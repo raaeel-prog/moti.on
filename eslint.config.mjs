@@ -122,7 +122,12 @@ export default [
       "prefer-const": "off",
       // `for (key in obj)` com hasOwnProperty e o unico jeito de iterar objeto em
       // ExtendScript; Object.keys nao existe.
-      "guard-for-in": "off"
+      "guard-for-in": "off",
+      // O ExtendScript e ES5 e nao tem optional catch binding: `catch {}` e erro
+      // de sintaxe la. Um binding sem uso e imposto pela linguagem, nao
+      // descuido, entao acusa-lo obrigaria a escrever codigo pior so para
+      // silenciar a regra.
+      "no-unused-vars": ["error", { caughtErrors: "none" }]
     }
   },
 

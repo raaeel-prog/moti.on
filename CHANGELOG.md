@@ -55,6 +55,18 @@ Precedido de pesquisa em fonte primária, registrada em `docs/research/premiere-
 
 Foi substituído por `tests/build-output.test.mjs`, que declara o **inventário exato** do build, verifica que `CSInterface.js` chega intacto (é o único arquivo de terceiros), e mantém as asserções estruturais. O fixture antigo continua no repositório, marcado como registro histórico.
 
+### CHMS-006 — Matriz de capacidades
+
+- **`parseHostVersion` e `compareVersions`**, existindo por causa de uma frase da §9: *"Nenhuma feature deve depender apenas de `parseFloat(hostVersion)`."* O problema não é estilo — `parseFloat("25.10")` devolve `25.1`, então `25.10 < 25.9`, e um gate escrito assim **bloqueia a versão mais nova e libera a mais velha**. O erro não aparece em teste nenhum enquanto os números menores não passarem de 9, e aparece meses depois na máquina de quem atualizou o aplicativo. Há um teste que demonstra o `parseFloat` errando ao lado do `parseHostVersion` acertando, e uma varredura no fonte que falha se `parseFloat` reaparecer no pacote.
+- **`buildCapabilities` é pura** e compartilhada pelos dois hosts. Cada um coleta os fatos crus do seu jeito; a derivação é a mesma. É isso que impede as duas plataformas de divergirem em silêncio sobre o que "disponível" significa.
+- **Uma sonda que não pôde concluir vira `"unknown"`, nunca `false`.** Colapsar em `false` faria a interface afirmar que um recurso está indisponível quando ninguém verificou; em `true` seria pior. Onde o contrato exige booleano, `"unknown"` vira `false` — mas o estado real sobrevive em `findings`, e é dele que a interface tira o que mostrar.
+- **Toda capacidade ausente traz chave de motivo**, e um motivo específico da sonda vence o genérico: "não empacotado neste build" e "seu host não suporta" pedem ações diferentes do usuário, e a primeira não é culpa da instalação dele.
+- **Campos de outro host não aparecem na matriz.** `hasActiveComp` não significa nada no Premiere; emitir os dois sempre produziria linhas permanentemente vermelhas para coisas que não existem naquele host.
+- **Cache só de sessão, sem nenhum caminho de persistência** — e há um teste que falha se um aparecer. Capacidade é propriedade do ambiente, não do plugin: o usuário liga uma preferência, instala uma atualização, conecta a rede. Uma matriz persistida continuaria afirmando o estado de ontem, e o pior caso é o silencioso.
+- **Sondas nos dois hosts**, todas por presença de símbolo. A leitura da preferência do After Effects fica dentro de `try/catch` porque **os nomes de seção e chave não foram verificados** contra documentação da Adobe — se estiverem errados o resultado é `"unknown"` e a interface diz que não conseguiu determinar, em vez de afirmar `false` com base num nome que ninguém confirmou.
+- **Botão "Verificar sistema" nos dois painéis.** A view completa de Settings → System Check chega no CHMS-008; até lá o resultado sai na caixa de log — feio, e informação real. Deixar a sonda sem saída visível até a UI ficar pronta seria construir código que ninguém consegue exercitar.
+- **`docs/adr/0003-tiers-de-suporte-after-effects.md`**: a §4.2 define faixas só para o Premiere, e para o After Effects não havia o que transcrever. As faixas propostas estão registradas como proposta, e o teste que as cobre se chama "os tiers do After Effects são proposta registrada, não transcrição" — para que ninguém leia o código e conclua que veio do documento normativo.
+
 ### CHMS-003 — Package `contracts`
 
 - **`packages/contracts`** define o contrato de comandos da §8: `CommandRequest`, `CommandResponse`, `CommandWarning`, `CommandFailure`, `CommandContext`, `CommandOptions` e `CommandTiming`, mais `HostCapabilities` (§9) e `RigMetadata` (§11).

@@ -95,6 +95,28 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     timeoutMs: DEFAULT_TIMEOUT_MS
   },
   {
+    id: "ae.capability.probe",
+    hosts: ["after-effects"],
+    requirements: [],
+    destructive: false,
+    mutates: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.none",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "pr.capability.probe",
+    hosts: ["premiere-pro"],
+    requirements: [],
+    destructive: false,
+    mutates: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.none",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
     id: "ae.demo.createComposition",
     hosts: ["after-effects"],
     requirements: ["hasProject"],

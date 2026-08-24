@@ -90,11 +90,29 @@ declare class Project {
   readonly file: File | null;
   readonly activeItem: Item | CompItem | null;
   readonly items: ItemCollection;
+  /**
+   * Motor de expressoes do projeto.
+   *
+   * As strings que o After Effects realmente devolve aqui NAO foram conferidas
+   * num projeto real; `normalizeExpressionEngine` trata valor irreconhecivel
+   * como "unknown" em vez de chutar. Ver docs/HOST_LIMITATIONS.md.
+   */
+  readonly expressionEngine: string;
 }
 
 declare const app: {
   readonly version: string;
   readonly project: Project;
+  /**
+   * Preferencias do aplicativo.
+   *
+   * ATENCAO: os nomes de secao e de chave NAO foram verificados contra
+   * documentacao da Adobe. Toda leitura precisa estar dentro de try/catch e
+   * reportar "unknown" quando falhar, nunca "false".
+   */
+  readonly preferences: {
+    getPrefAsLong(section: string, key: string): number;
+  };
   /**
    * ATENCAO: destrutivo. Descarta o projeto aberto e nao entra no historico de
    * Undo. Nunca deve ser chamado dentro de um grupo de Undo nem como fallback

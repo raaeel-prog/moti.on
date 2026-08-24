@@ -12,11 +12,12 @@
  * compartilhado, ele fala com um `dispatch(request)` que funciona igual nos dois
  * lados.
  */
-import type { CommandRequest, CommandResponse } from "@motion/contracts";
+import type { CommandRequest, CommandResponse, HostCapabilities } from "@motion/contracts";
+import { buildCapabilities, type ProbeFacts } from "@motion/capability-matrix";
 import { PROTOCOL_VERSION } from "@motion/contracts";
 
 import { createPremiereAdapter } from "../../host/src/adapter.js";
-import { contextRead, selfTest } from "../../host/src/commands.js";
+import { capabilityProbe, contextRead, selfTest } from "../../host/src/commands.js";
 import type { PremiereModule } from "../../host/src/premiere-api.js";
 
 interface UxpEntrypoints {
@@ -69,7 +70,7 @@ function setLog(message: string, state?: StatusState): void {
 }
 
 function setBusy(busy: boolean): void {
-  for (const id of ["refreshButton", "selfTestButton"]) {
+  for (const id of ["refreshButton", "selfTestButton", "systemCheckButton"]) {
     const button = element(id);
     if (button instanceof HTMLButtonElement) button.disabled = busy;
   }
@@ -146,6 +147,7 @@ async function start(): Promise<void> {
 
   adapter.register("pr.context.read", contextRead);
   adapter.register("pr.diagnostics.selfTest", selfTest);
+  adapter.register("pr.capability.probe", capabilityProbe);
 
   function buildRequest(command: string): CommandRequest {
     return {
@@ -217,8 +219,46 @@ async function start(): Promise<void> {
     setBusy(false);
   }
 
+  /**
+   * Executa a sonda e mostra a matriz de capacidades.
+   *
+   * A view completa de Settings → System Check chega no CHMS-008, junto com o
+   * shell de navegação. Até lá o resultado sai na caixa de log — que é feio, e é
+   * informação real: cada linha é resultado de sonda, não suposição. Deixar a
+   * sonda sem nenhuma saída visível até a UI ficar pronta seria construir código
+   * que ninguém consegue exercitar.
+   */
+  async function runSystemCheck(): Promise<void> {
+    setBusy(true);
+    setStatus("Verificando o sistema…", "busy");
+
+    const response = (await adapter.dispatch(
+      buildRequest("pr.capability.probe")
+    )) as CommandResponse<ProbeFacts>;
+
+    if (!response.ok || !response.data) {
+      reportFailure(response);
+      setBusy(false);
+      return;
+    }
+
+    const capabilities: HostCapabilities = buildCapabilities(response.data);
+
+    const lines = Object.entries(capabilities.findings).map(([key, finding]) => {
+      const mark = finding.state === "available" ? "✓" : finding.state === "unknown" ? "?" : "✕";
+      // A razão sai junto: a §9 exige que todo requisito ausente seja explicado,
+      // e "indisponível" sozinho obriga o usuário a adivinhar o que fazer.
+      return `${mark} ${key}${finding.reasonKey ? ` — ${finding.reasonKey}` : ""}`;
+    });
+
+    setStatus("Conectado", "ok");
+    setLog([`Tier de suporte: ${capabilities.supportTier}`, ...lines].join("\n"), "ok");
+    setBusy(false);
+  }
+
   element("refreshButton")?.addEventListener("click", () => void refreshContext());
   element("selfTestButton")?.addEventListener("click", () => void runSelfTest());
+  element("systemCheckButton")?.addEventListener("click", () => void runSystemCheck());
 
   await refreshContext();
 }

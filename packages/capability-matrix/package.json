@@ -1,0 +1,14 @@
+{
+  "name": "@motion/capability-matrix",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sondagem de capacidades por host: comparacao de versao, tiers de suporte e derivacao da matriz.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
+  "dependencies": { "@motion/contracts": "0.1.0" },
+  "license": "MIT"
+}

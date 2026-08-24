@@ -8,6 +8,7 @@
   "type": "module",
   "dependencies": {
     "@motion/contracts": "0.1.0",
-    "@motion/command-registry": "0.1.0"
+    "@motion/command-registry": "0.1.0",
+    "@motion/capability-matrix": "0.1.0"
   }
 }

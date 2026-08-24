@@ -11,6 +11,7 @@
   "include": ["host/src/**/*.ts", "client/src/**/*.ts"],
   "references": [
     { "path": "../../packages/contracts" },
-    { "path": "../../packages/command-registry" }
+    { "path": "../../packages/command-registry" },
+    { "path": "../../packages/capability-matrix" }
   ]
 }

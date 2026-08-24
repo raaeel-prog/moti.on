@@ -7,6 +7,7 @@
  * agora, sem feature, seria inventar um caso de uso para exercitar código.
  */
 import type { CommandFailure } from "@motion/contracts";
+import type { ProbeFacts, ProbeResult } from "@motion/capability-matrix";
 
 import type { PremiereCommandContext, PremiereCommandHandler } from "./adapter.js";
 
@@ -131,6 +132,94 @@ export const selfTest: PremiereCommandHandler = {
         passed: checks.filter((check) => check.ok).length,
         total: checks.length
       }
+    };
+  }
+};
+
+/**
+ * `pr.capability.probe` — coleta os fatos crus de capacidade do Premiere Pro.
+ *
+ * Coleta, e não decide. A derivação da matriz é a função pura `buildCapabilities`
+ * em `packages/capability-matrix`, compartilhada com o After Effects — é isso que
+ * impede os dois hosts de divergirem em silêncio sobre o que "disponível"
+ * significa.
+ *
+ * Toda sonda é por **presença de símbolo**, nunca por comparação de versão. A §9
+ * é explícita: nenhuma feature pode depender apenas de `parseFloat(hostVersion)`.
+ * Um Premiere 26.3 com o módulo de transcrição indisponível e um 26.2 com ele
+ * presente existem os dois na prática.
+ */
+export const capabilityProbe: PremiereCommandHandler = {
+  async preflight(): Promise<CommandFailure | null> {
+    return null;
+  },
+
+  async run(context: PremiereCommandContext) {
+    const { premiere, project } = context;
+
+    /** Executa uma sonda, devolvendo "unknown" quando ela lança. */
+    const safe = (probe: () => boolean): ProbeResult => {
+      try {
+        return probe() === true;
+      } catch {
+        return "unknown";
+      }
+    };
+
+    const activeSequence = project ? await project.getActiveSequence() : null;
+
+    const moduleRecord = premiere as unknown as Record<string, unknown>;
+    const projectRecord = project as unknown as Record<string, unknown> | null;
+
+    const reasons: NonNullable<ProbeFacts["reasons"]> = {
+      canUseNativeAddon: "capability.reason.addonNotPackaged",
+      canReachCompanion: "capability.reason.companionNotImplemented"
+    };
+
+    const facts: ProbeFacts = {
+      host: "premiere-pro",
+      // hostVersion ainda não é lido: a forma documentada de obtê-lo no UXP não
+      // foi confirmada. "unknown" faz o tier cair em `unsupported`, que é uma
+      // afirmação forte — mas nenhum comando do P0 decide por versão, e inventar
+      // um número seria pior. Registrado em docs/HOST_LIMITATIONS.md.
+      hostVersion: "unknown",
+
+      hasProject: Boolean(project),
+      hasActiveSequence: Boolean(activeSequence),
+
+      // O UXP concede acesso a arquivos pelo manifest, não por preferência do
+      // usuário. O manifest declara localFileSystem: "request", então o acesso
+      // acontece via seletor de arquivo — que existe, mas cada uso é aprovado
+      // pelo usuário na hora.
+      canWriteFiles: true,
+      // network não está declarado no manifest. Isso é escolha, não limitação:
+      // o P0 não fala com a rede, e a permissão chega com o provider no CHMS-029.
+      canAccessNetwork: false,
+
+      canUseNativeAddon: false,
+      canReachCompanion: false,
+
+      // Sondagem por símbolo. Onde o símbolo não existe, o resultado é `false`
+      // medido — e não uma suposição a partir do número da versão.
+      canInsertMogrt: safe(
+        () => typeof projectRecord?.["createInsertProjectItemAction"] === "function"
+      ),
+      canReadTranscript: safe(() => typeof moduleRecord["Transcript"] === "function"),
+      canImportTranscript: safe(
+        () => typeof (moduleRecord["Transcript"] as Record<string, unknown> | undefined)?.["importFromJSON"] === "function"
+      ),
+      canQueryTranscriptLanguages: safe(
+        () => typeof (moduleRecord["Transcript"] as Record<string, unknown> | undefined)?.["querySupportedLanguages"] === "function"
+      ),
+      canReadCaptionTracks: safe(() => typeof moduleRecord["CaptionTrack"] === "function"),
+
+      reasons
+    };
+
+    return {
+      changed: false,
+      warnings: [],
+      data: facts as unknown as Record<string, unknown>
     };
   }
 };

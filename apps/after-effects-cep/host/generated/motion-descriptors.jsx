@@ -34,6 +34,17 @@
         "pt-BR": ""
       }
     },
+    "ae.capability.probe": {
+      id: "ae.capability.probe",
+      destructive: false,
+      mutates: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
     "ae.demo.createComposition": {
       id: "ae.demo.createComposition",
       destructive: false,

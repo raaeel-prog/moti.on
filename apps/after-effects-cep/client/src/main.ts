@@ -10,7 +10,8 @@
  * agora, no mesmo commit que troca a ponte inteira, tornaria impossível saber
  * qual das duas mudanças quebrou o que.
  */
-import type { CommandResponse } from "@motion/contracts";
+import type { CommandResponse, HostCapabilities } from "@motion/contracts";
+import { buildCapabilities, type ProbeFacts } from "@motion/capability-matrix";
 
 import { createAeHostAdapter } from "./host-adapter.js";
 
@@ -51,7 +52,7 @@ function setLog(message: string, state?: StatusState): void {
 }
 
 function setBusy(busy: boolean): void {
-  for (const id of ["refreshButton", "createDemoButton", "echoButton"]) {
+  for (const id of ["refreshButton", "createDemoButton", "echoButton", "systemCheckButton"]) {
     const button = element(id);
     if (button instanceof HTMLButtonElement) button.disabled = busy;
   }
@@ -198,7 +199,46 @@ async function start(): Promise<void> {
     setBusy(false);
   }
 
+  /**
+   * Executa a sonda e mostra a matriz de capacidades.
+   *
+   * A view completa de Settings → System Check chega no CHMS-008, junto com o
+   * shell de navegação. Até lá o resultado sai na caixa de log — feio, e
+   * informação real: cada linha é resultado de sonda, não suposição.
+   */
+  async function runSystemCheck(): Promise<void> {
+    setBusy(true);
+    setStatus("Verificando o sistema…", "busy");
+
+    const response = await client.execute<ProbeFacts>("ae.capability.probe");
+
+    if (!response.ok || !response.data) {
+      reportFailure(response);
+      setBusy(false);
+      return;
+    }
+
+    const capabilities: HostCapabilities = buildCapabilities(response.data);
+
+    const lines = Object.entries(capabilities.findings).map(([key, finding]) => {
+      const mark = finding.state === "available" ? "✓" : finding.state === "unknown" ? "?" : "✕";
+      return `${mark} ${key}${finding.reasonKey ? ` — ${finding.reasonKey}` : ""}`;
+    });
+
+    setStatus("Conectado", "ok");
+    setLog(
+      [
+        `Tier de suporte: ${capabilities.supportTier}`,
+        `Motor de expressões: ${capabilities.expressionEngine}`,
+        ...lines
+      ].join("\n"),
+      "ok"
+    );
+    setBusy(false);
+  }
+
   element("refreshButton")?.addEventListener("click", () => void refreshContext());
+  element("systemCheckButton")?.addEventListener("click", () => void runSystemCheck());
   element("createDemoButton")?.addEventListener("click", () => void createDemo());
   element("echoButton")?.addEventListener("click", () => void verifyBridge());
 
