@@ -4,12 +4,65 @@ on:
   push:
   pull_request:
 
+# Somente leitura. O workflow não publica nada e não precisa de escrita; um
+# token com mais poder do que a tarefa exige é o que transforma um script
+# comprometido de uma dependência em comprometimento do repositório.
+permissions:
+  contents: read
+
+# Um push novo na mesma branch cancela a execução anterior. Sem isso, uma
+# sequência de commits enfileira execuções que ninguém vai ler.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  validate:
-    runs-on: ubuntu-latest
+  check:
+    name: check (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Uma falha só no Windows precisa ser vista, e não abortar a execução do
+      # Linux junto — a diferença entre as duas é justamente o que interessa.
+      fail-fast: false
+      matrix:
+        # Windows não é redundante aqui. scripts/build.mjs manipula caminhos,
+        # scripts/build-extendscript.mjs concatena arquivos numa ordem declarada,
+        # e o inventário de dist/ precisa valer nos dois. Além disso, os dois
+        # aplicativos Adobe alvo rodam em Windows e macOS, e a maior parte do
+        # desenvolvimento acontece em Windows.
+        os: [ubuntu-latest, windows-latest]
+        # 22 é a LTS que o CI usava; 24 é a versão em que este código foi
+        # desenvolvido. Rodar as duas evita descobrir uma incompatibilidade só
+        # quando alguém com a outra versão clonar o repositório.
+        node: [22, 24]
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - run: npm run check
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # npm ci, e não npm install: instala exatamente o que o package-lock.json
+      # fixa. `npm install` pode resolver versões diferentes das testadas, o que
+      # faz o CI verificar um conjunto de dependências que não é o que roda na
+      # máquina de ninguém.
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Verificação completa
+        run: npm run check
+
+      # O output de build só é útil se alguém puder baixá-lo para inspecionar,
+      # ou para instalar num host real e fechar os itens de
+      # docs/HOST_LIMITATIONS.md. Uma combinação só: os artefatos são iguais, e
+      # subir quatro cópias seria desperdício.
+      - name: Publicar dist/ para inspeção
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 14
+          if-no-files-found: error
