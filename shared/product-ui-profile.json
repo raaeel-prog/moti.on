@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "product": "CrossHost Motion Suite",
+  "designRead": "A native-feeling Adobe workstation panel: dark, restrained, compact, precise, and task-focused.",
+  "references": [
+    "BadFX",
+    "Brazu",
+    "Premiere Composer",
+    "After Effects Effect Controls"
+  ],
+  "referenceUse": "Infer density, navigation, parameter-row behavior and compact tool access. Never clone branding, assets or exact layouts.",
+  "dashboardBackground": "#1D1D1D",
+  "dials": {
+    "designVariance": 2,
+    "motionIntensity": 2,
+    "visualDensity": 3,
+    "accentIntensity": 2
+  },
+  "navigation": {
+    "primary": "compact icon-and-label module rail",
+    "secondary": "small top tabs only when switching product areas",
+    "details": "show parameters for one active tool at a time"
+  },
+  "banned": [
+    "analytics dashboard",
+    "hero section",
+    "large marketing cards",
+    "persistent asset gallery on the tools dashboard",
+    "multiple inspectors open simultaneously",
+    "decorative gradients",
+    "glassmorphism",
+    "neon glow around containers",
+    "oversized rounded cards",
+    "more than one accent color in UI chrome",
+    "timeline preview unless the active feature requires timing"
+  ]
+}

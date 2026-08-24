@@ -1,0 +1,58 @@
+:root {
+  color-scheme: dark;
+
+  --ch-surface-canvas: #1d1d1d;
+  --ch-surface-panel: #202020;
+  --ch-surface-raised: #242424;
+  --ch-surface-control: #282828;
+  --ch-surface-hover: #2d2d2d;
+  --ch-surface-pressed: #171717;
+
+  --ch-border-subtle: #2a2a2a;
+  --ch-border-default: #343434;
+  --ch-border-strong: #464646;
+  --ch-border-focus: #73a7ff;
+
+  --ch-text-primary: #e7e7e7;
+  --ch-text-secondary: #a6a6a6;
+  --ch-text-muted: #747474;
+  --ch-text-disabled: #555555;
+
+  --ch-accent: #35c978;
+  --ch-accent-hover: #45d889;
+  --ch-accent-pressed: #26985d;
+  --ch-accent-soft: rgba(53, 201, 120, 0.12);
+
+  --ch-danger: #e36a6a;
+  --ch-warning: #d8a54a;
+  --ch-info: #73a7ff;
+  --ch-success: #35c978;
+
+  --ch-space-1: 4px;
+  --ch-space-2: 8px;
+  --ch-space-3: 12px;
+  --ch-space-4: 16px;
+  --ch-space-5: 20px;
+  --ch-space-6: 24px;
+
+  --ch-radius-control: 4px;
+  --ch-radius-panel: 6px;
+  --ch-radius-round: 999px;
+
+  --ch-size-header: 32px;
+  --ch-size-control: 28px;
+  --ch-size-hit-target: 32px;
+  --ch-size-tool-tile: 40px;
+  --ch-size-icon: 18px;
+
+  --ch-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --ch-font-xs: 10px;
+  --ch-font-sm: 11px;
+  --ch-font-md: 12px;
+  --ch-font-lg: 13px;
+
+  --ch-motion-fast: 90ms;
+  --ch-motion-normal: 140ms;
+  --ch-motion-slow: 220ms;
+  --ch-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}

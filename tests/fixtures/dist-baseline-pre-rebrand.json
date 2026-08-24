@@ -1,0 +1,68 @@
+{
+  "$comment": "Inventario de dist/ imediatamente antes de qualquer edicao do agente. Gerado por 'npm run build' no starter 0.1.0. BUILD_INFO.json e excluido porque embute um timestamp e nao e reproduzivel. Usado por tests/build-parity.test.mjs (CHMS-002) como referencia de que a migracao para workspaces nao alterou os artefatos.",
+  "capturedAt": "2026-08-24T14:52:40Z",
+  "tag": "starter-0.1.0",
+  "node": "v24.19.0",
+  "npm": "11.17.0",
+  "excluded": [
+    "BUILD_INFO.json"
+  ],
+  "files": {
+    "after-effects-cep/.debug": {
+      "bytes": 214,
+      "sha256": "5b29ce2d7c363add59a9a7e9fab568691b53ed3a2cdcb697b43b4efc6dbe8ada"
+    },
+    "after-effects-cep/CSXS/manifest.xml": {
+      "bytes": 1572,
+      "sha256": "f08c79b1082655db7cd2e4c4112afb8b45a0cd808301121dd19a79898cf7b394"
+    },
+    "after-effects-cep/client/index.html": {
+      "bytes": 1912,
+      "sha256": "66cb24692a8120921cfb63c41379c198fbcc82d570e24ae7eeb99e610e8a0780"
+    },
+    "after-effects-cep/client/lib/CSInterface.js": {
+      "bytes": 42759,
+      "sha256": "3c45400984772b88cdf4604b4763a29219f8071fdedb9a1fa19d997349003783"
+    },
+    "after-effects-cep/client/main.js": {
+      "bytes": 3663,
+      "sha256": "a49bd5c76ee4ed4c59d0bf303bd7dadba30761fd8a5bab682ed787a64318d862"
+    },
+    "after-effects-cep/host/index.jsx": {
+      "bytes": 3870,
+      "sha256": "3a5094f7df1b4b2b84dfedf63be453da953031169ac9d8e5c9b5f54389e5641b"
+    },
+    "after-effects-cep/shared/protocol.js": {
+      "bytes": 2100,
+      "sha256": "416324d9519bd4c35d4bca5394acc326420216c4a802076d90453b4d7d21a891"
+    },
+    "after-effects-cep/styles/theme.css": {
+      "bytes": 3087,
+      "sha256": "bf926d759e7186ccf301cf6536fc9921fb73fe03429859354c4da78fe6c5be4d"
+    },
+    "premiere-uxp/host/premiere-adapter.js": {
+      "bytes": 2249,
+      "sha256": "6e06e51e36c36302f55f74a33be57ddc4d23c0692fae362a0a083477b1ef71ee"
+    },
+    "premiere-uxp/index.html": {
+      "bytes": 1805,
+      "sha256": "21847327b053307975e6021d1c871b7846c92f472da3fa3808678c682eb18b45"
+    },
+    "premiere-uxp/main.js": {
+      "bytes": 4081,
+      "sha256": "69fb40692d16d9139a817084fa7322b421360552db64516ab6673cd6799d664f"
+    },
+    "premiere-uxp/manifest.json": {
+      "bytes": 695,
+      "sha256": "e8a0c1f9a8fe5f1d2c6b3bcbf9eaa7e0035bae5f774b01fad157bb8c424f1268"
+    },
+    "premiere-uxp/shared/protocol.js": {
+      "bytes": 2100,
+      "sha256": "416324d9519bd4c35d4bca5394acc326420216c4a802076d90453b4d7d21a891"
+    },
+    "premiere-uxp/styles/theme.css": {
+      "bytes": 3087,
+      "sha256": "bf926d759e7186ccf301cf6536fc9921fb73fe03429859354c4da78fe6c5be4d"
+    }
+  }
+}

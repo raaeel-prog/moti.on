@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 2,
+  "canonicalRoot": ".agents/skills",
+  "mirrors": [
+    ".claude/skills"
+  ],
+  "language": "en",
+  "documentationLanguage": "pt-BR",
+  "project": "CrossHost Motion Suite",
+  "generatedAt": "2026-08-24",
+  "design": {
+    "background": "#1D1D1D",
+    "accent": "#35C978",
+    "visualDensity": 3,
+    "layoutVariance": 2,
+    "motionIntensity": 2,
+    "hostAffinity": 9
+  },
+  "skills": [
+    {
+      "name": "orchestrating-crosshost-work",
+      "displayName": "CrossHost Orchestrator",
+      "category": "coordination",
+      "implicitInvocation": true
+    },
+    {
+      "name": "researching-adobe-capabilities",
+      "displayName": "Adobe Capability Research",
+      "category": "research",
+      "implicitInvocation": true
+    },
+    {
+      "name": "designing-adobe-workstation-ui",
+      "displayName": "Adobe Workstation UI",
+      "category": "design",
+      "implicitInvocation": true
+    },
+    {
+      "name": "building-crosshost-panel-ui",
+      "displayName": "CrossHost Panel UI",
+      "category": "frontend",
+      "implicitInvocation": true
+    },
+    {
+      "name": "developing-after-effects-cep",
+      "displayName": "After Effects CEP",
+      "category": "host",
+      "implicitInvocation": true
+    },
+    {
+      "name": "developing-premiere-uxp",
+      "displayName": "Premiere Pro UXP",
+      "category": "host",
+      "implicitInvocation": true
+    },
+    {
+      "name": "engineering-motion-rigs",
+      "displayName": "Motion Rig Engineering",
+      "category": "domain",
+      "implicitInvocation": true
+    },
+    {
+      "name": "integrating-asset-services",
+      "displayName": "Asset Service Integration",
+      "category": "domain",
+      "implicitInvocation": true
+    },
+    {
+      "name": "building-ai-captions-sfx",
+      "displayName": "AI Captions and SFX",
+      "category": "domain",
+      "implicitInvocation": true
+    },
+    {
+      "name": "engineering-native-media-core",
+      "displayName": "Native Media Core",
+      "category": "native",
+      "implicitInvocation": true
+    },
+    {
+      "name": "testing-adobe-hosts",
+      "displayName": "Adobe Host Verification",
+      "category": "quality",
+      "implicitInvocation": true
+    },
+    {
+      "name": "securing-crosshost-plugins",
+      "displayName": "CrossHost Security",
+      "category": "quality",
+      "implicitInvocation": true
+    },
+    {
+      "name": "optimizing-crosshost-performance",
+      "displayName": "CrossHost Performance",
+      "category": "quality",
+      "implicitInvocation": true
+    },
+    {
+      "name": "releasing-adobe-extensions",
+      "displayName": "Adobe Extension Release",
+      "category": "release",
+      "implicitInvocation": true
+    }
+  ]
+}

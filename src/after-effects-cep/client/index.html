@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CrossHost Toolkit</title>
+  <link rel="stylesheet" href="../styles/theme.css">
+</head>
+<body>
+  <main class="panel-shell">
+    <header class="panel-header">
+      <h1 class="panel-title">CrossHost Toolkit</h1>
+      <p class="panel-subtitle">After Effects · CEP/ExtendScript</p>
+    </header>
+
+    <div class="status-line" aria-live="polite">
+      <span id="statusDot" class="status-dot"></span>
+      <span id="statusText" class="status-text">Inicializando…</span>
+    </div>
+
+    <section class="context-card" aria-label="Contexto do After Effects">
+      <div class="context-row">
+        <div class="context-label">Versão</div>
+        <div id="hostVersion" class="context-value">—</div>
+      </div>
+      <div class="context-row">
+        <div class="context-label">Projeto</div>
+        <div id="projectName" class="context-value">—</div>
+      </div>
+      <div class="context-row">
+        <div class="context-label">Caminho</div>
+        <div id="projectPath" class="context-value">—</div>
+      </div>
+      <div class="context-row">
+        <div class="context-label">Item ativo</div>
+        <div id="activeItemName" class="context-value">—</div>
+      </div>
+      <div class="context-row">
+        <div class="context-label">Composição</div>
+        <div id="compositionInfo" class="context-value">—</div>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button id="refreshButton" class="action-button">Atualizar contexto</button>
+      <button id="createDemoButton" class="action-button secondary">Criar composição de teste</button>
+    </div>
+
+    <div id="logBox" class="log-box" aria-live="polite">Pronto para conectar ao After Effects.</div>
+  </main>
+
+  <script src="lib/CSInterface.js"></script>
+  <script src="../shared/protocol.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

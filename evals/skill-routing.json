@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-24",
+  "cases": [
+    {
+      "id": "route-001",
+      "skill": "orchestrating-crosshost-work",
+      "prompt": "Planeje e implemente a feature CHMS-021 ponta a ponta, coordenando UI, host, testes e documentação.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-002",
+      "skill": "orchestrating-crosshost-work",
+      "prompt": "Divida o trabalho de AI Captions entre vários agentes sem conflitos de contrato.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-003",
+      "skill": "orchestrating-crosshost-work",
+      "prompt": "Troque apenas o texto de um tooltip já definido.",
+      "shouldTrigger": false
+    },
+    {
+      "id": "route-004",
+      "skill": "researching-adobe-capabilities",
+      "prompt": "Verifique na documentação atual se Premiere 26.3 expõe hasTranscript e qual é o fallback.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-005",
+      "skill": "researching-adobe-capabilities",
+      "prompt": "Confirme a permissão UXP necessária para acessar um domínio de assets e registre a versão mínima.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-006",
+      "skill": "researching-adobe-capabilities",
+      "prompt": "Ajuste o espaçamento entre duas property rows usando os tokens existentes.",
+      "shouldTrigger": false
+    },
+    {
+      "id": "route-007",
+      "skill": "designing-adobe-workstation-ui",
+      "prompt": "Redesenhe o painel Parallax para ficar mais minimalista, sutil e parecido com uma workstation Adobe.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-008",
+      "skill": "designing-adobe-workstation-ui",
+      "prompt": "Audite hierarquia, densidade, tokens, ícones e estados da tela de keyframes em 280 e 720 px.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-009",
+      "skill": "designing-adobe-workstation-ui",
+      "prompt": "Implemente a fórmula de inversão temporal de keyframes sem alterar a interface.",
+      "shouldTrigger": false
+    },
+    {
+      "id": "route-010",
+      "skill": "building-crosshost-panel-ui",
+      "prompt": "Implemente os componentes PropertyRow, SliderField e DisclosureGroup para CEP e UXP.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-011",
+      "skill": "building-crosshost-panel-ui",
+      "prompt": "Corrija overflow horizontal, focus-visible e estado de loading no painel dockado.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-012",
+      "skill": "building-crosshost-panel-ui",
+      "prompt": "Pesquise se o DOM do Premiere suporta transcrição interna.",
+      "shouldTrigger": false
+    },
+    {
+      "id": "route-013",
+      "skill": "developing-after-effects-cep",
+      "prompt": "Implemente um comando CEP/ExtendScript que cria um null, agrupa Undo e preserva a seleção.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-014",
+      "skill": "developing-after-effects-cep",
+      "prompt": "Corrija o dispatcher JSX para validar o comando e usar matchName em efeitos.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-015",
+      "skill": "developing-after-effects-cep",
+      "prompt": "Crie o pacote CCX do plugin Premiere.",
+      "shouldTrigger": false
+    },
+    {
+      "id": "route-016",
+      "skill": "developing-premiere-uxp",
+      "prompt": "Implemente um comando UXP que adiciona markers à sequência ativa usando capability detection.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-017",
+      "skill": "developing-premiere-uxp",
+      "prompt": "Atualize o manifest do Premiere e implemente locked access/transaction para mutações.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-018",
+      "skill": "developing-premiere-uxp",
+      "prompt": "Crie uma expression de wiggle para uma propriedade no After Effects.",
+      "shouldTrigger": false
+    },
+    {
+      "id": "route-019",
+      "skill": "engineering-motion-rigs",
+      "prompt": "Implemente o alinhador de anchor point nos modos Normal, Reverse, Convex, Concave e Random.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-020",
+      "skill": "engineering-motion-rigs",
+      "prompt": "Defina Apply, Adjust, Bake e Remove para o rig de Parallax preservando keyframe metadata.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-021",
+      "skill": "engineering-motion-rigs",
+      "prompt": "Configure autenticação OAuth para o backend de assets.",
+      "shouldTrigger": false
+    },
+    {
+      "id": "route-022",
+      "skill": "integrating-asset-services",
+      "prompt": "Integre busca e download de imagens Pexels com cache, atribuição e importação no host.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-023",
+      "skill": "integrating-asset-services",
+      "prompt": "Modele o banco de assets, providers, licenças, favoritos e rate limiting.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-024",
+      "skill": "integrating-asset-services",
+      "prompt": "Ajuste a curva Bezier do keyframe smoother.",
+      "shouldTrigger": false
+    },
+    {
+      "id": "route-025",
+      "skill": "building-ai-captions-sfx",
+      "prompt": "Implemente captions animadas por palavra com timing por frame e SFX automáticos.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-026",
+      "skill": "building-ai-captions-sfx",
+      "prompt": "Converta transcript do Premiere para um modelo normalizado e gere saída editável no After Effects.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-027",
+      "skill": "building-ai-captions-sfx",
+      "prompt": "Renomeie layers selecionadas com prefixo incremental.",
+      "shouldTrigger": false
+    },
+    {
+      "id": "route-028",
+      "skill": "engineering-native-media-core",
+      "prompt": "Integre whisper.cpp em um worker nativo com progresso, cancelamento e checksum do modelo.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-029",
+      "skill": "engineering-native-media-core",
+      "prompt": "Projete a ABI de um .uxpaddon para análise de áudio sem bloquear a UI do Premiere.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-030",
+      "skill": "engineering-native-media-core",
+      "prompt": "Mude a cor de fundo do painel para #1D1D1D.",
+      "shouldTrigger": false
+    },
+    {
+      "id": "route-031",
+      "skill": "testing-adobe-hosts",
+      "prompt": "Verifique a feature Parallax com testes unitários, fixture .aep, Undo e evidência no host real.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-032",
+      "skill": "testing-adobe-hosts",
+      "prompt": "Audite os screenshots em 280, 360, 480 e 720 px e produza relatório PASS/FAIL/NOT RUN.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-033",
+      "skill": "testing-adobe-hosts",
+      "prompt": "Escreva apenas o texto de marketing da página do produto.",
+      "shouldTrigger": false
+    },
+    {
+      "id": "route-034",
+      "skill": "securing-crosshost-plugins",
+      "prompt": "Faça threat model do bridge CEP, downloads de assets, tokens e atualização do companion.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-035",
+      "skill": "securing-crosshost-plugins",
+      "prompt": "Revise expressão gerada, path traversal, redirects, secrets e assinatura de modelos offline.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-036",
+      "skill": "securing-crosshost-plugins",
+      "prompt": "Escolha o ícone visual para a ferramenta Orbit.",
+      "shouldTrigger": false
+    },
+    {
+      "id": "route-037",
+      "skill": "optimizing-crosshost-performance",
+      "prompt": "Meça e reduza a latência do painel, bridge e operação em 500 layers com benchmark reproduzível.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-038",
+      "skill": "optimizing-crosshost-performance",
+      "prompt": "Otimize o grid de assets, carregamento de thumbnails, memória e cancelamento de downloads.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-039",
+      "skill": "optimizing-crosshost-performance",
+      "prompt": "Defina a política comercial de assinatura mensal.",
+      "shouldTrigger": false
+    },
+    {
+      "id": "route-040",
+      "skill": "releasing-adobe-extensions",
+      "prompt": "Prepare release ZXP e CCX com signing, checksums, SBOM e teste de instalação limpa.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-041",
+      "skill": "releasing-adobe-extensions",
+      "prompt": "Valide upgrade, downgrade, uninstall, notarização e rollback da versão 1.0.0.",
+      "shouldTrigger": true
+    },
+    {
+      "id": "route-042",
+      "skill": "releasing-adobe-extensions",
+      "prompt": "Implemente o algoritmo matemático do efeito Orbit.",
+      "shouldTrigger": false
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+interface:
+  display_name: "CrossHost Panel UI"
+  short_description: "Build shared, accessible, dock-responsive panel components"
+  brand_color: "#8B8D98"
+  default_prompt: "Use $building-crosshost-panel-ui for this task and follow its verification gates."
+policy:
+  allow_implicit_invocation: true

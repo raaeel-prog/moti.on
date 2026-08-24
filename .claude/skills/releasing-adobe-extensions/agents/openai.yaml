@@ -1,0 +1,7 @@
+interface:
+  display_name: "Adobe Extension Release"
+  short_description: "Package, sign, install, verify, and release Adobe extensions"
+  brand_color: "#0EA5E9"
+  default_prompt: "Use $releasing-adobe-extensions for this task and follow its verification gates."
+policy:
+  allow_implicit_invocation: true

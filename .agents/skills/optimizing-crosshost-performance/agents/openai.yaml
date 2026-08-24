@@ -1,0 +1,7 @@
+interface:
+  display_name: "CrossHost Performance"
+  short_description: "Measure and optimize panel, host bridge, expression, and native work"
+  brand_color: "#F59E0B"
+  default_prompt: "Use $optimizing-crosshost-performance for this task and follow its verification gates."
+policy:
+  allow_implicit_invocation: true

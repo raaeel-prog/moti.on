@@ -1,0 +1,7 @@
+interface:
+  display_name: "Asset Service Integration"
+  short_description: "Integrate compliant asset search, cache, download, and import"
+  brand_color: "#31A8FF"
+  default_prompt: "Use $integrating-asset-services for this task and follow its verification gates."
+policy:
+  allow_implicit_invocation: true

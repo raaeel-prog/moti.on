@@ -1,0 +1,7 @@
+interface:
+  display_name: "Native Media Core"
+  short_description: "Build safe native audio, ML, and Hybrid plugin workloads"
+  brand_color: "#D0A24A"
+  default_prompt: "Use $engineering-native-media-core for this native media task and follow its ABI, safety, cancellation, and test gates."
+policy:
+  allow_implicit_invocation: true

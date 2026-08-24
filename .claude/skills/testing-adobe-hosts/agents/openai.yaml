@@ -1,0 +1,7 @@
+interface:
+  display_name: "Adobe Host Verification"
+  short_description: "Verify contracts, fixtures, visuals, Undo, and real hosts"
+  brand_color: "#10B981"
+  default_prompt: "Use $testing-adobe-hosts for this task and follow its verification gates."
+policy:
+  allow_implicit_invocation: true

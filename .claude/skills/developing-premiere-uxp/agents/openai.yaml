@@ -1,0 +1,7 @@
+interface:
+  display_name: "Premiere Pro UXP"
+  short_description: "Build version-aware Premiere UXP tools and Hybrid addons"
+  brand_color: "#6C7CFF"
+  default_prompt: "Use $developing-premiere-uxp for this task and follow its verification gates."
+policy:
+  allow_implicit_invocation: true

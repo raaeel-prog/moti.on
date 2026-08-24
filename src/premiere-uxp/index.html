@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CrossHost Toolkit</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <script src="main.js"></script>
+</head>
+<body>
+  <main class="panel-shell">
+    <header class="panel-header">
+      <h1 class="panel-title">CrossHost Toolkit</h1>
+      <p class="panel-subtitle">Premiere Pro · UXP</p>
+    </header>
+
+    <div class="status-line" aria-live="polite">
+      <span id="statusDot" class="status-dot"></span>
+      <span id="statusText" class="status-text">Inicializando…</span>
+    </div>
+
+    <section id="contextCard" class="context-card" aria-label="Contexto do Premiere Pro">
+      <div class="context-row">
+        <div class="context-label">Projeto</div>
+        <div id="projectName" class="context-value">—</div>
+      </div>
+      <div class="context-row">
+        <div class="context-label">Caminho</div>
+        <div id="projectPath" class="context-value">—</div>
+      </div>
+      <div class="context-row">
+        <div class="context-label">Sequência ativa</div>
+        <div id="sequenceName" class="context-value">—</div>
+      </div>
+      <div class="context-row">
+        <div class="context-label">Sequências</div>
+        <div id="sequenceCount" class="context-value">—</div>
+      </div>
+      <div class="context-row">
+        <div class="context-label">Trilhas</div>
+        <div id="trackCount" class="context-value">—</div>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button id="refreshButton" class="action-button">Atualizar contexto</button>
+      <button id="selfTestButton" class="action-button secondary">Executar autoteste</button>
+    </div>
+
+    <div id="logBox" class="log-box" aria-live="polite">Pronto para conectar ao Premiere Pro.</div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,46 @@
+# Dependencias
+node_modules/
+
+# Saida de build.
+#
+# dist/ e derivado: 'npm run build' o reproduz inteiramente a partir da arvore
+# fonte. A tag starter-0.1.0 preserva o starter carregavel, e
+# docs/BASELINE_STARTER_0.1.0.md registra o inventario com SHA-256 do dist
+# original, entao nada se perde ao nao versiona-lo.
+dist/
+packages/*/dist/
+apps/*/dist/
+artifacts/
+
+# Artefatos de ferramenta
+*.tsbuildinfo
+.eslintcache
+coverage/
+
+# Temporarios de validacao.
+# scripts/validate.mjs escrevia .tmp-index-jsx-check.js na raiz do repositorio
+# e podia deixa-lo para tras se o processo morresse. O script foi corrigido para
+# usar os.tmpdir(), mas o padrao fica aqui como rede de seguranca.
+.tmp-*
+
+# Segredos e credenciais. Nunca versionar.
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.cer
+*.key
+*.pem
+
+# Pacotes assinados de release
+*.zxp
+*.ccx
+
+# Ruido de sistema operacional e editor
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/*
+!.vscode/extensions.json

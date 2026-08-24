@@ -1,0 +1,7 @@
+interface:
+  display_name: "Adobe Capability Research"
+  short_description: "Verify current APIs, versions, permissions, and fallbacks"
+  brand_color: "#6F9DFF"
+  default_prompt: "Use $researching-adobe-capabilities to verify this capability from current primary sources before implementation."
+policy:
+  allow_implicit_invocation: true

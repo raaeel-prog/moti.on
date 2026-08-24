@@ -1,0 +1,7 @@
+interface:
+  display_name: "CrossHost Security"
+  short_description: "Secure commands, media, secrets, native code, and privacy"
+  brand_color: "#EF4444"
+  default_prompt: "Use $securing-crosshost-plugins for this task and follow its verification gates."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,7 @@
+interface:
+  display_name: "After Effects CEP"
+  short_description: "Build safe CEP and ExtendScript automation for After Effects"
+  brand_color: "#9999FF"
+  default_prompt: "Use $developing-after-effects-cep for this task and follow its verification gates."
+policy:
+  allow_implicit_invocation: true

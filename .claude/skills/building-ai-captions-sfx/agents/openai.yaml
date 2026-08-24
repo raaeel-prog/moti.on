@@ -1,0 +1,7 @@
+interface:
+  display_name: "AI Captions and SFX"
+  short_description: "Build private, editable captions with deterministic SFX"
+  brand_color: "#D16BFF"
+  default_prompt: "Use $building-ai-captions-sfx for this task and follow its verification gates."
+policy:
+  allow_implicit_invocation: true
