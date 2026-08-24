@@ -43,14 +43,22 @@ Depois siga `docs/INSTALLATION.md`. As decisões técnicas e fontes oficiais est
 
 ## Estrutura
 
+npm workspaces. `apps/*` são os shells que carregam dentro de cada aplicativo Adobe; `packages/*` é o código compartilhado entre eles.
+
 ```text
-src/shared/                 código e tema compartilhados
-src/premiere-uxp/           plugin do Premiere Pro
-src/after-effects-cep/      extensão do After Effects
-scripts/                    build, validação e instalação de desenvolvimento
-tests/                      testes automatizados
-dist/                       artefatos carregáveis nos hosts
+apps/premiere-uxp/               plugin do Premiere Pro (UXP)
+apps/after-effects-cep/          extensão do After Effects (CEP 12)
+  client/                        painel HTML/JS
+  host/src/                      camada ExtendScript, ES5 escrito à mão
+  host/types/                    declarações de tipo do ExtendScript
+packages/contracts/legacy/       envelope de resposta compartilhado (UMD)
+packages/ui-core/src/            CSS e componentes da apresentação
+scripts/                         build, validação, scanner ES5, instalação dev
+tests/                           testes automatizados
+dist/                            artefatos carregáveis nos hosts (derivado)
 ```
+
+Os diretórios `native/`, `services/`, `presets/` e `installers/` que o master spec §7 prevê ainda **não existem**, e nem os outros packages que ele lista. Eles nascem na issue CHMS que primeiro precisa deles — a tabela está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Criá-los vazios agora seria exatamente o esqueleto de placeholders que a §0.5 proíbe.
 
 ## Estado de validação
 
@@ -70,10 +78,12 @@ O item 4 não é formalidade: nenhum recurso dependente de host pode ser declara
 ## Comandos
 
 ```bash
+npm run lint       # ESLint + scanner do subconjunto ExtendScript
+npm run typecheck  # tsc -b, inclui checkJs sobre o host ExtendScript
 npm run build      # gera dist/
 npm run validate   # valida manifests, arquivos e sintaxe
 npm test           # executa testes unitários
-npm run check      # build + validação + testes
+npm run check      # lint + typecheck + build + validate + testes + skills
 ```
 
 ## Próxima etapa de desenvolvimento

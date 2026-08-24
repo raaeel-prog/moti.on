@@ -2,15 +2,29 @@
   "name": "motion-plugin",
   "version": "0.1.0",
   "private": true,
-  "description": "Moti.on — suite de motion design para Adobe After Effects (CEP/ExtendScript) e Premiere Pro (UXP).",
+  "description": "Moti.on â€” suite de motion design para Adobe After Effects (CEP/ExtendScript) e Premiere Pro (UXP).",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "clean": "node scripts/build.mjs --clean-only",
     "build": "node scripts/build.mjs",
+    "lint": "eslint . && node scripts/check-extendscript.mjs",
+    "typecheck": "tsc -b",
     "validate": "node scripts/validate.mjs",
-    "test": "node --test tests/*.test.mjs",
-    "check": "npm run build && npm run validate && npm test && npm run skills:validate",
+    "test": "node --test \"tests/*.test.mjs\" \"packages/*/tests/*.test.mjs\" \"apps/*/tests/*.test.mjs\"",
+    "check": "npm run lint && npm run typecheck && npm run build && npm run validate && npm test && npm run skills:validate",
     "skills:sync": "node scripts/sync-agent-skills.mjs",
     "skills:validate": "node scripts/validate-agent-skills.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.2.0",
+    "eslint": "^10.9.0",
+    "globals": "^17.11.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0"
   },
   "engines": {
     "node": ">=18"

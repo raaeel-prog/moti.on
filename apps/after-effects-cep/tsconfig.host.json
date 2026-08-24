@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "$comment": [
+    "Checagem de tipos da camada de host em ExtendScript.",
+    "",
+    "O host NAO e compilado a partir de TypeScript. Ele e JavaScript ES5 escrito",
+    "a mao. Isso nao e preferencia, e a unica opcao que sobrou:",
+    "",
+    "  - o target ES3 do tsc foi descontinuado no TypeScript 5.0 e removido na 5.5;",
+    "  - o esbuild nao emite ES3;",
+    "  - no TypeScript 6.0, que este repositorio usa, ate 'target: ES5' passou a",
+    "    emitir TS5107 como descontinuado, com remocao anunciada para a 7.0. O",
+    "    mesmo vale para 'module: None' e 'moduleResolution: classic';",
+    "  - mesmo quando existia, 'target: ES5' emitia helpers (__extends usa",
+    "    Object.setPrototypeOf) que o ExtendScript nao possui, entao saida ES5",
+    "    nunca equivaleu a saida segura para ExtendScript.",
+    "",
+    "Por isso 'target' aqui e ES2020 (valor suportado, e irrelevante porque noEmit",
+    "esta ligado) enquanto 'lib' continua ES5. E o lib que faz o trabalho: ele",
+    "remove Object.keys, Array.prototype.map, Promise, JSON e o resto do que o",
+    "ExtendScript nao tem, e o erro aparece no editor, no lugar certo.",
+    "",
+    "A restricao de SINTAXE (arrow, let, const, template literal, spread) nao vem",
+    "daqui e sim de scripts/check-extendscript.mjs, que e a ferramenta adequada",
+    "para isso e nao depende de um target descontinuado.",
+    "",
+    "Terceira camada: node --check em scripts/validate.mjs, sobre o arquivo montado."
+  ],
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES5"],
+    "types": [],
+
+    "allowJs": true,
+    "checkJs": true,
+
+    "noEmit": true,
+    "tsBuildInfoFile": "../../.tsbuildinfo/after-effects-cep-host.tsbuildinfo",
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+
+    "verbatimModuleSyntax": false,
+    "isolatedModules": false,
+    "exactOptionalPropertyTypes": false
+  },
+  "include": ["host/src/**/*.jsx", "host/types/**/*.d.ts"]
+}

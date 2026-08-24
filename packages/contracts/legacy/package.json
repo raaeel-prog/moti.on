@@ -1,0 +1,4 @@
+{
+  "$comment": "Marcador de escopo, nao um workspace. packages/contracts declara \"type\": \"module\" porque o codigo novo do CHMS-003 sera ESM. protocol.js aqui e UMD: ele precisa carregar como CommonJS no Node e nos testes, como script global no CEP, e via require no UXP. Sem este arquivo o Node interpreta protocol.js como ESM e o padrao UMD quebra em `root.MotionProtocol = factory()`.",
+  "type": "commonjs"
+}

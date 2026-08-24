@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const Protocol = require(path.join(root, "src/shared/protocol.js"));
+const Protocol = require(path.join(root, "packages/contracts/legacy/protocol.js"));
 
 test("parse aceita envelope válido", () => {
   const envelope = Protocol.parse('{"ok":true,"data":{"name":"demo"},"error":null}');

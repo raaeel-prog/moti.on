@@ -1,0 +1,8 @@
+{
+  "name": "@motion/premiere-uxp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Painel Moti.on para Adobe Premiere Pro sobre UXP.",
+  "$comment": "Este arquivo e o manifesto npm do workspace. O manifesto que o Premiere le e manifest.json, ao lado dele. scripts/build.mjs exclui package.json de dist/ para que os dois nao se confundam.",
+  "license": "MIT"
+}
