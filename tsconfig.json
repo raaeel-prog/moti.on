@@ -3,6 +3,7 @@
   "$comment": "Projeto raiz do build incremental. 'tsc -b' percorre as referencias abaixo. Cada package ou app ganha uma referencia aqui no commit em que passa a ter codigo TypeScript proprio, nunca antes: uma referencia para um projeto vazio faz o typecheck parecer que cobre algo que ele nao cobre.",
   "files": [],
   "references": [
+    { "path": "./packages/contracts" },
     { "path": "./apps/after-effects-cep/tsconfig.host.json" }
   ]
 }

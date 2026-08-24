@@ -1,5 +1,6 @@
 import js from "@eslint/js";
 import globals from "globals";
+import tseslint from "typescript-eslint";
 
 /**
  * Configuracao flat do ESLint.
@@ -20,9 +21,15 @@ export default [
   {
     ignores: [
       "dist/**",
+      "packages/*/dist/**",
+      "apps/*/dist/**",
       "node_modules/**",
       "artifacts/**",
       "coverage/**",
+      // Codigo gerado. A checagem dele e feita por
+      // packages/contracts/tests/generated-drift.test.mjs, que roda o mesmo
+      // scanner de subconjunto ExtendScript usado nos fontes escritos a mao.
+      "apps/*/host/generated/**",
       // CSInterface.js e codigo de terceiros, distribuido pela Adobe.
       // Reformata-lo dificultaria comparar com a versao oficial.
       "apps/after-effects-cep/client/lib/**"
@@ -31,9 +38,23 @@ export default [
 
   js.configs.recommended,
 
+  // TypeScript. Sem checagem com informacao de tipo (projectService) de
+  // proposito: `npm run typecheck` roda o tsc completo e e a autoridade sobre
+  // tipos. Duplicar isso no lint dobraria o tempo sem encontrar nada novo.
+  ...tseslint.configs.recommended.map((config) => ({
+    ...config,
+    files: ["packages/**/*.ts", "apps/**/*.ts"]
+  })),
+
   // Scripts de build e testes: Node moderno, ESM.
   {
-    files: ["scripts/**/*.mjs", "tests/**/*.mjs", "packages/*/tests/**/*.mjs", "apps/*/tests/**/*.mjs"],
+    files: [
+      "scripts/**/*.mjs",
+      "tests/**/*.mjs",
+      "packages/*/scripts/**/*.mjs",
+      "packages/*/tests/**/*.mjs",
+      "apps/*/tests/**/*.mjs"
+    ],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: "module",

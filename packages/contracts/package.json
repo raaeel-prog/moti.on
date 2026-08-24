@@ -2,10 +2,20 @@
   "name": "@motion/contracts",
   "version": "0.1.0",
   "private": true,
-  "description": "Contrato de comandos entre painel e host: tipos, schemas, codigos de erro e a ponte para o envelope legado.",
+  "description": "Contrato de comandos entre painel e host: tipos, codigos de erro, capacidades, metadata de rig e a ponte para o envelope legado.",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "./legacy/protocol.js": "./legacy/protocol.js"
   },
+  "files": [
+    "dist",
+    "legacy"
+  ],
   "license": "MIT"
 }

@@ -3,6 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { buildExtendScript } from "./build-extendscript.mjs";
+import { renderModule as renderContractsModule, GENERATED_PATH as CONTRACTS_ES5_PATH } from "../packages/contracts/scripts/gen-extendscript.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDir, "..");
@@ -33,7 +34,13 @@ const EXCLUDED_BASENAMES = new Set([
   "node_modules",
   "tests",
   "types",
-  "src"
+  "src",
+  // Codigo gerado do contrato. Ele NAO e copiado solto para dist/: o
+  // ExtendScript nao tem sistema de modulos, entao um .jsx avulso ao lado do
+  // host nunca seria carregado, e existiria no pacote so para confundir.
+  // Ele entra no bundle por concatenacao em HOST_SOURCE_ORDER, no CHMS-004,
+  // quando o dispatcher passar a consumir MotionContracts.
+  "generated"
 ]);
 
 const pkg = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
@@ -81,6 +88,11 @@ async function copyAppShell(appName, outputName) {
     await cp(asset.from, destination);
   }
 }
+
+// Geracao antes da copia: o modulo ES5 do contrato faz parte do host montado, e
+// gera-lo depois deixaria o build de uma arvore limpa emitindo a versao anterior.
+await mkdir(path.dirname(CONTRACTS_ES5_PATH), { recursive: true });
+await writeFile(CONTRACTS_ES5_PATH, await renderContractsModule(), "utf8");
 
 await copyAppShell("premiere-uxp", "premiere-uxp");
 await copyAppShell("after-effects-cep", "after-effects-cep");

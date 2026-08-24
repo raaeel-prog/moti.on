@@ -1,0 +1,70 @@
+/**
+ * ARQUIVO GERADO. NÃO EDITE À MÃO.
+ *
+ * Origem: packages/contracts/src/{errors,protocol,rig-metadata}.ts
+ * Gerador: packages/contracts/scripts/gen-extendscript.mjs
+ *
+ * Regenere com `npm run build`. O teste de drift em
+ * packages/contracts/tests/generated-drift.test.mjs falha se este arquivo sair
+ * de sincronia com o fonte TypeScript.
+ */
+(function (global) {
+  global.MotionContracts = {
+    PROTOCOL_VERSION: 1,
+
+    ERROR: {
+      NO_ACTIVE_PROJECT: "NO_ACTIVE_PROJECT",
+      NO_ACTIVE_COMP: "NO_ACTIVE_COMP",
+      NO_ACTIVE_SEQUENCE: "NO_ACTIVE_SEQUENCE",
+      NO_SELECTION: "NO_SELECTION",
+      INVALID_SELECTION_TYPE: "INVALID_SELECTION_TYPE",
+      UNSUPPORTED_HOST_VERSION: "UNSUPPORTED_HOST_VERSION",
+      CAPABILITY_UNAVAILABLE: "CAPABILITY_UNAVAILABLE",
+      PERMISSION_DENIED: "PERMISSION_DENIED",
+      NETWORK_UNAVAILABLE: "NETWORK_UNAVAILABLE",
+      PROVIDER_ERROR: "PROVIDER_ERROR",
+      LICENSE_REQUIRED: "LICENSE_REQUIRED",
+      MODEL_NOT_INSTALLED: "MODEL_NOT_INSTALLED",
+      NATIVE_SERVICE_UNAVAILABLE: "NATIVE_SERVICE_UNAVAILABLE",
+      INVALID_PRESET: "INVALID_PRESET",
+      EXPRESSION_CONFLICT: "EXPRESSION_CONFLICT",
+      KEYFRAME_CONFLICT: "KEYFRAME_CONFLICT",
+      TRACK_CONFLICT: "TRACK_CONFLICT",
+      ASSET_LICENSE_BLOCKED: "ASSET_LICENSE_BLOCKED",
+      USER_CANCELLED: "USER_CANCELLED",
+      HOST_OPERATION_FAILED: "HOST_OPERATION_FAILED",
+      ROLLBACK_FAILED: "ROLLBACK_FAILED",
+      INTERNAL_ERROR: "INTERNAL_ERROR"
+    },
+
+    ERROR_RECOVERABLE: {
+      NO_ACTIVE_PROJECT: true,
+      NO_ACTIVE_COMP: true,
+      NO_ACTIVE_SEQUENCE: true,
+      NO_SELECTION: true,
+      INVALID_SELECTION_TYPE: true,
+      UNSUPPORTED_HOST_VERSION: false,
+      CAPABILITY_UNAVAILABLE: false,
+      PERMISSION_DENIED: true,
+      NETWORK_UNAVAILABLE: true,
+      PROVIDER_ERROR: true,
+      LICENSE_REQUIRED: true,
+      MODEL_NOT_INSTALLED: true,
+      NATIVE_SERVICE_UNAVAILABLE: false,
+      INVALID_PRESET: false,
+      EXPRESSION_CONFLICT: true,
+      KEYFRAME_CONFLICT: true,
+      TRACK_CONFLICT: true,
+      ASSET_LICENSE_BLOCKED: false,
+      USER_CANCELLED: true,
+      HOST_OPERATION_FAILED: true,
+      ROLLBACK_FAILED: false,
+      INTERNAL_ERROR: false
+    },
+
+    META_OPEN: "[MOTION_META_V1]",
+    META_CLOSE: "[/MOTION_META_V1]",
+    RIG_PREFIX: "MOTION | ",
+    EXPRESSION_HEADER: "// MOTION_EXPRESSION v1 | "
+  };
+}($.global));
