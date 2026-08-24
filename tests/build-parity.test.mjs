@@ -31,7 +31,11 @@ const dist = path.join(root, "dist");
  */
 const ALLOWED_DIVERGENCE = {
   "after-effects-cep/host/index.jsx":
-    "O fonte passou a viver em apps/after-effects-cep/host/src/index.jsx sem a diretiva #target, que agora e emitida por scripts/build-extendscript.mjs. Com o arquivo parseavel, ele ganhou anotacoes JSDoc para ser verificado por tsc --checkJs, e duas correcoes apontadas pelo ESLint: escape desnecessario numa regex e hasOwnProperty acessado direto do objeto. Tambem foi removido o ramo `if (!app.project) app.newProject()`, que chamava uma operacao destrutiva e nao-desfazivel de dentro de um grupo de Undo."
+    "CHMS-004 substituiu a camada de host inteira. Ela deixou de ser um arquivo unico com dois comandos globais e passou a ser montada a partir de nove fontes: contrato e descriptors gerados, MotionJson, MotionUndo, MotionRegistry, tres comandos e o dispatcher. O unico simbolo publico agora e MotionAE.dispatch.",
+  "after-effects-cep/client/main.js":
+    "CHMS-004 passou o cliente a ser empacotado pelo esbuild a partir de apps/after-effects-cep/client/src/main.ts, em vez de copiado. Ele precisa do encoder de evalScript e dos descriptors de packages/, e reimplementar o escape dentro do painel criaria uma segunda copia da unica funcao que impede injecao de codigo no host.",
+  "after-effects-cep/client/index.html":
+    "O script tag de shared/protocol.js saiu, porque o protocolo legado deixou de ser carregado pelo painel do After Effects, e entrou o botao echoButton, que aciona ae.diagnostics.echo para verificar a integridade da ponte com o host."
 };
 
 async function collectDistFiles(directory, base = directory, accumulated = []) {
@@ -127,19 +131,51 @@ test("o ExtendScript montado comeca com a diretiva #target, exatamente uma vez",
   assert.equal(occurrences, 1, "A diretiva #target aparece mais de uma vez em posição de código.");
 });
 
-test("o host montado ainda expoe os dois comandos que o painel chama", async () => {
+test("o host montado registra todo comando que o descriptor declara", async () => {
   const source = await readFile(path.join(dist, "after-effects-cep/host/index.jsx"), "utf8");
+
+  // Um descriptor sem implementacao vira um botao que responde
+  // "não implementado neste build" ao usuario. Compila, passa no lint, e so
+  // aparece quando alguem clica. Este teste transforma isso em falha de build.
+  const declared = [...source.matchAll(/^\s{4}"(ae\.[a-zA-Z.]+)":\s*\{/gm)].map((m) => m[1]);
+  const registered = [...source.matchAll(/MotionRegistry\.register\("(ae\.[a-zA-Z.]+)"/g)].map((m) => m[1]);
+
+  assert.ok(declared.length > 0, "Nenhum descriptor foi encontrado no host montado.");
+  assert.deepEqual(
+    registered.sort(),
+    declared.sort(),
+    "Os comandos declarados nos descriptors e os registrados no host não são o mesmo conjunto."
+  );
+});
+
+test("o host montado expoe apenas MotionAE.dispatch", async () => {
+  const source = await readFile(path.join(dist, "after-effects-cep/host/index.jsx"), "utf8");
+
+  // Qualquer outro global do plugin seria um caminho para dentro do After
+  // Effects que contorna o dispatcher — ou seja, contorna a checagem de versao
+  // de protocolo, o preflight, o consentimento para operacao destrutiva e a
+  // fronteira de Undo.
+  assert.match(source, /global\.MotionAE\s*=\s*\{\s*dispatch:\s*dispatch\s*\}/);
+
+  const publicGlobals = [...source.matchAll(/^\s*global\.(Motion\w+)\s*=/gm)].map((m) => m[1]);
+  assert.deepEqual(
+    [...new Set(publicGlobals)].sort(),
+    ["MotionAE", "MotionContracts", "MotionDescriptors", "MotionJson", "MotionRegistry", "MotionUndo"],
+    "O conjunto de globais do host mudou. Somente MotionAE é superfície pública; " +
+      "os demais são módulos internos, e um global novo precisa de justificativa."
+  );
+});
+
+test("o bundle do cliente chama o dispatcher e nenhum comando por nome", async () => {
   const client = await readFile(path.join(dist, "after-effects-cep/client/main.js"), "utf8");
 
-  // O contrato entre cliente e host neste ponto ainda e a chamada literal por
-  // nome. Se a montagem quebrar o global ou renomear um comando, o painel para de
-  // funcionar sem nenhum erro de build.
-  for (const command of ["getContext", "createDemoComposition"]) {
-    assert.match(source, new RegExp(`${command}:\\s*${command}`), `Host não expõe ${command}.`);
-    assert.match(client, new RegExp(`MotionAE\\.${command}\\(\\)`), `Cliente não chama ${command}.`);
-  }
+  assert.match(client, /MotionAE\.dispatch\(/, "O cliente não monta a chamada ao dispatcher.");
 
-  assert.match(source, /global\.MotionAE\s*=/, "O host não pendura MotionAE no global.");
+  // Os comandos antigos eram invocados por nome literal dentro do evalScript.
+  // Se um sobreviver, existe um caminho paralelo que nao passa pelo escape.
+  for (const legacy of ["MotionAE.getContext", "MotionAE.createDemoComposition"]) {
+    assert.ok(!client.includes(legacy), `Chamada legada sobrevivente no cliente: ${legacy}`);
+  }
 });
 
 test("nenhum arquivo de workspace vazou para dist/", async () => {

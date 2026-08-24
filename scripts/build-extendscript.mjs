@@ -30,8 +30,30 @@ const hostSrc = path.join(root, "apps", "after-effects-cep", "host", "src");
 
 /**
  * Ordem de concatenacao. Dependencias primeiro.
+ *
+ * Lista literal, nunca glob. Um glob resolve em ordem de sistema de arquivos,
+ * que difere entre Windows, macOS e o runner do CI — e como cada modulo depende
+ * dos globais que os anteriores penduraram em `$.global`, uma ordem diferente
+ * quebra o carregamento dentro do After Effects, onde o erro e mais caro de
+ * diagnosticar.
+ *
+ * Os caminhos com `../generated/` sao codigo gerado a partir do TypeScript. Eles
+ * vem antes de tudo porque o dispatcher e os comandos leem MotionContracts e
+ * MotionDescriptors.
  */
-export const HOST_SOURCE_ORDER = ["index.jsx"];
+export const HOST_SOURCE_ORDER = [
+  "../generated/motion-contracts.jsx",
+  "../generated/motion-descriptors.jsx",
+  "json.jsx",
+  "undo.jsx",
+  "registry.jsx",
+  "commands/context-read.jsx",
+  "commands/diagnostics-echo.jsx",
+  "commands/demo-create-composition.jsx",
+  // dispatch por ultimo: ele e o unico simbolo publico, e so faz sentido depois
+  // que todos os comandos ja se registraram.
+  "dispatch.jsx"
+];
 
 const TARGET_DIRECTIVE = "#target aftereffects\n";
 

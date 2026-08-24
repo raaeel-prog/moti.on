@@ -3,7 +3,9 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { buildExtendScript } from "./build-extendscript.mjs";
+import { buildAeClient } from "./build-client.mjs";
 import { renderModule as renderContractsModule, GENERATED_PATH as CONTRACTS_ES5_PATH } from "../packages/contracts/scripts/gen-extendscript.mjs";
+import { renderModule as renderDescriptorsModule, GENERATED_PATH as DESCRIPTORS_ES5_PATH } from "../packages/command-registry/scripts/gen-extendscript.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDir, "..");
@@ -29,17 +31,14 @@ const dist = path.join(root, "dist");
 const EXCLUDED_BASENAMES = new Set([
   ".debug",
   "package.json",
-  "tsconfig.json",
-  "tsconfig.host.json",
   "node_modules",
   "tests",
   "types",
   "src",
-  // Codigo gerado do contrato. Ele NAO e copiado solto para dist/: o
-  // ExtendScript nao tem sistema de modulos, entao um .jsx avulso ao lado do
-  // host nunca seria carregado, e existiria no pacote so para confundir.
-  // Ele entra no bundle por concatenacao em HOST_SOURCE_ORDER, no CHMS-004,
-  // quando o dispatcher passar a consumir MotionContracts.
+  // Codigo gerado do contrato e dos descriptors. NAO e copiado solto para
+  // dist/: o ExtendScript nao tem sistema de modulos, entao um .jsx avulso ao
+  // lado do host nunca seria carregado e existiria no pacote so para confundir.
+  // Ele entra no bundle por concatenacao, declarada em HOST_SOURCE_ORDER.
   "generated"
 ]);
 
@@ -77,6 +76,9 @@ async function copyAppShell(appName, outputName) {
       const base = path.basename(source);
       if (EXCLUDED_BASENAMES.has(base)) return false;
       // Artefatos do compilador: tsc -b grava .tsbuildinfo ao lado do tsconfig.
+      // Prefixo, e nao lista de nomes: tsconfig.client.json vazou para dist/
+      // exatamente porque a lista nao previa um terceiro tsconfig.
+      if (base.startsWith("tsconfig") && base.endsWith(".json")) return false;
       if (base.endsWith(".tsbuildinfo") || base.endsWith(".ts") || base.endsWith(".map")) return false;
       return true;
     }
@@ -93,6 +95,7 @@ async function copyAppShell(appName, outputName) {
 // gera-lo depois deixaria o build de uma arvore limpa emitindo a versao anterior.
 await mkdir(path.dirname(CONTRACTS_ES5_PATH), { recursive: true });
 await writeFile(CONTRACTS_ES5_PATH, await renderContractsModule(), "utf8");
+await writeFile(DESCRIPTORS_ES5_PATH, await renderDescriptorsModule(), "utf8");
 
 await copyAppShell("premiere-uxp", "premiere-uxp");
 await copyAppShell("after-effects-cep", "after-effects-cep");
@@ -101,6 +104,13 @@ await copyAppShell("after-effects-cep", "after-effects-cep");
 // aqui para que os fontes permanecam JavaScript verificavel por ferramenta.
 const extendScript = await buildExtendScript(
   path.join(dist, "after-effects-cep", "host", "index.jsx")
+);
+
+// O cliente do painel e empacotado, nao copiado: ele importa o encoder de
+// evalScript e os descriptors de packages/, e nem o CEP nem o UXP resolvem
+// modulos de node_modules por conta propria.
+const aeClient = await buildAeClient(
+  path.join(dist, "after-effects-cep", "client", "main.js")
 );
 
 const buildInfo = {
@@ -117,5 +127,7 @@ await writeFile(
 );
 
 console.log(
-  `Build concluído em dist/. ExtendScript montado a partir de ${extendScript.files} fonte(s), ${extendScript.bytes} bytes.`
+  `Build concluído em dist/.
+  ExtendScript: ${extendScript.files} fonte(s), ${extendScript.bytes} bytes.
+  Cliente AE:   ${aeClient.bytes} bytes.`
 );

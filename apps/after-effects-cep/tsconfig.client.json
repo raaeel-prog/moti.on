@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "$comment": "Cliente do painel CEP. Roda no Chromium embutido do CEP 12, nao no Node: 'lib' traz DOM e o alvo e ES2020, que o Chromium do CEP 12 suporta. O bundle final e produzido pelo esbuild; aqui so a checagem de tipos.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM"],
+    "types": [],
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "tsBuildInfoFile": "../../.tsbuildinfo/after-effects-cep-client.tsbuildinfo"
+  },
+  "include": ["client/src/**/*.ts"]
+}

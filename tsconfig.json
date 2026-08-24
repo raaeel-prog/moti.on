@@ -4,6 +4,8 @@
   "files": [],
   "references": [
     { "path": "./packages/contracts" },
-    { "path": "./apps/after-effects-cep/tsconfig.host.json" }
+    { "path": "./packages/command-registry" },
+    { "path": "./apps/after-effects-cep/tsconfig.host.json" },
+    { "path": "./apps/after-effects-cep/tsconfig.client.json" }
   ]
 }

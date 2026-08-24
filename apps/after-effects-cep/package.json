@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Painel Moti.on para Adobe After Effects sobre CEP 12, com camada de host em ExtendScript.",
-  "$comment": "Manifesto npm do workspace. O manifesto que o After Effects le e CSXS/manifest.xml. scripts/build.mjs exclui package.json de dist/.",
-  "license": "MIT"
+  "$comment": "Manifesto npm do workspace. O manifesto que o After Effects le e CSXS/manifest.xml. scripts/build.mjs exclui package.json de dist/. O campo type=module vale para os fontes TypeScript do cliente; a camada de host em .jsx nao passa por resolucao de modulo do Node e nao e afetada.",
+  "license": "MIT",
+  "type": "module"
 }

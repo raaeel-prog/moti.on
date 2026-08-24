@@ -53,3 +53,11 @@ export {
   toLegacy,
   type LegacyEnvelope
 } from "./legacy.js";
+
+export {
+  MAX_INLINE_CHARS,
+  buildDispatchCall,
+  decodeFromHost,
+  encodeForEvalScript,
+  needsTempFileTransport
+} from "./evalscript.js";

@@ -4,6 +4,7 @@ import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { stripCommentsAndStrings } from "./check-extendscript.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDir, "..");
@@ -103,6 +104,84 @@ assert(
 assert(
   !aeManifest.includes("com.example") && !premiereManifestRaw.includes("com.example"),
   "Identificador placeholder com.example encontrado num manifest."
+);
+
+
+// ---------------------------------------------------------------------------
+// Fronteira de seguranca da ponte painel-host.
+//
+// Estas assercoes rodam sobre o BUNDLE CONSTRUIDO, nao sobre o fonte. E o
+// construido que roda dentro do After Effects, e um import esquecido ou uma
+// refatoracao mal feita so aparecem depois de empacotar.
+// ---------------------------------------------------------------------------
+
+const aeClientBundle = await readFile(await mustExist("after-effects-cep/client/main.js"), "utf8");
+const aeHostBundle = await readFile(await mustExist("after-effects-cep/host/index.jsx"), "utf8");
+
+// As checagens estruturais rodam sobre o texto SEM comentarios e sem conteudo de
+// string. Os proprios arquivos documentam as regras que estao sendo verificadas
+// — o cabecalho de dispatch.jsx explica que existe um unico `global.MotionAE =`
+// — e uma busca crua acusaria a documentacao. O que importa e o codigo.
+const aeClientCode = stripCommentsAndStrings(aeClientBundle);
+const aeHostCode = stripCommentsAndStrings(aeHostBundle);
+
+// Um unico ponto de contato com o evalScript. Ele recebe uma string de codigo
+// que o After Effects avalia com acesso total ao projeto e ao sistema de
+// arquivos; espalhar chamadas tornaria impossivel auditar o que atravessa.
+const evalScriptCalls = (aeClientCode.match(/\.evalScript\s*\(/g) || []).length;
+assert(
+  evalScriptCalls === 1,
+  `O bundle do cliente chama evalScript ${evalScriptCalls} vezes. Somente o host adapter pode chamá-lo.`
+);
+
+// Um unico simbolo publico no host. Qualquer outro global seria um caminho
+// alternativo para dentro do After Effects, fora do dispatcher e portanto fora
+// de toda a validacao que ele faz.
+const publicHostGlobals = (aeHostCode.match(/global\.MotionAE\s*=/g) || []).length;
+assert(
+  publicHostGlobals === 1,
+  `O host expõe MotionAE ${publicHostGlobals} vezes. Deve ser exatamente uma.`
+);
+assert(
+  /global\.MotionAE\s*=\s*\{\s*dispatch:/.test(aeHostCode),
+  "MotionAE precisa expor apenas dispatch. Comandos individuais não podem ser globais."
+);
+
+// Geracao de codigo em runtime. A secao 24 do master spec proibe
+// allowCodeGenerationFromStrings; um eval sobrevivente no bundle contradiz isso.
+for (const [pattern, label] of [
+  [/(^|[^.\w])eval\s*\(/, "eval("],
+  [/new\s+Function\s*\(/, "new Function("]
+]) {
+  assert(!pattern.test(aeClientCode), `Geração de código em runtime no bundle do cliente: ${label}`);
+  assert(!pattern.test(aeHostCode), `Geração de código em runtime no host: ${label}`);
+}
+
+// Marcadores de trabalho inacabado. A secao 0.5 proibe TODO e mock silencioso;
+// se um chegou ao build, chegou ao usuario.
+for (const marker of ["TODO", "FIXME", "XXX"]) {
+  assert(!aeClientBundle.includes(marker), `Marcador ${marker} no bundle do cliente.`);
+  assert(!aeHostBundle.includes(marker), `Marcador ${marker} no host construído.`);
+}
+
+// console no bundle. Ate o logger estruturado do CHMS-007, nenhum console pode
+// sair no build: a secao 34 o proibe em release, e log nao estruturado vaza
+// caminho e nome de projeto, que a secao 25 proibe registrar.
+assert(
+  !/console\.(log|warn|error|info|debug)\s*\(/.test(aeClientCode),
+  "console no bundle do cliente. Use o logger."
+);
+assert(
+  !/console\.(log|warn|error|info|debug)\s*\(/.test(aeHostCode),
+  "console no host construído."
+);
+
+// URLs literais. Endpoint espalhado pelo codigo e o que torna impossivel saber
+// para onde o plugin fala. A secao 34 exige que provedores venham de config.
+const urlInBundle = aeClientBundle.match(/https?:\/\/[^"'\s)]+/g) || [];
+assert(
+  urlInBundle.length === 0,
+  `URL literal no bundle do cliente: ${urlInBundle.slice(0, 3).join(", ")}`
 );
 
 console.log("Validação estrutural e sintática concluída.");

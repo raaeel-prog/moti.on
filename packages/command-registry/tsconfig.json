@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "$comment": "types: [node] traz as declaracoes de setTimeout/clearTimeout. O painel roda em CEP e UXP, nao em Node, mas as assinaturas de temporizador sao as mesmas e sao as unicas coisas usadas daqui — o resto do ambiente e injetado pelo Transport, justamente para nao amarrar este package a um runtime.",
+  "compilerOptions": {
+    "types": ["node"],
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../.tsbuildinfo/command-registry.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [{ "path": "../contracts" }]
+}

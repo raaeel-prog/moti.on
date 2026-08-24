@@ -96,12 +96,23 @@ export default [
       ecmaVersion: 5,
       sourceType: "script",
       globals: {
+        // Fornecidos pelo After Effects.
         $: "readonly",
         app: "readonly",
         CompItem: "readonly",
         File: "readonly",
         ParagraphJustification: "readonly",
-        TextDocument: "readonly"
+        TextDocument: "readonly",
+        // Fornecidos pelos proprios modulos do host. O ExtendScript nao tem
+        // sistema de modulos: cada arquivo se pendura em $.global e os
+        // seguintes o enxergam como identificador nu. A ordem de carregamento
+        // esta em HOST_SOURCE_ORDER, e os tipos em host/types/motion-host.d.ts.
+        MotionContracts: "readonly",
+        MotionDescriptors: "readonly",
+        MotionJson: "readonly",
+        MotionUndo: "readonly",
+        MotionRegistry: "readonly",
+        MotionAE: "readonly"
       }
     },
     rules: {

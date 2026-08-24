@@ -30,6 +30,18 @@ export interface CommandContext {
    */
   projectFingerprint?: string;
   activeItemId?: string;
+  /**
+   * Locale da interface, por exemplo `"pt-BR"`.
+   *
+   * O host precisa dele por um motivo específico: o rótulo que aparece em
+   * `Edit > Undo` é escrito pelo host, e o usuário lê esse menu no idioma dele.
+   * Toda a demais tradução acontece no painel.
+   *
+   * Campo opcional acrescentado depois da v1 inicial. Pelo `docs/adr/0002`, campo
+   * opcional novo não sobe `PROTOCOL_VERSION`: um host antigo simplesmente não o
+   * lê, e um host novo trata a ausência caindo no idioma padrão.
+   */
+  locale?: string;
 }
 
 export interface CommandOptions {

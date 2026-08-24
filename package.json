@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "clean": "node scripts/build.mjs --clean-only",
-    "build": "node scripts/build.mjs",
+    "build": "tsc -b && node scripts/build.mjs",
     "lint": "eslint . && node scripts/check-extendscript.mjs",
     "typecheck": "tsc -b",
     "validate": "node scripts/validate.mjs",
@@ -21,6 +21,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.2.0",
+    "esbuild": "^0.28.2",
     "eslint": "^10.9.0",
     "globals": "^17.11.0",
     "typescript": "^6.0.3",
