@@ -1,6 +1,7 @@
 import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import premierepro from "@adobe/eslint-plugin-premierepro";
 
 /**
  * Configuracao flat do ESLint.
@@ -125,23 +126,35 @@ export default [
     }
   },
 
-  // Cliente do painel UXP (Premiere Pro).
+  // Premiere Pro: regras oficiais da Adobe.
+  //
+  // Sao elas que impedem os erros mais caros da API do Premiere — mutar fora de
+  // uma transacao, trabalho assincrono dentro dos callbacks sincronos de
+  // lockedAccess e executeTransaction, e referencia de Action escapando do
+  // escopo da trava. A secao 7 do master spec exige "ESLint incl. official
+  // Premiere rules", e uma regra oficial acompanha as mudancas da API; uma regra
+  // caseira envelhece em silencio.
+  //
+  // Config sintatica, nao recommendedTypeChecked: as variantes com informacao de
+  // tipo exigem projectService, que faz o ESLint carregar o programa TypeScript
+  // inteiro a cada execucao. `npm run typecheck` ja roda o tsc completo.
+  //
+  // tests/premiere-eslint-rules.test.mjs prova que as regras funcionam com o
+  // ESLint 10 apesar do peer ^9 declarado pelo plugin.
   {
-    files: ["apps/premiere-uxp/**/*.js"],
+    ...premierepro.configs.recommended,
+    files: ["apps/premiere-uxp/**/*.ts"]
+  },
+
+  {
+    files: ["apps/premiere-uxp/**/*.ts"],
     languageOptions: {
-      ecmaVersion: 2020,
-      sourceType: "commonjs",
-      globals: {
-        ...globals.browser,
-        require: "readonly",
-        module: "writable",
-        MotionProtocol: "readonly"
-      }
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: { ...globals.browser }
     },
     rules: {
-      "no-console": "error",
-      "no-var": "off",
-      "prefer-const": "off"
+      "no-console": "error"
     }
   },
 

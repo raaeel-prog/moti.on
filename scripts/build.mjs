@@ -3,7 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { buildExtendScript } from "./build-extendscript.mjs";
-import { buildAeClient } from "./build-client.mjs";
+import { buildAeClient, buildPremiereClient } from "./build-client.mjs";
 import { renderModule as renderContractsModule, GENERATED_PATH as CONTRACTS_ES5_PATH } from "../packages/contracts/scripts/gen-extendscript.mjs";
 import { renderModule as renderDescriptorsModule, GENERATED_PATH as DESCRIPTORS_ES5_PATH } from "../packages/command-registry/scripts/gen-extendscript.mjs";
 
@@ -58,10 +58,6 @@ if (process.argv.includes("--clean-only")) {
  */
 const SHARED_ASSETS = [
   {
-    from: path.join(packages, "contracts", "legacy", "protocol.js"),
-    to: path.join("shared", "protocol.js")
-  },
-  {
     from: path.join(packages, "ui-core", "src", "theme.css"),
     to: path.join("styles", "theme.css")
   }
@@ -113,6 +109,10 @@ const aeClient = await buildAeClient(
   path.join(dist, "after-effects-cep", "client", "main.js")
 );
 
+const premiereClient = await buildPremiereClient(
+  path.join(dist, "premiere-uxp", "main.js")
+);
+
 const buildInfo = {
   name: pkg.name,
   version: pkg.version,
@@ -129,5 +129,6 @@ await writeFile(
 console.log(
   `Build concluído em dist/.
   ExtendScript: ${extendScript.files} fonte(s), ${extendScript.bytes} bytes.
-  Cliente AE:   ${aeClient.bytes} bytes.`
+  Cliente AE:   ${aeClient.bytes} bytes.
+  Cliente PPro: ${premiereClient.bytes} bytes.`
 );

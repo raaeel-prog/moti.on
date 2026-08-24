@@ -1,0 +1,12 @@
+{
+  "name": "@motion/test-fixtures",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Duplos de teste dos modulos de host. Nao entra em nenhum build distribuivel.",
+  "type": "module",
+  "main": "./src/index.mjs",
+  "exports": {
+    "./premierepro": "./src/fake-premierepro.mjs"
+  },
+  "license": "MIT"
+}

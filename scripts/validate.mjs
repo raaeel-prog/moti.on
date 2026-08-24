@@ -48,12 +48,12 @@ const csInterfacePath = await mustExist("after-effects-cep/client/lib/CSInterfac
 const csInterfaceStats = await stat(csInterfacePath);
 assert(csInterfaceStats.size > 40000, "CSInterface.js parece incompleto.");
 
+// Checagem de sintaxe sobre os artefatos que os hosts carregam. Os dois clientes
+// sao bundles do esbuild; o protocolo legado deixou de ser copiado para dentro
+// dos apps quando o CHMS-004 e o CHMS-005 substituiram os dois lados da ponte.
 const filesToCheck = [
   "premiere-uxp/main.js",
-  "premiere-uxp/host/premiere-adapter.js",
-  "premiere-uxp/shared/protocol.js",
-  "after-effects-cep/client/main.js",
-  "after-effects-cep/shared/protocol.js"
+  "after-effects-cep/client/main.js"
 ];
 
 for (const relativePath of filesToCheck) {
@@ -182,6 +182,91 @@ const urlInBundle = aeClientBundle.match(/https?:\/\/[^"'\s)]+/g) || [];
 assert(
   urlInBundle.length === 0,
   `URL literal no bundle do cliente: ${urlInBundle.slice(0, 3).join(", ")}`
+);
+
+
+// ---------------------------------------------------------------------------
+// Permissoes e CSP.
+//
+// Verificado contra a referencia oficial do manifest v5 em 2026-08-24; o
+// registro esta em docs/research/premiere-uxp-transactions.md. As chaves validas
+// sao clipboard, localFileSystem, network, webview, launchProcess,
+// allowCodeGenerationFromStrings, enableUserInfo, ipc e enableAddon.
+// ---------------------------------------------------------------------------
+
+const permissions = premiereManifest.requiredPermissions || {};
+
+// Permissao minima. Declarar permissao "para depois" e o tipo de coisa que passa
+// despercebida numa revisao ate virar rejeicao de marketplace.
+const ALLOWED_PERMISSIONS_P0 = new Set(["localFileSystem"]);
+const declared = Object.keys(permissions);
+const unexpected = declared.filter((key) => !ALLOWED_PERMISSIONS_P0.has(key));
+assert(
+  unexpected.length === 0,
+  `Permissão declarada sem necessidade no P0: ${unexpected.join(", ")}. ` +
+    "network chega no CHMS-029, enableAddon no CHMS-040, e cada uma com a issue que a justifica."
+);
+
+assert(
+  permissions.localFileSystem === "request",
+  `localFileSystem deve ser "request", e não "${permissions.localFileSystem}". ` +
+    '"fullAccess" daria acesso a todo o disco para um recurso que precisa de um arquivo por vez.'
+);
+
+// A secao 24 proibe geracao de codigo em runtime. E tambem o que torna o Ajv em
+// runtime inviavel: o compilador padrao dele usa new Function.
+assert(
+  permissions.allowCodeGenerationFromStrings !== true,
+  "allowCodeGenerationFromStrings é proibido pela §24 do master spec."
+);
+
+// network com "all" seria pedir acesso irrestrito a rede. Quando o CHMS-029
+// trouxer o provider Pexels, os dominios serao explicitos.
+assert(
+  permissions.network?.domains !== "all",
+  'network.domains: "all" nunca é aceitável. Liste os domínios explicitamente.'
+);
+
+// CSP nos dois paineis.
+for (const htmlPath of ["premiere-uxp/index.html", "after-effects-cep/client/index.html"]) {
+  const html = await readFile(await mustExist(htmlPath), "utf8");
+  assert(
+    /http-equiv="Content-Security-Policy"/.test(html),
+    `Falta a meta Content-Security-Policy em ${htmlPath}.`
+  );
+  assert(
+    /default-src 'none'/.test(html),
+    `A CSP de ${htmlPath} precisa partir de default-src 'none'.`
+  );
+  assert(
+    !/unsafe-inline|unsafe-eval/.test(html),
+    `A CSP de ${htmlPath} não pode permitir unsafe-inline nem unsafe-eval.`
+  );
+}
+
+// O painel do Premiere passou pelas mesmas regras do bundle do After Effects.
+const premiereBundle = await readFile(await mustExist("premiere-uxp/main.js"), "utf8");
+const premiereCode = stripCommentsAndStrings(premiereBundle);
+
+for (const [pattern, label] of [
+  [/(^|[^.\w])eval\s*\(/, "eval("],
+  [/new\s+Function\s*\(/, "new Function("],
+  [/console\.(log|warn|error|info|debug)\s*\(/, "console"]
+]) {
+  assert(!pattern.test(premiereCode), `${label} no bundle do Premiere.`);
+}
+
+for (const marker of ["TODO", "FIXME", "XXX"]) {
+  assert(!premiereBundle.includes(marker), `Marcador ${marker} no bundle do Premiere.`);
+}
+
+// Um unico ponto de contato com o modulo do host, pelo mesmo motivo do
+// evalScript do lado do After Effects: concentrar o contato num lugar auditavel.
+const premiereRequires = (premiereCode.match(/require\(/g) || []).length;
+assert(
+  premiereRequires > 0 && premiereRequires <= 4,
+  `O bundle do Premiere faz ${premiereRequires} chamadas a require(). ` +
+    "Esperado: premierepro, uxp e o entrypoint. Um número maior sugere acesso disperso ao host."
 );
 
 console.log("Validação estrutural e sintática concluída.");

@@ -6,6 +6,7 @@
     { "path": "./packages/contracts" },
     { "path": "./packages/command-registry" },
     { "path": "./apps/after-effects-cep/tsconfig.host.json" },
-    { "path": "./apps/after-effects-cep/tsconfig.client.json" }
+    { "path": "./apps/after-effects-cep/tsconfig.client.json" },
+    { "path": "./apps/premiere-uxp" }
   ]
 }

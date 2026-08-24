@@ -59,3 +59,32 @@ export async function buildAeClient(outputPath) {
   const outputs = Object.values(result.metafile.outputs);
   return { bytes: outputs[0]?.bytes ?? 0 };
 }
+
+/**
+ * Empacota o painel do Premiere.
+ *
+ * Formato CommonJS, e nao IIFE: o UXP carrega o entry point do painel por
+ * `require`, e o proprio codigo usa `require("premierepro")` e `require("uxp")`.
+ * Esses dois sao fornecidos pelo runtime do Premiere e precisam ficar EXTERNOS —
+ * empacota-los faria o esbuild tentar resolve-los em node_modules e o build
+ * falharia, ou pior, embutiria um stub vazio.
+ */
+export async function buildPremiereClient(outputPath) {
+  const result = await esbuild.build({
+    entryPoints: [path.join(root, "apps", "premiere-uxp", "client", "src", "main.ts")],
+    outfile: outputPath,
+    bundle: true,
+    format: "cjs",
+    platform: "neutral",
+    target: ["es2020"],
+    external: ["premierepro", "uxp", "fs", "os", "path"],
+    legalComments: "none",
+    minify: false,
+    sourcemap: false,
+    logLevel: "warning",
+    metafile: true
+  });
+
+  const outputs = Object.values(result.metafile.outputs);
+  return { bytes: outputs[0]?.bytes ?? 0 };
+}

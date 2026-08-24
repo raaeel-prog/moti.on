@@ -19,6 +19,7 @@
     "skills:validate": "node scripts/validate-agent-skills.mjs"
   },
   "devDependencies": {
+    "@adobe/eslint-plugin-premierepro": "^26.3.0",
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.2.0",
     "esbuild": "^0.28.2",
@@ -30,5 +31,13 @@
   "engines": {
     "node": ">=18"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "overrides": {
+    "@adobe/eslint-plugin-premierepro": {
+      "eslint": "$eslint"
+    }
+  },
+  "$comment": {
+    "overrides": "O plugin oficial da Adobe (@adobe/eslint-plugin-premierepro) declara peer eslint ^9.0.0 e este repositorio usa o 10. O override aponta a resolucao dele para o eslint da raiz, em vez de afrouxar a resolucao do projeto inteiro com legacy-peer-deps. A compatibilidade real e verificada por tests/premiere-eslint-rules.test.mjs, que roda o plugin contra codigo que deve e que nao deve disparar as regras: sem essa prova, o override seria so um jeito de silenciar o npm."
+  }
 }

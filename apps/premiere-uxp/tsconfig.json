@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "$comment": "Cliente e camada de host do Premiere no mesmo projeto. Diferente do After Effects, aqui nao ha ExtendScript nem ponte a atravessar: o UXP roda o painel e o codigo de host no mesmo runtime, entao os dois sao TypeScript compilado normalmente e o adapter e chamado direto. O bundle final do painel e produzido pelo esbuild.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "rootDir": ".",
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../.tsbuildinfo/premiere-uxp.tsbuildinfo"
+  },
+  "include": ["host/src/**/*.ts", "client/src/**/*.ts"],
+  "references": [
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/command-registry" }
+  ]
+}

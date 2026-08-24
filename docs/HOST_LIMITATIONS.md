@@ -36,13 +36,19 @@ Está provado por teste que `beginUndoGroup` e `endUndoGroup` são chamados exat
 
 O tipo `HostCapabilities.expressionEngine` prevê `"javascript" | "legacy" | "unknown"`. A sonda que leria `app.project.expressionEngine` chega no CHMS-006, e **as strings que o After Effects realmente devolve não foram conferidas** num projeto de verdade.
 
-### 7. Premiere Pro
+### 7. Comportamento em tempo de execução das transações do Premiere
 
-O adapter do Premiere continua sendo o do starter: lê projeto e sequência, faz autoteste, e ainda usa o envelope legado. O command bus com `lockedAccess`/`executeTransaction` é CHMS-005 e **não foi escrito**. As assinaturas exatas dessas APIs serão verificadas contra a referência oficial da Adobe antes de qualquer código — não de memória.
+As assinaturas de `lockedAccess`, `executeTransaction` e `CompoundAction.addAction` foram verificadas contra a referência oficial da Adobe e estão registradas em [`docs/research/premiere-uxp-transactions.md`](research/premiere-uxp-transactions.md). O helper `withTransaction` respeita o aninhamento documentado e está coberto por teste contra um duplo que falha se a ordem for invertida.
 
-### 8. Permissões UXP e CSP
+**Nada disso foi executado dentro do Premiere Pro.** Continua sem resposta: em que situação exatamente `executeTransaction` devolve `false`; se `lockedAccess` pode ser aninhado; o que acontece quando uma exceção escapa de dentro do callback; e se a transação de fato produz uma única entrada no histórico de Desfazer.
 
-`apps/premiere-uxp/manifest.json` **ainda não declara `requiredPermissions`**, e nenhum dos dois `index.html` tem meta `Content-Security-Policy`. Ambos entram no CHMS-005. Também não está verificado se o UXP honra CSP declarada por meta tag.
+Também não foi verificado o valor real de `hostVersion` — o painel do Premiere hoje envia `"unknown"`, porque a forma documentada de obtê-lo ainda não foi confirmada. Isso não bloqueia nada no P0, já que nenhum comando decide por versão, mas precisa ser resolvido antes do CHMS-006.
+
+### 8. Aceitação de `requiredPermissions` e da CSP
+
+`apps/premiere-uxp/manifest.json` declara `"localFileSystem": "request"`, e os dois painéis têm meta `Content-Security-Policy` partindo de `default-src 'none'`. As chaves válidas do manifest v5 foram verificadas na referência oficial.
+
+**Não está verificado** o comportamento no carregamento real: se o UXP recusa o plugin quando uma permissão é insuficiente, se avisa, ou se ignora em silêncio uma chave desconhecida. Também não está verificado se o UXP honra CSP declarada por meta tag — se não honrar, a proteção efetiva vem apenas de `requiredPermissions` e da garantia de que o build não contém código remoto.
 
 ### 9. Locale da interface
 
@@ -81,7 +87,13 @@ Isto **não** depende de host real, e está coberto por teste automatizado:
 | Callback atrasado não resolve promessa já entregue | idem |
 | Um único `evalScript` no bundle e um único global público no host | `scripts/validate.mjs`, sobre o build |
 | Nenhum `eval`, `new Function`, `console` ou URL literal no build | idem |
-| Descriptors e registro do host são o mesmo conjunto | `tests/build-parity.test.mjs` |
+| Descriptors e registro do host são o mesmo conjunto | `tests/build-output.test.mjs` |
+| `executeTransaction` roda dentro do callback de `lockedAccess` | `apps/premiere-uxp/tests/adapter.test.mjs` |
+| A trava fecha mesmo quando a montagem das ações lança | idem |
+| Nenhuma referência a `Action` sobrevive à transação | idem |
+| Autoteste do Premiere detecta ausência da API por símbolo, não por versão | idem |
+| As regras oficiais da Adobe realmente disparam nesta instalação | `tests/premiere-eslint-rules.test.mjs` |
+| Permissões mínimas e CSP no build | `scripts/validate.mjs` |
 | Código gerado não sai de sincronia com o TypeScript | testes de drift nos dois packages |
 | Sintaxe fora do subconjunto ExtendScript | `scripts/check-extendscript.mjs` + `tests/extendscript-subset.test.mjs` |
 

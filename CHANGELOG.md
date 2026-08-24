@@ -33,6 +33,28 @@ O commit crítico de segurança do P0. `evalScript` recebe uma **string de códi
 
 101 testes passando. Nenhum deles prova que o painel carrega no After Effects — isso está na página de limitações, e continua aberto.
 
+### CHMS-005 — Command bus do Premiere Pro
+
+Precedido de pesquisa em fonte primária, registrada em `docs/research/premiere-uxp-transactions.md`. **A pesquisa corrigiu três coisas que teriam sido implementadas erradas se o código fosse escrito de memória:**
+
+1. **`lockedAccess` e `executeTransaction` são síncronas.** O plano previa `withTransaction` como `async` devolvendo `Promise`. A referência oficial mostra `lockedAccess(callback: () => void): void` e `executeTransaction(callback: (compoundAction: CompoundAction) => void, undoString?: string): boolean`. Pior: o plugin oficial da Adobe tem **duas regras de lint dedicadas** a impedir exatamente esse erro.
+2. **O callback recebe o `CompoundAction`; não devolve ações.** A assinatura planejada era `build: (ctx) => Action[]`. As ações entram por `compound.addAction(action)`.
+3. **`no-action-scope-escape` é regra oficial, não invenção local.** O plano previa uma regra `no-restricted-syntax` caseira para a exigência da §10 de não reter referências de `Action`. A Adobe já tem uma — e regra oficial acompanha as mudanças da API, enquanto regra caseira envelhece em silêncio.
+
+- **`@adobe/eslint-plugin-premierepro`** entrou, cumprindo a exigência da §7 de "ESLint incl. official Premiere rules". O plugin declara peer `eslint@^9` e o repositório usa o 10; a resolução foi destravada por um `override` dirigido, **e `tests/premiere-eslint-rules.test.mjs` prova que as regras de fato disparam** — com par positivo e negativo cada uma. Um override sem verificação é só uma forma de silenciar o instalador: se o plugin carregasse sem produzir diagnóstico, `npm run lint` ficaria verde para sempre e a proteção contra o erro mais caro do Premiere teria deixado de existir sem ninguém notar.
+- **`withTransaction`** aninha `executeTransaction` dentro de `lockedAccess`, como a Adobe documenta, e devolve `{ executed, empty }`. **`compound.empty` é um sinal mais forte do que o equivalente no After Effects**: lá, saber se algo mudou depende de o comando reportar `changed` honestamente; aqui o próprio host responde. Nenhuma referência a `Action` ou `CompoundAction` sobrevive ao retorno.
+- **Adapter com o mesmo contrato do host do After Effects**: mesmos 22 códigos de erro, mesma recusa de `protocolVersion` divergente, mesma regra do `ok`, mesmo `preflight` antes de qualquer mutação. O módulo `premierepro` é **injetado**, e é isso que torna o adapter testável sem abrir o Premiere.
+- **O painel do Premiere foi reescrito em TypeScript** e passou a usar o adapter. Sem isso o adapter seria código morto — escrever a camada e deixar o painel no caminho antigo é exatamente o placeholder que a §0.5 proíbe. O `premiere-adapter.js` e o `main.js` antigos foram removidos.
+- **`requiredPermissions` declarado pela primeira vez**, e com uma única entrada: `"localFileSystem": "request"`. Não `"fullAccess"` — daria acesso a todo o disco para um recurso que precisa de um arquivo por vez. `network`, `enableAddon`, `launchProcess` e `allowCodeGenerationFromStrings` estão **ausentes de propósito**, cada um amarrado à issue que o justificaria. `scripts/validate.mjs` falha se uma permissão não prevista aparecer, se `localFileSystem` subir de nível, ou se `network.domains` virar `"all"`.
+- **Meta CSP nos dois painéis**, partindo de `default-src 'none'`, sem `unsafe-inline` nem `unsafe-eval`. Verificado no build.
+- **`packages/test-fixtures`** com o duplo do módulo `premierepro`. Ele registra a **ordem** das chamadas, não só o fato de terem acontecido: a garantia que importa é que `executeTransaction` roda dentro do callback de `lockedAccess`, e um teste que só contasse chamadas passaria com as duas invertidas. O duplo também lança se a transação for aberta fora da trava.
+
+#### Gate de paridade aposentado, com substituto
+
+`tests/build-parity.test.mjs` comparava `dist/` contra o snapshot do CHMS-001b e cumpriu o papel: provou que a migração para workspaces não alterou nenhum artefato. Depois que o CHMS-004 e o CHMS-005 substituíram deliberadamente as duas camadas de host e os dois painéis, continuar comparando produziria uma lista de divergências declaradas que cresce a cada commit sem carregar sinal — a forma mais comum de um gate morrer sem que ninguém perceba.
+
+Foi substituído por `tests/build-output.test.mjs`, que declara o **inventário exato** do build, verifica que `CSInterface.js` chega intacto (é o único arquivo de terceiros), e mantém as asserções estruturais. O fixture antigo continua no repositório, marcado como registro histórico.
+
 ### CHMS-003 — Package `contracts`
 
 - **`packages/contracts`** define o contrato de comandos da §8: `CommandRequest`, `CommandResponse`, `CommandWarning`, `CommandFailure`, `CommandContext`, `CommandOptions` e `CommandTiming`, mais `HostCapabilities` (§9) e `RigMetadata` (§11).
