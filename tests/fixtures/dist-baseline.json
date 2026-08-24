@@ -1,0 +1,34 @@
+{
+  "$comment": "Inventario de dist/ apos o rebranding para Moti.on (CHMS-001b). Esta e a referencia usada por tests/build-parity.test.mjs (CHMS-002) para provar que a migracao para npm workspaces nao alterou os artefatos carregados pelos hosts. Difere de dist-baseline-pre-rebrand.json em dois pontos: after-effects-cep/.debug nao esta mais presente (scripts/build.mjs passou a exclui-lo) e os arquivos que continham identificadores mudaram de hash. BUILD_INFO.json e excluido da comparacao porque embute um timestamp.",
+  "capturedAt": "2026-08-24T15:04:00Z",
+  "issue": "CHMS-001b",
+  "node": "v24.19.0",
+  "npm": "11.17.0",
+  "excluded": [
+    "BUILD_INFO.json"
+  ],
+  "unchangedSincePreRebrand": [
+    "after-effects-cep/client/lib/CSInterface.js",
+    "after-effects-cep/styles/theme.css",
+    "premiere-uxp/host/premiere-adapter.js",
+    "premiere-uxp/styles/theme.css"
+  ],
+  "removedSincePreRebrand": [
+    "after-effects-cep/.debug"
+  ],
+  "files": {
+    "after-effects-cep/CSXS/manifest.xml": { "bytes": 1519, "sha256": "d1815a4bb88af4e1d0819d7313f33c71af40b6c1413e93ef0ff361359d2bee56" },
+    "after-effects-cep/client/index.html": { "bytes": 1892, "sha256": "e28813f546351618b31c5db0e0f7fa830bcfca60e16fbbea91b3647b8a0fe936" },
+    "after-effects-cep/client/lib/CSInterface.js": { "bytes": 42759, "sha256": "3c45400984772b88cdf4604b4763a29219f8071fdedb9a1fa19d997349003783" },
+    "after-effects-cep/client/main.js": { "bytes": 3630, "sha256": "4c4500ffaca534d00f3f745ddea809a032460c142b35b116114835f3d8db4885" },
+    "after-effects-cep/host/index.jsx": { "bytes": 3855, "sha256": "f1896d84ed9e771fdb2be337723451ea0b8bb07dbd993df3c451276bbd587250" },
+    "after-effects-cep/shared/protocol.js": { "bytes": 2097, "sha256": "60908c945f954621183ff456017630603b0c6fe87f75c8eb0f9a840d4a7b5ece" },
+    "after-effects-cep/styles/theme.css": { "bytes": 3087, "sha256": "bf926d759e7186ccf301cf6536fc9921fb73fe03429859354c4da78fe6c5be4d" },
+    "premiere-uxp/host/premiere-adapter.js": { "bytes": 2249, "sha256": "6e06e51e36c36302f55f74a33be57ddc4d23c0692fae362a0a083477b1ef71ee" },
+    "premiere-uxp/index.html": { "bytes": 1785, "sha256": "a8b00449cb4e2bb265639bd06876cb14fd84253e9ec704bf50858a449da9f599" },
+    "premiere-uxp/main.js": { "bytes": 4203, "sha256": "36539e654aa4082f4b9449d24940a3107bcda7c27aa5a50db1607d2896099e69" },
+    "premiere-uxp/manifest.json": { "bytes": 664, "sha256": "af5317034ee927bbed1a450b7d3f17dfaa8b3d7db2af7114ec2e662b6a168044" },
+    "premiere-uxp/shared/protocol.js": { "bytes": 2097, "sha256": "60908c945f954621183ff456017630603b0c6fe87f75c8eb0f9a840d4a7b5ece" },
+    "premiere-uxp/styles/theme.css": { "bytes": 3087, "sha256": "bf926d759e7186ccf301cf6536fc9921fb73fe03429859354c4da78fe6c5be4d" }
+  }
+}

@@ -1,8 +1,8 @@
 {
-  "name": "adobe-crosshost-plugin-starter",
+  "name": "motion-plugin",
   "version": "0.1.0",
   "private": true,
-  "description": "Starter multi-host para Adobe Premiere Pro UXP e After Effects CEP/ExtendScript.",
+  "description": "Moti.on — suite de motion design para Adobe After Effects (CEP/ExtendScript) e Premiere Pro (UXP).",
   "scripts": {
     "clean": "node scripts/build.mjs --clean-only",
     "build": "node scripts/build.mjs",

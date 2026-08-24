@@ -131,13 +131,12 @@ function initializePanel() {
 }
 
 entrypoints.setup({
+  // O UXP exige os hooks de ciclo de vida do plugin, mas nao ha nada a fazer
+  // neles ainda. Ficam vazios de proposito: MASTER_BUILD_SPEC secao 34 proibe
+  // console.log fora do logger, e o logger estruturado chega no CHMS-007.
   plugin: {
-    create: function () {
-      console.log("CrossHost Toolkit criado.");
-    },
-    destroy: function () {
-      console.log("CrossHost Toolkit destruído.");
-    }
+    create: function () {},
+    destroy: function () {}
   },
   panels: {
     mainPanel: {

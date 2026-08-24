@@ -1,6 +1,8 @@
-# Adobe CrossHost Plugin Starter
+# Moti.on
 
-Base funcional para um produto que atua no **Premiere Pro** e no **After Effects**, respeitando o runtime atual de cada aplicativo.
+Suíte de motion design que atua no **Premiere Pro** e no **After Effects**, respeitando o runtime atual de cada aplicativo.
+
+> **Estado:** fase P0 (fundação), sobre a base `0.1.0`. Nenhum recurso de animação foi implementado ainda. O que existe hoje é a base carregável nos dois hosts, descrita abaixo. O plano completo está em [`docs/MASTER_BUILD_SPEC.md`](docs/MASTER_BUILD_SPEC.md); o histórico do ponto de partida em [`docs/BASELINE_STARTER_0.1.0.md`](docs/BASELINE_STARTER_0.1.0.md).
 
 ## O que já funciona
 
@@ -54,15 +56,16 @@ dist/                       artefatos carregáveis nos hosts
 
 O comando `npm run check` executa build limpo, validação dos manifests, verificação sintática e testes unitários. A validação final de um plugin Adobe exige também carregamento e teste dentro dos aplicativos-alvo; este repositório não substitui essa etapa de QA.
 
-## Personalização obrigatória
+## Pendente antes de publicar
 
-Antes de publicar:
+Os identificadores já são definitivos — `com.motion.plugin.premiere` e `com.motion.plugin.ae.panel`, registrados em [`docs/adr/0001-marca-e-namespace.md`](docs/adr/0001-marca-e-namespace.md) — e `npm run validate` falha se um placeholder voltar. Continua pendente:
 
-1. troque os IDs `com.example...` por um namespace próprio;
-2. defina nome, marca, ícones e versão;
-3. implemente o fluxo real do produto;
-4. adicione licença, assinatura, distribuição e matriz de QA;
-5. teste dentro das versões reais do Premiere e do After Effects em Windows e macOS.
+1. ícones e identidade visual;
+2. o fluxo real do produto (fases P1 a P6 do master spec);
+3. licença comercial, assinatura de código, distribuição e matriz de QA;
+4. teste dentro das versões reais do Premiere e do After Effects, em Windows e macOS.
+
+O item 4 não é formalidade: nenhum recurso dependente de host pode ser declarado concluído sem execução no aplicativo real. O que está implementado mas ainda não foi verificado num host fica marcado `IMPLEMENTED_NOT_HOST_VERIFIED`.
 
 ## Comandos
 

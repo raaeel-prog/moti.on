@@ -35,27 +35,27 @@
 
   function callHost(expression, callback) {
     if (!csInterface) {
-      callback(CrossHostProtocol.failure("CSInterface não foi inicializada.", "NO_CSINTERFACE"));
+      callback(MotionProtocol.failure("CSInterface não foi inicializada.", "NO_CSINTERFACE"));
       return;
     }
 
     csInterface.evalScript(expression, function (rawResult) {
-      callback(CrossHostProtocol.parse(rawResult));
+      callback(MotionProtocol.parse(rawResult));
     });
   }
 
   function renderContext(data) {
-    element("hostVersion").textContent = CrossHostProtocol.safeText(data.hostVersion);
-    element("projectName").textContent = CrossHostProtocol.safeText(data.projectName);
-    element("projectPath").textContent = CrossHostProtocol.safeText(data.projectPath, "Projeto ainda não salvo");
+    element("hostVersion").textContent = MotionProtocol.safeText(data.hostVersion);
+    element("projectName").textContent = MotionProtocol.safeText(data.projectName);
+    element("projectPath").textContent = MotionProtocol.safeText(data.projectPath, "Projeto ainda não salvo");
     element("activeItemName").textContent =
-      CrossHostProtocol.safeText(data.activeItemName, "Nenhum") +
+      MotionProtocol.safeText(data.activeItemName, "Nenhum") +
       (data.activeItemType ? " · " + data.activeItemType : "");
 
     element("compositionInfo").textContent = data.isComposition
-      ? CrossHostProtocol.formatDimension(data.compWidth, data.compHeight) +
-        " · " + CrossHostProtocol.safeText(data.compDuration) + " s · " +
-        CrossHostProtocol.safeText(data.compFrameRate) + " fps"
+      ? MotionProtocol.formatDimension(data.compWidth, data.compHeight) +
+        " · " + MotionProtocol.safeText(data.compDuration) + " s · " +
+        MotionProtocol.safeText(data.compFrameRate) + " fps"
       : "Nenhuma composição ativa";
   }
 
@@ -64,7 +64,7 @@
     setStatus("Lendo o projeto ativo…", "");
     setLog("Consultando o DOM ExtendScript do After Effects…", "");
 
-    callHost("CrossHostAE.getContext()", function (envelope) {
+    callHost("MotionAE.getContext()", function (envelope) {
       if (!envelope.ok) {
         setStatus("Não foi possível obter o contexto.", "error");
         setLog(envelope.error.message + " [" + envelope.error.code + "]", "error");
@@ -84,7 +84,7 @@
     setStatus("Criando composição de teste…", "");
     setLog("A operação será registrada como um único grupo de desfazer.", "");
 
-    callHost("CrossHostAE.createDemoComposition()", function (envelope) {
+    callHost("MotionAE.createDemoComposition()", function (envelope) {
       if (!envelope.ok) {
         setStatus("A composição não foi criada.", "error");
         setLog(envelope.error.message + " [" + envelope.error.code + "]", "error");

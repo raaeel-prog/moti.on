@@ -1,6 +1,6 @@
 {
-  "id": "com.example.crosshosttoolkit.premiere",
-  "name": "CrossHost Toolkit",
+  "id": "com.motion.plugin.premiere",
+  "name": "Moti.on",
   "version": "0.1.0",
   "main": "index.html",
   "host": {
@@ -13,7 +13,7 @@
       "type": "panel",
       "id": "mainPanel",
       "label": {
-        "default": "CrossHost Toolkit"
+        "default": "Moti.on"
       },
       "minimumSize": {
         "width": 260,

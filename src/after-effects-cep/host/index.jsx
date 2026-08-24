@@ -86,7 +86,7 @@
   }
 
   function createDemoComposition() {
-    app.beginUndoGroup("CrossHost Toolkit - Criar composição de teste");
+    app.beginUndoGroup("Moti.on - Criar composição de teste");
 
     try {
       if (!app.project) {
@@ -94,7 +94,7 @@
       }
 
       var comp = app.project.items.addComp(
-        "CrossHost Demo",
+        "Moti.on Demo",
         1920,
         1080,
         1,
@@ -127,7 +127,7 @@
     }
   }
 
-  global.CrossHostAE = {
+  global.MotionAE = {
     getContext: getContext,
     createDemoComposition: createDemoComposition
   };

@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $Source = Join-Path $ProjectRoot "dist\after-effects-cep"
 $TargetRoot = Join-Path $env:APPDATA "Adobe\CEP\extensions"
-$Target = Join-Path $TargetRoot "com.example.crosshosttoolkit.ae"
+$Target = Join-Path $TargetRoot "com.motion.plugin.ae"
 
 if (-not (Test-Path $Source)) {
   throw "Build não encontrado. Execute 'npm run build' antes da instalação."
@@ -26,4 +26,4 @@ if ($EnableDebugMode) {
 }
 
 Write-Host "Extensão instalada em: $Target"
-Write-Host "Reinicie o After Effects e abra o painel CrossHost Toolkit."
+Write-Host "Reinicie o After Effects e abra o painel Moti.on."

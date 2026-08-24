@@ -25,7 +25,7 @@ Procedimento:
 3. Clique em **Add Plugin**.
 4. Selecione `dist/premiere-uxp/manifest.json`.
 5. Clique em **Load & Watch**.
-6. No Premiere, abra `Window > UXP Plugins > CrossHost Toolkit`.
+6. No Premiere, abra `Window > UXP Plugins > Moti.on`.
 
 Teste esperado:
 
@@ -42,7 +42,7 @@ npm run build
 .\scripts\install-ae-dev.ps1 -EnableDebugMode
 ```
 
-Reinicie o After Effects e abra o painel **CrossHost Toolkit** no menu de extensões.
+Reinicie o After Effects e abra o painel **Moti.on** no menu de extensões.
 
 ## 4. After Effects CEP — macOS
 
@@ -51,7 +51,7 @@ npm run build
 ./scripts/install-ae-dev.sh --enable-debug
 ```
 
-Reinicie o After Effects e abra o painel **CrossHost Toolkit** no menu de extensões.
+Reinicie o After Effects e abra o painel **Moti.on** no menu de extensões.
 
 Teste esperado:
 
@@ -65,5 +65,5 @@ O modo de desenvolvimento aceita extensão não assinada. Para distribuição re
 
 - empacote o Premiere como `.ccx` pelo fluxo UXP;
 - assine e empacote o After Effects como `.zxp`;
-- substitua todos os IDs `com.example...` por IDs próprios e permanentes;
+- os identificadores definitivos já são `com.motion.plugin.premiere` e `com.motion.plugin.ae.panel`; `npm run validate` falha se um placeholder voltar;
 - teste os instaladores em Windows e macOS limpos.

@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <ExtensionManifest
   Version="7.0"
-  ExtensionBundleId="com.example.crosshosttoolkit"
+  ExtensionBundleId="com.motion.plugin"
   ExtensionBundleVersion="0.1.0"
-  ExtensionBundleName="CrossHost Toolkit"
+  ExtensionBundleName="Moti.on"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <ExtensionList>
-    <Extension Id="com.example.crosshosttoolkit.ae.panel" Version="0.1.0" />
+    <Extension Id="com.motion.plugin.ae.panel" Version="0.1.0" />
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>
@@ -20,7 +20,7 @@
     </RequiredRuntimeList>
   </ExecutionEnvironment>
   <DispatchInfoList>
-    <Extension Id="com.example.crosshosttoolkit.ae.panel">
+    <Extension Id="com.motion.plugin.ae.panel">
       <DispatchInfo>
         <Resources>
           <MainPath>./client/index.html</MainPath>
@@ -31,7 +31,7 @@
         </Lifecycle>
         <UI>
           <Type>Panel</Type>
-          <Menu>CrossHost Toolkit</Menu>
+          <Menu>Moti.on</Menu>
           <Geometry>
             <Size>
               <Height>520</Height>

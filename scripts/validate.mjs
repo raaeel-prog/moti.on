@@ -1,4 +1,5 @@
-import { access, readFile, stat, writeFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, stat, writeFile, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
@@ -28,7 +29,8 @@ function nodeCheck(filePath) {
 }
 
 const premiereManifestPath = await mustExist("premiere-uxp/manifest.json");
-const premiereManifest = JSON.parse(await readFile(premiereManifestPath, "utf8"));
+const premiereManifestRaw = await readFile(premiereManifestPath, "utf8");
+const premiereManifest = JSON.parse(premiereManifestRaw);
 assert(premiereManifest.manifestVersion === 5, "O manifest UXP precisa usar a versão 5.");
 assert(premiereManifest.host.app === "premierepro", "Host UXP inválido.");
 assert(premiereManifest.host.minVersion === "25.6.0", "Versão mínima do Premiere inesperada.");
@@ -57,14 +59,50 @@ for (const relativePath of filesToCheck) {
   nodeCheck(await mustExist(relativePath));
 }
 
+// O ExtendScript nao e parseavel pelo Node por causa da diretiva #target, entao
+// ela e removida numa copia descartavel. A copia vive em os.tmpdir(): escrever
+// na raiz do repositorio deixava .tmp-index-jsx-check.js para tras sempre que o
+// processo morresse entre o writeFile e o finally.
 const jsxPath = await mustExist("after-effects-cep/host/index.jsx");
 const jsxSource = await readFile(jsxPath, "utf8");
-const jsxCheckPath = path.join(root, ".tmp-index-jsx-check.js");
+const jsxCheckDir = await mkdtemp(path.join(os.tmpdir(), "motion-jsx-check-"));
+const jsxCheckPath = path.join(jsxCheckDir, "index-jsx-check.js");
 await writeFile(jsxCheckPath, jsxSource.replace(/^#target[^\n]*\n/, ""), "utf8");
 try {
   nodeCheck(jsxCheckPath);
 } finally {
-  await rm(jsxCheckPath, { force: true });
+  await rm(jsxCheckDir, { recursive: true, force: true });
 }
+
+// O arquivo de porta de depuracao do CEP nao pode chegar ao output de build.
+// scripts/build.mjs o exclui; esta assercao garante que a exclusao nao seja
+// removida por acidente numa refatoracao futura do copiador.
+let debugFileLeaked = true;
+try {
+  await access(path.join(dist, "after-effects-cep", ".debug"));
+} catch {
+  debugFileLeaked = false;
+}
+assert(
+  !debugFileLeaked,
+  "O arquivo .debug do CEP vazou para dist/. Ele declara a porta de depuração remota e não pode ser distribuído."
+);
+
+// Identificadores definitivos. Ate o CHMS-001b o repositorio usava os
+// placeholders com.example.crosshosttoolkit.*, que o README mandava trocar antes
+// de publicar. Agora que a troca foi feita, o retorno dos placeholders passa a
+// ser um erro de build, nao um lembrete em documentacao.
+assert(
+  premiereManifest.id === "com.motion.plugin.premiere",
+  `ID do plugin UXP inesperado: ${premiereManifest.id}`
+);
+assert(
+  aeManifest.includes('ExtensionBundleId="com.motion.plugin"'),
+  "ExtensionBundleId do CEP inesperado."
+);
+assert(
+  !aeManifest.includes("com.example") && !premiereManifestRaw.includes("com.example"),
+  "Identificador placeholder com.example encontrado num manifest."
+);
 
 console.log("Validação estrutural e sintática concluída.");
