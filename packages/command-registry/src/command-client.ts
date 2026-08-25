@@ -26,6 +26,7 @@ import {
   ERROR_META,
   PROTOCOL_VERSION,
   isCommandResponse,
+  validateCommandRequest,
   type CommandContext,
   type CommandOptions,
   type CommandRequest,
@@ -120,7 +121,7 @@ interface PendingEntry {
 export interface CommandClient {
   execute<TData = unknown>(
     command: string,
-    args?: unknown,
+    args?: Record<string, unknown>,
     options?: CommandOptions
   ): Promise<CommandResponse<TData>>;
   /** Quantos pedidos aguardam resposta. Usado nos testes de vazamento. */
@@ -180,7 +181,7 @@ export function createCommandClient(config: CommandClientOptions): CommandClient
 
   function execute<TData>(
     command: string,
-    args: unknown = {},
+    args: Record<string, unknown> = {},
     options?: CommandOptions
   ): Promise<CommandResponse<TData>> {
     const requestId = idFactory();
@@ -212,6 +213,24 @@ export function createCommandClient(config: CommandClientOptions): CommandClient
       ...(options ? { options } : {})
     };
 
+    const requestValidation = validateCommandRequest(request);
+    if (!requestValidation.valid) {
+      return Promise.resolve(
+        failureResponse(
+          requestId,
+          "INTERNAL_ERROR",
+          "O pedido não atende ao contrato de comandos.",
+          startedAt,
+          now() - startedMs,
+          {
+            command,
+            issues: requestValidation.issues.map(({ path, code }) => ({ path, code }))
+          }
+        ) as CommandResponse<TData>
+      );
+    }
+    const serializedRequest = JSON.stringify(requestValidation.value);
+
     return new Promise<CommandResponse<TData>>((resolve) => {
       const entry: PendingEntry = {
         abandoned: false,
@@ -240,7 +259,7 @@ export function createCommandClient(config: CommandClientOptions): CommandClient
       pending.set(requestId, entry);
 
       try {
-        transport.send(JSON.stringify(request), deliver);
+        transport.send(serializedRequest, deliver);
       } catch (error) {
         clearTimeoutFn(entry.timeoutHandle);
         pending.delete(requestId);

@@ -1,9 +1,10 @@
 /**
  * Subconjunto tipado do módulo `premierepro`.
  *
- * Declarado aqui, e não importado: o módulo é fornecido pelo runtime do Premiere
- * e não existe como pacote npm instalável. Declarar apenas o que o código chama
- * deixa a superfície de contato explícita e auditável.
+ * Declarado aqui, e não importado em runtime: o módulo é fornecido pelo Premiere.
+ * O pacote oficial de tipos existe, mas este workspace ainda não o declara como
+ * dependência direta; manter o subconjunto usado deixa a fronteira auditável sem
+ * transformar uma dependência transitiva em contrato acidental.
  *
  * **Toda assinatura abaixo foi verificada contra a referência oficial da Adobe**
  * em 2026-08-24; o registro está em `docs/research/premiere-uxp-transactions.md`.
@@ -64,6 +65,20 @@ export interface PremiereSequence {
   readonly name: string;
   getVideoTrackCount(): Promise<number>;
   getAudioTrackCount(): Promise<number>;
+  getCaptionTrackCount?: () => Promise<number>;
+  getCaptionTrack?: (trackIndex: number) => Promise<unknown>;
+}
+
+export interface PremiereSequenceEditor {
+  insertMogrtFromPath?: (...args: unknown[]) => unknown;
+  insertMogrtFromLibrary?: (...args: unknown[]) => unknown;
+}
+
+export interface PremiereTranscriptApi {
+  exportToJSON?: (...args: unknown[]) => Promise<string>;
+  importFromJSON?: (...args: unknown[]) => unknown;
+  createImportTextSegmentsAction?: (...args: unknown[]) => PremiereAction;
+  querySupportedLanguages?: () => unknown[];
 }
 
 /**
@@ -77,4 +92,8 @@ export interface PremiereModule {
   Project: {
     getActiveProject(): Promise<PremiereProject | null>;
   };
+  SequenceEditor?: {
+    getEditor?: (sequence: PremiereSequence) => PremiereSequenceEditor;
+  };
+  Transcript?: PremiereTranscriptApi;
 }

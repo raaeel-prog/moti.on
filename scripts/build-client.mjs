@@ -26,9 +26,12 @@ const root = path.resolve(scriptDir, "..");
  * produz um painel que abre em branco dentro do After Effects sem nenhuma
  * mensagem util.
  *
- * ATENCAO: a versao exata do Chromium embutido no CEP 12 NAO foi verificada
- * contra documentacao da Adobe. `chrome88` e um limite conservador escolhido por
- * seguranca. Confirmar antes do release esta em docs/HOST_LIMITATIONS.md.
+ * MEDIDO em host real (After Effects 26.3, Windows 11, 2026-08-25): o painel
+ * reporta `AdobeCEP/12.0.1` com `Chrome/99.0.4844.84`. O alvo permanece em
+ * `chrome88` de proposito: uma medicao numa unica combinacao de versao e sistema
+ * nao autoriza subir o piso para toda a matriz de hosts suportada, e o custo de
+ * errar e um painel que abre em branco dentro do After Effects sem mensagem.
+ * Subir o alvo depende de repetir a medicao no restante da matriz.
  */
 const CEP_CHROMIUM_TARGET = "chrome88";
 

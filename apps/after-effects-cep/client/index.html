@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="pt-BR">
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
@@ -7,49 +7,12 @@
   <link rel="stylesheet" href="../styles/theme.css">
 </head>
 <body>
-  <main class="panel-shell">
-    <header class="panel-header">
-      <h1 class="panel-title">Moti.on</h1>
-      <p class="panel-subtitle">After Effects · CEP/ExtendScript</p>
-    </header>
-
-    <div class="status-line" aria-live="polite">
-      <span id="statusDot" class="status-dot"></span>
-      <span id="statusText" class="status-text">Inicializando…</span>
-    </div>
-
-    <section class="context-card" aria-label="Contexto do After Effects">
-      <div class="context-row">
-        <div class="context-label">Versão</div>
-        <div id="hostVersion" class="context-value">—</div>
-      </div>
-      <div class="context-row">
-        <div class="context-label">Projeto</div>
-        <div id="projectName" class="context-value">—</div>
-      </div>
-      <div class="context-row">
-        <div class="context-label">Caminho</div>
-        <div id="projectPath" class="context-value">—</div>
-      </div>
-      <div class="context-row">
-        <div class="context-label">Item ativo</div>
-        <div id="activeItemName" class="context-value">—</div>
-      </div>
-      <div class="context-row">
-        <div class="context-label">Composição</div>
-        <div id="compositionInfo" class="context-value">—</div>
-      </div>
-    </section>
-
-    <div class="actions">
-      <button id="refreshButton" class="action-button">Atualizar contexto</button>
-      <button id="createDemoButton" class="action-button secondary">Criar composição de teste</button>
-      <button id="echoButton" class="action-button secondary">Verificar ponte com o host</button>
-      <button id="systemCheckButton" class="action-button secondary">Verificar sistema</button>
-    </div>
-
-    <div id="logBox" class="log-box" aria-live="polite">Pronto para conectar ao After Effects.</div>
-  </main>
+  <!--
+    O shell inteiro é montado por @motion/ui-core dentro deste nó. O markup não
+    fica aqui porque os dois painéis compartilham a mesma estrutura, e mantê-la
+    em HTML duplicado faria a navegação divergir entre os hosts sem ninguém ver.
+  -->
+  <div id="root"></div>
 
   <script src="lib/CSInterface.js"></script>
   <script src="main.js"></script>

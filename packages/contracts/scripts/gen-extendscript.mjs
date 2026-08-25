@@ -62,11 +62,16 @@ async function readContractConstants() {
   }
   /** @type {Record<string, boolean>} */
   const recoverable = {};
-  for (const entry of metaBlock[1].matchAll(/([A-Z_]+):\s*\{\s*recoverable:\s*(true|false)/g)) {
+  /** @type {Record<string, string>} */
+  const actions = {};
+  for (const entry of metaBlock[1].matchAll(
+    /([A-Z_]+):\s*\{\s*recoverable:\s*(true|false),\s*actionKey:\s*"([^"]+)"/g
+  )) {
     recoverable[entry[1]] = entry[2] === "true";
+    actions[entry[1]] = entry[3];
   }
 
-  const missing = errorCodes.filter((code) => !(code in recoverable));
+  const missing = errorCodes.filter((code) => !(code in recoverable) || !(code in actions));
   if (missing.length > 0) {
     throw new Error(`ERROR_META não cobre: ${missing.join(", ")}`);
   }
@@ -94,6 +99,7 @@ async function readContractConstants() {
     protocolVersion: Number(versionMatch[1]),
     errorCodes,
     recoverable,
+    actions,
     metaOpen: readString("META_OPEN"),
     metaClose: readString("META_CLOSE"),
     rigPrefix: readString("RIG_PREFIX"),
@@ -120,6 +126,10 @@ export async function renderModule() {
     .map((code) => `      ${code}: ${c.recoverable[code] ? "true" : "false"}`)
     .join(",\n");
 
+  const actionEntries = c.errorCodes
+    .map((code) => `      ${code}: ${quote(c.actions[code])}`)
+    .join(",\n");
+
   return `/**
  * ARQUIVO GERADO. NÃO EDITE À MÃO.
  *
@@ -140,6 +150,10 @@ ${errorEntries}
 
     ERROR_RECOVERABLE: {
 ${recoverableEntries}
+    },
+
+    ERROR_ACTION: {
+${actionEntries}
     },
 
     META_OPEN: ${quote(c.metaOpen)},

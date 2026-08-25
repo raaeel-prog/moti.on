@@ -23,6 +23,7 @@ export default [
     ignores: [
       "dist/**",
       "packages/*/dist/**",
+      "packages/contracts/src/generated/**",
       "apps/*/dist/**",
       "node_modules/**",
       "artifacts/**",

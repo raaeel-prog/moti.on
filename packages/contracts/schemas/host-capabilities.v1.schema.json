@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moti.on/schemas/host-capabilities.v1.schema.json",
+  "title": "Moti.on HostCapabilities v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "host",
+    "hostVersion",
+    "supportTier",
+    "hasProject",
+    "canWriteFiles",
+    "canAccessNetwork",
+    "canUseNativeAddon",
+    "canReachCompanion",
+    "canInsertMogrt",
+    "canReadTranscript",
+    "canImportTranscript",
+    "canQueryTranscriptLanguages",
+    "canReadCaptionTracks",
+    "findings"
+  ],
+  "properties": {
+    "host": { "enum": ["after-effects", "premiere-pro"] },
+    "hostVersion": { "type": "string", "pattern": "[\\s\\S]+" },
+    "supportTier": {
+      "enum": ["full", "compatible", "baseline", "unsupported", "unknown"]
+    },
+    "hasProject": { "type": "boolean" },
+    "hasActiveComp": { "type": "boolean" },
+    "hasActiveSequence": { "type": "boolean" },
+    "canWriteFiles": { "type": "boolean" },
+    "canAccessNetwork": { "type": "boolean" },
+    "canUseNativeAddon": { "type": "boolean" },
+    "canReachCompanion": { "type": "boolean" },
+    "canInsertMogrt": { "type": "boolean" },
+    "canReadTranscript": { "type": "boolean" },
+    "canImportTranscript": { "type": "boolean" },
+    "canQueryTranscriptLanguages": { "type": "boolean" },
+    "canReadCaptionTracks": { "type": "boolean" },
+    "expressionEngine": { "enum": ["javascript", "legacy", "unknown"] },
+    "findings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hasProject": { "$ref": "#/$defs/finding" },
+        "hasActiveComp": { "$ref": "#/$defs/finding" },
+        "hasActiveSequence": { "$ref": "#/$defs/finding" },
+        "canWriteFiles": { "$ref": "#/$defs/finding" },
+        "canAccessNetwork": { "$ref": "#/$defs/finding" },
+        "canUseNativeAddon": { "$ref": "#/$defs/finding" },
+        "canReachCompanion": { "$ref": "#/$defs/finding" },
+        "canInsertMogrt": { "$ref": "#/$defs/finding" },
+        "canReadTranscript": { "$ref": "#/$defs/finding" },
+        "canImportTranscript": { "$ref": "#/$defs/finding" },
+        "canQueryTranscriptLanguages": { "$ref": "#/$defs/finding" },
+        "canReadCaptionTracks": { "$ref": "#/$defs/finding" },
+        "expressionEngine": { "$ref": "#/$defs/finding" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "host": { "const": "after-effects" } }, "required": ["host"] },
+      "then": {
+        "properties": { "hasActiveSequence": false }
+      },
+      "else": {
+        "properties": {
+          "hasActiveComp": false,
+          "expressionEngine": false
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": { "enum": ["available", "unavailable", "unknown"] },
+        "reasonKey": { "type": "string", "pattern": "[\\s\\S]+" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "state": { "enum": ["unavailable", "unknown"] } },
+            "required": ["state"]
+          },
+          "then": { "required": ["reasonKey"] }
+        }
+      ]
+    }
+  }
+}

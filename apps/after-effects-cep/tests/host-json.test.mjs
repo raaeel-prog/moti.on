@@ -122,6 +122,41 @@ test("parse recusa escape unicode malformado", () => {
   assert.throws(() => MotionJson.parse('"\\uZZZZ"'), /escape unicode malformado/);
 });
 
+test("parse recusa controles crus dentro de strings", () => {
+  for (const control of ["\u0000", "\u0001", "\n", "\r", "\t"]) {
+    assert.throws(
+      () => MotionJson.parse(`"antes${control}depois"`),
+      /caractere de controle não escapado/,
+      `Controle U+${control.charCodeAt(0).toString(16).padStart(4, "0")} foi aceito sem escape.`
+    );
+  }
+});
+
+test("parse aplica a gramática estrita de números JSON", () => {
+  for (const malformed of [
+    "01",
+    "-01",
+    "1.",
+    "-.1",
+    "1e",
+    "1e+",
+    "1e-",
+    "1e9999",
+    "--1",
+    "+1"
+  ]) {
+    assert.throws(
+      () => MotionJson.parse(malformed),
+      /JSON inválido/,
+      `Número inválido ${malformed} foi aceito.`
+    );
+  }
+
+  for (const valid of ["0", "-0", "12", "-12.5", "1e3", "1E-2", "-1.25e+3"]) {
+    assert.equal(MotionJson.parse(valid), JSON.parse(valid), `Número válido ${valid} foi recusado.`);
+  }
+});
+
 test("parse decodifica escape unicode de volta ao caractere", () => {
   assert.equal(MotionJson.parse('"\\u00e7"'), "ç");
   assert.equal(MotionJson.parse('"\\ud83c\\udfac"'), "🎬");

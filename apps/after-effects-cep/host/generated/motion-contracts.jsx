@@ -62,6 +62,31 @@
       INTERNAL_ERROR: false
     },
 
+    ERROR_ACTION: {
+      NO_ACTIVE_PROJECT: "error.action.openProject",
+      NO_ACTIVE_COMP: "error.action.openComposition",
+      NO_ACTIVE_SEQUENCE: "error.action.openSequence",
+      NO_SELECTION: "error.action.selectLayers",
+      INVALID_SELECTION_TYPE: "error.action.selectSupportedType",
+      UNSUPPORTED_HOST_VERSION: "error.action.updateHost",
+      CAPABILITY_UNAVAILABLE: "error.action.checkSystemCheck",
+      PERMISSION_DENIED: "error.action.grantPermission",
+      NETWORK_UNAVAILABLE: "error.action.checkConnection",
+      PROVIDER_ERROR: "error.action.retryLater",
+      LICENSE_REQUIRED: "error.action.activateLicense",
+      MODEL_NOT_INSTALLED: "error.action.installModel",
+      NATIVE_SERVICE_UNAVAILABLE: "error.action.checkSystemCheck",
+      INVALID_PRESET: "error.action.reportIssue",
+      EXPRESSION_CONFLICT: "error.action.chooseConflictMode",
+      KEYFRAME_CONFLICT: "error.action.chooseConflictMode",
+      TRACK_CONFLICT: "error.action.chooseTrack",
+      ASSET_LICENSE_BLOCKED: "error.action.chooseAnotherAsset",
+      USER_CANCELLED: "error.action.none",
+      HOST_OPERATION_FAILED: "error.action.checkUndoHistory",
+      ROLLBACK_FAILED: "error.action.undoManually",
+      INTERNAL_ERROR: "error.action.exportLogBundle"
+    },
+
     META_OPEN: "[MOTION_META_V1]",
     META_CLOSE: "[/MOTION_META_V1]",
     RIG_PREFIX: "MOTION | ",

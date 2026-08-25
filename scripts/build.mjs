@@ -30,6 +30,12 @@ const dist = path.join(root, "dist");
  */
 const EXCLUDED_BASENAMES = new Set([
   ".debug",
+  // `tsc -b` emite `apps/*/dist/` antes deste copiador rodar. Sem excluir o
+  // diretorio inteiro, `fs.cp` replica essa arvore compilada dentro do pacote
+  // do host (`dist/premiere-uxp/dist/...`). Mesmo quando todos os arquivos
+  // internos acabam filtrados por extensao, os diretorios vazios ainda vazam
+  // para o artefato e tornam o inventario dependente do estado da maquina.
+  "dist",
   "package.json",
   "node_modules",
   "tests",

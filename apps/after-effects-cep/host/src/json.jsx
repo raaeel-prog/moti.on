@@ -233,6 +233,10 @@
           continue;
         }
 
+        if (ch.charCodeAt(0) < 0x20) {
+          fail("caractere de controle não escapado em string");
+        }
+
         out += ch;
         at += 1;
       }
@@ -243,20 +247,39 @@
 
     function parseNumber() {
       var start = at;
-      if (peek() === "-") at += 1;
-      while (at < source.length && /[0-9]/.test(source.charAt(at))) at += 1;
+      if (peek() === "-") {
+        at += 1;
+      }
+
+      if (peek() === "0") {
+        at += 1;
+        if (/[0-9]/.test(peek())) {
+          fail("zero à esquerda não é permitido");
+        }
+      } else if (/[1-9]/.test(peek())) {
+        while (at < source.length && /[0-9]/.test(source.charAt(at))) at += 1;
+      } else {
+        fail("parte inteira ausente");
+      }
+
       if (peek() === ".") {
         at += 1;
+        if (!/[0-9]/.test(peek())) {
+          fail("parte fracionária ausente");
+        }
         while (at < source.length && /[0-9]/.test(source.charAt(at))) at += 1;
       }
       if (peek() === "e" || peek() === "E") {
         at += 1;
         if (peek() === "+" || peek() === "-") at += 1;
+        if (!/[0-9]/.test(peek())) {
+          fail("expoente ausente");
+        }
         while (at < source.length && /[0-9]/.test(source.charAt(at))) at += 1;
       }
       var raw = source.substring(start, at);
       var parsed = Number(raw);
-      if (raw === "" || isNaN(parsed)) {
+      if (raw === "" || isNaN(parsed) || !isFinite(parsed)) {
         fail("número malformado '" + raw + "'");
       }
       return parsed;

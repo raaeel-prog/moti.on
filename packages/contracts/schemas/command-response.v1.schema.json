@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moti.on/schemas/command-response.v1.schema.json",
+  "title": "Moti.on CommandResponse v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "requestId", "ok", "data", "warnings", "error"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "requestId": { "type": "string", "pattern": "[\\s\\S]+" },
+    "ok": { "type": "boolean" },
+    "data": { "$ref": "#/$defs/jsonValue" },
+    "warnings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/warning" }
+    },
+    "error": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/failure" }
+      ]
+    },
+    "timing": { "$ref": "#/$defs/timing" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "ok": { "const": true } }, "required": ["ok"] },
+      "then": { "properties": { "error": { "type": "null" } } },
+      "else": {
+        "properties": {
+          "data": { "type": "null" },
+          "error": { "$ref": "#/$defs/failure" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "errorCode": {
+      "enum": [
+        "NO_ACTIVE_PROJECT",
+        "NO_ACTIVE_COMP",
+        "NO_ACTIVE_SEQUENCE",
+        "NO_SELECTION",
+        "INVALID_SELECTION_TYPE",
+        "UNSUPPORTED_HOST_VERSION",
+        "CAPABILITY_UNAVAILABLE",
+        "PERMISSION_DENIED",
+        "NETWORK_UNAVAILABLE",
+        "PROVIDER_ERROR",
+        "LICENSE_REQUIRED",
+        "MODEL_NOT_INSTALLED",
+        "NATIVE_SERVICE_UNAVAILABLE",
+        "INVALID_PRESET",
+        "EXPRESSION_CONFLICT",
+        "KEYFRAME_CONFLICT",
+        "TRACK_CONFLICT",
+        "ASSET_LICENSE_BLOCKED",
+        "USER_CANCELLED",
+        "HOST_OPERATION_FAILED",
+        "ROLLBACK_FAILED",
+        "INTERNAL_ERROR"
+      ]
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "pattern": "[\\s\\S]+" },
+        "message": { "type": "string", "pattern": "[\\s\\S]+" },
+        "details": { "$ref": "#/$defs/jsonValue" }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "recoverable", "action"],
+      "properties": {
+        "code": { "$ref": "#/$defs/errorCode" },
+        "message": { "type": "string", "pattern": "[\\s\\S]+" },
+        "recoverable": { "type": "boolean" },
+        "action": {
+          "enum": [
+            "error.action.openProject",
+            "error.action.openComposition",
+            "error.action.openSequence",
+            "error.action.selectLayers",
+            "error.action.selectSupportedType",
+            "error.action.updateHost",
+            "error.action.checkSystemCheck",
+            "error.action.grantPermission",
+            "error.action.checkConnection",
+            "error.action.retryLater",
+            "error.action.activateLicense",
+            "error.action.installModel",
+            "error.action.reportIssue",
+            "error.action.chooseConflictMode",
+            "error.action.chooseTrack",
+            "error.action.chooseAnotherAsset",
+            "error.action.none",
+            "error.action.checkUndoHistory",
+            "error.action.undoManually",
+            "error.action.exportLogBundle"
+          ]
+        },
+        "details": { "$ref": "#/$defs/jsonValue" }
+      }
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startedAt", "durationMs"],
+      "properties": {
+        "startedAt": { "type": "string", "pattern": "[\\s\\S]+" },
+        "durationMs": { "type": "number", "minimum": 0 }
+      }
+    },
+    "jsonValue": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    }
+  }
+}

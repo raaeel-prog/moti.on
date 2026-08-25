@@ -150,7 +150,7 @@ export function buildCapabilities(facts: ProbeFacts): HostCapabilities {
     hostVersion: facts.hostVersion,
     // Sem versão legível não há tier a afirmar. `unsupported` seria uma
     // afirmação forte sobre algo que não foi medido.
-    supportTier: parsed ? tierFor(facts.host, parsed) : "unsupported",
+    supportTier: parsed ? tierFor(facts.host, parsed) : "unknown",
 
     hasProject: toBoolean(facts.hasProject),
     canWriteFiles: toBoolean(facts.canWriteFiles),
@@ -178,6 +178,18 @@ export function buildCapabilities(facts: ProbeFacts): HostCapabilities {
   if (!parsed) {
     capabilities.findings.hasProject = capabilities.findings.hasProject ?? { state: "unknown" };
   }
+
+  // O snapshot precisa ser imutavel por inteiro. Congelar apenas o envelope
+  // ainda permitiria alterar uma finding sem executar uma nova sonda.
+  for (const key in capabilities.findings) {
+    if (Object.prototype.hasOwnProperty.call(capabilities.findings, key)) {
+      const finding = capabilities.findings[key as CapabilityKey];
+      if (finding) {
+        Object.freeze(finding);
+      }
+    }
+  }
+  Object.freeze(capabilities.findings);
 
   // Congelado: a matriz é um instantâneo do que foi medido. Se um consumidor
   // pudesse alterá-la, um relatório de diagnóstico deixaria de refletir o que a

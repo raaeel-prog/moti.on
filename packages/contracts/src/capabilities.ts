@@ -17,7 +17,7 @@ import type { HostId } from "./protocol.js";
  * definidas pela especificação e estão propostas em
  * `docs/adr/0003-tiers-de-suporte-after-effects.md`.
  */
-export type SupportTier = "full" | "compatible" | "baseline" | "unsupported";
+export type SupportTier = "full" | "compatible" | "baseline" | "unsupported" | "unknown";
 
 /**
  * Estado de uma capacidade sondada.

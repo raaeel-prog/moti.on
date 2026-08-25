@@ -10,6 +10,7 @@ import type { CommandFailure } from "@motion/contracts";
 import type { ProbeFacts, ProbeResult } from "@motion/capability-matrix";
 
 import type { PremiereCommandContext, PremiereCommandHandler } from "./adapter.js";
+import type { PremiereSequence } from "./premiere-api.js";
 
 /**
  * `pr.context.read` — lê projeto e sequência ativa.
@@ -31,6 +32,7 @@ export const contextRead: PremiereCommandHandler = {
         warnings: [],
         data: {
           host: "Premiere Pro",
+          hostVersion: context.hostVersion,
           hasProject: false,
           projectName: null,
           projectPath: null,
@@ -56,6 +58,7 @@ export const contextRead: PremiereCommandHandler = {
       warnings: [],
       data: {
         host: "Premiere Pro",
+        hostVersion: context.hostVersion,
         hasProject: true,
         // Nomes e caminhos vão crus para o painel, que os exibe. O que NÃO pode
         // acontecer é irem para o log: a §25 proíbe registrar nome e caminho de
@@ -85,19 +88,26 @@ export const selfTest: PremiereCommandHandler = {
 
   async run(context: PremiereCommandContext) {
     const { premiere, project } = context;
-    const checks: Array<{ name: string; ok: boolean; detail: string | null }> = [];
+    const checks: Array<{ name: string; ok: boolean; detailKey: string | null }> = [];
 
     const hasModule = Boolean(premiere && premiere.Project);
     checks.push({
       name: "module.premierepro",
       ok: hasModule,
-      detail: hasModule ? null : "O módulo premierepro não foi carregado."
+      detailKey: hasModule ? null : "selfTest.detail.moduleUnavailable"
+    });
+
+    const hasHostVersion = context.hostVersion !== "unknown";
+    checks.push({
+      name: "host.version",
+      ok: hasHostVersion,
+      detailKey: hasHostVersion ? null : "selfTest.detail.hostVersionUnknown"
     });
 
     checks.push({
       name: "project.active",
       ok: Boolean(project),
-      detail: project ? null : "Nenhum projeto aberto."
+      detailKey: project ? null : "selfTest.detail.noProject"
     });
 
     // Sondagem por símbolo, não por versão. A §9 é explícita: nenhuma feature
@@ -110,9 +120,11 @@ export const selfTest: PremiereCommandHandler = {
     checks.push({
       name: "project.transactionApi",
       ok: hasTransactionApi,
-      detail: hasTransactionApi
+      detailKey: hasTransactionApi
         ? null
-        : "lockedAccess e executeTransaction não foram encontrados. Requer Premiere Pro 25.6 ou posterior."
+        : project
+          ? "selfTest.detail.transactionUnavailable"
+          : "selfTest.detail.transactionNotChecked"
     });
 
     return {
@@ -124,7 +136,7 @@ export const selfTest: PremiereCommandHandler = {
         .filter((check) => !check.ok)
         .map((check) => ({
           code: "SELF_TEST_CHECK_FAILED",
-          message: check.detail ?? `Verificação ${check.name} não passou.`,
+          message: check.detailKey ?? "selfTest.detail.checkFailed",
           details: { check: check.name }
         })),
       data: {
@@ -166,10 +178,54 @@ export const capabilityProbe: PremiereCommandHandler = {
       }
     };
 
-    const activeSequence = project ? await project.getActiveSequence() : null;
+    let activeSequence: PremiereSequence | null = null;
+    let activeSequenceKnown = true;
+    if (project) {
+      try {
+        activeSequence = await project.getActiveSequence();
+      } catch {
+        activeSequenceKnown = false;
+      }
+    }
 
     const moduleRecord = premiere as unknown as Record<string, unknown>;
-    const projectRecord = project as unknown as Record<string, unknown> | null;
+
+    const hasMethods = (target: unknown, methods: string[]): boolean => {
+      if ((typeof target !== "object" && typeof target !== "function") || target === null) {
+        return false;
+      }
+
+      const record = target as Record<string, unknown>;
+      return methods.every((method) => typeof record[method] === "function");
+    };
+
+    const transcript = (): unknown => moduleRecord["Transcript"];
+
+    const canInsertMogrt: ProbeResult = (() => {
+      const hasEditorFactory = safe(() => hasMethods(moduleRecord["SequenceEditor"], ["getEditor"]));
+      if (hasEditorFactory !== true) {
+        return hasEditorFactory;
+      }
+      if (!activeSequence) {
+        // A factory sozinha não prova que a instância expõe inserção. Sem uma
+        // sequência não existe objeto documentado que possa ser inspecionado.
+        return "unknown";
+      }
+
+      return safe(() => {
+        const sequenceEditor = moduleRecord["SequenceEditor"] as Record<string, unknown>;
+        const getEditor = sequenceEditor["getEditor"] as (sequence: unknown) => unknown;
+        const editor = getEditor.call(sequenceEditor, activeSequence);
+        return (
+          hasMethods(editor, ["insertMogrtFromPath"]) ||
+          hasMethods(editor, ["insertMogrtFromLibrary"])
+        );
+      });
+    })();
+
+    const canReadCaptionTracks: ProbeResult = activeSequence
+      ? safe(() => hasMethods(activeSequence, ["getCaptionTrackCount", "getCaptionTrack"]))
+      : "unknown";
 
     const reasons: NonNullable<ProbeFacts["reasons"]> = {
       canUseNativeAddon: "capability.reason.addonNotPackaged",
@@ -178,20 +234,15 @@ export const capabilityProbe: PremiereCommandHandler = {
 
     const facts: ProbeFacts = {
       host: "premiere-pro",
-      // hostVersion ainda não é lido: a forma documentada de obtê-lo no UXP não
-      // foi confirmada. "unknown" faz o tier cair em `unsupported`, que é uma
-      // afirmação forte — mas nenhum comando do P0 decide por versão, e inventar
-      // um número seria pior. Registrado em docs/HOST_LIMITATIONS.md.
-      hostVersion: "unknown",
+      hostVersion: context.hostVersion,
 
       hasProject: Boolean(project),
-      hasActiveSequence: Boolean(activeSequence),
+      hasActiveSequence: activeSequenceKnown ? Boolean(activeSequence) : "unknown",
 
-      // O UXP concede acesso a arquivos pelo manifest, não por preferência do
-      // usuário. O manifest declara localFileSystem: "request", então o acesso
-      // acontece via seletor de arquivo — que existe, mas cada uso é aprovado
-      // pelo usuário na hora.
-      canWriteFiles: true,
+      // O adapter recebe este fato da presença real de getFileForSaving no UXP.
+      // A existência de `file.write` ainda é validada depois que o usuário
+      // escolhe o destino, porque antes disso não há File para inspecionar.
+      canWriteFiles: context.runtime.canWriteFiles,
       // network não está declarado no manifest. Isso é escolha, não limitação:
       // o P0 não fala com a rede, e a permissão chega com o provider no CHMS-029.
       canAccessNetwork: false,
@@ -199,19 +250,17 @@ export const capabilityProbe: PremiereCommandHandler = {
       canUseNativeAddon: false,
       canReachCompanion: false,
 
-      // Sondagem por símbolo. Onde o símbolo não existe, o resultado é `false`
-      // medido — e não uma suposição a partir do número da versão.
-      canInsertMogrt: safe(
-        () => typeof projectRecord?.["createInsertProjectItemAction"] === "function"
+      // Cada flag verifica o método documentado que executa aquela operação.
+      // Objetos estáticos como Transcript/CaptionTrack não são construtores.
+      canInsertMogrt,
+      canReadTranscript: safe(() => hasMethods(transcript(), ["exportToJSON"])),
+      canImportTranscript: safe(() =>
+        hasMethods(transcript(), ["importFromJSON", "createImportTextSegmentsAction"])
       ),
-      canReadTranscript: safe(() => typeof moduleRecord["Transcript"] === "function"),
-      canImportTranscript: safe(
-        () => typeof (moduleRecord["Transcript"] as Record<string, unknown> | undefined)?.["importFromJSON"] === "function"
+      canQueryTranscriptLanguages: safe(() =>
+        hasMethods(transcript(), ["querySupportedLanguages"])
       ),
-      canQueryTranscriptLanguages: safe(
-        () => typeof (moduleRecord["Transcript"] as Record<string, unknown> | undefined)?.["querySupportedLanguages"] === "function"
-      ),
-      canReadCaptionTracks: safe(() => typeof moduleRecord["CaptionTrack"] === "function"),
+      canReadCaptionTracks,
 
       reasons
     };

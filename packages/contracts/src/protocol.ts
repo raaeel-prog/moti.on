@@ -14,6 +14,7 @@
  *    envelope tornaria todo erro monolíngue.
  */
 import type { ErrorCode } from "./errors.js";
+import { isCommandResponseValue } from "./validators.js";
 
 export const PROTOCOL_VERSION = 1 as const;
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
@@ -65,7 +66,7 @@ export interface CommandOptions {
   preserveSelection?: boolean;
 }
 
-export interface CommandRequest<TArgs = unknown> {
+export interface CommandRequest<TArgs extends Record<string, unknown> = Record<string, unknown>> {
   protocolVersion: ProtocolVersion;
   /** Correlaciona resposta com pedido. Resposta com id desconhecido é descartada. */
   requestId: string;
@@ -95,7 +96,7 @@ export interface CommandFailure {
   /** Repetir a mesma ação pode dar certo? Ver ERROR_META. */
   recoverable: boolean;
   /** Chave i18n da ação corretiva. */
-  action?: string;
+  action: string;
   details?: unknown;
 }
 
@@ -122,13 +123,5 @@ export interface CommandResponse<TData = unknown> {
  * resposta de outra sessão chegam pelo mesmo canal.
  */
 export function isCommandResponse(value: unknown): value is CommandResponse {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    candidate["protocolVersion"] === PROTOCOL_VERSION &&
-    typeof candidate["requestId"] === "string" &&
-    typeof candidate["ok"] === "boolean" &&
-    Array.isArray(candidate["warnings"]) &&
-    (candidate["error"] === null || typeof candidate["error"] === "object")
-  );
+  return isCommandResponseValue(value);
 }

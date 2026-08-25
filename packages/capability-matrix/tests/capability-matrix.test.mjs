@@ -207,7 +207,7 @@ test("expressionEngine so existe no After Effects e nao chuta javascript", () =>
 
 test("versao ilegivel nao produz um tier inventado", () => {
   const capabilities = buildCapabilities(factsFor({ hostVersion: "sei la" }));
-  assert.equal(capabilities.supportTier, "unsupported");
+  assert.equal(capabilities.supportTier, "unknown");
   assert.equal(capabilities.hostVersion, "sei la", "A string original precisa sobreviver para diagnóstico.");
 });
 
@@ -216,6 +216,12 @@ test("a matriz e congelada", () => {
   // alterá-la, um relatório de diagnóstico deixaria de refletir a sonda.
   const capabilities = buildCapabilities(factsFor());
   assert.ok(Object.isFrozen(capabilities));
+  assert.ok(Object.isFrozen(capabilities.findings));
+  assert.ok(Object.isFrozen(capabilities.findings.canWriteFiles));
+  assert.throws(() => {
+    capabilities.findings.canWriteFiles.state = "unavailable";
+  }, TypeError);
+  assert.equal(capabilities.findings.canWriteFiles.state, "available");
 });
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { COMMAND_DESCRIPTORS, createCommandClient, getDescriptor } from "../dist/index.js";
+import {
+  COMMAND_DESCRIPTORS,
+  createCommandClient,
+  getDescriptor,
+  resolveUndoLabel
+} from "../dist/index.js";
 
 /**
  * O cliente e o lado do painel da ponte. Os tres comportamentos testados aqui
@@ -164,6 +169,50 @@ test("comando desconhecido falha localmente, sem ida ao host", async () => {
   assert.equal(h.sent.length, 0, "Pedir um comando inexistente não pode chegar ao host.");
 });
 
+test("pedido malformado ou com toJSON falha localmente antes do transporte", async () => {
+  const primitiveHarness = createHarness();
+  const primitive = await primitiveHarness.client.execute("ae.context.read", null);
+  assert.equal(primitive.ok, false);
+  assert.equal(primitive.error.code, "INTERNAL_ERROR");
+  assert.equal(primitiveHarness.sent.length, 0);
+
+  const hookedArgs = { safe: true };
+  Object.defineProperty(hookedArgs, "toJSON", {
+    value: () => ({ injected: "não pode atravessar" }),
+    enumerable: false
+  });
+  const hookedHarness = createHarness();
+  const hooked = await hookedHarness.client.execute("ae.context.read", hookedArgs);
+  assert.equal(hooked.ok, false);
+  assert.equal(hooked.error.code, "INTERNAL_ERROR");
+  assert.ok(hooked.error.details.issues.some(({ code }) => code === "toJSON"));
+  assert.equal(hookedHarness.sent.length, 0);
+});
+
+test("CommandClient serializa o snapshot validado, não um Proxy vivo", async () => {
+  let descriptorReads = 0;
+  const proxyArgs = new Proxy(
+    { value: "safe" },
+    {
+      getOwnPropertyDescriptor(target, property) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(target, property);
+        if (property !== "value" || !descriptor) return descriptor;
+        descriptorReads += 1;
+        return { ...descriptor, value: descriptorReads === 1 ? "safe" : "evil" };
+      }
+    }
+  );
+
+  const h = createHarness();
+  const promise = h.client.execute("ae.context.read", proxyArgs);
+  const request = h.lastRequest();
+  assert.equal(request.args.value, "safe");
+  assert.equal(Object.getOwnPropertyDescriptor(proxyArgs, "value").value, "evil");
+
+  h.reply(successFor(request.requestId));
+  assert.equal((await promise).ok, true);
+});
+
 test("resposta que nao segue o contrato v1 e descartada", async () => {
   const h = createHarness();
   const promise = h.client.execute("ae.context.read");
@@ -244,6 +293,15 @@ test("comando que nao muta usa o rotulo de Undo vazio", () => {
       );
     }
   }
+});
+
+test("rótulo de Undo normaliza os formatos de locale devolvidos pelos hosts", () => {
+  const key = "undo.ae.demo.createComposition";
+
+  for (const locale of ["pt-BR", "pt_BR", "pt-br", "pt"]) {
+    assert.equal(resolveUndoLabel(key, locale), "Moti.on: criar composição de teste");
+  }
+  assert.equal(resolveUndoLabel(key, "de-DE"), "Moti.on: create test composition");
 });
 
 test("ids de comando sao ASCII e nao repetem", () => {

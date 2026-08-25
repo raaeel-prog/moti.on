@@ -105,7 +105,142 @@ test("preflight que falha nunca abre grupo de Undo", async () => {
 
   assert.equal(response.ok, false);
   assert.equal(response.error.code, "NO_ACTIVE_PROJECT");
+  assert.equal(response.error.action, "error.action.openProject");
   assert.deepEqual(calls, [], "Nenhuma chamada de Undo pode acontecer quando o preflight recusa.");
+});
+
+test("preflight não consegue inventar código fora do contrato", async () => {
+  const { scope, calls } = await loadDispatcher((s) => {
+    s.MotionRegistry.register("ae.context.read", {
+      preflight: () => ({
+        code: "ERRO_INVENTADO",
+        message: "não deveria atravessar",
+        recoverable: true,
+        details: { segredo: "não ecoar" }
+      }),
+      run: () => ({ changed: false, warnings: [], data: {} })
+    });
+  });
+
+  const response = JSON.parse(scope.MotionAE.dispatch(requestFor("ae.context.read")));
+
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, "INTERNAL_ERROR");
+  assert.equal(response.error.action, "error.action.exportLogBundle");
+  assert.deepEqual(response.error.details, { receivedCode: "ERRO_INVENTADO" });
+  assert.deepEqual(calls, []);
+});
+
+test("requirements gerados bloqueiam antes de preflight e Undo", async () => {
+  let preflightInvoked = false;
+  const { scope, app, calls } = await loadDispatcher((s) => {
+    s.MotionRegistry.register("ae.demo.createComposition", {
+      preflight: () => {
+        preflightInvoked = true;
+        return null;
+      },
+      run: () => ({ changed: true, warnings: [], data: {} })
+    });
+  });
+
+  assert.deepEqual(scope.MotionDescriptors["ae.demo.createComposition"].requirements, ["hasProject"]);
+  app.project = null;
+
+  const response = JSON.parse(scope.MotionAE.dispatch(requestFor("ae.demo.createComposition")));
+
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, "NO_ACTIVE_PROJECT");
+  assert.equal(response.error.action, "error.action.openProject");
+  assert.equal(preflightInvoked, false);
+  assert.deepEqual(calls, []);
+});
+
+test("dryRun recusado nunca invoca comando mutante nem abre Undo", async () => {
+  let invoked = false;
+  const { scope, calls } = await loadDispatcher((s) => {
+    s.MotionRegistry.register("ae.demo.createComposition", {
+      preflight: () => {
+        invoked = true;
+        return null;
+      },
+      run: () => {
+        invoked = true;
+        return { changed: true, warnings: [], data: {} };
+      }
+    });
+  });
+
+  const response = JSON.parse(
+    scope.MotionAE.dispatch(
+      requestFor("ae.demo.createComposition", { options: { dryRun: true } })
+    )
+  );
+
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, "CAPABILITY_UNAVAILABLE");
+  assert.equal(response.error.action, "error.action.checkSystemCheck");
+  assert.equal(invoked, false);
+  assert.deepEqual(calls, []);
+});
+
+test("dryRun de comando read-only suportado executa sem Undo", async () => {
+  let runs = 0;
+  const { scope, calls } = await loadDispatcher((s) => {
+    s.MotionRegistry.register("ae.diagnostics.echo", {
+      preflight: () => null,
+      run: () => {
+        runs += 1;
+        return { changed: false, warnings: [], data: { payload: "ok" } };
+      }
+    });
+  });
+
+  const response = JSON.parse(
+    scope.MotionAE.dispatch(requestFor("ae.diagnostics.echo", { options: { dryRun: true } }))
+  );
+
+  assert.equal(response.ok, true);
+  assert.equal(runs, 1);
+  assert.deepEqual(calls, []);
+});
+
+test("envelopes críticos inválidos são recusados antes do handler", async () => {
+  let invoked = 0;
+  const { scope, calls } = await loadDispatcher((s) => {
+    s.MotionRegistry.register("ae.context.read", {
+      preflight: () => {
+        invoked += 1;
+        return null;
+      },
+      run: () => {
+        invoked += 1;
+        return { changed: false, warnings: [], data: {} };
+      }
+    });
+  });
+
+  const invalid = [
+    { requestId: "" },
+    { command: "" },
+    { args: [] },
+    { args: null },
+    { context: null },
+    { context: { host: "premiere-pro", hostVersion: "25.0" } },
+    { context: { host: "after-effects", hostVersion: "" } },
+    { options: [] },
+    { options: { dryRun: "yes" } },
+    { options: { dryrun: true } }
+  ];
+
+  for (const overrides of invalid) {
+    const response = JSON.parse(scope.MotionAE.dispatch(requestFor("ae.context.read", overrides)));
+    assert.equal(response.ok, false, JSON.stringify(overrides));
+    assert.equal(response.error.code, "INTERNAL_ERROR", JSON.stringify(overrides));
+    assert.equal(response.error.action, "error.action.exportLogBundle", JSON.stringify(overrides));
+  }
+
+  assert.equal(invoked, 0);
+  assert.deepEqual(calls, []);
 });
 
 test("beginUndoGroup e endUndoGroup acontecem uma vez cada, mesmo quando run lanca", async () => {
@@ -116,7 +251,11 @@ test("beginUndoGroup e endUndoGroup acontecem uma vez cada, mesmo quando run lan
     s.MotionRegistry.register("ae.demo.createComposition", {
       preflight: () => null,
       run: () => {
-        throw new Error("falha simulada dentro do host");
+        throw {
+          message: "SEGREDO_DO_PROJETO não pode atravessar",
+          line: 42,
+          stack: "C:/Users/pessoa/projeto-secreto.aep"
+        };
       }
     });
   });
@@ -125,7 +264,13 @@ test("beginUndoGroup e endUndoGroup acontecem uma vez cada, mesmo quando run lan
 
   assert.equal(response.ok, false);
   assert.equal(response.error.code, "HOST_OPERATION_FAILED");
-  assert.match(response.error.message, /falha simulada/);
+  assert.equal(response.error.message, "HOST_OPERATION_FAILED");
+  assert.deepEqual(response.error.details, {
+    command: "ae.demo.createComposition",
+    line: 42
+  });
+  assert.ok(!JSON.stringify(response).includes("SEGREDO_DO_PROJETO"));
+  assert.ok(!JSON.stringify(response).includes("projeto-secreto"));
 
   assert.equal(calls.filter((c) => c.type === "beginUndoGroup").length, 1);
   assert.equal(calls.filter((c) => c.type === "endUndoGroup").length, 1);
@@ -239,7 +384,57 @@ test("pedido ilegivel responde erro tipado em vez de estourar", async () => {
     const response = JSON.parse(scope.MotionAE.dispatch(malformed));
     assert.equal(response.ok, false, `"${malformed}" não produziu resposta de erro.`);
     assert.equal(response.error.code, "INTERNAL_ERROR");
+    if (malformed !== "null") assert.equal(response.error.message, "INTERNAL_ERROR");
+    if (malformed !== "") assert.ok(!response.error.message.includes(malformed));
   }
+});
+
+test("linha de exceção só atravessa quando é inteiro finito allowlisted", async () => {
+  for (const unsafeLine of ["12", -1, 1.5, Infinity, NaN, 1000001]) {
+    const { scope } = await loadDispatcher((s) => {
+      s.MotionRegistry.register("ae.context.read", {
+        preflight: () => null,
+        run: () => {
+          throw {
+            message: "não serializar esta mensagem",
+            line: unsafeLine,
+            path: "C:/segredo.aep"
+          };
+        }
+      });
+    });
+
+    const raw = scope.MotionAE.dispatch(requestFor("ae.context.read"));
+    const response = JSON.parse(raw);
+    assert.deepEqual(response.error.details, { command: "ae.context.read" });
+    assert.ok(!raw.includes("não serializar"));
+    assert.ok(!raw.includes("segredo.aep"));
+  }
+});
+
+test("getter hostil em line não impede a resposta sanitizada", async () => {
+  const thrown = { message: "não serializar" };
+  Object.defineProperty(thrown, "line", {
+    get() {
+      throw new Error("getter também não pode atravessar");
+    }
+  });
+
+  const { scope } = await loadDispatcher((s) => {
+    s.MotionRegistry.register("ae.context.read", {
+      preflight: () => null,
+      run: () => {
+        throw thrown;
+      }
+    });
+  });
+
+  const raw = scope.MotionAE.dispatch(requestFor("ae.context.read"));
+  const response = JSON.parse(raw);
+  assert.equal(response.error.message, "HOST_OPERATION_FAILED");
+  assert.deepEqual(response.error.details, { command: "ae.context.read" });
+  assert.ok(!raw.includes("não serializar"));
+  assert.ok(!raw.includes("getter também"));
 });
 
 test("requestId e protocolVersion sao ecoados em sucesso e em falha", async () => {
@@ -275,6 +470,7 @@ test("toda resposta traz timing e warnings, mesmo vazios", async () => {
   assert.equal(typeof response.timing.startedAt, "string");
   assert.match(response.timing.startedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
   assert.equal(typeof response.timing.durationMs, "number");
+  assert.equal(response.error.action, "error.action.exportLogBundle");
 });
 
 test("o registro recusa id duplicado", async () => {
@@ -308,7 +504,7 @@ test("o registro recusa comando sem preflight", async () => {
   );
 });
 
-test("o rotulo de Undo sai no idioma do contexto", async () => {
+test("o rotulo de Undo normaliza o locale real do CEP com underscore", async () => {
   const { scope, calls } = await loadDispatcher((s) => {
     s.MotionRegistry.register("ae.demo.createComposition", {
       preflight: () => null,
@@ -318,7 +514,7 @@ test("o rotulo de Undo sai no idioma do contexto", async () => {
 
   scope.MotionAE.dispatch(
     requestFor("ae.demo.createComposition", {
-      context: { host: "after-effects", hostVersion: "25.0", locale: "pt-BR" }
+      context: { host: "after-effects", hostVersion: "25.0", locale: "pt_BR" }
     })
   );
 

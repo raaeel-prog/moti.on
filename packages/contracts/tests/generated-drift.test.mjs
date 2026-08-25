@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 import { GENERATED_PATH, renderModule } from "../scripts/gen-extendscript.mjs";
+import {
+  GENERATED_PATH as SCHEMA_VALIDATORS_PATH,
+  renderModule as renderSchemaValidators
+} from "../scripts/gen-schema-validators.mjs";
 import { findBannedConstructs } from "../../../scripts/check-extendscript.mjs";
 
 /**
@@ -44,6 +48,23 @@ test("o gerador falha alto se o fonte do contrato mudar de forma", async () => {
   const rendered = await renderModule();
   assert.match(rendered, /global\.MotionContracts = \{/);
   assert.match(rendered, /PROTOCOL_VERSION: 1/);
+  assert.match(rendered, /ERROR_ACTION: \{/);
+  assert.match(rendered, /NO_ACTIVE_PROJECT: "error\.action\.openProject"/);
   assert.match(rendered, /META_OPEN: "\[MOTION_META_V1\]"/);
   assert.match(rendered, /EXPRESSION_HEADER: "\/\/ MOTION_EXPRESSION v1 \| "/);
+});
+
+test("os validadores standalone correspondem exatamente aos JSON Schemas", async () => {
+  assert.equal(
+    await readFile(SCHEMA_VALIDATORS_PATH, "utf8"),
+    await renderSchemaValidators(),
+    "O validador gerado está desatualizado. Rode `npm run contracts:generate`."
+  );
+});
+
+test("o runtime dos schemas é CSP-safe e não depende do compilador Ajv", async () => {
+  const source = await readFile(SCHEMA_VALIDATORS_PATH, "utf8");
+  assert.doesNotMatch(source, /\b(?:eval|Function)\s*\(/);
+  assert.doesNotMatch(source, /\brequire\s*\(/);
+  assert.doesNotMatch(source, /from\s+["']ajv(?:\/|["'])/);
 });

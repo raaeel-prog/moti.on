@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moti.on/schemas/rig-metadata.v1.schema.json",
+  "title": "Moti.on RigMetadata v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "rigId",
+    "rigType",
+    "pluginVersion",
+    "createdAt",
+    "memberLayerUuids"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "rigId": { "type": "string", "pattern": "[\\s\\S]+" },
+    "rigType": { "type": "string", "pattern": "[\\s\\S]+" },
+    "pluginVersion": { "type": "string", "pattern": "[\\s\\S]+" },
+    "createdAt": { "type": "string", "pattern": "[\\s\\S]+" },
+    "controllerLayerUuid": { "type": "string", "pattern": "[\\s\\S]+" },
+    "memberLayerUuids": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "[\\s\\S]+" }
+    },
+    "presetId": { "type": "string", "pattern": "[\\s\\S]+" },
+    "userOverrides": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    }
+  },
+  "$defs": {
+    "jsonValue": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    }
+  }
+}

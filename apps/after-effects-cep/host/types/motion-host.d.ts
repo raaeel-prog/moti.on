@@ -50,6 +50,7 @@ declare const MotionContracts: {
   readonly PROTOCOL_VERSION: number;
   readonly ERROR: MotionErrorCodes;
   readonly ERROR_RECOVERABLE: Record<string, boolean>;
+  readonly ERROR_ACTION: Record<string, string>;
   readonly META_OPEN: string;
   readonly META_CLOSE: string;
   readonly RIG_PREFIX: string;
@@ -58,6 +59,7 @@ declare const MotionContracts: {
 
 interface MotionHostDescriptor {
   id: string;
+  requirements: string[];
   destructive: boolean;
   mutates: boolean;
   supportsDryRun: boolean;
@@ -85,6 +87,7 @@ interface MotionCommandFailure {
   code: string;
   message: string;
   recoverable: boolean;
+  action?: string;
   details: unknown;
 }
 

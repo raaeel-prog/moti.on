@@ -15,13 +15,16 @@
  * Funcionava porque não havia argumento. No momento em que o primeiro comando
  * receber parâmetro, a concatenação ingênua vira vulnerabilidade.
  *
- * A regra deste módulo: **a saída é sempre ASCII imprimível**, e a única forma
- * de montar a chamada é `buildDispatchCall`.
+ * A regra deste módulo: **a saída é sempre ASCII imprimível**, e as únicas
+ * funções autorizadas a produzir string de código são `buildDispatchCall` e
+ * `buildHostBootstrapCall`. As duas passam pelo mesmo encoder; nada mais neste
+ * repositório monta código para o `evalScript`.
  */
 
 /**
- * Acima disto, o pedido não viaja inline: vai por arquivo temporário com
- * checksum SHA-256.
+ * Acima disto, o adapter recusa o pedido antes de chamar `evalScript`. O futuro
+ * transporte alternativo deverá usar arquivo temporário e checksum SHA-256,
+ * mas esse caminho ainda não está implementado neste build.
  *
  * O limite não é o de uma especificação — não existe número documentado para o
  * tamanho máximo de um `evalScript`. É um teto conservador escolhido porque o
@@ -29,7 +32,15 @@
  * coisas são piores do que um caminho alternativo explícito. Transcrições e
  * documentos de legenda passam disto com facilidade.
  */
-export const MAX_INLINE_CHARS = 60_000;
+export const MAX_INLINE_EVALSCRIPT_CHARS = 60_000;
+
+/**
+ * Alias mantido para consumidores anteriores ao nome canônico explícito.
+ *
+ * Novos adapters devem usar `MAX_INLINE_EVALSCRIPT_CHARS`: o nome curto podia
+ * ser confundido com o tamanho do JSON antes do escaping.
+ */
+export const MAX_INLINE_CHARS = MAX_INLINE_EVALSCRIPT_CHARS;
 
 /** Só caracteres ASCII imprimíveis, de U+0020 a U+007E. */
 const PRINTABLE_ASCII = /^[\x20-\x7E]*$/;
@@ -122,13 +133,60 @@ export function buildDispatchCall(json: string): string {
   return `MotionAE.dispatch("${encodeForEvalScript(json)}")`;
 }
 
+/** Caminho do host montado, relativo à raiz da extensão instalada. */
+export const HOST_SCRIPT_RELATIVE_PATH = "/host/index.jsx";
+
+const HOST_DISPATCH_READY_EXPRESSION =
+  'typeof $.global.MotionAE === "object" && ' +
+  '$.global.MotionAE !== null && ' +
+  'typeof $.global.MotionAE.dispatch === "function"';
+
 /**
- * O pedido cabe inline, ou precisa do caminho por arquivo temporário?
+ * Valor que `buildHostBootstrapCall` devolve quando o host ficou carregado.
+ *
+ * É o resultado de `typeof`, e não um booleano, porque `typeof` nunca lança: se
+ * `$.evalFile` rodar mas não registrar o global, a resposta diz `"undefined"` em
+ * vez de mentir sucesso.
+ */
+export const HOST_BOOTSTRAP_OK = "function";
+
+/**
+ * Monta a chamada que carrega o host ExtendScript a partir do disco.
+ *
+ * **Por que isso existe.** O manifest CSXS deliberadamente não declara
+ * `<ScriptPath>`. No After Effects 26.3 esse caminho abriu um modal bloqueante
+ * de erro de sintaxe, enquanto `$.evalFile` carregou o mesmo arquivo. Cada nova
+ * instância do adapter usa esta chamada antes do primeiro despacho; ela nunca
+ * aceita como prova de versão um namespace `MotionAE` deixado por outra
+ * instância. O registro do host real está em `docs/HOST_LIMITATIONS.md`.
+ *
+ * Carregar por `$.evalFile` também cobre um segundo caso, independente da
+ * versão: o motor ExtendScript pode ser reiniciado no meio da sessão, e a partir
+ * daí o painel continua aberto conversando com um host que não existe mais.
+ *
+ * O caminho é normalizado para barra normal antes de ser codificado. `File`
+ * aceita os dois separadores, mas a barra invertida sobrevive ao encoder como
+ * `\\` e deixa o literal ilegível na hora de depurar — e depurar isso dentro do
+ * After Effects é caro.
+ */
+export function buildHostBootstrapCall(extensionPath: string): string {
+  const normalized = extensionPath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const encoded = encodeForEvalScript(normalized + HOST_SCRIPT_RELATIVE_PATH);
+
+  return (
+    `(function(){try{$.evalFile(new File("${encoded}"));` +
+    `return (${HOST_DISPATCH_READY_EXPRESSION})?"function":"undefined";` +
+    `}catch(e){return "bootstrap-failed";}})()`
+  );
+}
+
+/**
+ * O pedido cabe inline, ou exige o transporte alternativo ainda não disponível?
  *
  * Mede a string **já codificada**, não a original: escapar acentos multiplica o
  * tamanho por seis, e um documento de legenda em português mede muito mais
  * depois de codificado do que antes.
  */
 export function needsTempFileTransport(json: string): boolean {
-  return encodeForEvalScript(json).length > MAX_INLINE_CHARS;
+  return encodeForEvalScript(json).length > MAX_INLINE_EVALSCRIPT_CHARS;
 }

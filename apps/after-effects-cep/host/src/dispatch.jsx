@@ -18,29 +18,43 @@
   var ERROR = MotionContracts.ERROR;
 
   /**
-   * Extrai a mensagem de um valor lancado.
-   *
-   * O ExtendScript lanca objetos que nem sempre sao Error, e um `catch` recebe
-   * `unknown`. Ler `.message` direto compila em JavaScript e produz "undefined"
-   * na mensagem de erro que o usuario vai ler.
-   *
-   * @param {unknown} error
-   * @returns {string}
-   */
-  function describeError(error) {
-    var detail = /** @type {{ message?: string }} */ (error);
-    return detail && typeof detail.message === "string" ? detail.message : String(error);
-  }
-
-  /**
-   * Numero da linha, quando o ExtendScript o fornece.
+   * Numero de linha seguro, quando o ExtendScript o fornece.
    *
    * @param {unknown} error
    * @returns {number|null}
    */
   function errorLine(error) {
-    var detail = /** @type {{ line?: number }} */ (error);
-    return detail && typeof detail.line === "number" ? detail.line : null;
+    try {
+      var detail = /** @type {{ line?: number }} */ (error);
+      var line = detail && typeof detail.line === "number" ? detail.line : null;
+      return (
+        line !== null &&
+        isFinite(line) &&
+        line >= 0 &&
+        line <= 1000000 &&
+        Math.floor(line) === line
+      ) ? line : null;
+    } catch (lineReadError) {
+      return null;
+    }
+  }
+
+  /**
+   * Allowlist de detalhes de excecao. Nunca copia message, stack, path ou o
+   * objeto lancado: todos podem conter texto criativo, caminhos e dados do
+   * projeto. O painel localiza a falha a partir do ErrorCode.
+   *
+   * @param {string|null} command
+   * @param {unknown} error
+   * @returns {Record<string, unknown>}
+   */
+  function exceptionDetails(command, error) {
+    /** @type {Record<string, unknown>} */
+    var details = {};
+    var line = errorLine(error);
+    if (typeof command === "string" && command !== "") details.command = command;
+    if (line !== null) details.line = line;
+    return details;
   }
 
   /** @returns {string} */
@@ -91,12 +105,199 @@
    */
   function makeError(code, message, details) {
     var recoverable = MotionContracts.ERROR_RECOVERABLE[code];
+    var action = MotionContracts.ERROR_ACTION[code];
     return {
       code: code,
       message: message,
       recoverable: recoverable === true,
+      action: typeof action === "string" ? action : "error.action.exportLogBundle",
       details: typeof details === "undefined" ? null : details
     };
+  }
+
+  /** @param {unknown} value @returns {boolean} */
+  function isRecord(value) {
+    return value !== null && typeof value === "object" && !(value instanceof Array);
+  }
+
+  /** @param {unknown} value @returns {boolean} */
+  function isNonEmptyString(value) {
+    return typeof value === "string" && !/^\s*$/.test(value);
+  }
+
+  /** @param {unknown} code @returns {boolean} */
+  function isKnownErrorCode(code) {
+    return (
+      typeof code === "string" &&
+      Object.prototype.hasOwnProperty.call(MotionContracts.ERROR, code)
+    );
+  }
+
+  /**
+   * Completa erros devolvidos por preflight com os metadados canonicos. O host
+   * nunca confia que cada handler lembrou de repetir action/recoverable.
+   *
+   * @param {MotionCommandFailure} error
+   * @returns {MotionCommandFailure}
+   */
+  function normalizeError(error) {
+    if (!error || typeof error !== "object" || typeof error.code !== "string") {
+      return makeError(ERROR.INTERNAL_ERROR, "O preflight devolveu um erro inválido.", null);
+    }
+    if (!isKnownErrorCode(error.code)) {
+      return makeError(
+        ERROR.INTERNAL_ERROR,
+        "O preflight devolveu um código de erro desconhecido.",
+        { receivedCode: error.code }
+      );
+    }
+    return makeError(
+      error.code,
+      typeof error.message === "string" ? error.message : "O comando foi recusado sem mensagem.",
+      typeof error.details === "undefined" ? null : error.details
+    );
+  }
+
+  /**
+   * Valida a parte estrutural do envelope antes de consultar descriptor,
+   * preflight ou Undo. Campos opcionais novos no envelope continuam permitidos;
+   * os campos criticos existentes, porem, nunca sao inferidos.
+   *
+   * @param {any} request
+   * @returns {MotionCommandFailure|null}
+   */
+  function validateEnvelope(request) {
+    var options;
+    var optionNames = ["dryRun", "allowDestructive", "preserveSelection"];
+    var allowedOptions = {
+      dryRun: true,
+      allowDestructive: true,
+      preserveSelection: true
+    };
+    var i;
+    var key;
+
+    if (!isRecord(request)) {
+      return makeError(ERROR.INTERNAL_ERROR, "Pedido não é um objeto.", null);
+    }
+    if (!isNonEmptyString(request.requestId)) {
+      return makeError(ERROR.INTERNAL_ERROR, "requestId precisa ser uma string não vazia.", null);
+    }
+    if (!isNonEmptyString(request.command)) {
+      return makeError(ERROR.INTERNAL_ERROR, "command precisa ser uma string não vazia.", null);
+    }
+    if (!isRecord(request.args)) {
+      return makeError(ERROR.INTERNAL_ERROR, "args precisa ser um objeto.", null);
+    }
+    if (!isRecord(request.context)) {
+      return makeError(ERROR.INTERNAL_ERROR, "context precisa ser um objeto.", null);
+    }
+    if (request.context.host !== "after-effects") {
+      return makeError(
+        ERROR.INTERNAL_ERROR,
+        "O envelope foi destinado a outro host.",
+        { expected: "after-effects", received: request.context.host }
+      );
+    }
+    if (!isNonEmptyString(request.context.hostVersion)) {
+      return makeError(ERROR.INTERNAL_ERROR, "context.hostVersion precisa ser uma string não vazia.", null);
+    }
+    if (typeof request.options !== "undefined") {
+      if (!isRecord(request.options)) {
+        return makeError(ERROR.INTERNAL_ERROR, "options precisa ser um objeto.", null);
+      }
+      options = request.options;
+      for (i = 0; i < optionNames.length; i += 1) {
+        key = optionNames[i] || "";
+        if (
+          Object.prototype.hasOwnProperty.call(options, key) &&
+          typeof options[key] !== "boolean"
+        ) {
+          return makeError(
+            ERROR.INTERNAL_ERROR,
+            "A opção " + key + " precisa ser booleana.",
+            { option: key }
+          );
+        }
+      }
+      for (key in options) {
+        if (
+          Object.prototype.hasOwnProperty.call(options, key) &&
+          !Object.prototype.hasOwnProperty.call(allowedOptions, key)
+        ) {
+          return makeError(
+            ERROR.INTERNAL_ERROR,
+            "Opção desconhecida no envelope.",
+            { option: key }
+          );
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /** @param {string} requirement @returns {boolean} */
+  function requirementIsAvailable(requirement) {
+    var project;
+    var activeItem;
+
+    try {
+      project = typeof app !== "undefined" ? app.project : null;
+      if (requirement === "hasProject") return Boolean(project);
+      if (requirement === "hasActiveComp") {
+        activeItem = project ? project.activeItem : null;
+        return Boolean(
+          activeItem && typeof CompItem !== "undefined" && activeItem instanceof CompItem
+        );
+      }
+      if (requirement === "expressionEngine") {
+        return Boolean(project && typeof project.expressionEngine === "string");
+      }
+    } catch (probeError) {
+      return false;
+    }
+
+    // Requisitos sem uma sonda host-side documentada falham fechados. Liberar
+    // por versao ou por suposicao seria exatamente o bypass que este gate evita.
+    return false;
+  }
+
+  /**
+   * @param {MotionHostDescriptor} descriptor
+   * @returns {string|null}
+   */
+  function firstMissingRequirement(descriptor) {
+    var requirements = descriptor.requirements || [];
+    var i;
+    var requirement;
+    for (i = 0; i < requirements.length; i += 1) {
+      requirement = requirements[i];
+      if (typeof requirement === "string" && !requirementIsAvailable(requirement)) {
+        return requirement;
+      }
+    }
+    return null;
+  }
+
+  /** @param {string} requirement @param {string} command @returns {MotionCommandFailure} */
+  function requirementError(requirement, command) {
+    if (requirement === "hasProject") {
+      return makeError(ERROR.NO_ACTIVE_PROJECT, "Abra um projeto antes de executar este comando.", {
+        command: command,
+        requirement: requirement
+      });
+    }
+    if (requirement === "hasActiveComp") {
+      return makeError(ERROR.NO_ACTIVE_COMP, "Abra uma composição antes de executar este comando.", {
+        command: command,
+        requirement: requirement
+      });
+    }
+    return makeError(ERROR.CAPABILITY_UNAVAILABLE, "Uma capacidade obrigatória não está disponível.", {
+      command: command,
+      requirement: requirement
+    });
   }
 
   /**
@@ -127,20 +328,20 @@
     } catch (parseError) {
       return respond(
         requestId, false, null, [],
-        makeError(ERROR.INTERNAL_ERROR, "Pedido ilegível: " + describeError(parseError), null),
+        makeError(ERROR.INTERNAL_ERROR, ERROR.INTERNAL_ERROR, exceptionDetails(null, parseError)),
         startedAt, startedMs
       );
     }
 
-    if (!request || typeof request !== "object") {
+    requestId = isNonEmptyString(request && request.requestId) ? request.requestId : "unknown";
+
+    if (!isRecord(request)) {
       return respond(
         requestId, false, null, [],
         makeError(ERROR.INTERNAL_ERROR, "Pedido não é um objeto.", null),
         startedAt, startedMs
       );
     }
-
-    requestId = typeof request.requestId === "string" ? request.requestId : "unknown";
 
     // 2. Versao de protocolo. Recusa, nunca tentativa de adivinhacao: um
     //    envelope de outra versao que "quase" encaixa produz corrupcao
@@ -155,6 +356,11 @@
         ),
         startedAt, startedMs
       );
+    }
+
+    var envelopeError = validateEnvelope(request);
+    if (envelopeError) {
+      return respond(requestId, false, null, [], envelopeError, startedAt, startedMs);
     }
 
     // 3. Descriptor. Sem ele nao se sabe se o comando muta, se e destrutivo nem
@@ -204,10 +410,46 @@
         );
       }
 
+      if (options.dryRun === true && descriptor.supportsDryRun !== true) {
+        return respond(
+          requestId, false, null, [],
+          makeError(
+            ERROR.CAPABILITY_UNAVAILABLE,
+            "Este comando não oferece execução sem mutação.",
+            { command: request.command, option: "dryRun" }
+          ),
+          startedAt, startedMs
+        );
+      }
+
+      // Um comando read-only que declara dry-run pode executar normalmente: ele
+      // já não muta. Para um comando mutante seria necessário um handler de
+      // preview separado; até ele existir, falhar fechado evita uma falsa prévia.
+      if (options.dryRun === true && descriptor.mutates === true) {
+        return respond(
+          requestId, false, null, [],
+          makeError(
+            ERROR.CAPABILITY_UNAVAILABLE,
+            "A pré-visualização sem mutação não está implementada neste build.",
+            { command: request.command, option: "dryRun" }
+          ),
+          startedAt, startedMs
+        );
+      }
+
+      var missingRequirement = firstMissingRequirement(descriptor);
+      if (missingRequirement) {
+        return respond(
+          requestId, false, null, [],
+          requirementError(missingRequirement, request.command),
+          startedAt, startedMs
+        );
+      }
+
       // 5. Preflight: TODA a validacao, com o projeto ainda intacto.
       preflightError = command.preflight(request.args || {}, request.context || {});
       if (preflightError) {
-        return respond(requestId, false, null, [], preflightError, startedAt, startedMs);
+        return respond(requestId, false, null, [], normalizeError(preflightError), startedAt, startedMs);
       }
 
       // 6. Execucao. Grupo de Undo apenas quando o comando muta: abrir um grupo
@@ -270,8 +512,8 @@
         requestId, false, null, [],
         makeError(
           ERROR.HOST_OPERATION_FAILED,
-          describeError(error),
-          { command: request.command, line: errorLine(error) }
+          ERROR.HOST_OPERATION_FAILED,
+          exceptionDetails(request.command, error)
         ),
         startedAt, startedMs
       );

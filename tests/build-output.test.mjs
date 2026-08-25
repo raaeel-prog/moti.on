@@ -65,6 +65,17 @@ async function collectDistFiles(directory, base = directory, accumulated = []) {
   return accumulated;
 }
 
+async function collectDistDirectories(directory, base = directory, accumulated = []) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const full = path.join(directory, entry.name);
+    accumulated.push(path.relative(base, full).split(path.sep).join("/"));
+    await collectDistDirectories(full, base, accumulated);
+  }
+  return accumulated;
+}
+
 test("dist/ contem exatamente os arquivos declarados", async () => {
   const actual = (await collectDistFiles(dist)).sort();
   assert.deepEqual(
@@ -72,6 +83,19 @@ test("dist/ contem exatamente os arquivos declarados", async () => {
     [...EXPECTED_DIST_FILES].sort(),
     "O conjunto de arquivos do build mudou. Os hosts carregam por caminho fixo: " +
       "um arquivo a mais pode ser vazamento de fonte, e um a menos é um painel que não carrega."
+  );
+});
+
+test("dist/ não contém uma saída de compilador aninhada", async () => {
+  const directories = await collectDistDirectories(dist);
+  const nestedBuildOutputs = directories.filter((directory) =>
+    directory.split("/").includes("dist")
+  );
+
+  assert.deepEqual(
+    nestedBuildOutputs,
+    [],
+    "Um apps/*/dist foi copiado para o pacote do host:\n" + nestedBuildOutputs.join("\n")
   );
 });
 
@@ -155,8 +179,19 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
 
 test("o bundle do After Effects chama o dispatcher e nenhum comando por nome", async () => {
   const client = await readFile(path.join(dist, "after-effects-cep/client/main.js"), "utf8");
+  const manifest = await readFile(path.join(dist, "after-effects-cep/CSXS/manifest.xml"), "utf8");
 
   assert.match(client, /MotionAE\.dispatch\(/);
+  assert.match(
+    client,
+    /\$\.evalFile/,
+    "O adapter precisa carregar host/index.jsx explicitamente antes do primeiro dispatch."
+  );
+  assert.doesNotMatch(
+    manifest,
+    /<ScriptPath(?:\s|>)/,
+    "O artefato CEP não pode reintroduzir o carregamento automático do host."
+  );
 
   for (const legacy of ["MotionAE.getContext", "MotionAE.createDemoComposition"]) {
     assert.ok(!client.includes(legacy), `Chamada legada sobrevivente: ${legacy}`);
@@ -172,6 +207,32 @@ test("o bundle do Premiere registra os comandos e nao contem evalScript", async 
 
   // evalScript e do CEP. Se aparecer aqui, alguem copiou codigo do lado errado.
   assert.ok(!client.includes("evalScript"), "evalScript não existe no UXP.");
+
+  const literalRequires = [
+    ...client.matchAll(/\brequire\s*\(\s*(["'])([^"']+)\1\s*\)/g)
+  ].map((match) => match[2]);
+  assert.deepEqual(
+    [...new Set(literalRequires)].sort(),
+    ["premierepro", "uxp"],
+    "O bundle UXP só pode importar os módulos externos fornecidos pelo host."
+  );
+  assert.equal(
+    (client.match(/\brequire\s*\(/g) || []).length,
+    literalRequires.length,
+    "Todo require do bundle UXP precisa usar nome literal allowlisted."
+  );
+});
+
+test("os bundles não contêm URL literal fora da allowlist", async () => {
+  const allowed = new Set(["http://www.w3.org/2000/svg"]);
+
+  for (const relativePath of ["after-effects-cep/client/main.js", "premiere-uxp/main.js"]) {
+    const bundle = await readFile(path.join(dist, relativePath), "utf8");
+    const rejected = (bundle.match(/https?:\/\/[^"'\s)]+/g) || []).filter(
+      (url) => !allowed.has(url)
+    );
+    assert.deepEqual(rejected, [], `URLs fora da allowlist em ${relativePath}`);
+  }
 });
 
 test("BUILD_INFO declara nome e versao do package.json", async () => {

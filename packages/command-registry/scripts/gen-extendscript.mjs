@@ -6,12 +6,10 @@
  * alguem os copiasse a mao. Copia manual diverge.
  *
  * O que e emitido e deliberadamente MENOR que o descriptor completo. O host
- * precisa saber se o comando muta, se e destrutivo e qual rotulo de Undo usar.
- * Ele nao precisa de `timeoutMs`, que e assunto do cliente, nem de
- * `requirements`, que no P0 nao tem sonda para consultar — o CHMS-006 traz a
- * capability matrix e ai os requisitos passam a ser verificaveis no host.
- * Emitir agora um campo que ninguem le criaria a impressao de que ele esta
- * sendo respeitado.
+ * precisa saber se o comando muta, se e destrutivo, quais capacidades exige e
+ * qual rotulo de Undo usar. Ele nao precisa de `timeoutMs`, que e assunto do
+ * cliente. `requirements` atravessa a geracao porque o dispatcher e a ultima
+ * barreira antes de uma mutacao no projeto.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -77,6 +75,7 @@ export async function renderModule() {
 
       return `    ${quote(descriptor.id)}: {
       id: ${quote(descriptor.id)},
+      requirements: [${descriptor.requirements.map(quote).join(", ")}],
       destructive: ${descriptor.destructive ? "true" : "false"},
       mutates: ${descriptor.mutates ? "true" : "false"},
       supportsDryRun: ${descriptor.supportsDryRun ? "true" : "false"},
@@ -112,7 +111,22 @@ ${entries}
    */
   function undoLabelFor(descriptor, locale) {
     if (!descriptor || !descriptor.undoLabels) return "";
-    if (locale && descriptor.undoLabels[locale]) return descriptor.undoLabels[locale];
+
+    if (typeof locale === "string") {
+      var normalized = locale.replace(/^\\s+|\\s+$/g, "").replace(/_/g, "-").toLowerCase();
+      var language = normalized.split("-")[0];
+      var languageMatch = null;
+
+      for (var supported in descriptor.undoLabels) {
+        if (!Object.prototype.hasOwnProperty.call(descriptor.undoLabels, supported)) continue;
+        var supportedLower = supported.toLowerCase();
+        if (supportedLower === normalized) return descriptor.undoLabels[supported];
+        if (!languageMatch && supportedLower.split("-")[0] === language) languageMatch = supported;
+      }
+
+      if (languageMatch) return descriptor.undoLabels[languageMatch];
+    }
+
     return descriptor.undoLabels[DEFAULT_LOCALE] || "";
   }
 

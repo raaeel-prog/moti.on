@@ -11,11 +11,16 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./legacy/protocol.js": "./legacy/protocol.js"
+    "./legacy/protocol.js": "./legacy/protocol.js",
+    "./schemas/*": "./schemas/*"
   },
   "files": [
     "dist",
-    "legacy"
+    "legacy",
+    "schemas"
   ],
+  "scripts": {
+    "generate:schemas": "node scripts/gen-schema-validators.mjs"
+  },
   "license": "MIT"
 }

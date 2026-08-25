@@ -1,35 +1,70 @@
-/**
- * Raiz de composição do painel do Premiere Pro.
- *
- * Diferente do After Effects, aqui não existe ponte a atravessar: o UXP roda o
- * painel e o código de host no mesmo runtime, então o adapter é chamado direto,
- * sem serialização e sem escape. O que continua igual é o **contrato** — o mesmo
- * `CommandRequest`, os mesmos 22 códigos de erro, a mesma regra do `ok` — porque
- * é o contrato, e não o transporte, que mantém os dois hosts coerentes.
- *
- * Isso também é o motivo de o adapter existir como camada separada em vez de o
- * painel chamar `premierepro` direto: quando o CHMS-008 trouxer o shell de UI
- * compartilhado, ele fala com um `dispatch(request)` que funciona igual nos dois
- * lados.
- */
-import type { CommandRequest, CommandResponse, HostCapabilities } from "@motion/contracts";
-import { buildCapabilities, type ProbeFacts } from "@motion/capability-matrix";
-import { PROTOCOL_VERSION } from "@motion/contracts";
+/** Raiz de composição do painel Premiere Pro UXP. */
+import {
+  buildCapabilities,
+  parseHostVersion,
+  type ProbeFacts
+} from "@motion/capability-matrix";
+import {
+  PROTOCOL_VERSION,
+  type CommandRequest,
+  type CommandResponse,
+  type HostCapabilities
+} from "@motion/contracts";
+import { createLogger, type MotionLogger } from "@motion/logging";
+import {
+  button,
+  createI18n,
+  createShell,
+  logLine,
+  notice,
+  propertyRow,
+  sectionTitle,
+  type I18n,
+  type RenderRegions,
+  type RowTone,
+  type Shell,
+  type ShellView
+} from "@motion/ui-core";
 
 import { createPremiereAdapter } from "../../host/src/adapter.js";
 import { capabilityProbe, contextRead, selfTest } from "../../host/src/commands.js";
 import type { PremiereModule } from "../../host/src/premiere-api.js";
+import { createPanelLifecycle, type ManagedPanelRuntime } from "./lifecycle.js";
+import {
+  createPremiereMessages,
+  localizeCommandFailure,
+  type LocalizedViewError,
+  type PremiereMessages
+} from "./messages.js";
+import {
+  exportDiagnosticsBundle,
+  readUxpHostEnvironment,
+  type RuntimeProbeResult,
+  type UxpHostEnvironment
+} from "./uxp-runtime.js";
+
+interface UxpPanelHandler {
+  create?: (rootNode?: unknown) => void;
+  show?: (rootNode?: unknown) => void;
+  hide?: (rootNode?: unknown) => void;
+  destroy?: (rootNode?: unknown) => void;
+}
 
 interface UxpEntrypoints {
   setup(config: {
     plugin?: { create?: () => void; destroy?: () => void };
-    panels?: Record<string, { show?: () => void }>;
+    panels?: Record<string, UxpPanelHandler>;
   }): void;
+}
+
+interface UxpModuleWithEntrypoints {
+  entrypoints?: UxpEntrypoints;
 }
 
 declare function require(module: string): unknown;
 
 interface ContextData {
+  hostVersion: string;
   hasProject: boolean;
   projectName: string | null;
   projectPath: string | null;
@@ -40,249 +75,662 @@ interface ContextData {
 }
 
 interface SelfTestData {
-  checks: Array<{ name: string; ok: boolean; detail: string | null }>;
+  checks: Array<{ name: string; ok: boolean; detailKey: string | null }>;
   passed: number;
   total: number;
 }
 
-type StatusState = "ok" | "error" | "busy";
-
-function element(id: string): HTMLElement | null {
-  return document.getElementById(id);
+interface PanelServices {
+  i18n: I18n;
+  messages: PremiereMessages;
+  logger: MotionLogger;
+  dispatcher: Dispatcher | null;
+  uxp: unknown;
+  canWriteFiles: RuntimeProbeResult;
 }
 
-function setText(id: string, value: string): void {
-  const node = element(id);
-  if (node) node.textContent = value;
-}
+const VIEWS: ShellView[] = [
+  { id: "context", labelKey: "nav.context", titleKey: "view.context.title" },
+  { id: "system", labelKey: "nav.system", titleKey: "view.system.title" },
+  { id: "diagnostics", labelKey: "nav.diagnostics", titleKey: "view.diagnostics.title" }
+];
 
-function setStatus(message: string, state?: StatusState): void {
-  const dot = element("statusDot");
-  if (dot) dot.className = "status-dot" + (state ? ` is-${state}` : "");
-  setText("statusText", message);
-}
+const PLUGIN_VERSION = "0.1.0";
 
-function setLog(message: string, state?: StatusState): void {
-  const box = element("logBox");
-  if (!box) return;
-  box.className = "log-box" + (state ? ` is-${state}` : "");
-  box.textContent = message;
-}
-
-function setBusy(busy: boolean): void {
-  for (const id of ["refreshButton", "selfTestButton", "systemCheckButton"]) {
-    const button = element(id);
-    if (button instanceof HTMLButtonElement) button.disabled = busy;
-  }
-}
-
-function orDash(value: string | number | null | undefined, fallback = "—"): string {
-  return value === null || value === undefined || value === "" ? fallback : String(value);
-}
-
-function reportFailure(response: CommandResponse): void {
-  const error = response.error;
-  if (!error) {
-    setLog("O comando falhou sem informar o motivo.", "error");
-    return;
-  }
-  setStatus(error.recoverable ? "Não foi possível concluir" : "Erro", "error");
-  setLog(`[${error.code}] ${error.message}`, "error");
-}
+const state: {
+  context: ContextData | null;
+  capabilities: HostCapabilities | null;
+  selfTest: SelfTestData | null;
+  lastError: LocalizedViewError | null;
+  busy: boolean;
+} = {
+  context: null,
+  capabilities: null,
+  selfTest: null,
+  lastError: null,
+  busy: false
+};
 
 let requestCounter = 0;
 
-/**
- * `requestId` mesmo sem ponte a correlacionar.
- *
- * Aqui a chamada é direta e a correlação é trivialmente garantida. O id continua
- * existindo porque ele é o que amarra a resposta ao pedido **no log**: quando o
- * CHMS-007 trouxer o logger com redaction, um diagnóstico exportado precisa
- * permitir reconstruir a sequência de operações, e sem id isso vira adivinhação.
- */
+function resetState(): void {
+  state.context = null;
+  state.capabilities = null;
+  state.selfTest = null;
+  state.lastError = null;
+  state.busy = false;
+}
+
 function nextRequestId(): string {
   const cryptoObject = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-  if (typeof cryptoObject?.randomUUID === "function") return cryptoObject.randomUUID();
+  if (typeof cryptoObject?.randomUUID === "function") {
+    return cryptoObject.randomUUID();
+  }
   requestCounter += 1;
   return `${Date.now().toString(36)}-${requestCounter}`;
 }
 
-async function start(): Promise<void> {
-  let premiere: PremiereModule;
+type Dispatcher = (command: string) => Promise<CommandResponse>;
 
-  try {
-    premiere = require("premierepro") as PremiereModule;
-  } catch {
-    // Painel aberto fora do Premiere, ou versão sem o módulo. Estado honesto em
-    // vez de tela em branco.
-    setStatus("Fora do Premiere Pro", "error");
-    setLog(
-      "Este painel só funciona carregado dentro do Premiere Pro 25.6 ou posterior. " +
-        "Consulte docs/INSTALLATION.md.",
-      "error"
-    );
-    setBusy(true);
-    return;
-  }
-
-  const uiLocale = (() => {
-    try {
-      const uxp = require("uxp") as { host?: { uiLocale?: string } };
-      return uxp.host?.uiLocale;
-    } catch {
-      // uiLocale não é essencial: sem ele o rótulo de Desfazer cai no inglês, o
-      // que é degradação visível e não silenciosa.
-      return undefined;
-    }
-  })();
-
+function createDispatcher(
+  premiere: PremiereModule,
+  logger: MotionLogger,
+  environment: UxpHostEnvironment
+): Dispatcher {
   const adapter = createPremiereAdapter({
     premiere,
-    logger: {
-      warn(message: string) {
-        setLog(message, "error");
-      }
-    }
+    logger,
+    runtime: { canWriteFiles: environment.canWriteFiles }
   });
 
   adapter.register("pr.context.read", contextRead);
   adapter.register("pr.diagnostics.selfTest", selfTest);
   adapter.register("pr.capability.probe", capabilityProbe);
 
-  function buildRequest(command: string): CommandRequest {
-    return {
+  return async (command) => {
+    const request: CommandRequest = {
       protocolVersion: PROTOCOL_VERSION,
       requestId: nextRequestId(),
       command,
       args: {},
       context: {
         host: "premiere-pro",
-        hostVersion: "unknown",
-        ...(uiLocale ? { locale: uiLocale } : {})
+        hostVersion: environment.hostVersion,
+        ...(environment.uiLocale ? { locale: environment.uiLocale } : {})
       }
     };
-  }
 
-  async function refreshContext(): Promise<void> {
-    setBusy(true);
-    setStatus("Lendo o contexto…", "busy");
-
-    const response = (await adapter.dispatch(buildRequest("pr.context.read"))) as CommandResponse<ContextData>;
-
-    if (!response.ok || !response.data) {
-      reportFailure(response);
-      setBusy(false);
-      return;
-    }
-
-    const data = response.data;
-    setText("projectName", orDash(data.projectName, "Nenhum projeto aberto"));
-    setText("projectPath", orDash(data.projectPath, "Projeto ainda não salvo"));
-    setText("sequenceName", orDash(data.sequenceName, "Nenhuma sequência ativa"));
-    setText("sequenceCount", String(data.sequenceCount));
-    setText(
-      "trackCount",
-      data.videoTrackCount === null
-        ? "—"
-        : `${data.videoTrackCount} vídeo · ${data.audioTrackCount} áudio`
-    );
-
-    setStatus("Conectado", "ok");
-    setLog(`Contexto lido em ${response.timing?.durationMs ?? 0} ms.`, "ok");
-    setBusy(false);
-  }
-
-  async function runSelfTest(): Promise<void> {
-    setBusy(true);
-    setStatus("Executando autoteste…", "busy");
-
-    const response = (await adapter.dispatch(
-      buildRequest("pr.diagnostics.selfTest")
-    )) as CommandResponse<SelfTestData>;
-
-    if (!response.ok || !response.data) {
-      reportFailure(response);
-      setBusy(false);
-      return;
-    }
-
-    // Cada linha mostra o que foi medido. Uma verificação reprovada traz o
-    // motivo, não só o símbolo de erro: "falhou" sem motivo obriga o usuário a
-    // adivinhar o que fazer.
-    const lines = response.data.checks.map(
-      (check) => `${check.ok ? "✓" : "✕"} ${check.name}${check.detail ? ` — ${check.detail}` : ""}`
-    );
-
-    const allPassed = response.data.passed === response.data.total;
-    setStatus(allPassed ? "Conectado" : "Verificações pendentes", allPassed ? "ok" : "error");
-    setLog(lines.join("\n"), allPassed ? "ok" : "error");
-    setBusy(false);
-  }
-
-  /**
-   * Executa a sonda e mostra a matriz de capacidades.
-   *
-   * A view completa de Settings → System Check chega no CHMS-008, junto com o
-   * shell de navegação. Até lá o resultado sai na caixa de log — que é feio, e é
-   * informação real: cada linha é resultado de sonda, não suposição. Deixar a
-   * sonda sem nenhuma saída visível até a UI ficar pronta seria construir código
-   * que ninguém consegue exercitar.
-   */
-  async function runSystemCheck(): Promise<void> {
-    setBusy(true);
-    setStatus("Verificando o sistema…", "busy");
-
-    const response = (await adapter.dispatch(
-      buildRequest("pr.capability.probe")
-    )) as CommandResponse<ProbeFacts>;
-
-    if (!response.ok || !response.data) {
-      reportFailure(response);
-      setBusy(false);
-      return;
-    }
-
-    const capabilities: HostCapabilities = buildCapabilities(response.data);
-
-    const lines = Object.entries(capabilities.findings).map(([key, finding]) => {
-      const mark = finding.state === "available" ? "✓" : finding.state === "unknown" ? "?" : "✕";
-      // A razão sai junto: a §9 exige que todo requisito ausente seja explicado,
-      // e "indisponível" sozinho obriga o usuário a adivinhar o que fazer.
-      return `${mark} ${key}${finding.reasonKey ? ` — ${finding.reasonKey}` : ""}`;
-    });
-
-    setStatus("Conectado", "ok");
-    setLog([`Tier de suporte: ${capabilities.supportTier}`, ...lines].join("\n"), "ok");
-    setBusy(false);
-  }
-
-  element("refreshButton")?.addEventListener("click", () => void refreshContext());
-  element("selfTestButton")?.addEventListener("click", () => void runSelfTest());
-  element("systemCheckButton")?.addEventListener("click", () => void runSystemCheck());
-
-  await refreshContext();
+    const response = await adapter.dispatch(request);
+    logger.recordResponse(command, response);
+    return response;
+  };
 }
 
-// O UXP exige os hooks de ciclo de vida. Vazios de propósito: não há nada a
-// fazer neles, e o logger estruturado que registraria o ciclo chega no CHMS-007.
-const entrypoints = (require("uxp") as { entrypoints: UxpEntrypoints }).entrypoints;
+function createPanelRuntime(uxp: unknown, rootNode?: unknown): ManagedPanelRuntime | null {
+  // O HTML do entrypoint contém um único mount estável. O parâmetro documentado
+  // é aceito para que create/show possam compartilhar esta fábrica, mas o UXP
+  // continua sendo o dono do rootNode.
+  void rootNode;
+  const mount = document.getElementById("root");
+  if (!mount) {
+    return null;
+  }
 
-entrypoints.setup({
-  plugin: {
-    create() {},
-    destroy() {}
-  },
-  panels: {
-    mainPanel: {
-      show() {
-        void start();
+  resetState();
+  const environment = readUxpHostEnvironment(uxp);
+  const i18n = createI18n({ locale: environment.uiLocale });
+  const messages = createPremiereMessages(i18n.locale());
+  document.documentElement?.setAttribute("lang", i18n.locale());
+
+  const logger = createLogger({
+    host: "premiere-pro",
+    hostVersion: environment.hostVersion,
+    pluginVersion: PLUGIN_VERSION
+  });
+
+  let premiere: PremiereModule | null;
+  try {
+    premiere = require("premierepro") as PremiereModule;
+  } catch {
+    premiere = null;
+  }
+
+  const dispatcher = premiere ? createDispatcher(premiere, logger, environment) : null;
+  const services: PanelServices = {
+    i18n,
+    messages,
+    logger,
+    dispatcher,
+    uxp,
+    canWriteFiles: environment.canWriteFiles
+  };
+
+  const shell = createShell({
+    mount,
+    document,
+    i18n,
+    subtitleKey: "app.subtitle.premiere",
+    views: VIEWS,
+    onRender: (viewId, regions) => renderView(viewId, regions, services)
+  });
+  const stopObservingWidth = shell.observeWidth(window);
+
+  logger.info("panel.started", { command: "panel.started" });
+  if (!dispatcher) {
+    shell.setStatus(i18n.t("status.outsideHost"), "error");
+  }
+
+  return {
+    show() {
+      logger.info("panel.shown", { command: "panel.shown" });
+      // panel.show é um trigger documentado de invalidação: contexto e matriz
+      // não sobrevivem silenciosamente a troca de projeto/sequence.
+      state.context = null;
+      state.capabilities = null;
+      state.selfTest = null;
+
+      if (!dispatcher || state.busy) {
+        return;
       }
+
+      void refreshContext(shell, services, dispatcher);
+    },
+
+    dispose() {
+      stopObservingWidth();
+      logger.info("panel.destroyed", { command: "panel.destroyed" });
+      resetState();
+    }
+  };
+}
+
+function renderView(viewId: string, regions: RenderRegions, services: PanelServices): void {
+  const { i18n, messages, dispatcher } = services;
+
+  if (!dispatcher) {
+    regions.content.appendChild(notice(document, i18n.t("message.outsideHost"), "error"));
+    return;
+  }
+
+  if (viewId === "context") {
+    renderContext(regions, services);
+    renderCurrentError(viewId, regions, services);
+
+    const label = i18n.t("action.refresh");
+    regions.actions.appendChild(
+      button(document, {
+        label,
+        variant: "primary",
+        disabled: state.busy,
+        title: state.busy ? messages.t("disabled.busy") : label,
+        onClick: () => void refreshContext(regions.shell, services, dispatcher)
+      })
+    );
+    return;
+  }
+
+  if (viewId === "system") {
+    renderSystem(regions, services);
+    renderCurrentError(viewId, regions, services);
+
+    const checkLabel = i18n.t("action.runSystemCheck");
+    regions.actions.appendChild(
+      button(document, {
+        label: checkLabel,
+        variant: "primary",
+        disabled: state.busy,
+        title: state.busy ? messages.t("disabled.busy") : checkLabel,
+        onClick: () => void runSystemCheck(regions.shell, services, dispatcher)
+      })
+    );
+
+    const selfTestLabel = i18n.t("action.runSelfTest");
+    regions.actions.appendChild(
+      button(document, {
+        label: selfTestLabel,
+        disabled: state.busy,
+        title: state.busy ? messages.t("disabled.busy") : selfTestLabel,
+        onClick: () => void runSelfTest(regions.shell, services, dispatcher)
+      })
+    );
+    return;
+  }
+
+  renderDiagnostics(regions, services);
+  renderCurrentError(viewId, regions, services);
+}
+
+function orFallback(
+  i18n: I18n,
+  value: string | number | null,
+  fallbackKey: Parameters<I18n["t"]>[0]
+): string {
+  return value === null || value === "" ? i18n.t(fallbackKey) : String(value);
+}
+
+function renderContext(regions: RenderRegions, services: PanelServices): void {
+  const { i18n, messages } = services;
+  const context = state.context;
+
+  if (!context) {
+    regions.content.appendChild(notice(document, i18n.t("status.readingContext")));
+    return;
+  }
+
+  const projectName = context.hasProject
+    ? orFallback(i18n, context.projectName, "value.none")
+    : messages.t("value.noProject");
+  const projectPath = context.hasProject
+    ? orFallback(i18n, context.projectPath, "value.projectNotSaved")
+    : i18n.t("value.none");
+
+  const rows: Array<[string, string]> = [
+    [i18n.t("context.hostVersion"), orFallback(i18n, context.hostVersion, "value.none")],
+    [i18n.t("context.project"), projectName],
+    [i18n.t("context.path"), projectPath],
+    [i18n.t("context.sequence"), orFallback(i18n, context.sequenceName, "value.noSequence")],
+    [i18n.t("context.sequenceCount"), String(context.sequenceCount)],
+    [
+      i18n.t("context.tracks"),
+      context.videoTrackCount === null
+        ? i18n.t("value.none")
+        : i18n.t("context.tracksValue", {
+            video: context.videoTrackCount,
+            audio: context.audioTrackCount ?? 0
+          })
+    ]
+  ];
+
+  for (const [label, value] of rows) {
+    regions.content.appendChild(propertyRow(document, label, value));
+  }
+
+  if (!context.hasProject) {
+    regions.content.appendChild(notice(document, messages.t("message.noProject"), "warning"));
+  }
+}
+
+function renderSystem(regions: RenderRegions, services: PanelServices): void {
+  const { i18n, messages } = services;
+  const capabilities = state.capabilities;
+
+  if (capabilities) {
+    const versionKnown = parseHostVersion(capabilities.hostVersion) !== null;
+    regions.content.appendChild(
+      propertyRow(
+        document,
+        i18n.t("capability.supportTier"),
+        versionKnown
+          ? i18n.t(
+              `capability.tier.premiere.${capabilities.supportTier}` as Parameters<I18n["t"]>[0]
+            )
+          : i18n.t("capability.state.unknown"),
+        versionKnown ? undefined : "unknown"
+      )
+    );
+
+    for (const [key, finding] of Object.entries(capabilities.findings)) {
+      if (!finding) {
+        continue;
+      }
+
+      const tone: RowTone =
+        finding.state === "available" ? "ok" : finding.state === "unknown" ? "unknown" : "off";
+      const value =
+        finding.state === "available"
+          ? i18n.t("capability.state.available")
+          : `${i18n.t(`capability.state.${finding.state}` as Parameters<I18n["t"]>[0])} — ${
+              finding.reasonKey
+                ? i18n.t(finding.reasonKey as Parameters<I18n["t"]>[0])
+                : ""
+            }`.trim();
+
+      regions.content.appendChild(
+        propertyRow(document, i18n.t(`capability.key.${key}` as Parameters<I18n["t"]>[0]), value, tone)
+      );
     }
   }
-});
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => void start());
+  if (state.selfTest) {
+    regions.content.appendChild(sectionTitle(document, i18n.t("action.runSelfTest")));
+    for (const check of state.selfTest.checks) {
+      const nameKey = `selfTest.name.${check.name}`;
+      const checkName = messages.has(nameKey) ? messages.t(nameKey) : check.name;
+      const detail =
+        check.detailKey && messages.has(check.detailKey)
+          ? messages.t(check.detailKey)
+          : check.detailKey;
+
+      regions.content.appendChild(
+        propertyRow(
+          document,
+          checkName,
+          check.ok
+            ? i18n.t("capability.state.available")
+            : `${i18n.t("capability.state.unavailable")}${detail ? ` — ${detail}` : ""}`,
+          check.ok ? "ok" : "off"
+        )
+      );
+    }
+  }
+
+  if (!capabilities && !state.selfTest) {
+    regions.content.appendChild(notice(document, messages.t("message.systemCheckNotRun")));
+  }
+}
+
+function renderDiagnostics(regions: RenderRegions, services: PanelServices): void {
+  const { i18n, messages, logger, canWriteFiles } = services;
+  const entries = logger.entries();
+  const size = logger.size();
+
+  regions.content.appendChild(notice(document, i18n.t("logs.redactionNotice")));
+  if (canWriteFiles !== true) {
+    regions.content.appendChild(
+      notice(document, messages.t("message.exportUnavailable"), "warning")
+    );
+  }
+  regions.content.appendChild(
+    sectionTitle(document, i18n.t("logs.summary", { count: size.entries, dropped: size.dropped }))
+  );
+
+  if (entries.length === 0) {
+    regions.content.appendChild(notice(document, i18n.t("logs.empty")));
+  } else {
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index];
+      if (!entry) {
+        continue;
+      }
+
+      const parts = [
+        entry.timestamp.slice(11, 19),
+        entry.level.toUpperCase(),
+        entry.message ?? entry.command ?? "-"
+      ];
+      if (entry.durationMs !== null) {
+        parts.push(`${entry.durationMs} ms`);
+      }
+      if (entry.errorCode) {
+        parts.push(entry.errorCode);
+      }
+
+      const level = entry.level === "error" || entry.level === "warn" ? entry.level : undefined;
+      regions.content.appendChild(logLine(document, parts.join("  "), level));
+    }
+  }
+
+  const exportLabel = i18n.t("action.exportBundle");
+  const exportDisabled = state.busy || canWriteFiles !== true;
+  regions.actions.appendChild(
+    button(document, {
+      label: exportLabel,
+      variant: "primary",
+      disabled: exportDisabled,
+      title: state.busy
+        ? messages.t("disabled.busy")
+        : canWriteFiles !== true
+          ? messages.t("disabled.exportUnavailable")
+          : exportLabel,
+      onClick: () => void exportBundle(regions.shell, services)
+    })
+  );
+
+  const clearLabel = i18n.t("action.clearLogs");
+  regions.actions.appendChild(
+    button(document, {
+      label: clearLabel,
+      disabled: state.busy,
+      title: state.busy ? messages.t("disabled.busy") : clearLabel,
+      onClick: () => {
+        const removed = logger.clear();
+        state.lastError = null;
+        regions.shell.setStatus(i18n.t("message.logsCleared", { count: removed }), "ok");
+        regions.shell.rerender();
+      }
+    })
+  );
+
+  const debugLabel = logger.isDebugMode()
+    ? i18n.t("action.disableDebug")
+    : i18n.t("action.enableDebug");
+  regions.actions.appendChild(
+    button(document, {
+      label: debugLabel,
+      disabled: state.busy,
+      title: state.busy ? messages.t("disabled.busy") : debugLabel,
+      onClick: () => {
+        if (logger.isDebugMode()) {
+          logger.disableDebugMode();
+          regions.shell.setStatus(i18n.t("message.debugDisabled"));
+        } else {
+          logger.enableDebugMode();
+          regions.shell.setStatus(i18n.t("message.debugEnabled"), "ok");
+        }
+        regions.shell.rerender();
+      }
+    })
+  );
+}
+
+function renderCurrentError(
+  viewId: string,
+  regions: RenderRegions,
+  services: PanelServices
+): void {
+  const error = state.lastError;
+  if (!error || error.viewId !== viewId) {
+    return;
+  }
+
+  regions.content.appendChild(notice(document, error.message, "error"));
+  if (error.recovery) {
+    regions.content.appendChild(
+      notice(
+        document,
+        `${services.messages.t("message.recovery")}: ${error.recovery}`,
+        "warning"
+      )
+    );
+  }
+}
+
+function reportFailure(
+  shell: Shell,
+  services: PanelServices,
+  response: CommandResponse,
+  originViewId: string
+): void {
+  const { i18n } = services;
+  const error = response.error;
+
+  if (!error) {
+    state.lastError = {
+      viewId: originViewId,
+      message: i18n.t("message.failureWithoutReason"),
+      recovery: i18n.t("error.action.exportLogBundle")
+    };
+    shell.setStatus(i18n.t("status.failed"), "error");
+    return;
+  }
+
+  state.lastError = localizeCommandFailure(originViewId, error, i18n, services.messages);
+  shell.setStatus(i18n.t(error.recoverable ? "status.notCompleted" : "status.failed"), "error");
+}
+
+function setBusy(shell: Shell, busy: boolean): void {
+  state.busy = busy;
+  shell.rerender();
+}
+
+async function refreshContext(
+  shell: Shell,
+  services: PanelServices,
+  dispatch: Dispatcher
+): Promise<void> {
+  const { i18n } = services;
+  state.lastError = null;
+  shell.setStatus(i18n.t("status.readingContext"), "busy");
+  setBusy(shell, true);
+
+  const response = (await dispatch("pr.context.read")) as CommandResponse<ContextData>;
+  if (!response.ok || !response.data) {
+    state.context = null;
+    reportFailure(shell, services, response, "context");
+    setBusy(shell, false);
+    return;
+  }
+
+  state.context = response.data;
+  shell.setStatus(i18n.t("status.connected"), "ok");
+  setBusy(shell, false);
+}
+
+async function runSelfTest(
+  shell: Shell,
+  services: PanelServices,
+  dispatch: Dispatcher
+): Promise<void> {
+  const { i18n, messages } = services;
+  state.lastError = null;
+  shell.setStatus(messages.t("status.runningSelfTest"), "busy");
+  setBusy(shell, true);
+
+  const response = (await dispatch("pr.diagnostics.selfTest")) as CommandResponse<SelfTestData>;
+  if (!response.ok || !response.data) {
+    reportFailure(shell, services, response, "system");
+    setBusy(shell, false);
+    return;
+  }
+
+  state.selfTest = response.data;
+  const allPassed = response.data.passed === response.data.total;
+  shell.setStatus(
+    i18n.t(allPassed ? "status.connected" : "status.notCompleted"),
+    allPassed ? "ok" : "error"
+  );
+  setBusy(shell, false);
+}
+
+async function runSystemCheck(
+  shell: Shell,
+  services: PanelServices,
+  dispatch: Dispatcher
+): Promise<void> {
+  const { i18n } = services;
+  state.lastError = null;
+  shell.setStatus(i18n.t("status.checkingSystem"), "busy");
+  setBusy(shell, true);
+
+  const response = (await dispatch("pr.capability.probe")) as CommandResponse<ProbeFacts>;
+  if (!response.ok || !response.data) {
+    reportFailure(shell, services, response, "system");
+    setBusy(shell, false);
+    return;
+  }
+
+  state.capabilities = buildCapabilities(response.data);
+  shell.setStatus(i18n.t("status.connected"), "ok");
+  setBusy(shell, false);
+}
+
+async function exportBundle(shell: Shell, services: PanelServices): Promise<void> {
+  const { i18n, messages, logger, uxp } = services;
+  state.lastError = null;
+  shell.setStatus(messages.t("status.exporting"), "busy");
+  setBusy(shell, true);
+
+  const result = await exportDiagnosticsBundle(uxp, logger.exportBundle());
+
+  if (result.status === "saved") {
+    logger.info("diagnostics.exported", {
+      command: "diagnostics.export",
+      result: "success"
+    });
+    shell.setStatus(messages.t("message.exportSaved"), "ok");
+  } else if (result.status === "cancelled") {
+    logger.info("diagnostics.export.cancelled", {
+      command: "diagnostics.export",
+      result: "cancelled"
+    });
+    shell.setStatus(messages.t("message.exportCancelled"));
+  } else {
+    const unavailable = result.status === "unsupported";
+    const message = messages.t(unavailable ? "message.exportUnavailable" : "message.exportFailed");
+    const recovery = i18n.t(
+      unavailable ? "error.action.updateHost" : "error.action.grantPermission"
+    );
+
+    state.lastError = {
+      viewId: "diagnostics",
+      message,
+      recovery
+    };
+
+    if (unavailable) {
+      logger.warn("diagnostics.export.unavailable", { reason: result.reason });
+    } else {
+      logger.error("diagnostics.export.failed", {
+        command: "diagnostics.export",
+        result: "failure",
+        errorCode: result.reason
+      });
+    }
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+  }
+
+  setBusy(shell, false);
+}
+
+function loadUxpModule(): UxpModuleWithEntrypoints | null {
+  try {
+    return require("uxp") as UxpModuleWithEntrypoints;
+  } catch {
+    return null;
+  }
+}
+
+function onDomReady(callback: () => void): void {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", callback);
+  } else {
+    callback();
+  }
+}
+
+const uxpModule = loadUxpModule();
+const panelLifecycle = createPanelLifecycle<unknown>((rootNode) =>
+  createPanelRuntime(uxpModule, rootNode)
+);
+
+if (uxpModule) {
+  const entrypoints = uxpModule.entrypoints;
+  if (!entrypoints || typeof entrypoints.setup !== "function") {
+    throw new Error("O runtime UXP não expôs entrypoints.setup.");
+  }
+
+  // Erros de setup não são capturados: mascará-los com o fallback de DOM faria
+  // uma falha real de lifecycle parecer uma inicialização normal.
+  entrypoints.setup({
+    plugin: {
+      destroy: () => panelLifecycle.destroy()
+    },
+    panels: {
+      mainPanel: {
+        create: (rootNode) => {
+          panelLifecycle.create(rootNode);
+        },
+        show: (rootNode) => {
+          panelLifecycle.show(rootNode);
+        },
+        destroy: () => panelLifecycle.destroy()
+      }
+    }
+  });
 } else {
-  void start();
+  // Fallback exclusivo para preview fora do UXP. Dentro do host, somente os
+  // callbacks documentados controlam montagem e cleanup.
+  onDomReady(() => {
+    panelLifecycle.show();
+  });
 }

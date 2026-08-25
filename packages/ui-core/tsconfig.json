@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "$comment": "Camada de apresentacao: roda dentro do Chromium do CEP e do runtime do UXP, nunca no Node. Por isso 'lib' traz DOM, e o alvo e ES2020 — o menor denominador entre os dois runtimes. Nenhum tipo de Node entra aqui: se este package precisar de 'fs' ou 'process', a fronteira de arquitetura foi rompida.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM"],
+    "types": [],
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../.tsbuildinfo/ui-core.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

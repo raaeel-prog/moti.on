@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moti.on/schemas/command-request.v1.schema.json",
+  "title": "Moti.on CommandRequest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "requestId", "command", "args", "context"],
+  "properties": {
+    "protocolVersion": { "const": 1 },
+    "requestId": { "type": "string", "pattern": "[\\s\\S]+" },
+    "command": { "type": "string", "pattern": "[\\s\\S]+" },
+    "args": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "hostVersion"],
+      "properties": {
+        "host": { "enum": ["after-effects", "premiere-pro"] },
+        "hostVersion": { "type": "string", "pattern": "[\\s\\S]+" },
+        "projectFingerprint": { "type": "string", "pattern": "[\\s\\S]+" },
+        "activeItemId": { "type": "string", "pattern": "[\\s\\S]+" },
+        "locale": { "type": "string", "pattern": "[\\s\\S]+" }
+      }
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dryRun": { "type": "boolean" },
+        "allowDestructive": { "type": "boolean" },
+        "preserveSelection": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "jsonValue": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "string" },
+        { "type": "number" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/jsonValue" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    }
+  }
+}

@@ -3,20 +3,22 @@ import assert from "node:assert/strict";
 
 import { createFakePremiere } from "../../../packages/test-fixtures/src/fake-premierepro.mjs";
 import { createPremiereAdapter } from "../dist/host/src/adapter.js";
-import { contextRead, selfTest } from "../dist/host/src/commands.js";
+import { capabilityProbe, contextRead, selfTest } from "../dist/host/src/commands.js";
 import { withTransaction } from "../dist/host/src/transaction.js";
 
-function makeAdapter(fakeOptions = {}) {
+function makeAdapter(fakeOptions = {}, runtime = { canWriteFiles: true }) {
   const premiere = createFakePremiere(fakeOptions);
   const warnings = [];
   const adapter = createPremiereAdapter({
     premiere,
     logger: { warn: (message, details) => warnings.push({ message, details }) },
+    runtime,
     now: () => 1_700_000_000_000
   });
 
   adapter.register("pr.context.read", contextRead);
   adapter.register("pr.diagnostics.selfTest", selfTest);
+  adapter.register("pr.capability.probe", capabilityProbe);
 
   return { adapter, premiere, warnings };
 }
@@ -41,6 +43,7 @@ test("pr.context.read devolve projeto, sequencia e contagem de trilhas", async (
   assert.equal(response.requestId, "req-1");
   assert.equal(response.data.hasProject, true);
   assert.equal(response.data.projectName, "MeuProjeto.prproj");
+  assert.equal(response.data.hostVersion, "25.6.0");
   assert.equal(response.data.sequenceName, "Sequência 01");
   assert.equal(response.data.sequenceCount, 3);
   assert.equal(response.data.videoTrackCount, 4);
@@ -81,7 +84,7 @@ test("o autoteste detecta a ausencia da API de transacao por simbolo", async () 
 
   const transactionCheck = response.data.checks.find((c) => c.name === "project.transactionApi");
   assert.equal(transactionCheck.ok, false);
-  assert.match(transactionCheck.detail, /25\.6/);
+  assert.equal(transactionCheck.detailKey, "selfTest.detail.transactionUnavailable");
 
   assert.ok(
     response.warnings.some((w) => w.code === "SELF_TEST_CHECK_FAILED"),
@@ -96,6 +99,209 @@ test("o autoteste passa quando a API de transacao esta presente", async () => {
   assert.equal(response.ok, true);
   assert.equal(response.data.passed, response.data.total);
   assert.deepEqual(response.warnings, []);
+});
+
+test("sem projeto o autoteste nao afirma que a API de transacao esta ausente", async () => {
+  const { adapter } = makeAdapter({ hasProject: false });
+  const response = await adapter.dispatch(requestFor("pr.diagnostics.selfTest"));
+
+  const transactionCheck = response.data.checks.find((c) => c.name === "project.transactionApi");
+  assert.equal(transactionCheck.ok, false);
+  assert.equal(transactionCheck.detailKey, "selfTest.detail.transactionNotChecked");
+});
+
+test("capability probe usa os simbolos oficiais e propaga a versao do UXP", async () => {
+  const { adapter, premiere } = makeAdapter({}, { canWriteFiles: true });
+  const sequence = await premiere.project.getActiveSequence();
+  sequence.getCaptionTrackCount = async () => 1;
+  sequence.getCaptionTrack = async () => ({});
+
+  premiere.SequenceEditor = {
+    getEditor() {
+      return {
+        insertMogrtFromPath() {
+          return [];
+        }
+      };
+    }
+  };
+  premiere.Transcript = {
+    async exportToJSON() {
+      return "{}";
+    },
+    importFromJSON() {
+      return {};
+    },
+    createImportTextSegmentsAction() {
+      return {};
+    },
+    querySupportedLanguages() {
+      return [];
+    }
+  };
+
+  const response = await adapter.dispatch(
+    requestFor("pr.capability.probe", {
+      context: { host: "premiere-pro", hostVersion: "26.3.1", locale: "pt-BR" }
+    })
+  );
+
+  assert.equal(response.ok, true);
+  assert.equal(response.data.hostVersion, "26.3.1");
+  assert.equal(response.data.canWriteFiles, true);
+  assert.equal(response.data.canInsertMogrt, true);
+  assert.equal(response.data.canReadTranscript, true);
+  assert.equal(response.data.canImportTranscript, true);
+  assert.equal(response.data.canQueryTranscriptLanguages, true);
+  assert.equal(response.data.canReadCaptionTracks, true);
+});
+
+test("capability probe mantem unknown quando falta objeto de contexto para provar o recurso", async () => {
+  const { adapter, premiere } = makeAdapter(
+    { hasActiveSequence: false },
+    { canWriteFiles: "unknown" }
+  );
+  premiere.SequenceEditor = {
+    getEditor() {
+      throw new Error("nao deve chamar sem sequencia");
+    }
+  };
+
+  const response = await adapter.dispatch(requestFor("pr.capability.probe"));
+
+  assert.equal(response.ok, true);
+  assert.equal(response.data.canWriteFiles, "unknown");
+  assert.equal(response.data.canInsertMogrt, "unknown");
+  assert.equal(response.data.canReadCaptionTracks, "unknown");
+  assert.equal(response.data.canReadTranscript, false);
+});
+
+test("capability probe converte getter que lanca em unknown", async () => {
+  const { adapter, premiere } = makeAdapter();
+  Object.defineProperty(premiere, "Transcript", {
+    get() {
+      throw new Error("modulo indisponivel");
+    }
+  });
+
+  const response = await adapter.dispatch(requestFor("pr.capability.probe"));
+
+  assert.equal(response.data.canReadTranscript, "unknown");
+  assert.equal(response.data.canImportTranscript, "unknown");
+  assert.equal(response.data.canQueryTranscriptLanguages, "unknown");
+});
+
+test("capability probe mantem sequencia como unknown quando a leitura lanca", async () => {
+  const { adapter, premiere } = makeAdapter();
+  premiere.project.getActiveSequence = async () => {
+    throw new Error("objeto stale");
+  };
+
+  const response = await adapter.dispatch(requestFor("pr.capability.probe"));
+
+  assert.equal(response.ok, true);
+  assert.equal(response.data.hasActiveSequence, "unknown");
+  assert.equal(response.data.canReadCaptionTracks, "unknown");
+});
+
+test("envelope destinado a outro host falha antes de tocar no projeto", async () => {
+  const { adapter, premiere } = makeAdapter();
+  const response = await adapter.dispatch(
+    requestFor("pr.context.read", {
+      context: { host: "after-effects", hostVersion: "26.3.0" }
+    })
+  );
+
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, "INTERNAL_ERROR");
+  assert.deepEqual(premiere.calls, []);
+});
+
+test("args e options malformados falham fechados antes do projeto", async () => {
+  for (const overrides of [
+    { args: null },
+    { args: [] },
+    { options: { dryRun: "sim" } },
+    { options: { opcaoInventada: true } }
+  ]) {
+    const { adapter, premiere } = makeAdapter();
+    const response = await adapter.dispatch(requestFor("pr.context.read", overrides));
+    assert.equal(response.ok, false);
+    assert.equal(response.error.code, "INTERNAL_ERROR");
+    assert.deepEqual(premiere.calls, []);
+  }
+});
+
+test("dryRun nao declarado no descriptor e recusado antes do projeto", async () => {
+  const { adapter, premiere } = makeAdapter();
+  const response = await adapter.dispatch(
+    requestFor("pr.context.read", { options: { dryRun: true } })
+  );
+
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, "CAPABILITY_UNAVAILABLE");
+  assert.equal(response.error.action, "error.action.checkSystemCheck");
+  assert.deepEqual(premiere.calls, []);
+});
+
+test("preflight tem code, recoverable e action normalizados pelo catalogo", async () => {
+  const premiere = createFakePremiere();
+  const adapter = createPremiereAdapter({ premiere, logger: { warn: () => {} } });
+  adapter.register("pr.context.read", {
+    async preflight() {
+      return {
+        code: "NO_ACTIVE_PROJECT",
+        message: "falha controlada",
+        recoverable: false,
+        action: "error.action.inventada"
+      };
+    },
+    async run() {
+      throw new Error("nao deve executar");
+    }
+  });
+
+  const response = await adapter.dispatch(requestFor("pr.context.read"));
+
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, "NO_ACTIVE_PROJECT");
+  assert.equal(response.error.recoverable, true);
+  assert.equal(response.error.action, "error.action.openProject");
+});
+
+test("preflight com codigo inventado vira INTERNAL_ERROR canonico", async () => {
+  const premiere = createFakePremiere();
+  const adapter = createPremiereAdapter({ premiere, logger: { warn: () => {} } });
+  adapter.register("pr.context.read", {
+    async preflight() {
+      return { code: "CODIGO_INVENTADO", message: "falha" };
+    },
+    async run() {
+      return { changed: false, warnings: [], data: {} };
+    }
+  });
+
+  const response = await adapter.dispatch(requestFor("pr.context.read"));
+  assert.equal(response.error.code, "INTERNAL_ERROR");
+  assert.equal(response.error.action, "error.action.exportLogBundle");
+});
+
+test("resultado malformado do handler falha fechado", async () => {
+  const premiere = createFakePremiere();
+  const adapter = createPremiereAdapter({ premiere, logger: { warn: () => {} } });
+  adapter.register("pr.context.read", {
+    async preflight() {
+      return null;
+    },
+    async run() {
+      return { changed: false, warnings: null, data: {} };
+    }
+  });
+
+  const response = await adapter.dispatch(requestFor("pr.context.read"));
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, "INTERNAL_ERROR");
+  assert.equal(response.error.action, "error.action.exportLogBundle");
 });
 
 test("versao de protocolo diferente e recusada sem tocar no projeto", async () => {

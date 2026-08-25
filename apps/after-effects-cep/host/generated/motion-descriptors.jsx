@@ -14,6 +14,7 @@
   var table = {
     "ae.context.read": {
       id: "ae.context.read",
+      requirements: [],
       destructive: false,
       mutates: false,
       supportsDryRun: false,
@@ -25,6 +26,7 @@
     },
     "ae.diagnostics.echo": {
       id: "ae.diagnostics.echo",
+      requirements: [],
       destructive: false,
       mutates: false,
       supportsDryRun: true,
@@ -36,6 +38,7 @@
     },
     "ae.capability.probe": {
       id: "ae.capability.probe",
+      requirements: [],
       destructive: false,
       mutates: false,
       supportsDryRun: false,
@@ -47,6 +50,7 @@
     },
     "ae.demo.createComposition": {
       id: "ae.demo.createComposition",
+      requirements: ["hasProject"],
       destructive: false,
       mutates: true,
       supportsDryRun: false,
@@ -65,7 +69,22 @@
    */
   function undoLabelFor(descriptor, locale) {
     if (!descriptor || !descriptor.undoLabels) return "";
-    if (locale && descriptor.undoLabels[locale]) return descriptor.undoLabels[locale];
+
+    if (typeof locale === "string") {
+      var normalized = locale.replace(/^\s+|\s+$/g, "").replace(/_/g, "-").toLowerCase();
+      var language = normalized.split("-")[0];
+      var languageMatch = null;
+
+      for (var supported in descriptor.undoLabels) {
+        if (!Object.prototype.hasOwnProperty.call(descriptor.undoLabels, supported)) continue;
+        var supportedLower = supported.toLowerCase();
+        if (supportedLower === normalized) return descriptor.undoLabels[supported];
+        if (!languageMatch && supportedLower.split("-")[0] === language) languageMatch = supported;
+      }
+
+      if (languageMatch) return descriptor.undoLabels[languageMatch];
+    }
+
     return descriptor.undoLabels[DEFAULT_LOCALE] || "";
   }
 

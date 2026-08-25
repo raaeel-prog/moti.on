@@ -1,0 +1,14 @@
+{
+  "name": "@motion/logging",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Logger estruturado com redaction na escrita, rotacao por contagem e por bytes, modo debug temporario e bundle de suporte. Nao acessa host, filesystem nem rede.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
+  "dependencies": { "@motion/contracts": "0.1.0" },
+  "license": "MIT"
+}

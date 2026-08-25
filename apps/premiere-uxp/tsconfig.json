@@ -12,6 +12,8 @@
   "references": [
     { "path": "../../packages/contracts" },
     { "path": "../../packages/command-registry" },
-    { "path": "../../packages/capability-matrix" }
+    { "path": "../../packages/capability-matrix" },
+    { "path": "../../packages/logging" },
+    { "path": "../../packages/ui-core" }
   ]
 }

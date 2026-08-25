@@ -24,7 +24,6 @@
       <DispatchInfo>
         <Resources>
           <MainPath>./client/index.html</MainPath>
-          <ScriptPath>./host/index.jsx</ScriptPath>
         </Resources>
         <Lifecycle>
           <AutoVisible>true</AutoVisible>
@@ -39,7 +38,7 @@
             </Size>
             <MinSize>
               <Height>280</Height>
-              <Width>260</Width>
+              <Width>280</Width>
             </MinSize>
             <MaxSize>
               <Height>1600</Height>

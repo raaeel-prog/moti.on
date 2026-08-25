@@ -52,6 +52,10 @@ As duas coisas divergem na prática. Um After Effects 25.0 com a preferência *A
 
 Por isso o tier aparece na tela de System Check como **uma linha entre outras**, e não como o veredito sobre o ambiente.
 
+Quando a versão não pode ser lida, a matriz usa `unknown`, não `unsupported`.
+`unsupported` continua reservado para uma versão conhecida abaixo do mínimo;
+ausência de evidência não é evidência de incompatibilidade.
+
 ### Quando este ADR precisa ser revisitado
 
 No primeiro recurso que exija um After Effects mais novo que 25.0. Aí `compatible` ou `baseline` passa a corresponder a algo real, e a tabela acima deixa de ser suficiente.

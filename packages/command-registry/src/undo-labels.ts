@@ -36,6 +36,30 @@ export function isSupportedLocale(value: unknown): value is SupportedLocale {
 }
 
 /**
+ * Converte formatos reais dos hosts (`pt_BR`, `pt-br`, `pt`) para a chave
+ * canônica do catálogo. O CEP 12 foi medido devolvendo underscore, enquanto o
+ * catálogo usa BCP 47 com hífen; exigir igualdade byte a byte faria o menu Undo
+ * cair silenciosamente para inglês numa interface em português.
+ */
+function normalizeSupportedLocale(value: unknown): SupportedLocale | null {
+  if (typeof value !== "string") return null;
+
+  const normalized = value.trim().replaceAll("_", "-").toLowerCase();
+  if (normalized.length === 0) return null;
+
+  for (const locale of SUPPORTED_LOCALES) {
+    if (locale.toLowerCase() === normalized) return locale;
+  }
+
+  const language = normalized.split("-")[0];
+  for (const locale of SUPPORTED_LOCALES) {
+    if (locale.toLowerCase().split("-")[0] === language) return locale;
+  }
+
+  return null;
+}
+
+/**
  * Resolve o rótulo. Locale desconhecido cai no padrão em vez de devolver a
  * chave: mostrar `undo.ae.demo.createComposition` no menu do After Effects seria
  * pior do que mostrar o texto em inglês.
@@ -43,6 +67,6 @@ export function isSupportedLocale(value: unknown): value is SupportedLocale {
 export function resolveUndoLabel(key: string, locale?: string): string {
   const entry = UNDO_LABELS[key];
   if (!entry) return "";
-  const resolved = isSupportedLocale(locale) ? locale : DEFAULT_LOCALE;
+  const resolved = normalizeSupportedLocale(locale) ?? DEFAULT_LOCALE;
   return entry[resolved];
 }

@@ -16,6 +16,7 @@
 import {
   ERROR_META,
   PROTOCOL_VERSION,
+  isErrorCode,
   type CommandFailure,
   type CommandRequest,
   type CommandResponse,
@@ -50,11 +51,20 @@ export interface PremiereCommandContext {
   project: PremiereProject | null;
   args: Record<string, unknown>;
   undoLabel: string;
+  /** Versao observada em `require("uxp").host.version`. */
+  hostVersion: string;
+  /** Fatos do runtime UXP que nao pertencem ao modulo `premierepro`. */
+  runtime: {
+    canWriteFiles: boolean | "unknown";
+  };
 }
 
 export interface PremiereAdapterOptions {
   premiere: PremiereModule;
   logger: { warn(message: string, details?: Record<string, unknown>): void };
+  runtime?: {
+    canWriteFiles?: boolean | "unknown";
+  };
   now?: () => number;
 }
 
@@ -69,8 +79,102 @@ function fail(code: ErrorCode, message: string, details?: unknown): CommandFailu
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+function isCommandOutcome(value: unknown): value is CommandOutcome {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (typeof value["changed"] !== "boolean" || !Array.isArray(value["warnings"])) {
+    return false;
+  }
+  if (!isRecord(value["data"])) {
+    return false;
+  }
+
+  return value["warnings"].every(
+    (warning) =>
+      isRecord(warning) &&
+      isNonEmptyString(warning["code"]) &&
+      isNonEmptyString(warning["message"])
+  );
+}
+
+const ALLOWED_OPTION_NAMES = new Set(["dryRun", "allowDestructive", "preserveSelection"]);
+
+/** Valida o envelope antes de qualquer leitura do projeto. */
+function validateEnvelope(request: unknown): CommandFailure | null {
+  if (!isRecord(request)) {
+    return fail("INTERNAL_ERROR", "Pedido não é um objeto.");
+  }
+  if (!isNonEmptyString(request["requestId"])) {
+    return fail("INTERNAL_ERROR", "requestId precisa ser uma string não vazia.");
+  }
+  if (!isNonEmptyString(request["command"])) {
+    return fail("INTERNAL_ERROR", "command precisa ser uma string não vazia.");
+  }
+  if (!isRecord(request["args"])) {
+    return fail("INTERNAL_ERROR", "args precisa ser um objeto.");
+  }
+
+  const context = request["context"];
+  if (!isRecord(context)) {
+    return fail("INTERNAL_ERROR", "context precisa ser um objeto.");
+  }
+  if (context["host"] !== "premiere-pro") {
+    return fail("INTERNAL_ERROR", "O envelope foi destinado a outro host.", {
+      expected: "premiere-pro",
+      received: context["host"]
+    });
+  }
+  if (!isNonEmptyString(context["hostVersion"])) {
+    return fail("INTERNAL_ERROR", "context.hostVersion precisa ser uma string não vazia.");
+  }
+  if (context["locale"] !== undefined && !isNonEmptyString(context["locale"])) {
+    return fail("INTERNAL_ERROR", "context.locale precisa ser uma string não vazia.");
+  }
+
+  const options = request["options"];
+  if (options === undefined) {
+    return null;
+  }
+  if (!isRecord(options)) {
+    return fail("INTERNAL_ERROR", "options precisa ser um objeto.");
+  }
+
+  for (const [name, value] of Object.entries(options)) {
+    if (!ALLOWED_OPTION_NAMES.has(name)) {
+      return fail("INTERNAL_ERROR", "Opção desconhecida no envelope.", { option: name });
+    }
+    if (typeof value !== "boolean") {
+      return fail("INTERNAL_ERROR", `A opção ${name} precisa ser booleana.`, { option: name });
+    }
+  }
+
+  return null;
+}
+
+/** Impõe código, recoverable e action canônicos mesmo para handler defeituoso. */
+function normalizeFailure(value: unknown): CommandFailure {
+  if (!isRecord(value)) {
+    return fail("INTERNAL_ERROR", "O preflight devolveu um erro inválido.");
+  }
+
+  const code = isErrorCode(value["code"]) ? value["code"] : "INTERNAL_ERROR";
+  const message = isNonEmptyString(value["message"])
+    ? value["message"]
+    : "O comando foi recusado sem mensagem.";
+  return fail(code, message, value["details"]);
+}
+
 export function createPremiereAdapter(options: PremiereAdapterOptions) {
-  const { premiere, logger, now = () => Date.now() } = options;
+  const { premiere, logger, runtime, now = () => Date.now() } = options;
   const handlers = new Map<string, PremiereCommandHandler>();
 
   function register(id: string, handler: PremiereCommandHandler): void {
@@ -106,6 +210,11 @@ export function createPremiereAdapter(options: PremiereAdapterOptions) {
     const startedMs = now();
     const startedAt = new Date(startedMs).toISOString();
     const requestId = typeof request?.requestId === "string" ? request.requestId : "unknown";
+
+    const envelopeError = validateEnvelope(request as unknown);
+    if (envelopeError) {
+      return respond(requestId, false, null, [], envelopeError, startedAt, startedMs);
+    }
 
     // Recusa, nunca adivinhação. Ver docs/adr/0002.
     if (request?.protocolVersion !== PROTOCOL_VERSION) {
@@ -151,6 +260,28 @@ export function createPremiereAdapter(options: PremiereAdapterOptions) {
         );
       }
 
+      if (request.options?.dryRun === true && descriptor.supportsDryRun !== true) {
+        return respond(
+          requestId, false, null, [],
+          fail("CAPABILITY_UNAVAILABLE", "Este comando não oferece execução sem mutação.", {
+            command: request.command,
+            option: "dryRun"
+          }),
+          startedAt, startedMs
+        );
+      }
+
+      if (request.options?.dryRun === true && descriptor.mutates) {
+        return respond(
+          requestId, false, null, [],
+          fail("CAPABILITY_UNAVAILABLE", "A pré-visualização sem mutação não está implementada.", {
+            command: request.command,
+            option: "dryRun"
+          }),
+          startedAt, startedMs
+        );
+      }
+
       const project = await premiere.Project.getActiveProject();
 
       // Requisito de capacidade. A matriz completa chega no CHMS-006; aqui só o
@@ -167,15 +298,34 @@ export function createPremiereAdapter(options: PremiereAdapterOptions) {
         premiere,
         project,
         args: (request.args as Record<string, unknown>) ?? {},
-        undoLabel: resolveUndoLabel(descriptor.undoLabelKey, request.context?.locale)
+        undoLabel: resolveUndoLabel(descriptor.undoLabelKey, request.context?.locale),
+        hostVersion:
+          typeof request.context?.hostVersion === "string" && request.context.hostVersion.trim() !== ""
+            ? request.context.hostVersion.trim()
+            : "unknown",
+        runtime: {
+          canWriteFiles: runtime?.canWriteFiles ?? "unknown"
+        }
       };
 
       const preflightError = await handler.preflight(context);
       if (preflightError) {
-        return respond(requestId, false, null, [], preflightError, startedAt, startedMs);
+        return respond(
+          requestId, false, null, [], normalizeFailure(preflightError), startedAt, startedMs
+        );
       }
 
       const outcome = await handler.run(context);
+
+      if (!isCommandOutcome(outcome as unknown)) {
+        return respond(
+          requestId, false, null, [],
+          fail("INTERNAL_ERROR", "O comando não devolveu um resultado válido.", {
+            command: request.command
+          }),
+          startedAt, startedMs
+        );
+      }
 
       // A regra do `ok` da §8, imposta pelo adapter.
       if (descriptor.mutates && !outcome.changed) {

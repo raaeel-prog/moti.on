@@ -1,0 +1,19 @@
+{
+  "name": "@motion/rig-metadata",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Formato portatil, canonico e fail-closed para metadata de rigs, com integridade SHA-256 e planejamento de sidecar sem acesso ao host.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@motion/contracts": "0.1.0"
+  },
+  "license": "MIT"
+}

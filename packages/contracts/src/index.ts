@@ -55,9 +55,26 @@ export {
 } from "./legacy.js";
 
 export {
+  HOST_BOOTSTRAP_OK,
+  HOST_SCRIPT_RELATIVE_PATH,
   MAX_INLINE_CHARS,
+  MAX_INLINE_EVALSCRIPT_CHARS,
   buildDispatchCall,
+  buildHostBootstrapCall,
   decodeFromHost,
   encodeForEvalScript,
   needsTempFileTransport
 } from "./evalscript.js";
+
+export {
+  CONTRACT_SCHEMA_VERSION,
+  isCommandRequest,
+  isHostCapabilities,
+  isRigMetadata,
+  validateCommandRequest,
+  validateCommandResponse,
+  validateHostCapabilities,
+  validateRigMetadata,
+  type ContractValidationIssue,
+  type ContractValidationResult
+} from "./validators.js";

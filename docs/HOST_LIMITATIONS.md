@@ -1,114 +1,134 @@
 # Limitações verificadas e o que ainda não foi executado em host real
 
-> Entregável 10 da §39 do master spec: *"lista objetiva de limitações verificadas"*.
->
-> **Nada nesta página pode ser descrito como funcionando até ter sido executado dentro do After Effects ou do Premiere Pro reais.** `npm run check` verde significa que a lógica pura está correta e que os contratos batem entre si. Não significa que o painel carrega, que o Undo agrupa, nem que os bytes atravessam o `evalScript` intactos.
+> Entregável 10 da §39 do master spec. Nada nesta página é descrito como funcionando em host real sem execução observada. `npm run check`, pesquisa oficial e testes com doubles não substituem After Effects ou Premiere Pro abertos com **este build**.
 
-O vocabulário de status é o de `docs/AGENT_SKILLS_GUIDE.md`: `IMPLEMENTED_AND_VERIFIED`, `IMPLEMENTED_NOT_HOST_VERIFIED`, `PARTIAL`, `BLOCKED_BY_CAPABILITY`, `BLOCKED_BY_PRODUCT_DECISION`, `NOT_IMPLEMENTED`.
+## Como ler os status
 
----
+Há dois eixos independentes:
 
-## O que está `IMPLEMENTED_NOT_HOST_VERIFIED`
+- implementação: `IMPLEMENTED_AND_VERIFIED`, `IMPLEMENTED_NOT_HOST_VERIFIED`, `PARTIAL`, `BLOCKED_BY_CAPABILITY`, `BLOCKED_BY_PRODUCT_DECISION` ou `NOT_IMPLEMENTED`;
+- execução: `PASS` (executado e aprovado), `FAIL` (executado e reprovado) ou `NOT RUN` (não executado no escopo declarado).
 
-### 1. Carregamento do painel no After Effects
+Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma medição feita com extensão equivalente pode ser `PASS` ou `FAIL` para aquele experimento e continuar `NOT RUN` para o build atual.
 
-O manifest CSXS declara CEP 12 e AE 25.0+, e o build produz a árvore que `docs/INSTALLATION.md` manda instalar. **Ninguém abriu o After Effects.** Não está verificado que o painel aparece no menu de extensões, que o `index.html` renderiza, nem que `MotionAE.dispatch` fica alcançável por `evalScript`.
+## Resumo do build atual
 
-### 2. Round-trip não-ASCII pelo canal `evalScript` real
+| Gate | Implementação | Execução neste build | Evidência disponível |
+|---|---|---|---|
+| Contrato v1: JSON Schemas/validadores | `IMPLEMENTED_AND_VERIFIED` | `PASS` automatizado | Quatro schemas Draft 2020-12, geração standalone e guards profundos no check integrado de 2026-08-25 |
+| After Effects: carregamento/bootstrap | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87/CEP 12.0.1/Windows 11: `<ScriptPath>` falhou com modal; depois da remoção, inicialização limpa e `$.evalFile` passaram |
+| After Effects: round-trip Unicode | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Botão do build atual preservou português, japonês, emoji, aspas e barras |
+| After Effects: Undo da composição de teste | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Um único Ctrl+Z removeu `Moti.on Demo`; menu exibiu o rótulo pt-BR esperado após correção de locale |
+| After Effects: payload acima de 60.000 caracteres codificados | `PARTIAL` | `NOT RUN` | Rejeição tipada implementada; transporte por arquivo temporário ausente |
+| Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | APIs verificadas em documentação e doubles |
+| Premiere: versão/locale do host | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | `require("uxp").host.version`/`.uiLocale` documentados para 25.6+ |
+| Premiere: transações/Undo | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Ordem `lockedAccess` → `executeTransaction` coberta por doubles |
+| Premiere: exportação de diagnóstico | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Picker e `File.write` documentados; host real não executado |
+| CHMS-009: núcleo puro de metadata de rigs | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | 24/24 testes focados; sem integração `Layer.comment`, filesystem ou Undo real |
+| UI responsiva e visual | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` parcial | Captura/interação no AE em largura compacta próxima de 280 px; matriz restante `NOT RUN` |
+| Acessibilidade no runtime | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Sem teste real de teclado, foco ou leitor de tela nos hosts |
+| `npm.cmd run check` integrado | — | `PASS` | Gate final: lint, typecheck, build, validate, 326/326 testes e skills validate |
 
-`encodeForEvalScript` e `MotionJson.stringify` produzem saída ASCII imprimível, e há 13 testes de escape mais um fuzz semeado de 500 strings cobrindo controles, U+2028/2029, acentos, CJK, emoji e substituto solitário. **O transporte não foi testado.** A hipótese que motivou o desenho — de que o canal do `evalScript` decodifica pela codepage do sistema no Windows e corromperia `"Composição"` — é razoável e não foi confirmada nem refutada num host real.
+## Detalhes e limites conhecidos
 
-O comando `ae.diagnostics.echo` existe justamente para isso: é o botão **Verificar ponte com o host**, e mandar um valor com acento, CJK e emoji e conferir a volta é o teste que fecha este item.
+### 1. Carregamento do host ExtendScript no After Effects
 
-### 3. Alvo do Chromium do CEP 12
+Em 2026-08-25, numa extensão CEP equivalente em **After Effects 26.3x87, Windows 11, CEP 12.0.1**, o painel renderizou, mas `typeof $.global.MotionAE` devolveu `"undefined"`. O `<ScriptPath>` do manifest não foi avaliado automaticamente; comandos voltaram `"EvalScript error."`. `$.evalFile` sobre o mesmo host script funcionou.
 
-`scripts/build-client.mjs` compila o bundle do painel para `chrome88`. **Esse número não foi verificado contra documentação da Adobe.** É um limite conservador escolhido por segurança. Se o CEP 12 embutir um Chromium mais novo, está se perdendo recurso à toa; se embutir um mais velho, o painel abre em branco dentro do After Effects sem nenhuma mensagem útil.
+O build Moti.on atual revelou um sintoma ainda mais forte: com `<ScriptPath>`, mostrou o modal `Não é possível executar o script na linha 1. Erro de sintaxe`. Depois de fechar o modal, o adapter carregou o mesmo arquivo por `$.evalFile` e os comandos passaram. O elemento opcional foi removido; após rebuild, reinstalação e reinício, o painel abriu sem modal, mostrou `Conectado` e respondeu a `ae.context.read`: `PASS` no ambiente acima.
 
-### 4. Agrupamento de Undo
+O adapter atual carrega obrigatoriamente o `host/index.jsx` corrente por `$.evalFile` uma vez por instância, serializa bootstraps concorrentes e permite uma única retentativa apenas para comando read-only quando o engine some. O caminho passa pelo encoder ASCII e não é registrado nos logs. Ainda falta repetir em AE 25.x, outros patches 26.x e macOS.
 
-Está provado por teste que `beginUndoGroup` e `endUndoGroup` são chamados exatamente uma vez cada, na ordem certa, inclusive quando o comando lança. **Não está provado que o After Effects de fato agrupa a operação numa única entrada do histórico** — só o host real responde isso. O teste manual está em `docs/INSTALLATION.md`: criar a composição de teste e conferir que um único Ctrl+Z a desfaz por completo.
+### 2. Round-trip Unicode do `evalScript`
 
-### 5. Preservação de seleção e do tempo corrente
+No build atual, o botão **Verificar ponte com o host** devolveu “Ponte com o host íntegra” com português, japonês, emoji, aspas e barra invertida. Resultado: `PASS` em AE 26.3x87/CEP 12.0.1/Windows 11. O payload acima de 60.000 caracteres permanece fora do escopo deste teste.
 
-`captureState`/`restoreState` **não existem ainda**. Nenhum comando do P0 muda seleção ou CTI, então não há o que preservar. Status: `NOT_IMPLEMENTED`, e chega junto com o primeiro comando que mexe em seleção.
+A hipótese de corrupção por codepage não reproduziu nessa máquina; isso não aprova macOS nem Windows com outra codepage. O escape ASCII continua necessário porque o custo de uma suposição errada é corrupção silenciosa.
 
-### 6. Valores reais de `expressionEngine`
+### 3. Runtime Chromium do CEP
 
-O tipo `HostCapabilities.expressionEngine` prevê `"javascript" | "legacy" | "unknown"`. A sonda que leria `app.project.expressionEngine` chega no CHMS-006, e **as strings que o After Effects realmente devolve não foram conferidas** num projeto de verdade.
+O runtime medido reportou Chrome 99.0.4844.84 / AdobeCEP 12.0.1; lookbehind e `crypto.randomUUID` executaram. Resultado do experimento: `PASS`. O build continua com alvo conservador `chrome88`; uma combinação não aprova toda a matriz.
 
-### 7. Comportamento em tempo de execução das transações do Premiere
+### 4. Undo do After Effects
 
-As assinaturas de `lockedAccess`, `executeTransaction` e `CompoundAction.addAction` foram verificadas contra a referência oficial da Adobe e estão registradas em [`docs/research/premiere-uxp-transactions.md`](research/premiere-uxp-transactions.md). O helper `withTransaction` respeita o aninhamento documentado e está coberto por teste contra um duplo que falha se a ordem for invertida.
+Testes automatizados cobrem preflight antes de mutação e equilíbrio de `beginUndoGroup`/`endUndoGroup`, inclusive com exceção. No host real, `Moti.on Demo` foi criada e um único Ctrl+Z removeu toda a composição: `PASS` para o agrupamento da demo no ambiente medido. Depois de corrigir a normalização de `pt_BR`, `Edit > Undo` exibiu `Desfazer Moti.on: criar composição de teste`: `PASS` para o rótulo nessa combinação. Persistência/reabertura e qualquer Undo da futura integração CHMS-009 continuam `NOT RUN`.
 
-**Nada disso foi executado dentro do Premiere Pro.** Continua sem resposta: em que situação exatamente `executeTransaction` devolve `false`; se `lockedAccess` pode ser aninhado; o que acontece quando uma exceção escapa de dentro do callback; e se a transação de fato produz uma única entrada no histórico de Desfazer.
+### 5. Seleção e tempo corrente
 
-Também não foi verificado o valor real de `hostVersion` — o painel do Premiere hoje envia `"unknown"`, porque a forma documentada de obtê-lo ainda não foi confirmada. Isso não bloqueia nada no P0, já que nenhum comando decide por versão, mas precisa ser resolvido antes do CHMS-006.
+`captureState`/`restoreState` ainda não existem. Nenhum comando P0 muda seleção ou CTI. Status: `NOT_IMPLEMENTED`; o gate torna-se obrigatório junto do primeiro comando que tocar esse estado.
 
-### 8. Aceitação de `requiredPermissions` e da CSP
+### 6. Probes reais do After Effects
 
-`apps/premiere-uxp/manifest.json` declara `"localFileSystem": "request"`, e os dois painéis têm meta `Content-Security-Policy` partindo de `default-src 'none'`. As chaves válidas do manifest v5 foram verificadas na referência oficial.
+A sonda do After Effects existe e preserva valores desconhecidos como `unknown`; não inventa JavaScript por versão. No build atual, o System Check passou e mostrou projeto, escrita, rede e motor de expressões disponíveis, mantendo capacidades não empacotadas ou exclusivas do Premiere indisponíveis. A string crua devolvida por `app.project.expressionEngine` ainda não foi anotada.
 
-**Não está verificado** o comportamento no carregamento real: se o UXP recusa o plugin quando uma permissão é insuficiente, se avisa, ou se ignora em silêncio uma chave desconhecida. Também não está verificado se o UXP honra CSP declarada por meta tag — se não honrar, a proteção efetiva vem apenas de `requiredPermissions` e da garantia de que o build não contém código remoto.
+A leitura da preferência **Allow Scripts To Write Files And Access Network** usa `Main Pref Section`/`Pref_SCRIPTING_FILE_NETWORK_SECURITY`, nomes encontrados em material comunitário e ainda não confirmados em documentação oficial. Exceção vira `unknown` com motivo `couldNotReadHostPreference`, nunca uma falsa afirmação de indisponibilidade. A sonda retornou escrita e rede disponíveis neste ambiente; a validade dos nomes em outras versões continua uma incerteza documentada.
 
-### 9. Locale da interface
+### 7. Premiere: ambiente, capabilities e transações
 
-O adapter lê `csInterface.getHostEnvironment().appUILocale` para preencher `context.locale`, que é o que faz o rótulo de Undo sair no idioma do usuário. **Não foi verificado** que esse campo existe e no formato esperado (`pt-BR` vs `pt_BR` vs `ptBR`). Se vier em formato diferente, o rótulo cai no inglês — degradação visível e honesta, não silenciosa, mas ainda assim errada.
+As assinaturas de `lockedAccess`, `executeTransaction` e `CompoundAction.addAction` foram verificadas contra a referência oficial em [`research/premiere-uxp-transactions.md`](research/premiere-uxp-transactions.md). O helper aninha a transação dentro da trava e não conserva objetos `Action` depois do callback.
 
-### 10. Transporte de payload grande por arquivo temporário
+A fonte oficial da versão e do locale é `require("uxp").host.version` e `.uiLocale`; a decisão está em [`research/premiere-uxp-host-environment-and-diagnostics-export.md`](research/premiere-uxp-host-environment-and-diagnostics-export.md). Quando a versão estiver ausente, o estado correto é `unknown`/`Não verificado`, nunca `unsupported` inventado.
 
-`needsTempFileTransport` decide corretamente quando um payload passa do limite, e isso é testado. **O caminho alternativo em si não foi implementado**: nenhum comando do P0 chega perto de 60.000 caracteres. Status: `PARTIAL` — a decisão existe e é testada, a execução chega quando houver um comando que precise dela.
+As capabilities de MOGRT, transcript e caption tracks usam os símbolos públicos mapeados em [`research/premiere-uxp-capability-probes.md`](research/premiere-uxp-capability-probes.md). Sem sequência ativa ou quando getter/factory lança, a implementação mantém `unknown`.
+
+Ainda `NOT RUN` no Premiere real: carregamento, valores de versão/locale, retorno `false` de `executeTransaction`, comportamento de exceção, Undo e objetos stale. O P0 não possui comando mutante no Premiere, então o autoteste só confirma presença de símbolo; a execução da fronteira fica sem consumidor real até uma feature posterior ou um fixture de host explicitamente aprovado.
+
+### 8. Permissão, CSP e exportação de diagnóstico no Premiere
+
+O manifest declara apenas `localFileSystem: "request"`. A exportação abre `storage.localFileSystem.getFileForSaving(...)` após clique explícito e grava com `File.write(...)`; cancelamento não é erro. O logger não deve conservar `nativePath`, nome escolhido, nomes de projeto/sequência, credenciais ou payload criativo.
+
+Pesquisa/API: documentada. Carregamento, aceitação da permissão, comportamento da CSP, picker, cancelamento e escrita no Premiere real: `NOT RUN`.
+
+### 9. Locale da interface do After Effects
+
+Na extensão equivalente, `appUILocale` e `appLocale` foram `"pt_BR"`. `normalizeLocale` aceita underscore e faz fallback por idioma. O build atual renderizou o painel em pt-BR no mesmo host: `PASS` para essa combinação; en-US e outros locales reais continuam `NOT RUN`.
+
+### 10. Payload grande no After Effects
+
+O teto canônico é 60.000 caracteres do JSON **já codificado** para o `evalScript`. Acima dele, o adapter falha fechado antes até da sonda de presença, com `INTERNAL_ERROR`, motivo `INLINE_PAYLOAD_TOO_LARGE`, `encodedChars`, `maxInlineChars` e `mayHaveMutated: false`.
+
+Não existe transporte por arquivo temporário, checksum nem limpeza de temporário. Status: `PARTIAL`; host: `NOT RUN`. O botão Unicode comum não fecha este gate porque seu payload fica abaixo do limite.
 
 ### 11. QA visual
 
-Nada foi visto renderizado. Os requisitos de 280/360/480/720 px e de escala de 100/125/150/200% de DPI da §22.3 **não foram exercitados**. O painel atual ainda é o layout do starter; o shell responsivo com os tokens `#1D1D1D` é CHMS-008.
+O shell compartilhado, a base `#1D1D1D`, uma tarefa dominante por view e os modos 280/360/480/720 px estão implementados e testados em DOM falso. O build foi visto e operado dentro do AE numa largura compacta próxima de 280 px, sem overflow horizontal aparente: `PASS` parcial. 360/480/720 px, 100/125/150/200% de escala, Premiere e macOS continuam `NOT RUN`.
 
 ### 12. Acessibilidade
 
-Ordem de foco por teclado, contraste do anel de foco e comportamento de leitor de tela **não foram verificados** em nenhum dos dois runtimes. A §22.4 exige, e nenhum teste automatizado neste repositório mede isso.
+O shell declara relações ARIA, foco visível e navegação de abas por teclado, com testes automatizados. Ordem de foco completa, contraste renderizado e leitor de tela em CEP/UXP reais: `NOT RUN`.
 
----
+### 13. Metadata de rigs
 
-## O que está verificado, e por qual mecanismo
+O package puro `@motion/rig-metadata` cria, lê, atualiza, remove e migra o bloco `[MOTION_META_V1]`. Ele preserva byte a byte o texto do usuário fora do span gerenciado, exige um único bloco válido, usa JSON recursivamente canônico, UTF-8 estrito, base64url sem padding e SHA-256, e falha fechado em corrupção ou migração não registrada. O limite inline é fornecido pelo adapter; o retorno é um plano inline/sidecar, sem I/O dentro do package.
 
-Isto **não** depende de host real, e está coberto por teste automatizado:
+Evidência automatizada: **24/24 testes focados `PASS`**, incluídos no check integrado de 2026-08-25. Evidência no After Effects: `NOT RUN`. Ainda não existem neste slice o adapter de `Layer.comment`, escrita/rename/remoção atômicos do sidecar, fronteira de Undo, teste de limite real do comentário, reabertura/persistência no `.aep` ou um rig visual aplicado. O status agregado de CHMS-009 é `IMPLEMENTED_NOT_HOST_VERIFIED`.
 
-| Item | Onde |
-|---|---|
-| Escape para `evalScript` produz ASCII imprimível para qualquer entrada | `packages/contracts/tests/evalscript.test.mjs` (13 testes, fuzz semeado de 500 strings) |
-| Carga de injeção não fecha o literal de string | idem, teste que localiza onde o literal termina |
-| As tabelas de escape do painel e do host são idênticas | `apps/after-effects-cep/tests/host-json.test.mjs` |
-| Parser JSON do host recusa `__proto__`, profundidade > 64 e entrada > 4 MB | idem |
-| `preflight` que falha nunca abre grupo de Undo | `apps/after-effects-cep/tests/host-dispatch.test.mjs` |
-| `beginUndoGroup`/`endUndoGroup` balanceiam mesmo com exceção | idem |
-| Comando que muta e reporta `changed: false` responde `ok: false` | idem |
-| Versão de protocolo diferente é recusada sem invocar o handler | idem |
-| Resposta com `requestId` desconhecido é descartada | `packages/command-registry/tests/command-client.test.mjs` |
-| Timeout avisa que a operação pode ter sido aplicada | idem |
-| Callback atrasado não resolve promessa já entregue | idem |
-| Um único `evalScript` no bundle e um único global público no host | `scripts/validate.mjs`, sobre o build |
-| Nenhum `eval`, `new Function`, `console` ou URL literal no build | idem |
-| Descriptors e registro do host são o mesmo conjunto | `tests/build-output.test.mjs` |
-| `executeTransaction` roda dentro do callback de `lockedAccess` | `apps/premiere-uxp/tests/adapter.test.mjs` |
-| A trava fecha mesmo quando a montagem das ações lança | idem |
-| Nenhuma referência a `Action` sobrevive à transação | idem |
-| Autoteste do Premiere detecta ausência da API por símbolo, não por versão | idem |
-| As regras oficiais da Adobe realmente disparam nesta instalação | `tests/premiere-eslint-rules.test.mjs` |
-| Permissões mínimas e CSP no build | `scripts/validate.mjs` |
-| Código gerado não sai de sincronia com o TypeScript | testes de drift nos dois packages |
-| Sintaxe fora do subconjunto ExtendScript | `scripts/check-extendscript.mjs` + `tests/extendscript-subset.test.mjs` |
+## Controles automatizados existentes
 
----
+Em **2026-08-25**, o gate final integrado concluiu `npm.cmd run check` com `PASS`: lint, typecheck, build, validate, **326/326 testes** e skills validate. O check cobre:
 
-## Como fechar os itens abertos
+- quatro JSON Schemas Draft 2020-12, geração standalone CSP-safe e guards profundos de request, response, capabilities e rig metadata;
+- escape ASCII, fuzz e limite inclusivo do `evalScript`;
+- parser JSON ES5, chaves perigosas, profundidade e teto de entrada;
+- preflight, protocolo, allowlist, Undo e semântica `changed` do dispatcher;
+- correlação, timeout, callback tardio e descriptor do `CommandClient`;
+- bootstrap e rejeição de payload acima de 60.000 caracteres sem chamar `evalScript`;
+- transações do Premiere com doubles e regras ESLint oficiais;
+- probes por símbolo, estados `unknown` e tiers sem `parseFloat`;
+- redaction na escrita, rotação por bytes UTF-8 e bundles imutáveis;
+- create/read/update/remove/migrate do núcleo puro de metadata, incluindo canonicalização, base64url, SHA-256 e planos sidecar sem I/O;
+- shell, i18n, larguras e semântica de foco/ARIA em DOM falso;
+- manifests, permissões, CSP, build, subconjunto ExtendScript e drift do código gerado.
 
-Os itens 1, 2 e 4 fecham numa única sessão dentro do After Effects, seguindo `docs/INSTALLATION.md`:
+Esse `PASS` é automatizado. Ele não aprova carregamento, UI, filesystem, Undo, persistência nem comportamento dos hosts Adobe reais.
 
-1. `npm run build`, depois `.\scripts\install-ae-dev.ps1 -EnableDebugMode` no Windows ou `./scripts/install-ae-dev.sh --enable-debug` no macOS.
-2. Abrir o painel Moti.on no menu de extensões. **Item 1 fecha aqui**, ou revela um problema de carregamento.
-3. Clicar em **Verificar ponte com o host**. O payload de prova contém acento, CJK, emoji, aspas e barras invertidas. **Item 2 fecha aqui**: se voltar idêntico, o transporte preserva os bytes; se voltar diferente, existe corrupção real e o painel diz isso em vez de fingir sucesso.
-4. Clicar em **Criar composição de teste**, conferir a composição 1920×1080 / 5 s / 30 fps, e apertar Ctrl+Z uma vez. **Item 4 fecha se um único Ctrl+Z desfizer tudo.**
-5. Anotar o valor de `appUILocale` observado, o que fecha o item 9.
+## Como fechar os itens
 
-O item 3 fecha consultando a documentação oficial do CEP sobre a versão embutida do Chromium, via `/researching-adobe-capabilities`, e não por tentativa e erro.
+Siga [`INSTALLATION.md`](INSTALLATION.md) e registre para cada execução: commit/build, sistema, versão do host, versão do runtime, data e `PASS`/`FAIL`. O mínimo restante é:
 
-Os itens 5, 6, 7, 8, 10, 11 e 12 dependem de código que ainda não foi escrito, e estão amarrados às issues CHMS correspondentes.
+1. carregar o artefato atual no Premiere real e reinstalar o AE em cada combinação adicional da matriz;
+2. no After Effects, repetir a matriz em AE 25.x/outros 26.x/macOS e fechar diagnóstico, DPI, teclado e acessibilidade;
+3. integrar CHMS-009 à camada de host e então testar `Layer.comment`, limite real, sidecar atômico, corrupção, migração, Undo e reabertura;
+4. no Premiere, testar contexto, versão/locale, System Check, picker salvo/cancelado e conteúdo redigido; testar transação/Undo quando houver um consumidor real;
+5. nos dois hosts, repetir 280/360/480/720 px, 100/125/150/200% de escala, teclado, foco, estados, overflow e screenshots;
+6. repetir a matriz necessária em Windows e macOS — aprovação numa plataforma não fecha a outra.

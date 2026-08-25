@@ -1,17 +1,65 @@
+/*
+ * Tema do painel Moti.on — CHMS-008.
+ *
+ * Arquivo unico e autocontido de proposito: `scripts/build.mjs` o copia para
+ * dentro de cada app, e o runtime UXP nao garante `@import`. Dividir em dois
+ * arquivos economizaria repeticao aqui e custaria um painel sem estilo la.
+ *
+ * As classes de largura (`ch-shell--compact` / `--standard` / `--wide`) sao
+ * aplicadas por JavaScript, e nao por `@media`. Media query mede a viewport; o
+ * que importa num painel acoplado e a largura do proprio painel, e o UXP nao
+ * garante media query dentro dele.
+ *
+ * Os valores vem de `shared/crosshost.tokens.json`, que e a fonte da direcao
+ * visual aprovada em `docs/UI_FOUNDATION.md`.
+ */
+
 :root {
-  --panel-bg: #202124;
-  --surface-bg: #2a2c30;
-  --surface-border: #41444a;
-  --text-primary: #f5f6f7;
-  --text-secondary: #b7bbc2;
-  --accent: #76a7ff;
-  --accent-strong: #4d8df7;
-  --success: #68c28b;
-  --danger: #ff7f86;
-  --warning: #f2c56b;
-  --radius: 8px;
-  --space: 12px;
   color-scheme: dark;
+
+  --ch-surface-canvas: #1d1d1d;
+  --ch-surface-panel: #202020;
+  --ch-surface-raised: #242424;
+  --ch-surface-control: #282828;
+  --ch-surface-hover: #2d2d2d;
+  --ch-surface-pressed: #171717;
+
+  --ch-border-subtle: #2a2a2a;
+  --ch-border-default: #343434;
+  --ch-border-strong: #464646;
+  --ch-border-focus: #73a7ff;
+
+  --ch-text-primary: #e7e7e7;
+  --ch-text-secondary: #a6a6a6;
+  --ch-text-muted: #8a8a8a;
+  --ch-text-disabled: #555555;
+
+  --ch-accent: #35c978;
+  --ch-accent-hover: #45d889;
+  --ch-accent-pressed: #26985d;
+  --ch-accent-contrast: #10251a;
+
+  --ch-danger: #e36a6a;
+  --ch-warning: #d8a54a;
+  --ch-info: #73a7ff;
+  --ch-success: #35c978;
+
+  --ch-space-1: 4px;
+  --ch-space-2: 8px;
+  --ch-space-3: 12px;
+  --ch-space-4: 16px;
+
+  --ch-radius-control: 4px;
+  --ch-radius-round: 999px;
+
+  --ch-size-control: 28px;
+
+  --ch-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --ch-font-sm: 11px;
+  --ch-font-md: 12px;
+  --ch-font-lg: 13px;
+
+  --ch-motion-fast: 90ms;
 }
 
 * {
@@ -19,175 +67,380 @@
 }
 
 html,
-body {
-  width: 100%;
-  min-height: 100%;
+body,
+#root {
   margin: 0;
   padding: 0;
-  overflow: auto;
-  background: var(--panel-bg);
-  color: var(--text-primary);
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 13px;
-}
-
-.panel-shell {
-  padding: 14px;
-}
-
-.panel-header {
-  margin-bottom: 14px;
-}
-
-.panel-title {
-  margin: 0 0 4px;
-  font-size: 17px;
-  line-height: 1.25;
-  font-weight: 700;
-}
-
-.panel-subtitle {
-  margin: 0;
-  color: var(--text-secondary);
-  line-height: 1.45;
-}
-
-.status-line {
-  display: flex;
-  align-items: center;
-  margin: 0 0 12px;
-  min-height: 24px;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  margin-right: 8px;
-  border-radius: 50%;
-  background: var(--warning);
-  flex: 0 0 auto;
-}
-
-.status-dot.is-success {
-  background: var(--success);
-}
-
-.status-dot.is-error {
-  background: var(--danger);
-}
-
-.status-text {
-  color: var(--text-secondary);
-  line-height: 1.35;
-}
-
-.context-card {
-  margin-bottom: 12px;
-  padding: 12px;
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius);
-  background: var(--surface-bg);
-}
-
-.context-row {
-  display: flex;
   width: 100%;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--surface-border);
-}
-
-.context-row:last-child {
-  border-bottom: 0;
-}
-
-.context-label {
-  width: 42%;
-  padding-right: 10px;
-  color: var(--text-secondary);
-  line-height: 1.35;
-  flex: 0 0 auto;
-}
-
-.context-value {
-  min-width: 0;
-  color: var(--text-primary);
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  margin: -4px;
-}
-
-.action-button {
-  min-height: 32px;
-  margin: 4px;
-  padding: 7px 12px;
-  border: 1px solid var(--accent-strong);
-  border-radius: 6px;
-  background: var(--accent-strong);
-  color: #ffffff;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.action-button.secondary {
-  border-color: var(--surface-border);
-  background: transparent;
-  color: var(--text-primary);
-}
-
-.action-button:hover {
-  filter: brightness(1.08);
-}
-
-.action-button:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
-.log-box {
-  min-height: 50px;
-  margin-top: 12px;
-  padding: 10px;
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius);
-  background: rgba(0, 0, 0, 0.14);
-  color: var(--text-secondary);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--ch-surface-canvas);
+  color: var(--ch-text-primary);
+  font-family: var(--ch-font-family);
+  font-size: var(--ch-font-md);
   line-height: 1.4;
 }
 
-.log-box.is-error {
-  border-color: var(--danger);
-  color: var(--danger);
+.ch-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background-color: var(--ch-surface-canvas);
 }
 
-.log-box.is-success {
-  border-color: var(--success);
-  color: var(--success);
+.ch-header,
+.ch-nav,
+.ch-view-title,
+.ch-actions,
+.ch-status {
+  flex: 0 0 auto;
 }
 
-@media (max-width: 300px) {
-  .context-row {
-    display: block;
-  }
+/* Identificacao discreta. A §22 proibe bloco de marca dentro de painel acoplado. */
+.ch-header {
+  padding: 10px var(--ch-space-3) 6px var(--ch-space-3);
+}
 
-  .context-label,
-  .context-value {
-    width: 100%;
-  }
+.ch-header__title {
+  font-size: var(--ch-font-lg);
+  font-weight: 600;
+  color: var(--ch-text-primary);
+}
 
-  .context-label {
-    margin-bottom: 3px;
-  }
+.ch-header__subtitle {
+  margin-top: 2px;
+  font-size: var(--ch-font-sm);
+  color: var(--ch-text-muted);
+}
 
-  .action-button {
-    width: calc(100% - 8px);
+.ch-nav {
+  display: flex;
+  flex-direction: row;
+  padding: 0 var(--ch-space-2);
+  border-bottom: 1px solid var(--ch-border-subtle);
+}
+
+.ch-nav__item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: var(--ch-size-control);
+  margin-right: 2px;
+  padding: 0 var(--ch-space-2);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background-color: transparent;
+  color: var(--ch-text-secondary);
+  font-family: inherit;
+  font-size: var(--ch-font-md);
+  cursor: pointer;
+  transition: color var(--ch-motion-fast) linear, background-color var(--ch-motion-fast) linear;
+}
+
+.ch-nav__item:hover {
+  background-color: var(--ch-surface-hover);
+  color: var(--ch-text-primary);
+}
+
+/* Trilho sutil, nao tile aceso: a §22 proibe glow como marcador de selecao. */
+.ch-nav__item.is-active {
+  color: var(--ch-text-primary);
+  border-bottom-color: var(--ch-accent);
+}
+
+.ch-nav__item:focus {
+  outline: 1px solid var(--ch-border-focus);
+  outline-offset: -1px;
+}
+
+.ch-nav__item:focus-visible {
+  outline: 1px solid var(--ch-border-focus);
+  outline-offset: -1px;
+}
+
+.ch-nav__item:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.ch-nav__label {
+  margin-left: 6px;
+}
+
+.ch-nav__glyph {
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+  font-size: var(--ch-font-md);
+}
+
+.ch-view-title {
+  padding: 10px var(--ch-space-3) var(--ch-space-1) var(--ch-space-3);
+  font-size: var(--ch-font-md);
+  font-weight: 600;
+  color: var(--ch-text-primary);
+}
+
+/* Só o conteúdo rola. A ação principal continua alcançável em painel baixo. */
+.ch-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 var(--ch-space-3) var(--ch-space-2) var(--ch-space-3);
+}
+
+.ch-section-title {
+  margin: 10px 0 var(--ch-space-1) 0;
+  font-size: var(--ch-font-sm);
+  font-weight: 600;
+  color: var(--ch-text-secondary);
+}
+
+/* Separador em vez de card: a §22 proibe card aninhado para cada grupo. */
+.ch-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--ch-border-subtle);
+}
+
+.ch-row__label {
+  flex: 0 0 42%;
+  padding-right: var(--ch-space-2);
+  font-size: var(--ch-font-md);
+  color: var(--ch-text-secondary);
+}
+
+.ch-row__value {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: right;
+  font-size: var(--ch-font-md);
+  color: var(--ch-text-primary);
+}
+
+/*
+ * Estado por cor E por marcador textual.
+ * A §22.4 proibe status que dependa so de cor.
+ */
+.ch-row--ok .ch-row__value {
+  color: var(--ch-accent);
+}
+
+.ch-row--off .ch-row__value {
+  color: var(--ch-text-muted);
+}
+
+.ch-row--unknown .ch-row__value {
+  color: var(--ch-warning);
+}
+
+.ch-notice {
+  margin: var(--ch-space-2) 0;
+  padding: 7px 9px;
+  border: 1px solid var(--ch-border-default);
+  border-radius: var(--ch-radius-control);
+  background-color: var(--ch-surface-panel);
+  color: var(--ch-text-secondary);
+  font-size: var(--ch-font-sm);
+  white-space: pre-wrap;
+}
+
+.ch-notice--error {
+  border-color: var(--ch-danger);
+  color: var(--ch-danger);
+}
+
+.ch-notice--warning {
+  border-color: var(--ch-warning);
+  color: var(--ch-warning);
+}
+
+.ch-log {
+  margin: 6px 0;
+  padding: 6px var(--ch-space-2);
+  border: 1px solid var(--ch-border-subtle);
+  border-radius: var(--ch-radius-control);
+  background-color: var(--ch-surface-panel);
+  color: var(--ch-text-secondary);
+  font-size: var(--ch-font-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ch-log--warn {
+  border-left: 2px solid var(--ch-warning);
+}
+
+.ch-log--error {
+  border-left: 2px solid var(--ch-danger);
+}
+
+.ch-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  padding: var(--ch-space-2) var(--ch-space-3);
+  border-top: 1px solid var(--ch-border-subtle);
+}
+
+.ch-button {
+  height: var(--ch-size-control);
+  margin: 0 6px 0 0;
+  padding: 0 var(--ch-space-3);
+  border: 1px solid var(--ch-border-strong);
+  border-radius: var(--ch-radius-control);
+  background-color: var(--ch-surface-control);
+  color: var(--ch-text-primary);
+  font-family: inherit;
+  font-size: var(--ch-font-md);
+  cursor: pointer;
+  transition: background-color var(--ch-motion-fast) linear;
+}
+
+.ch-button:hover {
+  background-color: var(--ch-surface-hover);
+}
+
+.ch-button:active {
+  background-color: var(--ch-surface-pressed);
+}
+
+.ch-button:focus {
+  outline: 1px solid var(--ch-border-focus);
+  outline-offset: 1px;
+}
+
+.ch-button:focus-visible {
+  outline: 1px solid var(--ch-border-focus);
+  outline-offset: 1px;
+}
+
+.ch-button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Um unico acento na tela, reservado a acao principal. */
+.ch-button--primary {
+  border-color: var(--ch-accent);
+  background-color: var(--ch-accent);
+  color: var(--ch-accent-contrast);
+}
+
+.ch-button--primary:hover {
+  background-color: var(--ch-accent-hover);
+}
+
+.ch-button--primary:active {
+  background-color: var(--ch-accent-pressed);
+}
+
+.ch-button[disabled] {
+  border-color: var(--ch-border-subtle);
+  background-color: var(--ch-surface-panel);
+  color: var(--ch-text-disabled);
+  cursor: default;
+}
+
+.ch-status {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 6px var(--ch-space-3) var(--ch-space-2) var(--ch-space-3);
+  font-size: var(--ch-font-sm);
+  color: var(--ch-text-secondary);
+}
+
+.ch-status__dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: var(--ch-radius-round);
+  background-color: var(--ch-text-muted);
+}
+
+.ch-status__dot.is-ok {
+  background-color: var(--ch-success);
+}
+
+.ch-status__dot.is-error {
+  background-color: var(--ch-danger);
+}
+
+.ch-status__dot.is-busy {
+  background-color: var(--ch-info);
+}
+
+.ch-status__text {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/*
+ * 280–359 px: navegacao por icone, respiro reduzido, botao em largura total.
+ * O rotulo some, mas o `title` permanece — a §22.4 exige nome acessivel.
+ */
+.ch-shell--compact .ch-header,
+.ch-shell--compact .ch-view-title,
+.ch-shell--compact .ch-content,
+.ch-shell--compact .ch-actions,
+.ch-shell--compact .ch-status {
+  padding-left: var(--ch-space-2);
+  padding-right: var(--ch-space-2);
+}
+
+.ch-shell--compact .ch-nav {
+  padding: 0 var(--ch-space-1);
+}
+
+.ch-shell--compact .ch-nav__label {
+  display: none;
+}
+
+.ch-shell--compact .ch-nav__item {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.ch-shell--compact .ch-row__label {
+  flex: 0 0 50%;
+}
+
+.ch-shell--compact .ch-button {
+  flex: 1 1 100%;
+  margin: 0 0 6px 0;
+}
+
+/*
+ * 560 px ou mais: largura de leitura limitada.
+ * A §22.3 proibe esticar controle pela largura inteira do painel.
+ */
+.ch-shell--wide .ch-header,
+.ch-shell--wide .ch-view-title,
+.ch-shell--wide .ch-content,
+.ch-shell--wide .ch-actions,
+.ch-shell--wide .ch-status {
+  max-width: 620px;
+}
+
+.ch-shell--wide .ch-row__label {
+  flex: 0 0 32%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-nav__item,
+  .ch-button {
+    transition: none;
   }
 }

@@ -25,3 +25,33 @@ test("o bundle CEP e o painel CEP têm identificadores próprios", async () => {
   assert.match(ae, /ExtensionBundleId="com\.motion\.plugin"/);
   assert.doesNotMatch(ae, /ExtensionBundleId="com\.motion\.plugin\.ae\.panel"/);
 });
+
+test("o manifest CEP delega o bootstrap ExtendScript ao adapter", async () => {
+  const ae = await readFile(path.join(root, "apps/after-effects-cep/CSXS/manifest.xml"), "utf8");
+
+  assert.match(ae, /<MainPath>\.\/client\/index\.html<\/MainPath>/);
+  assert.doesNotMatch(
+    ae,
+    /<ScriptPath(?:\s|>)/,
+    "ScriptPath reintroduz o carregamento automático que falhou no AE 26.3."
+  );
+});
+
+test("os dois hosts recusam painel abaixo da largura mínima suportada de 280 px", async () => {
+  const premiere = JSON.parse(
+    await readFile(path.join(root, "apps/premiere-uxp/manifest.json"), "utf8")
+  );
+  const ae = await readFile(
+    path.join(root, "apps/after-effects-cep/CSXS/manifest.xml"),
+    "utf8"
+  );
+
+  const premiereMainPanel = premiere.entrypoints.find(
+    (entry) => entry.type === "panel" && entry.id === "mainPanel"
+  );
+  assert.ok(premiereMainPanel, "Painel UXP mainPanel ausente.");
+  assert.equal(premiereMainPanel.minimumSize?.width, 280);
+
+  const aeMinimumSize = ae.match(/<MinSize>([\s\S]*?)<\/MinSize>/)?.[1] ?? "";
+  assert.match(aeMinimumSize, /<Width>\s*280\s*<\/Width>/);
+});
