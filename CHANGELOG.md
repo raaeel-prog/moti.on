@@ -88,6 +88,24 @@ Status: `IMPLEMENTED_AND_VERIFIED` no ambiente acima.
 
 **Pendência de produto registrada:** a documentação diz que o offset controla o *valor inicial* do wiggle, mas o identificador da camada continua na composição da semente. Não foi medido se duas camadas com a mesma semente produzem movimento idêntico — pode ser que a semente iguale a fase e não a trajetória. Até isso ser medido, o produto **não promete "mesma semente, mesmo movimento" entre camadas**; o texto da interface fala apenas do comportamento por propriedade.
 
+### CHMS-008 — navegação por ladrilhos, no lugar de uma aba por ferramenta
+
+Cada comando de expressão tinha virado uma aba. Com quatro comandos o painel gastava **sete abas**, e a §22 pede o contrário: grade de ícones, sem inspector até a ferramenta ser escolhida, uma tarefa dominante por vez. O CHMS-014 e o CHMS-015 acrescentariam mais duas cada.
+
+- A navegação voltou a **quatro abas**: Contexto, Ferramentas, Sistema, Diagnóstico.
+- `toolGrid` e `toolTile` no `@motion/ui-core`. Ladrilho, não card: sem sombra, sem raio grande, sem borda dupla. O rótulo textual **nunca some** — ícone sozinho exigiria decorar a iconografia.
+- `shell.setViewTitle` permite que a ferramenta aberta assuma o título. Deixá-lo em "Ferramentas" obrigaria a pessoa a voltar à grade para lembrar onde está.
+- As quatro ramificações do `renderView` viraram um **registro de ferramentas**: acrescentar uma ferramenta passa a ser acrescentar uma entrada, e não mais uma aba somada a mais uma ramificação.
+
+#### Dois defeitos encontrados pela própria verificação em host
+
+1. **A aba Ferramentas apareceu com `?` no lugar do ícone** — o id novo não tinha entrada no mapa de ícones, e o fallback é o ponto de interrogação. Nenhum gate pegava porque nada testava cobertura de ícone. Corrigido, com teste que percorre todos os ids que os painéis usam.
+2. **O quarto ladrilho esticava para a linha inteira** quando a grade quebrava em três colunas, ficando três vezes maior que os irmãos. A §22 pede layout previsível e alinhado à grade; resolvido com `max-width` no item.
+
+#### Verificado em host real — After Effects 26.3x87
+
+Quatro abas; grade com os quatro ladrilhos e ícone próprio; abrir Wiggle troca o título para "Wiggle" e mostra os cinco campos com Aplicar, Redefinir e Voltar; Voltar devolve a grade. Sem rolagem horizontal em 280 px nem em 480 px, e sem exceções no painel.
+
 ### CHMS-014 — Text Box: pesquisa em host e núcleo de expressão (`PARTIAL`)
 
 Primeiro slice do Text Box. **Não é o comando completo** — ver o que ficou de fora, abaixo.

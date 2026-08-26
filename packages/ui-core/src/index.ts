@@ -37,6 +37,8 @@ export {
   resolveWidthClass,
   sectionTitle,
   selectField,
+  toolGrid,
+  toolTile,
   type ButtonOptions,
   type CheckboxFieldOptions,
   type NoticeTone,
@@ -49,5 +51,6 @@ export {
   type ShellOptions,
   type ShellView,
   type StatusState,
+  type ToolTileOptions,
   type WidthClass
 } from "./shell.js";

@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import { createI18n } from "../dist/i18n.js";
 import {
   button,
+  toolGrid,
+  toolTile,
   createShell,
   logLine,
   notice,
@@ -360,4 +362,107 @@ test("o shell nao usa innerHTML em lugar nenhum", async () => {
 
   assert.ok(!code.includes("innerHTML"));
   assert.ok(!code.includes("insertAdjacentHTML"));
+});
+
+test("o ladrilho de ferramenta mantem rotulo textual, e nao so icone", () => {
+  // Icone sozinho exigiria que a pessoa decorasse a iconografia para achar a
+  // ferramenta. O rotulo nao some em nenhuma largura.
+  const doc = createFakeDocument();
+  const tile = toolTile(doc, {
+    id: "wiggle",
+    label: "Wiggle",
+    description: "Oscila a propriedade com semente reproduzível.",
+    onSelect: () => {}
+  });
+
+  assert.equal(tile.className, "ch-tool");
+  assert.equal(tile.getAttribute("type"), "button");
+  assert.equal(tile.title, "Oscila a propriedade com semente reproduzível.");
+
+  const rotulo = tile.children.find((filho) => filho.className === "ch-tool__label");
+  assert.ok(rotulo, "o ladrilho precisa de rótulo textual");
+  assert.equal(rotulo.textContent, "Wiggle");
+});
+
+test("o ladrilho sem descricao cai no proprio rotulo como tooltip", () => {
+  const doc = createFakeDocument();
+  const tile = toolTile(doc, { id: "smooth", label: "Smooth", onSelect: () => {} });
+
+  assert.equal(tile.title, "Smooth");
+});
+
+test("selecionar um ladrilho dispara a escolha uma unica vez", () => {
+  const doc = createFakeDocument();
+  const escolhas = [];
+  const tile = toolTile(doc, {
+    id: "flicker",
+    label: "Flicker",
+    onSelect: () => escolhas.push("flicker")
+  });
+
+  tile.click();
+
+  assert.deepEqual(escolhas, ["flicker"]);
+});
+
+test("a grade expoe lista e itens para leitor de tela", () => {
+  const doc = createFakeDocument();
+  const ids = ["loopOut", "smooth", "wiggle", "flicker"];
+  const grade = toolGrid(
+    doc,
+    ids.map((id) => toolTile(doc, { id, label: id, onSelect: () => {} }))
+  );
+
+  assert.equal(grade.className, "ch-tool-grid");
+  assert.equal(grade.getAttribute("role"), "list");
+  assert.equal(grade.children.length, ids.length);
+
+  grade.children.forEach((item) => {
+    assert.equal(item.className, "ch-tool-grid__item");
+    assert.equal(item.getAttribute("role"), "listitem");
+    assert.equal(item.children[0].className, "ch-tool");
+  });
+});
+
+test("a grade vazia continua sendo uma lista valida", () => {
+  // Um registro de ferramentas filtrado por capacidade pode chegar vazio; a
+  // grade nao pode quebrar por isso.
+  const grade = toolGrid(createFakeDocument(), []);
+
+  assert.equal(grade.children.length, 0);
+  assert.equal(grade.getAttribute("role"), "list");
+});
+
+test("setViewTitle troca o titulo da view, e o redesenho o devolve", () => {
+  // Com uma ferramenta aberta, o titulo precisa ser o nome dela: deixa-lo em
+  // "Ferramentas" obrigaria a pessoa a voltar a grade para lembrar onde esta.
+  const { shell, viewTitle } = montar();
+
+  assert.equal(viewTitle.textContent, "Contexto do projeto");
+
+  shell.setViewTitle("Wiggle");
+  assert.equal(viewTitle.textContent, "Wiggle");
+
+  shell.rerender();
+  assert.equal(
+    viewTitle.textContent,
+    "Contexto do projeto",
+    "o titulo declarado pela view volta no proximo redesenho"
+  );
+});
+
+test("toda view e ferramenta do painel tem icone proprio", () => {
+  // O marcador "?" e o fallback de id sem icone. Ele chegou a aparecer na aba
+  // Ferramentas em host real: o gate nao pegava porque nada testava cobertura
+  // de icone. Os ids abaixo sao os que os paineis realmente usam.
+  const doc = createFakeDocument({ supportsNamespaces: false });
+  const ids = ["context", "tools", "system", "diagnostics", "loopOut", "smooth", "wiggle", "flicker"];
+
+  const semIcone = ids.filter((id) => {
+    const tile = toolTile(doc, { id, label: id, onSelect: () => {} });
+    const glifo = tile.children[0].children[0];
+    return glifo.textContent === "?";
+  });
+
+  assert.deepEqual(semIcone, [], "id sem icone cai no marcador de interrogacao");
 });

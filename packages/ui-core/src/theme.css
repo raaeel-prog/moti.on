@@ -320,6 +320,91 @@ body,
   color: var(--ch-warning);
 }
 
+/*
+ * Grade de ferramentas — §22.
+ *
+ * Ladrilho, e nao card: sem sombra, sem raio grande e sem borda dupla. O
+ * numero de colunas vem da largura disponivel, entao o mesmo markup serve 280 e
+ * 720 px sem media query.
+ */
+.ch-tool-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  margin: var(--ch-space-2) 0 0 0;
+}
+
+/*
+ * `max-width` impede que um ladrilho sozinho na ultima linha estique para a
+ * largura toda: com quatro ferramentas em tres colunas, o quarto ficava tres
+ * vezes maior que os irmaos, e a §22 pede layout previsivel e alinhado a grade.
+ */
+.ch-tool-grid__item {
+  flex: 1 1 132px;
+  max-width: 240px;
+  min-width: 0;
+  padding: 0 var(--ch-space-1) var(--ch-space-2) 0;
+}
+
+.ch-tool {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 100%;
+  min-height: var(--ch-size-tool-tile, 40px);
+  padding: 0 var(--ch-space-2);
+  border: 1px solid var(--ch-border-subtle);
+  border-radius: var(--ch-radius-control);
+  background-color: var(--ch-surface-panel);
+  color: var(--ch-text-primary);
+  font-family: inherit;
+  font-size: var(--ch-font-md);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--ch-motion-fast) linear,
+    border-color var(--ch-motion-fast) linear;
+}
+
+.ch-tool:hover {
+  border-color: var(--ch-border-strong);
+  background-color: var(--ch-surface-hover);
+}
+
+.ch-tool:active {
+  background-color: var(--ch-surface-pressed);
+}
+
+.ch-tool:focus-visible {
+  outline: 1px solid var(--ch-border-focus);
+  outline-offset: 1px;
+}
+
+.ch-tool__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-right: var(--ch-space-2);
+  color: var(--ch-text-secondary);
+}
+
+.ch-tool:hover .ch-tool__icon {
+  color: var(--ch-accent);
+}
+
+/* O rotulo nunca some: icone sozinho exigiria decorar a iconografia. */
+.ch-tool__label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Em painel estreito a grade vira uma coluna, em vez de espremer dois ladrilhos. */
+.ch-shell--compact .ch-tool-grid__item {
+  flex: 1 1 100%;
+  max-width: none;
+  padding-right: 0;
+}
+
 .ch-notice {
   margin: var(--ch-space-2) 0;
   padding: 7px 9px;

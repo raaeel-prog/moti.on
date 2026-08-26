@@ -27,6 +27,7 @@ export type StatusState = "ok" | "error" | "busy";
 
 const ICON_PATHS: Record<string, string> = {
   context: "M3 4h12v3H3zM3 9h5v6H3zM10 9h5v6h-5z",
+  tools: "M3 3.5h4.5V8H3zM10.5 3.5H15V8h-4.5zM3 10h4.5v4.5H3zM10.5 10H15v4.5h-4.5z",
   loopOut: "M5 5h7.5l-2-2M13 13H5.5l2 2M14 5a5 5 0 0 1 0 8M4 13a5 5 0 0 1 0-8",
   smooth: "M2.5 12.5c3.5 0 4-7 6.5-7s3 7 6.5 7",
   wiggle: "M2 9l2.5-4.5L7 13.5l2.5-9L12 13.5l2-4.5h2",
@@ -38,6 +39,7 @@ const ICON_PATHS: Record<string, string> = {
 /** Marcadores distintos para runtimes que nao implementam SVG inline. */
 const ICON_FALLBACKS: Record<string, string> = {
   context: "C",
+  tools: "T",
   loopOut: "L",
   smooth: "~",
   wiggle: "W",
@@ -146,6 +148,53 @@ export function propertyRow(
 
 export function sectionTitle(doc: Document, text: string): HTMLElement {
   return createElement(doc, "div", "ch-section-title", text);
+}
+
+export interface ToolTileOptions {
+  /** Precisa bater com uma chave de `ICON_PATHS` para o ladrilho ter marcador. */
+  id: string;
+  label: string;
+  description?: string;
+  onSelect(): void;
+}
+
+/**
+ * Ladrilho de ferramenta.
+ *
+ * A §22 pede grade de ícones **sem inspector** até uma ferramenta ser
+ * escolhida: uma aba por ferramenta não escala, e com sete abas o painel já
+ * gastava a navegação inteira em coisas que o usuário não está usando agora.
+ *
+ * O rótulo textual é obrigatório e não some em nenhuma largura. Ícone sozinho
+ * exigiria que a pessoa decorasse a iconografia para achar a ferramenta.
+ */
+export function toolTile(doc: Document, options: ToolTileOptions): HTMLButtonElement {
+  const tile = createElement(doc, "button", "ch-tool") as HTMLButtonElement;
+  tile.setAttribute("type", "button");
+  tile.title = options.description ?? options.label;
+
+  const glyph = createElement(doc, "span", "ch-tool__icon");
+  glyph.appendChild(createIcon(doc, options.id));
+  tile.appendChild(glyph);
+  tile.appendChild(createElement(doc, "span", "ch-tool__label", options.label));
+
+  tile.addEventListener("click", options.onSelect);
+  return tile;
+}
+
+/** Grade de ferramentas. O número de colunas é decidido pelo CSS, por largura. */
+export function toolGrid(doc: Document, tiles: readonly HTMLElement[]): HTMLElement {
+  const grid = createElement(doc, "div", "ch-tool-grid");
+  grid.setAttribute("role", "list");
+
+  for (const tile of tiles) {
+    const item = createElement(doc, "div", "ch-tool-grid__item");
+    item.setAttribute("role", "listitem");
+    item.appendChild(tile);
+    grid.appendChild(item);
+  }
+
+  return grid;
 }
 
 interface FieldBaseOptions {
@@ -354,6 +403,17 @@ export interface Shell {
   setWidth(width: number): WidthClass;
   widthClass(): WidthClass;
   setStatus(message: string, state?: StatusState): void;
+  /**
+   * Substitui o título da view atual.
+   *
+   * Existe para o navegador de ferramentas: quando uma ferramenta está aberta, o
+   * título precisa ser o nome dela, e não "Ferramentas". A §22 coloca o título
+   * da ferramenta ativa como primeiro item da hierarquia — deixá-lo genérico
+   * obrigaria o usuário a olhar a grade para lembrar onde está.
+   *
+   * O próximo `rerender` devolve o título declarado pela view.
+   */
+  setViewTitle(text: string): void;
   /** Observa a largura do painel. Devolve o cancelador para o ciclo de vida. */
   observeWidth(target: Window): () => void;
 }
@@ -514,6 +574,10 @@ export function createShell(options: ShellOptions): Shell {
     rerender: render,
     setWidth,
     widthClass: () => (widthClass === "" ? resolveWidthClass(undefined) : widthClass),
+
+    setViewTitle(text) {
+      viewTitle.textContent = text;
+    },
 
     setStatus(message, state) {
       statusDot.className = state ? `ch-status__dot is-${state}` : "ch-status__dot";

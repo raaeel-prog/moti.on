@@ -22,6 +22,8 @@ import {
   propertyRow,
   sectionTitle,
   selectField,
+  toolGrid,
+  toolTile,
   type I18n,
   type RenderRegions,
   type RowTone,
@@ -130,12 +132,78 @@ const DEFAULT_SMOOTH: SmoothDraft = {
   referenceTime: 0
 };
 
+type MessageKey = Parameters<I18n["t"]>[0];
+type ToolId = "loopOut" | "smooth" | "wiggle" | "flicker";
+
+/**
+ * Uma ferramenta do navegador.
+ *
+ * O registro existe para que acrescentar uma ferramenta seja acrescentar uma
+ * entrada — e não mais uma aba na navegação e mais uma ramificação no
+ * `renderView`. Era assim antes, e com quatro comandos o painel já gastava sete
+ * abas: a §22 pede grade de ícones e uma tarefa dominante por vez.
+ */
+interface ToolDefinition {
+  /** Precisa bater com uma chave de ícone do shell. */
+  readonly id: ToolId;
+  readonly nameKey: MessageKey;
+  readonly descriptionKey: MessageKey;
+  render(regions: RenderRegions, i18n: I18n): void;
+  disabledReason(i18n: I18n): string | null;
+  apply(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void>;
+  reset(): void;
+}
+
+const TOOLS: readonly ToolDefinition[] = [
+  {
+    id: "loopOut",
+    nameKey: "tool.loopOut.name",
+    descriptionKey: "tool.loopOut.description",
+    render: renderLoopOut,
+    disabledReason: loopOutDisabledReason,
+    apply: applyLoopOut,
+    reset: () => {
+      state.loopOut = { ...DEFAULT_LOOP_OUT };
+    }
+  },
+  {
+    id: "smooth",
+    nameKey: "tool.smooth.name",
+    descriptionKey: "tool.smooth.description",
+    render: renderSmooth,
+    disabledReason: smoothDisabledReason,
+    apply: applySmooth,
+    reset: () => {
+      state.smooth = { ...DEFAULT_SMOOTH };
+    }
+  },
+  {
+    id: "wiggle",
+    nameKey: "tool.wiggle.name",
+    descriptionKey: "tool.wiggle.description",
+    render: renderWiggle,
+    disabledReason: wiggleDisabledReason,
+    apply: applyWiggle,
+    reset: () => {
+      state.wiggle = { ...DEFAULT_WIGGLE };
+    }
+  },
+  {
+    id: "flicker",
+    nameKey: "tool.flicker.name",
+    descriptionKey: "tool.flicker.description",
+    render: renderFlicker,
+    disabledReason: flickerDisabledReason,
+    apply: applyFlicker,
+    reset: () => {
+      state.flicker = { ...DEFAULT_FLICKER };
+    }
+  }
+];
+
 const VIEWS: ShellView[] = [
   { id: "context", labelKey: "nav.context", titleKey: "view.context.title" },
-  { id: "loopOut", labelKey: "nav.loopOut", titleKey: "view.loopOut.title" },
-  { id: "smooth", labelKey: "nav.smooth", titleKey: "view.smooth.title" },
-  { id: "wiggle", labelKey: "nav.wiggle", titleKey: "view.wiggle.title" },
-  { id: "flicker", labelKey: "nav.flicker", titleKey: "view.flicker.title" },
+  { id: "tools", labelKey: "nav.tools", titleKey: "view.tools.title" },
   { id: "system", labelKey: "nav.system", titleKey: "view.system.title" },
   { id: "diagnostics", labelKey: "nav.diagnostics", titleKey: "view.diagnostics.title" }
 ];
@@ -153,6 +221,8 @@ const state: {
   smooth: SmoothDraft;
   wiggle: WiggleDraft;
   flicker: FlickerDraft;
+  /** `null` mostra a grade; um id abre o editor daquela ferramenta. */
+  activeTool: ToolId | null;
 } = {
   context: null,
   capabilities: null,
@@ -162,7 +232,8 @@ const state: {
   loopOut: { ...DEFAULT_LOOP_OUT },
   smooth: { ...DEFAULT_SMOOTH },
   wiggle: { ...DEFAULT_WIGGLE },
-  flicker: { ...DEFAULT_FLICKER }
+  flicker: { ...DEFAULT_FLICKER },
+  activeTool: null
 };
 
 function start(): void {
@@ -256,17 +327,47 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
     return;
   }
 
-  if (viewId === "loopOut") {
-    renderLoopOut(regions, i18n);
+  if (viewId === "tools") {
+    const tool = TOOLS.find((item) => item.id === state.activeTool);
 
-    const disabledReason = loopOutDisabledReason(i18n);
+    // Sem ferramenta escolhida: so a grade. A §22 proibe inspector antes da
+    // escolha — parametros de quatro ferramentas na mesma tela seriam quatro
+    // tarefas competindo.
+    if (!tool) {
+      regions.content.appendChild(notice(document, i18n.t("message.toolsInstructions")));
+      regions.content.appendChild(
+        toolGrid(
+          document,
+          TOOLS.map((item) =>
+            toolTile(document, {
+              id: item.id,
+              label: i18n.t(item.nameKey),
+              description: i18n.t(item.descriptionKey),
+              onSelect: () => {
+                state.activeTool = item.id;
+                state.lastError = null;
+                shell.rerender();
+              }
+            })
+          )
+        )
+      );
+      return;
+    }
+
+    // Ferramenta aberta: o titulo passa a ser o nome dela. Deixa-lo em
+    // "Ferramentas" obrigaria o usuario a voltar a grade para lembrar onde esta.
+    shell.setViewTitle(i18n.t(tool.nameKey));
+    tool.render(regions, i18n);
+
+    const disabledReason = tool.disabledReason(i18n);
     regions.actions.appendChild(
       button(document, {
         label: i18n.t("action.apply"),
         variant: "primary",
         ...(disabledReason ? { disabled: true as const, disabledReason } : { disabled: false as const }),
         title: disabledReason ?? i18n.t("action.apply"),
-        onClick: () => void applyLoopOut(shell, i18n, logger, client)
+        onClick: () => void tool.apply(shell, i18n, logger, client)
       })
     );
     regions.actions.appendChild(
@@ -277,97 +378,21 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
           : { disabled: false as const }),
         title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.reset"),
         onClick: () => {
-          state.loopOut = { ...DEFAULT_LOOP_OUT };
+          tool.reset();
           state.lastError = null;
           shell.rerender();
         }
       })
     );
-    return;
-  }
-
-  if (viewId === "smooth") {
-    renderSmooth(regions, i18n);
-
-    const disabledReason = smoothDisabledReason(i18n);
     regions.actions.appendChild(
       button(document, {
-        label: i18n.t("action.apply"),
-        variant: "primary",
-        ...(disabledReason ? { disabled: true as const, disabledReason } : { disabled: false as const }),
-        title: disabledReason ?? i18n.t("action.apply"),
-        onClick: () => void applySmooth(shell, i18n, logger, client)
-      })
-    );
-    regions.actions.appendChild(
-      button(document, {
-        label: i18n.t("action.reset"),
+        label: i18n.t("action.backToTools"),
         ...(state.busy
           ? { disabled: true as const, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
           : { disabled: false as const }),
-        title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.reset"),
+        title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.backToTools"),
         onClick: () => {
-          state.smooth = { ...DEFAULT_SMOOTH };
-          state.lastError = null;
-          shell.rerender();
-        }
-      })
-    );
-    return;
-  }
-
-  if (viewId === "wiggle") {
-    renderWiggle(regions, i18n);
-
-    const disabledReason = wiggleDisabledReason(i18n);
-    regions.actions.appendChild(
-      button(document, {
-        label: i18n.t("action.apply"),
-        variant: "primary",
-        ...(disabledReason ? { disabled: true as const, disabledReason } : { disabled: false as const }),
-        title: disabledReason ?? i18n.t("action.apply"),
-        onClick: () => void applyWiggle(shell, i18n, logger, client)
-      })
-    );
-    regions.actions.appendChild(
-      button(document, {
-        label: i18n.t("action.reset"),
-        ...(state.busy
-          ? { disabled: true as const, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
-          : { disabled: false as const }),
-        title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.reset"),
-        onClick: () => {
-          state.wiggle = { ...DEFAULT_WIGGLE };
-          state.lastError = null;
-          shell.rerender();
-        }
-      })
-    );
-    return;
-  }
-
-  if (viewId === "flicker") {
-    renderFlicker(regions, i18n);
-
-    const disabledReason = flickerDisabledReason(i18n);
-    regions.actions.appendChild(
-      button(document, {
-        label: i18n.t("action.apply"),
-        variant: "primary",
-        ...(disabledReason ? { disabled: true as const, disabledReason } : { disabled: false as const }),
-        title: disabledReason ?? i18n.t("action.apply"),
-        onClick: () => void applyFlicker(shell, i18n, logger, client)
-      })
-    );
-    regions.actions.appendChild(
-      button(document, {
-        label: i18n.t("action.reset"),
-        ...(state.busy
-          ? { disabled: true as const, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
-          : { disabled: false as const }),
-        title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.reset"),
-        onClick: () => {
-          state.flicker = { ...DEFAULT_FLICKER };
+          state.activeTool = null;
           state.lastError = null;
           shell.rerender();
         }
