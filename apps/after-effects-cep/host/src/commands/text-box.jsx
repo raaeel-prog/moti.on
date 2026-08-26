@@ -279,6 +279,28 @@
     var rect = inner.addProperty(MN.rect);
     var fill = inner.addProperty(MN.fill);
 
+    rect.property(MN.rectRoundness).setValue(args.roundness);
+
+    var color = /** @type {number[]} */ (args.fillColor);
+    fill.property(MN.fillColor).setValue([color[0], color[1], color[2], 1]);
+    fill.property(MN.fillOpacity).setValue(args.fillOpacity);
+
+    // PARENTEAR ANTES DE ESCREVER AS EXPRESSOES.
+    //
+    // O template dereferencia `thisLayer.parent`. Numa camada ainda sem parent
+    // isso e `null`, e o After Effects rejeita a expressao no instante da
+    // atribuicao — medido no host: as duas primeiras tentativas reais falharam
+    // exatamente aqui. Nao e questao de estilo, e a unica ordem que funciona.
+    //
+    // Zerar ancora e posicao DEPOIS de parentear torna irrelevante se a
+    // atribuicao de parent preserva ou nao o transform: o resultado passa a ser
+    // escrito explicitamente. A origem da forma coincide com a origem do texto,
+    // que e o espaco em que `sourceRectAtTime` reporta o retangulo.
+    shape.parent = textLayer;
+    var transform = shape.property(MN.transform);
+    transform.property(MN.anchorPoint).setValue([0, 0]);
+    transform.property(MN.position).setValue([0, 0]);
+
     var size = rect.property(MN.rectSize);
     size.expression = MotionExpressions.renderTextBoxSize({
       paddingX: args.paddingX,
@@ -293,22 +315,6 @@
     if (typeof position.expressionError === "string" && position.expressionError !== "") {
       throw new Error("After Effects recusou a expressao de posicao da caixa.");
     }
-
-    rect.property(MN.rectRoundness).setValue(args.roundness);
-
-    var color = /** @type {number[]} */ (args.fillColor);
-    fill.property(MN.fillColor).setValue([color[0], color[1], color[2], 1]);
-    fill.property(MN.fillOpacity).setValue(args.fillOpacity);
-
-    // Parent primeiro, transform depois. A ordem importa: a expressao le
-    // `sourceRectAtTime` no espaco da camada de texto, entao a forma so cai no
-    // lugar certo se a origem dela coincidir com a origem do texto. Zerar
-    // ancora e posicao DEPOIS de parentear torna irrelevante se a atribuicao de
-    // parent preserva ou nao o transform — o resultado e escrito explicitamente.
-    shape.parent = textLayer;
-    var transform = shape.property(MN.transform);
-    transform.property(MN.anchorPoint).setValue([0, 0]);
-    transform.property(MN.position).setValue([0, 0]);
 
     // Logo abaixo do texto, como manda a §7.
     shape.moveAfter(textLayer);

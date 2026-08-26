@@ -23,7 +23,7 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | After Effects: Wiggle (`ae.expression.wiggle`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Aplicou em propriedade **sem keyframes**, reaplicou como no-op e trocou a semente; reprodutibilidade entre camadas e Ctrl+Z deste comando: `NOT RUN` |
 | After Effects: Flicker (`ae.expression.flicker`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Aplicou em 1D e 2D na mesma seleção sem `expressionError`; valor avaliado saiu escalar e array respectivamente. Cor e 3D em host: `NOT RUN` |
 | After Effects: payload acima de 60.000 caracteres codificados | `PARTIAL` | `NOT RUN` | Rejeição tipada implementada; transporte por arquivo temporário ausente |
-| After Effects: Caixa de texto (`ae.text.box`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | 15 testes de host em doubles cobrem criação, idempotência estrutural, rollback e recusa de argumento; nada executado no After Effects (item 16) |
+| After Effects: Caixa de texto (`ae.text.box`) | `PARTIAL` | `FAIL` corrigido, reteste `NOT RUN` | Duas tentativas reais em AE 26.3x87 falharam com `HOST_OPERATION_FAILED`: a expressão era escrita antes do parentesco e `thisLayer.parent` era `null`. Ordem corrigida; execução pós-correção pendente (item 16) |
 | Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | APIs verificadas em documentação e doubles |
 | Premiere: versão/locale do host | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | `require("uxp").host.version`/`.uiLocale` documentados para 25.6+ |
 | Premiere: transações/Undo | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Ordem `lockedAccess` → `executeTransaction` coberta por doubles |
@@ -152,9 +152,15 @@ Até que isso seja medido, o produto **não promete** "mesma semente, mesmo movi
 
 **O que fecha este item:** duas camadas na mesma composição, mesma semente e mesmos parâmetros, comparando o valor da propriedade quadro a quadro. Se divergirem, a semente é controle de variação por propriedade e o rótulo precisa dizer isso; se coincidirem, o produto ganha uma promessa que hoje não pode fazer.
 
-### 16. Caixa de texto: o rig inteiro está sem medição em host
+### 16. Caixa de texto: primeira execução em host falhou, causa encontrada e corrigida
 
-`IMPLEMENTED_NOT_HOST_VERIFIED` / execução `NOT RUN`.
+`PARTIAL` / execução `FAIL` corrigido, reteste `NOT RUN`.
+
+**Medido em host — AE 26.3x87, 2026-08-26.** Duas tentativas reais devolveram `HOST_OPERATION_FAILED` em 32 ms e 28 ms.
+
+Causa: o template dereferencia `thisLayer.parent`, e `configureBox` escrevia as expressões **antes** de parentear a forma ao texto. Numa camada ainda sem parent isso é `null`, o After Effects rejeita a expressão no instante da atribuição, e o guarda de `expressionError` do próprio comando lançava. Parentear passou a vir antes de escrever as expressões.
+
+O double não pegou porque só marcava `expressionError` quando a fonte batia com um `rejectSource` sintético — ele nunca modelava a avaliação. Agora modela: escrever uma expressão que contém `thisLayer.parent` numa forma sem parent produz erro, e 13 dos 15 testes falhavam antes da correção.
 
 Este é o primeiro comando que **cria camadas** em vez de anotar propriedades existentes, e por isso a distância entre "os testes passam" e "funciona no After Effects" é maior do que nos comandos de expressão. Os `matchName` foram sondados no host real (registro em `docs/research/after-effects-text-box-rig.md`), mas o rig montado com eles não foi.
 

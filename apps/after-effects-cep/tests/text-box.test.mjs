@@ -40,9 +40,11 @@ const FILHOS = {
 };
 
 class FakeProperty {
-  constructor(matchName) {
+  /** `dono` e a camada de forma, para modelar a avaliacao real da expressao. */
+  constructor(matchName, dono = null) {
     this.matchName = matchName;
-    this.filhos = (FILHOS[matchName] ?? []).map((nome) => new FakeProperty(nome));
+    this.dono = dono;
+    this.filhos = (FILHOS[matchName] ?? []).map((nome) => new FakeProperty(nome, dono));
     this.value = null;
     this.rejectSource = null;
     this._expression = "";
@@ -60,7 +62,7 @@ class FakeProperty {
   }
 
   addProperty(matchName) {
-    const criado = new FakeProperty(matchName);
+    const criado = new FakeProperty(matchName, this.dono);
     this.filhos.push(criado);
     return criado;
   }
@@ -75,7 +77,18 @@ class FakeProperty {
 
   set expression(valor) {
     this._expression = valor;
-    this.expressionError = valor === this.rejectSource ? "synthetic expression error" : "";
+    if (valor === this.rejectSource) {
+      this.expressionError = "synthetic expression error";
+      return;
+    }
+    // Modela a avaliacao do host: o template dereferencia `thisLayer.parent`,
+    // entao escrever a expressao antes de parentear falha de verdade no After
+    // Effects. Sem isto o double aceitaria uma ordem que o host recusa.
+    const precisaDeParent = typeof valor === "string" && valor.indexOf("thisLayer.parent") >= 0;
+    this.expressionError =
+      precisaDeParent && this.dono && !this.dono.parent
+        ? "expression error: null is not an object"
+        : "";
   }
 }
 
@@ -107,8 +120,8 @@ class FakeTextLayer extends FakeLayer {}
 class FakeShapeLayer extends FakeLayer {
   constructor(comp, nome) {
     super(comp, nome);
-    this.raiz = new FakeProperty(MN.contents);
-    this.transformGroup = new FakeProperty(MN.transform);
+    this.raiz = new FakeProperty(MN.contents, this);
+    this.transformGroup = new FakeProperty(MN.transform, this);
   }
 
   property(matchName) {

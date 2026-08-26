@@ -107,9 +107,19 @@ Se a montagem falhasse **depois** de `addShape()`, a camada meio-construída fic
 
 `anchorMode` e `multilineMode` continuam **bloqueados por definição de produto**, não por implementação: o spec lista os inputs mas não diz o que os modos são. Para uma caixa que já centraliza no bounding box, "modo de ancoragem" pode ser três features diferentes.
 
+#### A primeira execução em host falhou — e por quê
+
+Duas tentativas reais em AE 26.3x87 devolveram `HOST_OPERATION_FAILED` em 32 ms e 28 ms.
+
+A causa: o template dereferencia `thisLayer.parent`, e eu escrevia as expressões **antes** de parentear a forma ao texto. Numa camada ainda sem parent isso é `null`, o After Effects rejeita a expressão no instante da atribuição, e o guarda de `expressionError` do próprio comando lançava. Parentear agora vem primeiro. Não é ordem por estilo: é a única que funciona.
+
+O double não pegou porque só marcava `expressionError` quando a fonte batia com um `rejectSource` sintético — ele nunca modelava a avaliação. Agora modela: escrever uma expressão que contém `thisLayer.parent` numa forma sem parent produz erro. Com o double corrigido, **13 dos 15 testes falhavam** antes da correção do comando.
+
 #### Status honesto
 
-`IMPLEMENTED_NOT_HOST_VERIFIED`. São 15 testes de host em doubles cobrindo criação, idempotência, rollback e recusa de argumento — e **nada disso foi executado no After Effects**. Este é o primeiro comando que cria camadas, então a distância entre "verde" e "funciona" é maior que nos comandos de expressão. Os cinco pontos sem medição estão listados no item 16 de `docs/HOST_LIMITATIONS.md`, com o alinhamento espacial e a interpretação da cor em primeiro lugar.
+`PARTIAL`, execução `FAIL` corrigido e **reteste pendente**. O comando falhou em host, a causa foi encontrada e corrigida, mas a execução pós-correção ainda não aconteceu — então ele não pode ser chamado de verificado.
+
+O que continua sem medição: o alinhamento espacial da caixa, a interpretação da cor sob gerenciamento de cor, a ordem do preenchimento, o Undo de um passo e o `moveAfter` com várias camadas. Item 16 de `docs/HOST_LIMITATIONS.md`.
 
 ### CHMS-008 — navegação por ladrilhos, no lugar de uma aba por ferramenta
 
