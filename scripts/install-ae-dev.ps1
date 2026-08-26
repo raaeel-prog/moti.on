@@ -1,3 +1,15 @@
+# Instala o painel Moti.on para desenvolvimento no After Effects.
+#
+# ATENCAO: o destino NAO e uma pasta do After Effects.
+# `%APPDATA%\Adobe\CEP\extensions` e compartilhada por todos os hosts CEP da
+# maquina — Premiere Pro, Photoshop, Illustrator, InDesign —, e cada um a varre
+# na inicializacao. Em 2026-08-25, nesta maquina (Premiere Pro 26.3.2.2 /
+# Windows 11), a presenca desta extensao coincidiu uma vez com o Premiere nao
+# concluir a inicializacao, mas outra abertura com ela instalada funcionou. A
+# causa continua NAO identificada; ver docs/HOST_LIMITATIONS.md.
+# Se o Premiere voltar a falhar na abertura, use `scripts/uninstall-ae-dev.ps1`
+# para eliminar rapidamente essa variavel.
+
 param(
   [switch]$EnableDebugMode
 )
@@ -41,3 +53,6 @@ if ($EnableDebugMode) {
 
 Write-Host "Extensão instalada em: $Target"
 Write-Host "Reinicie o After Effects e abra o painel Moti.on."
+Write-Warning ("Esta pasta e compartilhada com Premiere Pro, Photoshop e demais hosts CEP. " +
+  "Se um host apresentar problema de inicializacao, rode scripts/uninstall-ae-dev.ps1 " +
+  "para eliminar a extensao como variavel de diagnostico.")
