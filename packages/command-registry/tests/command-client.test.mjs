@@ -339,7 +339,10 @@ test("ids de comando sao ASCII e nao repetem", () => {
   for (const id of ids) {
     // Id de comando e identificador de protocolo, nao texto de interface: tem de
     // permanecer estavel e neutro de idioma.
-    assert.match(id, /^[a-z]{2}\.[a-zA-Z.]+$/, `Id fora do padrão: ${id}`);
+    // O hífen é a convenção do spec para segmentos de várias palavras:
+    // `ae.layer.create-null`, `ae.shape.trim-path`, `ae.layer.reverse-order`.
+    // O guarda existe para manter o id ASCII e estável, não para proibir hífen.
+    assert.match(id, /^[a-z]{2}\.[a-zA-Z.-]+$/, `Id fora do padrão: ${id}`);
     assert.equal(getDescriptor(id).id, id);
   }
 });

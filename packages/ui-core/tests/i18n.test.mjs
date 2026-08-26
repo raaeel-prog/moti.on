@@ -137,6 +137,10 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
     "smooth.unit.seconds",
     "textBox.unit.px",
     "textBox.unit.percent",
+    // Nome proprio e simbolos de dimensao, iguais nos dois idiomas.
+    "tool.createNull.name",
+    "createNull.dimension.2d",
+    "createNull.dimension.3d",
     "context.compositionValue",
     "value.none",
     "error.withCode"

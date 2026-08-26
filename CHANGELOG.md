@@ -88,6 +88,38 @@ Status: `IMPLEMENTED_AND_VERIFIED` no ambiente acima.
 
 **Pendência de produto registrada:** a documentação diz que o offset controla o *valor inicial* do wiggle, mas o identificador da camada continua na composição da semente. Não foi medido se duas camadas com a mesma semente produzem movimento idêntico — pode ser que a semente iguale a fase e não a trajetória. Até isso ser medido, o produto **não promete "mesma semente, mesmo movimento" entre camadas**; o texto da interface fala apenas do comportamento por propriedade.
 
+### CHMS-015 — Create Null (`ae.layer.create-null`)
+
+Segundo comando do CHMS-015. O critério de aceite é o mesmo: parentear camadas rotacionadas e escaladas não pode alterar a posição visual delas.
+
+#### A decisão estrutural: não reimplementar a matemática da Adobe
+
+A §7 pede "resolver bounds e transform matrices". Compor essas matrizes a mão no ExtendScript daria um cálculo que eu **não teria como verificar** contra 3D, parents aninhados e camadas animadas — e que erraria em silêncio.
+
+Em vez disso o comando usa **o próprio motor de expressões como calculadora**: escreve uma expressão temporária na posição do null, lê o valor que o After Effects avaliou, apaga a expressão e assa o número. A matemática passa a ser a nativa da ferramenta.
+
+A sonda é apagada num `finally`, inclusive no caminho de erro. Um null com expressão temporária sobrevivente seria pior que um null mal posicionado: o usuário ficaria com uma camada contendo código que ele não escreveu.
+
+#### Dois defeitos que só o host revelou
+
+**1. `toComp` devolve dois componentes numa camada 2D e três numa 3D.** Ler `p[2]` sem guarda numa camada 2D produz *"Valor indefinido usado na expressão"* e o After Effects desabilita a expressão. Seleção mista de 2D e 3D é o caso comum, não o excepcional.
+
+**2. `toComp([0,0,0])` mapeia a origem do espaço da camada — o canto superior esquerdo da fonte, não a âncora.** Num sólido a âncora nasce no centro, então "média das âncoras" calculava a média dos cantos: `[215.835, 129.607]` onde o correto era `[260, 180]`.
+
+O segundo é o achado que vale registrar. **Ele passou como sucesso:** o comando respondia `ok: true`, a expressão avaliava sem erro, e o null pousava num lugar plausível. Só apareceu porque a sonda de verificação carregava o valor **esperado** ao lado do medido. Verificação que só confirma "não deu erro" não teria pego — e o defeito teria chegado ao usuário como "o null nasce meio torto".
+
+#### Verificado em host real — After Effects 26.3x87
+
+| Verificação | Medido |
+|---|---|
+| `compCenter` sem seleção | `[320, 180]` numa comp 640×360 |
+| `averageAnchor` | `[260.000, 180.000]` — exatamente a média das âncoras |
+| `selectionBounds` em 3D | `[245.186, 159.607, 0]` |
+| sonda residual | vazia nos três casos |
+| **critério de aceite** | camada rotacionada 35° e escalada 180% não se moveu ao ser parenteada |
+
+**O painel continua `NOT RUN`.** Item 18 de `docs/HOST_LIMITATIONS.md`.
+
 ### CHMS-015 — Parentesco (`ae.layer.parent` + `ae.layer.list`)
 
 Primeiro dos três comandos do CHMS-015. O critério do roteiro é um só — *world transform preservado* — e ele depende inteiramente de um fato que precisava ser medido, não lido.

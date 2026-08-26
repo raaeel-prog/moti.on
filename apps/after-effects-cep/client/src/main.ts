@@ -156,6 +156,32 @@ const DEFAULT_PARENT: ParentDraft = {
   chainMode: "target"
 };
 
+type NullPlacement = "compCenter" | "averageAnchor" | "selectionBounds";
+
+interface CreateNullDraft {
+  placement: NullPlacement;
+  dimension: "2d" | "3d";
+  parentSelected: boolean;
+  preserveWorldTransform: boolean;
+  size: number;
+  /** Índice de rótulo do After Effects, 0 a 16 — não o nome da camada. */
+  label: number;
+}
+
+/**
+ * Centro da composição sem parentear é o caso que funciona com zero seleção, e
+ * por isso é o padrão: abrir a ferramenta e clicar em Aplicar produz algo útil
+ * mesmo com nada selecionado.
+ */
+const DEFAULT_CREATE_NULL: CreateNullDraft = {
+  placement: "compCenter",
+  dimension: "2d",
+  parentSelected: false,
+  preserveWorldTransform: true,
+  size: 100,
+  label: 0
+};
+
 interface TextBoxDraft {
   paddingX: number;
   paddingY: number;
@@ -191,7 +217,7 @@ const DEFAULT_SMOOTH: SmoothDraft = {
 };
 
 type MessageKey = Parameters<I18n["t"]>[0];
-type ToolId = "loopOut" | "smooth" | "wiggle" | "flicker" | "textBox" | "parent";
+type ToolId = "loopOut" | "smooth" | "wiggle" | "flicker" | "textBox" | "parent" | "createNull";
 
 /**
  * Uma ferramenta do navegador.
@@ -267,6 +293,17 @@ const TOOLS: readonly ToolDefinition[] = [
     }
   },
   {
+    id: "createNull",
+    nameKey: "tool.createNull.name",
+    descriptionKey: "tool.createNull.description",
+    render: renderCreateNull,
+    disabledReason: createNullDisabledReason,
+    apply: applyCreateNull,
+    reset: () => {
+      state.createNull = { ...DEFAULT_CREATE_NULL };
+    }
+  },
+  {
     id: "parent",
     nameKey: "tool.parent.name",
     descriptionKey: "tool.parent.description",
@@ -313,6 +350,7 @@ const state: {
   flicker: FlickerDraft;
   textBox: TextBoxDraft;
   parent: ParentDraft;
+  createNull: CreateNullDraft;
   /** Cache da lista de camadas; `null` enquanto nunca foi lida. */
   layers: LayerSummary[] | null;
   layersTotal: number;
@@ -330,6 +368,7 @@ const state: {
   flicker: { ...DEFAULT_FLICKER },
   textBox: { ...DEFAULT_TEXT_BOX },
   parent: { ...DEFAULT_PARENT },
+  createNull: { ...DEFAULT_CREATE_NULL },
   layers: null,
   layersTotal: 0,
   activeTool: null
@@ -1469,6 +1508,225 @@ function hexToChannels(hex: string): [number, number, number] {
     parseInt(normalized.slice(3, 5), 16) / 255,
     parseInt(normalized.slice(5, 7), 16) / 255
   ];
+}
+
+interface CreateNullResultData {
+  nullIndex: number;
+  nullName: string;
+  parentedCount: number;
+}
+
+function isCreateNullResultData(value: unknown): value is CreateNullResultData {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    Number.isInteger(record.nullIndex) &&
+    typeof record.nullName === "string" &&
+    Number.isInteger(record.parentedCount) &&
+    (record.parentedCount as number) >= 0
+  );
+}
+
+function renderCreateNull(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.createNull;
+
+  regions.content.appendChild(notice(document, i18n.t("message.createNullInstructions")));
+  if (state.context && !state.context.isComposition) {
+    regions.content.appendChild(notice(document, i18n.t("message.createNullNoActiveComp"), "warning"));
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("createNull.section.placement")));
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "createnull-placement",
+      label: i18n.t("createNull.placement"),
+      value: draft.placement,
+      disabled: state.busy,
+      options: [
+        { value: "compCenter", label: i18n.t("createNull.placement.compCenter") },
+        { value: "averageAnchor", label: i18n.t("createNull.placement.averageAnchor") },
+        { value: "selectionBounds", label: i18n.t("createNull.placement.selectionBounds") }
+      ],
+      onChange: (value) => {
+        state.createNull.placement =
+          value === "averageAnchor" || value === "selectionBounds" ? value : "compCenter";
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "createnull-dimension",
+      label: i18n.t("createNull.dimension"),
+      value: draft.dimension,
+      disabled: state.busy,
+      options: [
+        { value: "2d", label: i18n.t("createNull.dimension.2d") },
+        { value: "3d", label: i18n.t("createNull.dimension.3d") }
+      ],
+      onChange: (value) => {
+        state.createNull.dimension = value === "3d" ? "3d" : "2d";
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("createNull.section.options")));
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "createnull-parent",
+      label: i18n.t("createNull.parentSelected"),
+      checked: draft.parentSelected,
+      disabled: state.busy,
+      onChange: (checked) => {
+        state.createNull.parentSelected = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  // Preservar aparência só faz diferença quando há parentesco. Mostrá-lo solto
+  // sugeriria que ele governa a posição do próprio null, o que não é o caso.
+  if (draft.parentSelected) {
+    regions.content.appendChild(
+      checkboxField(document, {
+        id: "createnull-preserve",
+        label: i18n.t("parent.preserveWorldTransform"),
+        description: i18n.t("parent.preserveWorldTransform.description"),
+        checked: draft.preserveWorldTransform,
+        disabled: state.busy,
+        onChange: (checked) => {
+          state.createNull.preserveWorldTransform = checked;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "createnull-size",
+      label: i18n.t("createNull.size"),
+      value: draft.size,
+      min: 1,
+      max: 10_000,
+      step: 10,
+      unit: i18n.t("textBox.unit.px"),
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.createNull.size = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "createnull-label",
+      label: i18n.t("createNull.label"),
+      description: i18n.t("createNull.label.description"),
+      value: draft.label,
+      min: 0,
+      max: 16,
+      step: 1,
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.createNull.label = value;
+        shell.rerender();
+      }
+    })
+  );
+}
+
+function isCreateNullDraftValid(draft: CreateNullDraft): boolean {
+  if (!Number.isInteger(draft.size) || draft.size < 1 || draft.size > 10_000) return false;
+  return Number.isInteger(draft.label) && draft.label >= 0 && draft.label <= 16;
+}
+
+function createNullDisabledReason(i18n: I18n): string | null {
+  if (state.busy) {
+    return state.busyReason ?? i18n.t("status.initializing");
+  }
+  if (!state.context?.isComposition) {
+    return i18n.t("message.createNullNoActiveComp");
+  }
+  if (!isCreateNullDraftValid(state.createNull)) {
+    return i18n.t("message.textBoxInvalidNumber");
+  }
+  return null;
+}
+
+async function applyCreateNull(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.createNullNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  const draft = state.createNull;
+  if (!isCreateNullDraftValid(draft)) {
+    state.lastError = i18n.t("message.textBoxInvalidNumber");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingCreateNull"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingCreateNull"));
+
+  const response = await client.execute<CreateNullResultData>(
+    "ae.layer.create-null",
+    {
+      placement: draft.placement,
+      dimension: draft.dimension,
+      parentSelected: draft.parentSelected,
+      preserveWorldTransform: draft.preserveWorldTransform,
+      size: draft.size,
+      label: draft.label
+    },
+    { preserveSelection: true }
+  );
+  logger.recordResponse("ae.layer.create-null", response);
+
+  if (!response.ok || !isCreateNullResultData(response.data)) {
+    if (!response.ok) {
+      reportFailure(shell, i18n, response);
+    } else {
+      state.lastError = i18n.t("message.failureWithoutReason");
+      logger.error("Resposta de Create Null invalida.", {
+        command: "ae.layer.create-null",
+        errorCode: "INVALID_HOST_RESPONSE",
+        result: "failure"
+      });
+      shell.setStatus(i18n.t("status.failed"), "error");
+    }
+    setBusy(shell, false);
+    return;
+  }
+
+  state.lastError = null;
+  shell.setStatus(
+    i18n.t("message.createNullCreated", { count: response.data.parentedCount }),
+    "ok"
+  );
+  setBusy(shell, false);
+
+  // A pilha de camadas mudou; o cache do seletor de alvo do Parentesco ficou
+  // desatualizado, e um índice velho apontaria para a camada errada.
+  state.layers = null;
+  state.layersTotal = 0;
 }
 
 function renderParent(regions: RenderRegions, i18n: I18n): void {

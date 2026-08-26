@@ -230,6 +230,24 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     timeoutMs: DEFAULT_TIMEOUT_MS
   },
   {
+    // Exige motor de expressoes: o posicionamento e calculado pelo proprio
+    // After Effects, por uma expressao temporaria que o comando escreve, le e
+    // apaga. Sem motor so o centro da composicao funcionaria, e um comando que
+    // faz metade do que a interface oferece e pior que um desabilitado.
+    id: "ae.layer.create-null",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    // Cada aplicacao cria um null novo de proposito: nao ha estado idempotente
+    // a proteger, entao "nada mudou" aqui seria mesmo uma falha.
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.layer.createNull",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
     id: "pr.context.read",
     hosts: ["premiere-pro"],
     requirements: [],

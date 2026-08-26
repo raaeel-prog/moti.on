@@ -402,6 +402,114 @@
     return source.replace(/\r\n?/g, "\n") === renderTextBoxPosition();
   }
 
+  /**
+   * Sondas TEMPORARIAS de posicionamento.
+   *
+   * Diferente de todo o resto deste modulo, estas expressoes nunca sao
+   * persistidas: o comando as escreve na posicao do null, le o valor avaliado,
+   * apaga a expressao e assa o numero. Por isso nao levam cabecalho gerenciado
+   * — nada precisa reconhece-las depois, porque nada sobrevive.
+   *
+   * A razao de existirem: compor matrizes de transform a mao no ExtendScript
+   * daria uma matematica que eu nao teria como verificar contra 3D, parents
+   * aninhados e camadas animadas. O motor de expressoes ja tem a matematica
+   * nativa e exata da Adobe; usa-lo como calculadora troca codigo inventado por
+   * codigo da propria ferramenta.
+   *
+   * @param {unknown} indices
+   * @returns {string}
+   */
+  function renderIndexList(indices) {
+    if (Object.prototype.toString.call(indices) !== "[object Array]") {
+      throw new Error("Lista de indices invalida.");
+    }
+    var lista = /** @type {unknown[]} */ (indices);
+    if (lista.length < 1 || lista.length > 500) throw new Error("Quantidade de indices invalida.");
+
+    var partes = [];
+    var i;
+    for (i = 0; i < lista.length; i += 1) {
+      var indice = lista[i];
+      if (
+        !isFiniteNumber(indice) ||
+        Math.floor(/** @type {number} */ (indice)) !== indice ||
+        /** @type {number} */ (indice) < 1 ||
+        /** @type {number} */ (indice) > 100000
+      ) {
+        throw new Error("Indice de camada invalido.");
+      }
+      partes.push(String(indice));
+    }
+    return "[" + partes.join(", ") + "]";
+  }
+
+  /**
+   * Media das ancoras das camadas, em espaco de composicao.
+   *
+   * @param {unknown} indices
+   * @returns {string}
+   */
+  function renderAnchorAverageProbe(indices) {
+    // `toComp` devolve DOIS componentes numa camada 2D e tres numa 3D — medido
+    // em AE 26.3x87. Ler `p[2]` sem guarda numa camada 2D produz "Valor
+    // indefinido usado na expressao" e o After Effects desabilita a expressao.
+    // Uma selecao mista de camadas 2D e 3D e o caso comum, nao o excepcional.
+    // `toComp` recebe um ponto no espaco da CAMADA, e a origem desse espaco e o
+    // canto superior esquerdo da fonte — nao a ancora. Num solido a ancora
+    // nasce no centro, entao `toComp([0,0,0])` daria a media dos cantos, com
+    // aparencia de resultado plausivel. Passar `anchorPoint` e o que faz este
+    // posicionamento significar o que o nome diz.
+    //
+    // `toComp` devolve DOIS componentes numa camada 2D e tres numa 3D — medido
+    // em AE 26.3x87. Ler `p[2]` sem guarda numa camada 2D produz "Valor
+    // indefinido usado na expressao" e o After Effects desabilita a expressao.
+    // Uma selecao mista de camadas 2D e 3D e o caso comum, nao o excepcional.
+    return (
+      "var idx = " + renderIndexList(indices) + ";\n" +
+      "var soma = [0, 0, 0];\n" +
+      "for (var i = 0; i < idx.length; i++) {\n" +
+      "  var l = thisComp.layer(idx[i]);\n" +
+      "  var p = l.toComp(l.anchorPoint);\n" +
+      "  var z = p.length > 2 ? p[2] : 0;\n" +
+      "  soma = [soma[0] + p[0], soma[1] + p[1], soma[2] + z];\n" +
+      "}\n" +
+      "[soma[0] / idx.length, soma[1] / idx.length, soma[2] / idx.length];"
+    );
+  }
+
+  /**
+   * Centro da uniao dos bounding boxes, em espaco de composicao.
+   *
+   * Os quatro cantos passam por `toComp` um a um de proposito: uma camada
+   * rotacionada tem bounding box alinhado ao eixo no espaco DELA, e projetar so
+   * dois cantos daria um retangulo errado depois da rotacao.
+   *
+   * @param {unknown} indices
+   * @returns {string}
+   */
+  function renderBoundsCenterProbe(indices) {
+    return (
+      "var idx = " + renderIndexList(indices) + ";\n" +
+      "var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;\n" +
+      "for (var i = 0; i < idx.length; i++) {\n" +
+      "  var l = thisComp.layer(idx[i]);\n" +
+      "  var r = l.sourceRectAtTime(time, false);\n" +
+      "  var xs = [r.left, r.left + r.width];\n" +
+      "  var ys = [r.top, r.top + r.height];\n" +
+      "  for (var m = 0; m < 2; m++) {\n" +
+      "    for (var n = 0; n < 2; n++) {\n" +
+      "      var p = l.toComp([xs[m], ys[n], 0]);\n" +
+      "      if (p[0] < minX) minX = p[0];\n" +
+      "      if (p[0] > maxX) maxX = p[0];\n" +
+      "      if (p[1] < minY) minY = p[1];\n" +
+      "      if (p[1] > maxY) maxY = p[1];\n" +
+      "    }\n" +
+      "  }\n" +
+      "}\n" +
+      "[(minX + maxX) / 2, (minY + maxY) / 2, 0];"
+    );
+  }
+
   global.MotionExpressions = {
     renderLoopOut: renderLoopOut,
     isManagedLoopOut: isManagedLoopOut,
@@ -414,6 +522,8 @@
     renderTextBoxSize: renderTextBoxSize,
     isManagedTextBoxSize: isManagedTextBoxSize,
     renderTextBoxPosition: renderTextBoxPosition,
-    isManagedTextBoxPosition: isManagedTextBoxPosition
+    isManagedTextBoxPosition: isManagedTextBoxPosition,
+    renderAnchorAverageProbe: renderAnchorAverageProbe,
+    renderBoundsCenterProbe: renderBoundsCenterProbe
   };
 }($.global));

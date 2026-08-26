@@ -154,6 +154,19 @@
         "en-US": "Moti.on: parent layers",
         "pt-BR": "Moti.on: parentear camadas"
       }
+    },
+    "ae.layer.create-null": {
+      id: "ae.layer.create-null",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.layer.createNull",
+      undoLabels: {
+        "en-US": "Moti.on: create null",
+        "pt-BR": "Moti.on: criar null"
+      }
     }
   };
 

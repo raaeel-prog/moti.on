@@ -25,6 +25,7 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | After Effects: payload acima de 60.000 caracteres codificados | `PARTIAL` | `NOT RUN` | Rejeição tipada implementada; transporte por arquivo temporário ausente |
 | After Effects: Caixa de texto (`ae.text.box`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: caixa criada, `size` e `position` avaliados exatamente nos valores esperados, sem `expressionError`; texto vazio recolheu para `[0, 0]`; seleção restaurada e reaplicação devolveu no-op. Ctrl+Z de um passo e cor não-preta pelo painel: `NOT RUN` (item 16) |
 | After Effects: Parentesco (`ae.layer.parent`, `ae.layer.list`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: `preserveWorldTransform` preservou o mundo exatamente; desligado, a camada pulou como pedido; ciclo e nome divergente recusados sem mutação; encadeamento seguiu a ordem do timeline; desparentear preservou o mundo. Painel: `NOT RUN` (item 17) |
+| After Effects: Create Null (`ae.layer.create-null`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: os três posicionamentos exatos, sonda temporária sempre apagada, e o critério de aceite cumprido — camadas rotacionadas e escaladas não se moveram ao serem parenteadas. Painel: `NOT RUN` (item 18) |
 | Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | APIs verificadas em documentação e doubles |
 | Premiere: versão/locale do host | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | `require("uxp").host.version`/`.uiLocale` documentados para 25.6+ |
 | Premiere: transações/Undo | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Ordem `lockedAccess` → `executeTransaction` coberta por doubles |
@@ -227,6 +228,40 @@ O After Effects seleciona toda camada recém-criada. Sem restaurar a seleção, 
 - **Camadas com expressão na posição.** Se o After Effects não conseguir reescrever um valor governado por expressão, `preserveWorldTransform` pode falhar em silêncio nessas camadas.
 - **Composição acima de 500 camadas**, onde a lista trunca.
 - Ctrl+Z de um passo para este comando; macOS; AE 25.x.
+
+### 18. Create Null: a matemática de transform é a do próprio After Effects
+
+`IMPLEMENTED_AND_VERIFIED` num ambiente / execução `PASS` para o comando.
+
+**A decisão estrutural:** o posicionamento **não** é calculado no ExtendScript. Compor matrizes de transform a mão daria uma matemática impossível de verificar contra 3D, parents aninhados e camadas animadas — e que erraria em silêncio. O comando escreve uma expressão temporária na posição do null, lê o valor que o After Effects avaliou, apaga a expressão e assa o número.
+
+A sonda nunca é persistida, e é apagada num `finally`: um null com expressão temporária sobrevivente seria pior que um null mal posicionado, porque o usuário teria uma camada com código que ele não escreveu.
+
+#### Dois defeitos que a verificação em host encontrou
+
+1. **`toComp` devolve DOIS componentes numa camada 2D e três numa 3D.** Ler `p[2]` sem guarda numa camada 2D produz "Valor indefinido usado na expressão" e o After Effects desabilita a expressão. Seleção mista de 2D e 3D é o caso comum.
+2. **`toComp([0,0,0])` mapeia a origem do espaço da camada — o canto superior esquerdo da fonte, não a âncora.** Num sólido a âncora nasce no centro, então "média das âncoras" calculava a média dos cantos: `[215.835, 129.607]` em vez de `[260, 180]`. **Esse erro passou como sucesso** — o comando respondia `ok: true` e posicionava o null num lugar plausível. Só apareceu porque a sonda de verificação carregava o valor esperado ao lado do medido.
+
+O segundo é o mais instrutivo do slice: um comando pode estar completamente verde, responder sucesso e estar computando a coisa errada. Verificação que só confirma "não deu erro" não teria pego.
+
+#### Evidência da execução aprovada
+
+| Verificação | Medido |
+|---|---|
+| `compCenter` sem seleção | `[320, 180]` numa comp 640×360 |
+| `averageAnchor` | `[260.000, 180.000]` — exatamente a média das âncoras |
+| `selectionBounds` em 3D | `[245.186, 159.607, 0]`, três componentes |
+| sonda residual | vazia nos três casos |
+| tamanho, cor de rótulo, dimensão | `150×150`, `label 9`, 2D/3D conforme pedido |
+| **critério de aceite** | camada rotacionada 35° e escalada 180% não se moveu ao ser parenteada |
+| seleção após o comando | só o null |
+
+#### O que continua `NOT RUN`
+
+- **O painel.** Nenhum dos dois comandos do CHMS-015 foi exercitado pela interface.
+- Seleção com mais de 500 camadas, onde o comando recusa.
+- Camadas com expressão na posição, onde a reescrita de `preserveWorldTransform` pode falhar em silêncio.
+- Ctrl+Z de um passo; macOS; AE 25.x.
 
 ## Controles automatizados existentes
 

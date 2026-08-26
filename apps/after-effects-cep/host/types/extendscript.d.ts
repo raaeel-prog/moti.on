@@ -61,6 +61,8 @@ declare class LayerCollection {
   addText(sourceText?: string): TextLayer;
   /** Cria uma shape layer vazia no topo da composicao. */
   addShape(): ShapeLayer;
+  /** Cria um null no topo da composicao. Nasce selecionado. */
+  addNull(): Layer;
 }
 
 declare class Layer {
@@ -82,6 +84,12 @@ declare class Layer {
   readonly index: number;
   /** `true` para camadas Null. Usado apenas para rotular o seletor de alvo. */
   readonly nullLayer: boolean;
+  /** Indice de cor de rotulo, 0 a 16. 0 significa sem rotulo. */
+  label: number;
+  threeDLayer: boolean;
+  /** Selecao da camada. */
+  selected: boolean;
+  readonly source: SolidSource;
   /**
    * Parenteia SEM preservar o world transform: a camada pula para onde o
    * transform do pai a levar. Medido em docs/research/after-effects-parenting.md
@@ -96,6 +104,12 @@ declare class Layer {
 declare class TextLayer extends Layer {}
 
 declare class ShapeLayer extends Layer {}
+
+/** Fonte de um solido ou null; largura e altura sao gravaveis. */
+declare class SolidSource {
+  width: number;
+  height: number;
+}
 
 declare class PropertyGroup {
   readonly matchName: string;
@@ -116,6 +130,12 @@ declare class Property {
   readonly numKeys: number;
   value: unknown;
   setValue(value: unknown): void;
+  /**
+   * Valor avaliado no tempo informado, ja com expressao aplicada quando
+   * `preExpression` e false. E o que permite usar o motor de expressoes como
+   * calculadora e assar o resultado.
+   */
+  valueAtTime(time: number, preExpression: boolean): unknown;
 }
 
 declare const PropertyType: {

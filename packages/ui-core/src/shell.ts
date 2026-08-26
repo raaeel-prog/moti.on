@@ -34,6 +34,7 @@ const ICON_PATHS: Record<string, string> = {
   flicker: "M9 2l-3.5 7h3L7 16l5-7.5H9L11 2z",
   textBox: "M2.5 5.5h13v7h-13zM5.5 8h5M5.5 10h3",
   parent: "M7 2.5h4v3H7zM9 5.5v2.5M4 8h10M4 8v2.5M14 8v2.5M2.5 10.5h3v3h-3zM12.5 10.5h3v3h-3z",
+  createNull: "M5.5 5.5h7v7h-7zM9 2.5v3M9 12.5v3M2.5 9h3M12.5 9h3",
   system: "M9 2.5l6 3.5v5l-6 3.5-6-3.5v-5zM6.5 8v2M11.5 8v2",
   diagnostics: "M3.5 4.5h11M3.5 9h11M3.5 13.5h7"
 };
@@ -48,6 +49,7 @@ const ICON_FALLBACKS: Record<string, string> = {
   flicker: "F",
   textBox: "[]",
   parent: "Y",
+  createNull: "+",
   system: "S",
   diagnostics: "!"
 };

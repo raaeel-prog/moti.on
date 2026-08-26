@@ -52,6 +52,10 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
   "undo.ae.layer.parent": {
     "en-US": "Moti.on: parent layers",
     "pt-BR": "Moti.on: parentear camadas"
+  },
+  "undo.ae.layer.createNull": {
+    "en-US": "Moti.on: create null",
+    "pt-BR": "Moti.on: criar null"
   }
 };
 

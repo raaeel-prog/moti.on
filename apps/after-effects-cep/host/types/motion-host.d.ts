@@ -117,6 +117,9 @@ declare const MotionExpressions: {
   /** Sem tokens: o centro do bounding box nao depende de padding. */
   renderTextBoxPosition(): string;
   isManagedTextBoxPosition(source: string): boolean;
+  /** Sondas temporarias de posicionamento; nunca persistidas. */
+  renderAnchorAverageProbe(indices: readonly number[]): string;
+  renderBoundsCenterProbe(indices: readonly number[]): string;
 };
 
 /** Erro tipado que um `preflight` devolve para recusar o comando. */
