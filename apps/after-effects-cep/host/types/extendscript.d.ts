@@ -37,7 +37,10 @@ declare class CompItem extends Item {
   readonly height: number;
   readonly duration: number;
   readonly frameRate: number;
+  readonly frameDuration: number;
   time: number;
+  readonly workAreaStart: number;
+  readonly workAreaDuration: number;
   readonly selectedProperties: Array<PropertyGroup & Property>;
   readonly selectedLayers: Layer[];
   readonly layers: LayerCollection;
@@ -66,6 +69,7 @@ declare class LayerCollection {
 }
 
 declare class Layer {
+  readonly parentProperty: null;
   name: string;
   /** Selecao da camada. O After Effects seleciona toda camada recem-criada. */
   selected: boolean;
@@ -90,6 +94,9 @@ declare class Layer {
   /** Selecao da camada. */
   selected: boolean;
   readonly source: SolidSource;
+  startTime: number;
+  /** Projeta um ponto da camada para coordenadas da composicao. */
+  sourcePointToComp(point: number[]): number[];
   /**
    * Parenteia SEM preservar o world transform: a camada pula para onde o
    * transform do pai a levar. Medido em docs/research/after-effects-parenting.md
@@ -103,6 +110,12 @@ declare class Layer {
   sourceRectAtTime(time: number, includeExtents: boolean): SourceRect;
   /** Move esta camada para logo abaixo da informada, na ordem da timeline. */
   moveAfter(layer: Layer): void;
+  /** Move esta camada para logo acima da informada. */
+  moveBefore(layer: Layer): void;
+  /** Move esta camada para o topo da composicao. */
+  moveToBeginning(): void;
+  readonly trackMatteLayer: Layer | null;
+  readonly trackMatteType: unknown;
   remove(): void;
 }
 
@@ -120,12 +133,16 @@ interface SourceRect {
 
 /** Fonte de um solido ou null; largura e altura sao gravaveis. */
 declare class SolidSource {
+  name: string;
   width: number;
   height: number;
 }
 
 declare class PropertyGroup {
+  readonly name: string;
   readonly matchName: string;
+  readonly propertyIndex: number;
+  readonly parentProperty: PropertyGroup | Layer | null;
   readonly numProperties: number;
   property(nameOrMatchName: string): PropertyGroup & Property;
   /** 1-indexado. Usado para varrer conteudo de shape, cujo tamanho e variavel. */
@@ -134,6 +151,10 @@ declare class PropertyGroup {
 }
 
 declare class Property {
+  readonly name: string;
+  readonly matchName: string;
+  readonly propertyIndex: number;
+  readonly parentProperty: PropertyGroup | Layer | null;
   readonly propertyType: number;
   readonly propertyValueType: number;
   readonly canSetExpression: boolean;
@@ -149,6 +170,39 @@ declare class Property {
    * calculadora e assar o resultado.
    */
   valueAtTime(time: number, preExpression: boolean): unknown;
+  keyTime(index: number): number;
+  keyValue(index: number): unknown;
+  keyInInterpolationType(index: number): unknown;
+  keyOutInterpolationType(index: number): unknown;
+  keyInTemporalEase(index: number): KeyframeEase[];
+  keyOutTemporalEase(index: number): KeyframeEase[];
+  keyTemporalContinuous(index: number): boolean;
+  keyTemporalAutoBezier(index: number): boolean;
+  keyInSpatialTangent(index: number): number[];
+  keyOutSpatialTangent(index: number): number[];
+  keySpatialContinuous(index: number): boolean;
+  keySpatialAutoBezier(index: number): boolean;
+  keyRoving(index: number): boolean;
+  keySelected(index: number): boolean;
+  keyLabel(index: number): number;
+  removeKey(index: number): void;
+  setValueAtTime(time: number, value: unknown): void;
+  setInterpolationTypeAtKey(index: number, inType: unknown, outType: unknown): void;
+  setTemporalEaseAtKey(index: number, inEase: KeyframeEase[], outEase: KeyframeEase[]): void;
+  setTemporalContinuousAtKey(index: number, continuous: boolean): void;
+  setTemporalAutoBezierAtKey(index: number, autoBezier: boolean): void;
+  setSpatialTangentsAtKey(index: number, inTangent: unknown, outTangent: unknown): void;
+  setSpatialContinuousAtKey(index: number, continuous: boolean): void;
+  setSpatialAutoBezierAtKey(index: number, autoBezier: boolean): void;
+  setRovingAtKey(index: number, roving: boolean): void;
+  setSelectedAtKey(index: number, selected: boolean): void;
+  setLabelAtKey(index: number, label: number): void;
+}
+
+declare class KeyframeEase {
+  constructor(speed: number, influence: number);
+  readonly speed: number;
+  readonly influence: number;
 }
 
 declare const PropertyType: {

@@ -48,6 +48,7 @@ export const HOST_SOURCE_ORDER = [
   "undo.jsx",
   "registry.jsx",
   "expression-templates.jsx",
+  "keyframe-operations.jsx",
   "commands/context-read.jsx",
   "commands/capability-probe.jsx",
   "commands/diagnostics-echo.jsx",
@@ -61,6 +62,10 @@ export const HOST_SOURCE_ORDER = [
   "commands/layer-parent.jsx",
   "commands/layer-create-null.jsx",
   "commands/layer-flip.jsx",
+  "commands/layer-rename.jsx",
+  "commands/layer-reverse-order.jsx",
+  "commands/keys-cut.jsx",
+  "commands/keys-delay.jsx",
   // dispatch por ultimo: ele e o unico simbolo publico, e so faz sentido depois
   // que todos os comandos ja se registraram.
   "dispatch.jsx"

@@ -122,6 +122,55 @@ declare const MotionExpressions: {
   renderBoundsCenterProbe(indices: readonly number[]): string;
 };
 
+interface MotionCapturedEase {
+  speed: number;
+  influence: number;
+}
+
+interface MotionCapturedSpatialKey {
+  inTangent: unknown;
+  outTangent: unknown;
+  continuous: boolean;
+  autoBezier: boolean;
+}
+
+interface MotionCapturedKey {
+  time: number;
+  value: unknown;
+  inInterpolation: unknown;
+  outInterpolation: unknown;
+  inEase: MotionCapturedEase[];
+  outEase: MotionCapturedEase[];
+  temporalContinuous: boolean;
+  temporalAutoBezier: boolean;
+  roving: boolean;
+  selected: boolean;
+  label?: number;
+  spatial: MotionCapturedSpatialKey | null;
+}
+
+interface MotionPropertySnapshot {
+  property: Property;
+  spatial: boolean;
+  supportsLabels: boolean;
+  keys: MotionCapturedKey[];
+}
+
+/** Adapter compartilhado de snapshot/restore do CHMS-016. */
+declare const MotionKeyframes: {
+  readonly MAX_KEYS_PER_BATCH: number;
+  isSupportedProperty(property: Property): boolean;
+  captureProperty(property: Property): MotionPropertySnapshot;
+  restoreProperty(snapshot: MotionPropertySnapshot, overrideTimes: number[] | null): void;
+  removeIndicesDescending(property: Property, indices: number[]): void;
+  describeProperty(comp: CompItem, property: Property): {
+    id: string;
+    layerIndex: number;
+    layerName: string;
+    propertyName: string;
+  };
+};
+
 /** Erro tipado que um `preflight` devolve para recusar o comando. */
 interface MotionCommandFailure {
   code: string;

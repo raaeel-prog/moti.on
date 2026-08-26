@@ -177,6 +177,12 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       "MotionDescriptors",
       "MotionExpressions",
       "MotionJson",
+      // Módulo interno compartilhado por `keys-cut` e `keys-delay`, no mesmo
+      // estatuto de `MotionExpressions`: o ExtendScript não tem sistema de
+      // módulos, então código comum a dois comandos só existe como global. Não
+      // expõe dispatch nem contorna o registry — só captura, restaura e remove
+      // keyframes preservando metadata.
+      "MotionKeyframes",
       "MotionRegistry",
       "MotionUndo"
     ],

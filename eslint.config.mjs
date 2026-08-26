@@ -103,6 +103,7 @@ export default [
         app: "readonly",
         CompItem: "readonly",
         File: "readonly",
+        KeyframeEase: "readonly",
         ParagraphJustification: "readonly",
         PropertyType: "readonly",
         PropertyValueType: "readonly",
@@ -117,6 +118,7 @@ export default [
         MotionDescriptors: "readonly",
         MotionJson: "readonly",
         MotionExpressions: "readonly",
+        MotionKeyframes: "readonly",
         MotionUndo: "readonly",
         MotionRegistry: "readonly",
         MotionAE: "readonly"

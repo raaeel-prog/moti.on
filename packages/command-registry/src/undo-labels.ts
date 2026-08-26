@@ -60,6 +60,22 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
   "undo.ae.layer.flip": {
     "en-US": "Moti.on: flip layers",
     "pt-BR": "Moti.on: espelhar camadas"
+  },
+  "undo.ae.layer.rename": {
+    "en-US": "Moti.on: rename layers",
+    "pt-BR": "Moti.on: renomear camadas"
+  },
+  "undo.ae.layer.reverseOrder": {
+    "en-US": "Moti.on: reverse layer order",
+    "pt-BR": "Moti.on: inverter ordem das camadas"
+  },
+  "undo.ae.keys.cut": {
+    "en-US": "Moti.on: cut keyframes",
+    "pt-BR": "Moti.on: cortar keyframes"
+  },
+  "undo.ae.keys.delay": {
+    "en-US": "Moti.on: delay animation",
+    "pt-BR": "Moti.on: atrasar anima\u00e7\u00e3o"
   }
 };
 

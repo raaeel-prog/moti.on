@@ -180,6 +180,110 @@
         "en-US": "Moti.on: flip layers",
         "pt-BR": "Moti.on: espelhar camadas"
       }
+    },
+    "ae.layer.rename.preview": {
+      id: "ae.layer.rename.preview",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
+    "ae.layer.rename": {
+      id: "ae.layer.rename",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.layer.rename",
+      undoLabels: {
+        "en-US": "Moti.on: rename layers",
+        "pt-BR": "Moti.on: renomear camadas"
+      }
+    },
+    "ae.layer.reverse-order.preview": {
+      id: "ae.layer.reverse-order.preview",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
+    "ae.layer.reverse-order": {
+      id: "ae.layer.reverse-order",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.layer.reverseOrder",
+      undoLabels: {
+        "en-US": "Moti.on: reverse layer order",
+        "pt-BR": "Moti.on: inverter ordem das camadas"
+      }
+    },
+    "ae.keys.cut.preview": {
+      id: "ae.keys.cut.preview",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
+    "ae.keys.cut": {
+      id: "ae.keys.cut",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: true,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.keys.cut",
+      undoLabels: {
+        "en-US": "Moti.on: cut keyframes",
+        "pt-BR": "Moti.on: cortar keyframes"
+      }
+    },
+    "ae.keys.delay.preview": {
+      id: "ae.keys.delay.preview",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
+    "ae.keys.delay": {
+      id: "ae.keys.delay",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.keys.delay",
+      undoLabels: {
+        "en-US": "Moti.on: delay animation",
+        "pt-BR": "Moti.on: atrasar animação"
+      }
     }
   };
 

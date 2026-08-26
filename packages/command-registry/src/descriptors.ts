@@ -263,6 +263,105 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     timeoutMs: DEFAULT_TIMEOUT_MS
   },
   {
+    // Preview e um comando separado para nunca abrir um grupo de Undo vazio.
+    id: "ae.layer.rename.preview",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: false,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.none",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.layer.rename",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.layer.rename",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.layer.reverse-order.preview",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: false,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.none",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.layer.reverse-order",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.layer.reverseOrder",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.keys.cut.preview",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: false,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.none",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    // Remove keyframes criados pelo usuario; o dispatcher exige consentimento
+    // allowDestructive explicito alem do preview obrigatorio no painel.
+    id: "ae.keys.cut",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: true,
+    mutates: true,
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.keys.cut",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.keys.delay.preview",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: false,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.none",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.keys.delay",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.keys.delay",
+    timeoutMs: 30_000
+  },
+  {
     id: "pr.context.read",
     hosts: ["premiere-pro"],
     requirements: [],

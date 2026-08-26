@@ -327,7 +327,16 @@ test("sucesso sem mudanca e opt-in e somente para comando mutante idempotente", 
       "ae.expression.wiggle",
       "ae.expression.flicker",
       "ae.text.box",
-      "ae.layer.parent"
+      "ae.layer.parent",
+      // Renomear para o nome que a camada já tem é o mesmo pedido do usuário
+      // satisfeito de antemão.
+      "ae.layer.rename",
+      // Cortar keys num intervalo que não tem nenhuma: o estado pedido — sem
+      // keys ali — já vale.
+      "ae.keys.cut",
+      // Offsets todos zero, que é o caso de uma única camada selecionada com
+      // atraso por índice. Reportar falha aí puniria um pedido bem formado.
+      "ae.keys.delay"
     ]
   );
 });
