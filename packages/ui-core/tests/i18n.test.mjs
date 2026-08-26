@@ -145,6 +145,8 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
     "flip.axis.vertical",
     "reverse.preserveTrackMattes",
     "cutKeys.unit.seconds",
+    // "Normal" e a mesma palavra nos dois idiomas.
+    "anchor.mode.normal",
     "context.compositionValue",
     "value.none",
     "error.withCode"

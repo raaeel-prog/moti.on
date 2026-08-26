@@ -328,6 +328,8 @@ test("sucesso sem mudanca e opt-in e somente para comando mutante idempotente", 
       "ae.expression.flicker",
       "ae.text.box",
       "ae.layer.parent",
+      // Pedir o ponto onde a ancora ja esta e um pedido satisfeito de antemao.
+      "ae.anchor.align",
       // Renomear para o nome que a camada já tem é o mesmo pedido do usuário
       // satisfeito de antemão.
       "ae.layer.rename",

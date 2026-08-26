@@ -193,6 +193,63 @@ body,
   padding: 0 var(--ch-space-3) var(--ch-space-2) var(--ch-space-3);
 }
 
+/* Grade 3x3 do alinhador de ancora. Quadrada por construcao: a posicao do
+   botao e a informacao, e uma celula esticada mentiria sobre a geometria. */
+.ch-anchor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  width: 96px;
+  margin: var(--ch-space-1) 0 var(--ch-space-2) 0;
+}
+
+.ch-anchor-grid__cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid var(--ch-border-default);
+  border-radius: var(--ch-radius-control);
+  background-color: var(--ch-surface-control);
+  cursor: pointer;
+}
+
+.ch-anchor-grid__cell:hover {
+  background-color: var(--ch-surface-hover);
+}
+
+.ch-anchor-grid__cell.is-active {
+  border-color: var(--ch-accent);
+  background-color: var(--ch-surface-pressed);
+}
+
+.ch-anchor-grid__cell:focus-visible {
+  outline: 1px solid var(--ch-border-focus);
+  outline-offset: 1px;
+}
+
+.ch-anchor-grid__cell[disabled] {
+  cursor: default;
+}
+
+/* O ponto marca o centro da celula; a celula ativa o acende. */
+.ch-anchor-grid__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ch-radius-round);
+  background-color: var(--ch-text-muted);
+}
+
+.ch-anchor-grid__cell.is-active .ch-anchor-grid__dot {
+  background-color: var(--ch-accent);
+}
+
+.ch-anchor-grid__cell[disabled] .ch-anchor-grid__dot {
+  background-color: var(--ch-text-disabled);
+}
+
 /* Rodape de lista: contagem e resumo, sem o peso visual de um aviso. */
 .ch-hint {
   padding: 4px 0 6px 0;

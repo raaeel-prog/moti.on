@@ -263,6 +263,33 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     timeoutMs: DEFAULT_TIMEOUT_MS
   },
   {
+    id: "ae.anchor.align.preview",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: false,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.none",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    // Transform puro: a compensacao e resolvida por matriz, sem expressao.
+    id: "ae.anchor.align",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    // Pedir o ponto onde a ancora ja esta e um pedido satisfeito de
+    // antemao, e nao uma falha.
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.anchor.align",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
     // Preview e um comando separado para nunca abrir um grupo de Undo vazio.
     id: "ae.layer.rename.preview",
     hosts: ["after-effects"],

@@ -181,6 +181,32 @@
         "pt-BR": "Moti.on: espelhar camadas"
       }
     },
+    "ae.anchor.align.preview": {
+      id: "ae.anchor.align.preview",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
+    "ae.anchor.align": {
+      id: "ae.anchor.align",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.anchor.align",
+      undoLabels: {
+        "en-US": "Moti.on: align anchor point",
+        "pt-BR": "Moti.on: alinhar ponto de ancoragem"
+      }
+    },
     "ae.layer.rename.preview": {
       id: "ae.layer.rename.preview",
       requirements: ["hasProject", "hasActiveComp"],

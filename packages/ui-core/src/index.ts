@@ -24,6 +24,7 @@ export {
 
 export {
   COMPACT_MAX,
+  anchorGrid,
   STANDARD_MAX,
   button,
   checkboxField,
@@ -44,6 +45,7 @@ export {
   toolGrid,
   toolTile,
   type ButtonOptions,
+  type AnchorGridOptions,
   type CheckboxFieldOptions,
   type ColorFieldOptions,
   type NoticeTone,

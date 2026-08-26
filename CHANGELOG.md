@@ -88,6 +88,66 @@ Status: `IMPLEMENTED_AND_VERIFIED` no ambiente acima.
 
 **Pendência de produto registrada:** a documentação diz que o offset controla o *valor inicial* do wiggle, mas o identificador da camada continua na composição da semente. Não foi medido se duas camadas com a mesma semente produzem movimento idêntico — pode ser que a semente iguale a fase e não a trajetória. Até isso ser medido, o produto **não promete "mesma semente, mesmo movimento" entre camadas**; o texto da interface fala apenas do comportamento por propriedade.
 
+### CHMS-017 — Alinhador de âncora (`ae.anchor.align`)
+
+Décima terceira ferramenta do painel: move o ponto de ancoragem para um dos nove pontos do
+bounds, com a camada ficando no lugar.
+
+#### A matriz, porque o spec proíbe o atalho
+
+A §14.5 é explícita: *não usar expressão temporária quando a operação pode ser resolvida por
+matriz.* Aqui pode. O transform leva o espaço da camada ao espaço do **pai** por
+`p = posição + R·S·(v − âncora)`, então:
+
+```text
+posicao' + R·S·(v - A')  =  posicao + R·S·(v - A)
+posicao'                 =  posicao + R·S·(A' - A)
+```
+
+**O transform do pai cancela** — `posição` já está em espaço do pai, e os dois lados passam pela
+mesma matriz. A compensação é local, e vale para qualquer profundidade de parentesco.
+
+#### Verificado em host — AE 26.3x87
+
+| Caso | Erro visual |
+|---|---|
+| 2D simples | `0` |
+| rotacionada 37° e escalada 160×70 | `1,205e-5 px` |
+| escala negativa | `0` |
+| **parenteada a pai rotacionado e escalado** | `5,267e-6 px` |
+| texto | `0` |
+
+Critério da §14.6: **0,5 px**. O pior caso ficou 40 mil vezes abaixo, e o resíduo é arredondamento
+do próprio After Effects — não da conta. A penúltima linha é a que confirma a derivação.
+
+#### O defeito que só a interface revelou
+
+A primeira aplicação pelo painel devolveu `ROLLBACK_FAILED`. **`setValue` levanta erro numa
+propriedade com keyframes**, e a cena de teste tinha uma camada com Position animada. O rollback
+tentava o mesmo caminho e falhava também — por isso o código de rollback no lugar do erro real.
+
+Camada animada é o caso comum no After Effects, não a exceção. O comando agora desloca cada
+keyframe pelo mesmo vetor — o que preserva a animação inteira — e o rollback subtrai o mesmo
+vetor, sem snapshot, porque nenhum keyframe é criado, removido ou reordenado.
+
+Duas recusas vieram junto: **âncora animada** (qual keyframe iria para o canto?) e **escala ou
+rotação animada com compensação ligada** (o vetor muda a cada quadro, e um deslocamento constante
+erraria em silêncio).
+
+#### Grade 3×3, e não um select de nove
+
+A §14.2 pede grade. Um select diria a mesma coisa e ocuparia menos espaço, mas esconderia a
+geometria: aqui a posição do botão **é** a informação, e ler "superior esquerdo" numa lista custa
+mais que ver o canto. `radiogroup` com `aria-label` por célula, porque nove botões sem nome
+acessível seriam nove botões idênticos para um leitor de tela.
+
+#### Escopo recusado
+
+**Convex** e **Concave** dependem de análise de path — convex hull e sinal de cross product — e
+são corpo de trabalho próprio. **Camadas 3D** precisam de matriz 4×4 ainda não verificada. As
+fontes de bounds `source`, `mask`, `shapePath` e `selection` são recusadas com erro tipado em vez
+de silenciosamente trocadas por `visual`.
+
 ### CHMS-016 — as quatro ferramentas no painel, e o painel finalmente verificado
 
 Renomear, Inverter ordem, Cortar keys e Atrasar entram na interface. Com elas o navegador chega a

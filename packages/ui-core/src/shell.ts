@@ -40,6 +40,7 @@ const ICON_PATHS: Record<string, string> = {
   reverseOrder: "M3.5 4.5h11M3.5 9h11M3.5 13.5h11M12 2.5l2 2-2 2M6 15.5l-2-2 2-2",
   cutKeys: "M9 2.5v13M5 6l-2.5 3 2.5 3M13 6l2.5 3-2.5 3",
   delay: "M2.5 5h4M2.5 9h7M2.5 13h10M13 3.5l2.5 2.5-2.5 2.5",
+  anchor: "M9 3.5v11M3.5 9h11M9 6.5a2.5 2.5 0 1 1 0 5a2.5 2.5 0 1 1 0-5z",
   system: "M9 2.5l6 3.5v5l-6 3.5-6-3.5v-5zM6.5 8v2M11.5 8v2",
   diagnostics: "M3.5 4.5h11M3.5 9h11M3.5 13.5h7"
 };
@@ -60,6 +61,7 @@ const ICON_FALLBACKS: Record<string, string> = {
   reverseOrder: "⇅",
   cutKeys: "✂",
   delay: "≫",
+  anchor: "⊕",
   system: "S",
   diagnostics: "!"
 };
@@ -335,6 +337,54 @@ export function numberField(doc: Document, options: NumberFieldOptions): HTMLEle
     field.control.appendChild(createElement(doc, "span", "ch-field__unit", options.unit));
   }
   return field.root;
+}
+
+export interface AnchorGridOptions {
+  /** Um dos nove valores; o botão correspondente fica marcado. */
+  value: string;
+  labels: ReadonlyArray<{ value: string; label: string }>;
+  disabled?: boolean;
+  onSelect(value: string): void;
+}
+
+/**
+ * Grade 3×3 de seleção, pedida pela §14.2 do spec.
+ *
+ * Um select de nove itens diria a mesma coisa e ocuparia menos espaço, mas
+ * esconderia a geometria: aqui a posição do botão **é** a informação, e ler
+ * "superior esquerdo" numa lista custa mais que ver o canto.
+ *
+ * `radiogroup` em vez de nove botões soltos: o leitor de tela anuncia o
+ * conjunto e a posição dentro dele, e as setas navegam a grade.
+ */
+export function anchorGrid(doc: Document, options: AnchorGridOptions): HTMLElement {
+  const grade = createElement(doc, "div", "ch-anchor-grid");
+  grade.setAttribute("role", "radiogroup");
+
+  for (const item of options.labels) {
+    const marcado = item.value === options.value;
+    const celula = createElement(
+      doc,
+      "button",
+      marcado ? "ch-anchor-grid__cell is-active" : "ch-anchor-grid__cell"
+    ) as HTMLButtonElement;
+    celula.setAttribute("type", "button");
+    celula.setAttribute("role", "radio");
+    celula.setAttribute("aria-checked", marcado ? "true" : "false");
+    // O rótulo textual não cabe numa célula de grade, então vive no nome
+    // acessível: sem ele o leitor de tela anunciaria nove botões idênticos.
+    celula.setAttribute("aria-label", item.label);
+    celula.title = item.label;
+    if (options.disabled) {
+      celula.disabled = true;
+      celula.setAttribute("aria-disabled", "true");
+    }
+    celula.appendChild(createElement(doc, "span", "ch-anchor-grid__dot"));
+    celula.addEventListener("click", () => options.onSelect(item.value));
+    grade.appendChild(celula);
+  }
+
+  return grade;
 }
 
 export interface TextFieldOptions extends FieldBaseOptions {

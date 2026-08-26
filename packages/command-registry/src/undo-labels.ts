@@ -61,6 +61,10 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
     "en-US": "Moti.on: flip layers",
     "pt-BR": "Moti.on: espelhar camadas"
   },
+  "undo.ae.anchor.align": {
+    "en-US": "Moti.on: align anchor point",
+    "pt-BR": "Moti.on: alinhar ponto de ancoragem"
+  },
   "undo.ae.layer.rename": {
     "en-US": "Moti.on: rename layers",
     "pt-BR": "Moti.on: renomear camadas"

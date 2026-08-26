@@ -27,6 +27,7 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | After Effects: Parentesco (`ae.layer.parent`, `ae.layer.list`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: `preserveWorldTransform` preservou o mundo exatamente; desligado, a camada pulou como pedido; ciclo e nome divergente recusados sem mutação; encadeamento seguiu a ordem do timeline; desparentear preservou o mundo. Painel: `NOT RUN` (item 17) |
 | After Effects: Create Null (`ae.layer.create-null`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: os três posicionamentos exatos, sonda temporária sempre apagada, e o critério de aceite cumprido — camadas rotacionadas e escaladas não se moveram ao serem parenteadas. Painel: `NOT RUN` (item 18) |
 | After Effects: Flip (`ae.layer.flip`) | `PARTIAL` | `PASS` para o escopo entregue | AE 26.3x87: flip duplo voltou idêntico; o canto espelhou em torno do pivô com erro de 1,1e-13; a conta de limites bate com a do motor de expressões. Camadas 3D, com pai e shape paths: recusadas ou fora de escopo (item 19) |
+| After Effects: Alinhador de âncora (`ae.anchor.align`) | `PARTIAL` | `PASS` para o escopo entregue | AE 26.3x87: pior erro visual de 1,2e-5 px contra o critério de 0,5 px da §14.6, incluindo camada parenteada a pai rotacionado e escalado. Convex, Concave e 3D fora de escopo (item 21) |
 | Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | APIs verificadas em documentação e doubles |
 | Premiere: versão/locale do host | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | `require("uxp").host.version`/`.uiLocale` documentados para 25.6+ |
 | Premiere: transações/Undo | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Ordem `lockedAccess` → `executeTransaction` coberta por doubles |
@@ -356,6 +357,64 @@ clique manual.
 - Largura 360 e 720 px; macOS; AE 25.x.
 - Aplicação pela interface das outras dez ferramentas: só Renomear e Inverter ordem foram
   clicadas até o fim.
+
+### 21. Alinhador de âncora: a matriz, e o keyframe que ela esqueceu
+
+`PARTIAL` / execução `PASS` para o escopo entregue.
+
+A §14.5 proíbe expressão temporária quando a operação pode ser resolvida por matriz. Aqui pode, e
+a derivação cabe em três linhas: o transform leva o espaço da camada ao espaço do **pai** por
+`p = posição + R·S·(v − âncora)`, então
+
+```text
+posição' + R·S·(v − A')  =  posição + R·S·(v − A)
+posição'                 =  posição + R·S·(A' − A)
+```
+
+**O transform do pai cancela.** `posição` já está em espaço do pai, e os dois lados passam pela
+mesma matriz. A compensação é inteiramente local, e vale para qualquer profundidade de
+parentesco — o que a medição confirmou.
+
+#### Evidência da execução aprovada
+
+| Caso | Erro visual |
+|---|---|
+| 2D simples | `0` |
+| rotacionada 37° e escalada 160×70 | `1,205e-5 px` |
+| escala negativa | `0` |
+| **parenteada a pai rotacionado e escalado** | `5,267e-6 px` |
+| texto | `0` |
+
+Critério da §14.6: **0,5 px**. O pior caso ficou 40 mil vezes abaixo, e o resíduo é arredondamento
+do próprio After Effects ao ler e gravar propriedade — não da conta.
+
+#### O defeito que só a interface revelou
+
+A primeira aplicação pelo painel devolveu `ROLLBACK_FAILED`. A causa: **`setValue` levanta erro
+numa propriedade com keyframes**, e a cena de teste tinha uma camada com Position animada. Pior,
+o rollback tentava o mesmo caminho e falhava também — daí o código de rollback em vez do erro
+original.
+
+Camada animada é o caso comum no After Effects, não a exceção. O comando agora desloca cada
+keyframe pelo mesmo vetor, o que preserva a animação inteira, e o rollback subtrai o mesmo vetor —
+sem snapshot, porque nenhum keyframe é criado, removido ou reordenado.
+
+Duas recusas novas vieram junto, e são de verdade:
+
+- **âncora animada** — qual keyframe iria para o canto? Não há resposta;
+- **escala ou rotação animada com compensação ligada** — `R·S·(A' − A)` muda a cada quadro, e um
+  deslocamento constante acertaria um instante e erraria todos os outros, em silêncio.
+
+#### Escopo recusado, e por quê
+
+- **Convex e Concave** dependem de análise de path — convex hull e sinal de cross product — e são
+  corpo de trabalho próprio.
+- **Camadas 3D**: âncora de três componentes, três rotações e orientation; a derivação precisa de
+  matriz 4×4 ainda não verificada em host.
+- **Fontes de bounds** `source`, `mask`, `shapePath` e `selection`: só `visual` está implementada,
+  e as outras são recusadas com erro tipado em vez de silenciosamente trocadas.
+- **União em comp space** para múltiplas camadas: com camadas rotacionadas o retângulo unido não
+  tem canto bem definido no espaço de cada camada. Por enquanto cada camada usa o próprio bounds.
 
 ## Controles automatizados existentes
 

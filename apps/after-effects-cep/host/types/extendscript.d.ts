@@ -162,6 +162,13 @@ declare class Property {
   expressionEnabled: boolean;
   readonly expressionError: string;
   readonly numKeys: number;
+  /** Valor do keyframe de indice 1-baseado. */
+  keyValue(index: number): unknown;
+  /**
+   * Grava o valor de um keyframe existente. E o unico caminho quando a
+   * propriedade e animada: `setValue` levanta erro com `numKeys > 0`.
+   */
+  setValueAtKey(index: number, value: unknown): void;
   value: unknown;
   setValue(value: unknown): void;
   /**

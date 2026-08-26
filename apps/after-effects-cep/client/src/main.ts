@@ -13,6 +13,7 @@ import type { CommandResponse, HostCapabilities } from "@motion/contracts";
 import { buildCapabilities, type ProbeFacts } from "@motion/capability-matrix";
 import { createLogger, type MotionLogger } from "@motion/logging";
 import {
+  anchorGrid,
   button,
   checkboxField,
   colorField,
@@ -156,6 +157,53 @@ const DEFAULT_PARENT: ParentDraft = {
   preserveWorldTransform: true,
   unparent: false,
   chainMode: "target"
+};
+
+type AnchorGridPoint =
+  | "topLeft"
+  | "topCenter"
+  | "topRight"
+  | "midLeft"
+  | "center"
+  | "midRight"
+  | "bottomLeft"
+  | "bottomCenter"
+  | "bottomRight";
+
+const ANCHOR_GRID: ReadonlyArray<{ ponto: AnchorGridPoint; rotulo: MessageKey }> = [
+  { ponto: "topLeft", rotulo: "anchor.grid.topLeft" },
+  { ponto: "topCenter", rotulo: "anchor.grid.topCenter" },
+  { ponto: "topRight", rotulo: "anchor.grid.topRight" },
+  { ponto: "midLeft", rotulo: "anchor.grid.midLeft" },
+  { ponto: "center", rotulo: "anchor.grid.center" },
+  { ponto: "midRight", rotulo: "anchor.grid.midRight" },
+  { ponto: "bottomLeft", rotulo: "anchor.grid.bottomLeft" },
+  { ponto: "bottomCenter", rotulo: "anchor.grid.bottomCenter" },
+  { ponto: "bottomRight", rotulo: "anchor.grid.bottomRight" }
+];
+
+interface AnchorDraft {
+  gridPoint: AnchorGridPoint;
+  mode: "normal" | "reverse" | "random";
+  timeMode: "currentTime" | "fixed";
+  fixedTime: number;
+  includeExtents: boolean;
+  preserveVisualPosition: boolean;
+  randomSeed: number;
+}
+
+/**
+ * Centro com aparência preservada: é o alinhamento que se pede na maior parte
+ * das vezes, e é o único que não move nada ao ser aplicado sem pensar.
+ */
+const DEFAULT_ANCHOR: AnchorDraft = {
+  gridPoint: "center",
+  mode: "normal",
+  timeMode: "currentTime",
+  fixedTime: 0,
+  includeExtents: false,
+  preserveVisualPosition: true,
+  randomSeed: 0
 };
 
 type CutRangeMode =
@@ -351,7 +399,8 @@ type ToolId =
   | "rename"
   | "reverseOrder"
   | "cutKeys"
-  | "delay";
+  | "delay"
+  | "anchor";
 
 /**
  * Uma ferramenta do navegador.
@@ -462,6 +511,20 @@ const TOOLS: readonly ToolDefinition[] = [
     }
   },
   {
+    id: "anchor",
+    nameKey: "tool.anchor.name",
+    descriptionKey: "tool.anchor.description",
+    render: renderAnchor,
+    disabledReason: anchorDisabledReason,
+    apply: applyAnchor,
+    load: refreshAnchorPreview,
+    reset: () => {
+      state.anchor = { ...DEFAULT_ANCHOR };
+      state.anchorPreview = null;
+      state.previewError = null;
+    }
+  },
+  {
     id: "cutKeys",
     nameKey: "tool.cutKeys.name",
     descriptionKey: "tool.cutKeys.description",
@@ -565,11 +628,13 @@ const state: {
   reverseOrder: ReverseOrderDraft;
   cutKeys: CutKeysDraft;
   delay: DelayDraft;
+  anchor: AnchorDraft;
   /** Prévias em cache; `null` enquanto a primeira não voltou. */
   renamePreview: RenamePreviewData | null;
   reversePreview: ReversePreviewData | null;
   cutKeysPreview: CutKeysPreviewData | null;
   delayPreview: DelayPreviewData | null;
+  anchorPreview: AnchorPreviewData | null;
   /** Motivo da última prévia recusada, mostrado dentro da view. */
   previewError: string | null;
   /** Cache da lista de camadas; `null` enquanto nunca foi lida. */
@@ -595,10 +660,12 @@ const state: {
   reverseOrder: { ...DEFAULT_REVERSE_ORDER },
   cutKeys: { ...DEFAULT_CUT_KEYS },
   delay: { ...DEFAULT_DELAY },
+  anchor: { ...DEFAULT_ANCHOR },
   renamePreview: null,
   reversePreview: null,
   cutKeysPreview: null,
   delayPreview: null,
+  anchorPreview: null,
   previewError: null,
   layers: null,
   layersTotal: 0,
@@ -1950,6 +2017,298 @@ function renderPreviewRows(
       hint(document, i18n.t("message.previewMore", { count: total - PREVIEW_MAX_ROWS }))
     );
   }
+}
+
+interface AnchorPreviewData {
+  targetCount: number;
+  changedCount: number;
+  targets: Array<{
+    layerName: string;
+    gridPoint: string;
+    anchorBefore: number[];
+    anchorAfter: number[];
+    changed: boolean;
+  }>;
+}
+
+function isAnchorPreviewData(value: unknown): value is AnchorPreviewData {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  const par = (v: unknown): boolean =>
+    Array.isArray(v) && v.length === 2 && v.every((n) => typeof n === "number");
+  return (
+    Number.isInteger(record.targetCount) &&
+    Number.isInteger(record.changedCount) &&
+    Array.isArray(record.targets) &&
+    record.targets.every((item) => {
+      if (typeof item !== "object" || item === null) return false;
+      const alvo = item as Record<string, unknown>;
+      return (
+        typeof alvo.layerName === "string" &&
+        typeof alvo.gridPoint === "string" &&
+        par(alvo.anchorBefore) &&
+        par(alvo.anchorAfter) &&
+        typeof alvo.changed === "boolean"
+      );
+    })
+  );
+}
+
+function anchorArgs(draft: AnchorDraft, preview: boolean): Record<string, unknown> {
+  return {
+    gridPoint: draft.gridPoint,
+    mode: draft.mode,
+    boundsSource: "visual",
+    timeMode: draft.timeMode,
+    // Campo inativo é canônico: o host recusa um tempo fixo fora do modo em vez
+    // de ignorá-lo, então o painel precisa mandar exatamente zero.
+    fixedTime: draft.timeMode === "fixed" ? draft.fixedTime : 0,
+    includeExtents: draft.includeExtents,
+    preserveVisualPosition: draft.preserveVisualPosition,
+    randomSeed: draft.randomSeed,
+    preview
+  };
+}
+
+async function refreshAnchorPreview(): Promise<void> {
+  const fiacao = wiringAtual;
+  if (!fiacao) return;
+
+  const sequencia = previewSequence + 1;
+  previewSequence = sequencia;
+
+  const response = await fiacao.client.execute<AnchorPreviewData>(
+    "ae.anchor.align.preview",
+    anchorArgs(state.anchor, true)
+  );
+  if (sequencia !== previewSequence) return;
+
+  state.anchorPreview = response.ok && isAnchorPreviewData(response.data) ? response.data : null;
+  state.previewError = response.ok ? null : describeFailure(fiacao.i18n, response);
+  fiacao.shell.rerender();
+}
+
+function renderAnchor(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.anchor;
+  const confirma = (mutacao: () => void) => {
+    mutacao();
+    shell.rerender();
+    void refreshAnchorPreview();
+  };
+
+  regions.content.appendChild(notice(document, i18n.t("message.anchorInstructions")));
+  if (state.context && !state.context.isComposition) {
+    regions.content.appendChild(notice(document, i18n.t("message.anchorNoActiveComp"), "warning"));
+  }
+  regions.content.appendChild(notice(document, i18n.t("message.anchorUnsupported"), "warning"));
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("anchor.section.point")));
+
+  // A §14.2 pede grade 3×3. Um select de nove itens diria a mesma coisa, mas
+  // esconderia a geometria: a grade é a informação, e ler "superior esquerdo"
+  // numa lista custa mais que ver o canto.
+  regions.content.appendChild(
+    anchorGrid(document, {
+      value: draft.gridPoint,
+      disabled: state.busy,
+      labels: ANCHOR_GRID.map(({ ponto, rotulo }) => ({ value: ponto, label: i18n.t(rotulo) })),
+      onSelect: (ponto) =>
+        confirma(() => {
+          state.anchor.gridPoint = ponto as AnchorGridPoint;
+        })
+    })
+  );
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "anchor-mode",
+      label: i18n.t("anchor.mode"),
+      value: draft.mode,
+      disabled: state.busy,
+      options: [
+        { value: "normal", label: i18n.t("anchor.mode.normal") },
+        { value: "reverse", label: i18n.t("anchor.mode.reverse") },
+        { value: "random", label: i18n.t("anchor.mode.random") }
+      ],
+      onChange: (value) =>
+        confirma(() => {
+          state.anchor.mode =
+            value === "reverse" || value === "random" ? value : "normal";
+        })
+    })
+  );
+
+  if (draft.mode === "random") {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "anchor-seed",
+        label: i18n.t("anchor.randomSeed"),
+        value: draft.randomSeed,
+        min: 0,
+        max: 2_147_483_647,
+        step: 1,
+        disabled: state.busy,
+        onCommit: (value) =>
+          confirma(() => {
+            state.anchor.randomSeed = value;
+          })
+      })
+    );
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("anchor.section.options")));
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "anchor-time-mode",
+      label: i18n.t("anchor.timeMode"),
+      value: draft.timeMode,
+      disabled: state.busy,
+      options: [
+        { value: "currentTime", label: i18n.t("anchor.timeMode.currentTime") },
+        { value: "fixed", label: i18n.t("anchor.timeMode.fixed") }
+      ],
+      onChange: (value) =>
+        confirma(() => {
+          state.anchor.timeMode = value === "fixed" ? "fixed" : "currentTime";
+        })
+    })
+  );
+
+  if (draft.timeMode === "fixed") {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "anchor-fixed-time",
+        label: i18n.t("anchor.fixedTime"),
+        value: draft.fixedTime,
+        min: 0,
+        max: 10_800,
+        step: 0.1,
+        unit: i18n.t("cutKeys.unit.seconds"),
+        disabled: state.busy,
+        onCommit: (value) =>
+          confirma(() => {
+            state.anchor.fixedTime = value;
+          })
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "anchor-extents",
+      label: i18n.t("anchor.includeExtents"),
+      description: i18n.t("anchor.includeExtents.description"),
+      checked: draft.includeExtents,
+      disabled: state.busy,
+      onChange: (checked) =>
+        confirma(() => {
+          state.anchor.includeExtents = checked;
+        })
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "anchor-preserve",
+      label: i18n.t("anchor.preserveVisualPosition"),
+      description: i18n.t("anchor.preserveVisualPosition.description"),
+      checked: draft.preserveVisualPosition,
+      disabled: state.busy,
+      onChange: (checked) =>
+        confirma(() => {
+          state.anchor.preserveVisualPosition = checked;
+        })
+    })
+  );
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("anchor.section.preview")));
+
+  if (state.previewError) {
+    regions.content.appendChild(notice(document, state.previewError, "warning"));
+    return;
+  }
+  const previa = state.anchorPreview;
+  if (!previa) {
+    regions.content.appendChild(hint(document, i18n.t("status.previewing")));
+    return;
+  }
+
+  const arredonda = (n: number): string => String(Math.round(n * 100) / 100);
+  renderPreviewRows(
+    regions,
+    i18n,
+    previa.targets.map((alvo) => ({
+      antes: alvo.layerName,
+      depois: `${arredonda(alvo.anchorAfter[0] ?? 0)}, ${arredonda(alvo.anchorAfter[1] ?? 0)}`
+    })),
+    previa.targetCount
+  );
+  regions.content.appendChild(
+    hint(
+      document,
+      i18n.t("message.previewChanged", {
+        changed: previa.changedCount,
+        total: previa.targetCount
+      })
+    )
+  );
+}
+
+function anchorDisabledReason(i18n: I18n): string | null {
+  if (state.busy) {
+    return state.busyReason ?? i18n.t("status.initializing");
+  }
+  if (!state.context?.isComposition) {
+    return i18n.t("message.anchorNoActiveComp");
+  }
+  if (state.previewError) {
+    return state.previewError;
+  }
+  if (state.anchorPreview && state.anchorPreview.changedCount === 0) {
+    return i18n.t("message.anchorNothing");
+  }
+  return null;
+}
+
+async function applyAnchor(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.anchorNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingAnchor"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingAnchor"));
+
+  const response = await client.execute<AnchorPreviewData>(
+    "ae.anchor.align",
+    anchorArgs(state.anchor, false),
+    { preserveSelection: true }
+  );
+  logger.recordResponse("ae.anchor.align", response);
+
+  if (!response.ok) {
+    reportFailure(shell, i18n, response);
+    setBusy(shell, false);
+    return;
+  }
+
+  state.lastError = null;
+  const alinhadas = isAnchorPreviewData(response.data) ? response.data.changedCount : 0;
+  shell.setStatus(i18n.t("message.anchorApplied", { count: alinhadas }), "ok");
+  setBusy(shell, false);
+
+  await refreshAnchorPreview();
 }
 
 interface CutKeysPreviewData {

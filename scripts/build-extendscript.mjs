@@ -62,6 +62,7 @@ export const HOST_SOURCE_ORDER = [
   "commands/layer-parent.jsx",
   "commands/layer-create-null.jsx",
   "commands/layer-flip.jsx",
+  "commands/anchor-align.jsx",
   "commands/layer-rename.jsx",
   "commands/layer-reverse-order.jsx",
   "commands/keys-cut.jsx",
