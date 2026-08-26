@@ -23,7 +23,7 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | After Effects: Wiggle (`ae.expression.wiggle`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Aplicou em propriedade **sem keyframes**, reaplicou como no-op e trocou a semente; reprodutibilidade entre camadas e Ctrl+Z deste comando: `NOT RUN` |
 | After Effects: Flicker (`ae.expression.flicker`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Aplicou em 1D e 2D na mesma seleção sem `expressionError`; valor avaliado saiu escalar e array respectivamente. Cor e 3D em host: `NOT RUN` |
 | After Effects: payload acima de 60.000 caracteres codificados | `PARTIAL` | `NOT RUN` | Rejeição tipada implementada; transporte por arquivo temporário ausente |
-| After Effects: Caixa de texto (`ae.text.box`) | `PARTIAL` | `FAIL` corrigido, reteste `NOT RUN` | Duas tentativas reais em AE 26.3x87 falharam com `HOST_OPERATION_FAILED`: a expressão era escrita antes do parentesco e `thisLayer.parent` era `null`. Ordem corrigida; execução pós-correção pendente (item 16) |
+| After Effects: Caixa de texto (`ae.text.box`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: caixa criada, `size` e `position` avaliados exatamente nos valores esperados, sem `expressionError`; texto vazio recolheu para `[0, 0]`; seleção restaurada e reaplicação devolveu no-op. Ctrl+Z de um passo e cor não-preta pelo painel: `NOT RUN` (item 16) |
 | Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | APIs verificadas em documentação e doubles |
 | Premiere: versão/locale do host | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | `require("uxp").host.version`/`.uiLocale` documentados para 25.6+ |
 | Premiere: transações/Undo | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Ordem `lockedAccess` → `executeTransaction` coberta por doubles |
@@ -60,7 +60,11 @@ Testes automatizados cobrem preflight antes de mutação e equilíbrio de `begin
 
 ### 5. Seleção e tempo corrente
 
-`captureState`/`restoreState` ainda não existem. Nenhum comando P0 muda seleção ou CTI. Status: `NOT_IMPLEMENTED`; o gate torna-se obrigatório junto do primeiro comando que tocar esse estado.
+`captureState`/`restoreState` genéricos ainda não existem. Status: `PARTIAL`.
+
+O gate previsto neste item foi acionado: **`ae.text.box` é o primeiro comando que altera seleção**, porque o After Effects seleciona toda camada recém-criada. Ele restaura a seleção por conta própria — mede as camadas de texto antes, devolve a seleção a elas depois — e isso está verificado em host (item 16).
+
+O que continua faltando é a versão **genérica**: um par `captureState`/`restoreState` no dispatcher, que valeria para qualquer comando futuro em vez de cada um resolver sozinho. Nenhum comando toca o CTI até agora.
 
 ### 6. Probes reais do After Effects
 
@@ -152,29 +156,51 @@ Até que isso seja medido, o produto **não promete** "mesma semente, mesmo movi
 
 **O que fecha este item:** duas camadas na mesma composição, mesma semente e mesmos parâmetros, comparando o valor da propriedade quadro a quadro. Se divergirem, a semente é controle de variação por propriedade e o rótulo precisa dizer isso; se coincidirem, o produto ganha uma promessa que hoje não pode fazer.
 
-### 16. Caixa de texto: primeira execução em host falhou, causa encontrada e corrigida
+### 16. Caixa de texto: verificada em host depois de dois defeitos medidos
 
-`PARTIAL` / execução `FAIL` corrigido, reteste `NOT RUN`.
+`IMPLEMENTED_AND_VERIFIED` num ambiente / execução `PASS`.
 
-**Medido em host — AE 26.3x87, 2026-08-26.** Duas tentativas reais devolveram `HOST_OPERATION_FAILED` em 32 ms e 28 ms.
+**Medido em AE 26.3x87, Windows 11, 2026-08-26.** O comando falhou quatro vezes em host antes de passar. As duas causas valem registro porque nenhuma delas era detectável por leitura de código ou por teste com doubles ingênuos.
 
-Causa: o template dereferencia `thisLayer.parent`, e `configureBox` escrevia as expressões **antes** de parentear a forma ao texto. Numa camada ainda sem parent isso é `null`, o After Effects rejeita a expressão no instante da atribuição, e o guarda de `expressionError` do próprio comando lançava. Parentear passou a vir antes de escrever as expressões.
+#### Defeito 1 — expressão escrita antes do parentesco
 
-O double não pegou porque só marcava `expressionError` quando a fonte batia com um `rejectSource` sintético — ele nunca modelava a avaliação. Agora modela: escrever uma expressão que contém `thisLayer.parent` numa forma sem parent produz erro, e 13 dos 15 testes falhavam antes da correção.
+O template dereferencia `thisLayer.parent`. Numa camada ainda sem parent isso é `null`, e o After Effects rejeita a expressão no instante da atribuição. Parentear passou a vir antes.
 
-Este é o primeiro comando que **cria camadas** em vez de anotar propriedades existentes, e por isso a distância entre "os testes passam" e "funciona no After Effects" é maior do que nos comandos de expressão. Os `matchName` foram sondados no host real (registro em `docs/research/after-effects-text-box-rig.md`), mas o rig montado com eles não foi.
+#### Defeito 2 — handle de propriedade envelhecido
 
-**O que está medido:** os identificadores existem e a árvore de conteúdo de uma shape layer tem a forma esperada; `sourceRectAtTime` devolve o retângulo no espaço da camada de texto, com `top` negativo, e colapsa para zero em texto vazio.
+Este é o que importa para todo o resto do projeto. Uma referência de propriedade no ExtendScript é presa ao índice dentro do grupo: **acrescentar um irmão invalida as referências já entregues**, e usá-las levanta "O objeto é inválido". O código guardava o `rect` devolvido por `addProperty` e adicionava o fill em seguida — o handle morria ali.
 
-**O que NÃO está medido, em ordem de risco:**
+Os `matchName` estiveram corretos o tempo todo. A sonda que "confirmou" os identificadores no slice anterior não reproduziu isso porque não inseria nada depois de obter a referência.
 
-1. **O alinhamento espacial.** A caixa só cai no lugar se a origem da camada de forma coincidir com a origem do texto. O comando parenteia e depois zera âncora e posição justamente para não depender da semântica de `layer.parent = x` — mas que o resultado seja o esperado é raciocínio, não medição.
-2. **A cor.** `hexToChannels` divide por 255 e entrega sRGB direto. Com gerenciamento de cor ativo no projeto, o After Effects pode interpretar esses números no espaço de trabalho e a cor exibida divergir do seletor.
-3. **A ordem do preenchimento.** O retângulo é adicionado antes do fill, que é a ordem que o próprio After Effects cria — mas se estiver invertida, a caixa fica invisível.
-4. **Undo de um passo.** Como em todos os outros comandos, `NOT RUN`.
-5. **`moveAfter` com várias camadas selecionadas**, onde os índices mudam a cada criação.
+**Regra que sai daí:** nunca segure referência de propriedade atravessando uma mutação estrutural do grupo que a contém. Releia pelo grupo.
 
-**O que fecha este item:** criar a caixa sobre uma camada de texto real e conferir posição, cor e ordem; editar o texto e ver a caixa acompanhar; reaplicar e observar no-op; desfazer com um Ctrl+Z.
+#### Defeito 3 — o comando deixava a caixa selecionada
+
+O After Effects seleciona toda camada recém-criada. Sem restaurar a seleção, a segunda aplicação via painel encontrava a **caixa** na seleção e recusava com `INVALID_SELECTION_TYPE` em vez de dar no-op. Ver também o item 5: este é o primeiro comando do projeto que altera seleção.
+
+#### Evidência da execução aprovada
+
+| Verificação | Medido |
+|---|---|
+| criação | `ok: true`, `createdCount: 1` |
+| `sourceRectAtTime` do texto | `top=-24.3809 left=0.2813 w=43.0664 h=32.1504` |
+| `Rect Size` avaliado | `[91.0664, 60.1504]` — exatamente `w+2·24`, `h+2·14` |
+| `Rect Position` avaliada | `[21.8145, -8.3057]` — exatamente o centro do bounding box |
+| `expressionError` | vazio nas duas propriedades, ambas habilitadas |
+| âncora e posição da camada | `[0, 0, 0]` e `[0, 0, 0]` |
+| ordem no grupo | `ADBE Vector Shape - Rect` antes de `ADBE Vector Graphic - Fill` |
+| ordem na timeline | caixa no índice 2, texto no índice 1 |
+| texto apagado | `Rect Size` recolheu para `[0, 0]` |
+| seleção após o comando | `[Ag]` — só o texto |
+| reaplicação sem tocar na seleção | `ok: true`, `createdCount: 0`, `unchangedCount: 1`, uma única caixa |
+
+#### O que continua `NOT RUN`
+
+- **Ctrl+Z de um passo** para este comando.
+- **Cor não-preta pelo painel.** O host foi exercitado com `[0, 0, 0]`; a conversão `hexToChannels` do painel e a interpretação sob gerenciamento de cor do projeto não foram medidas.
+- Aplicação com **várias camadas de texto selecionadas** em host real.
+- Comportamento com texto de múltiplas linhas e com `paddingX`/`paddingY` extremos.
+- macOS e AE 25.x.
 
 ## Controles automatizados existentes
 

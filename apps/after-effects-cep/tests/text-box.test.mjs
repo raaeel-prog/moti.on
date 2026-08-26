@@ -39,35 +39,67 @@ const FILHOS = {
   [MN.transform]: [MN.anchorPoint, MN.position]
 };
 
+/**
+ * Propriedade de shape.
+ *
+ * Modela duas coisas que o After Effects faz e que um double ingênuo não faz:
+ *
+ * 1. **Handles envelhecem.** Uma referência de propriedade é presa ao índice
+ *    dentro do grupo. Acrescentar um irmão invalida as referências já
+ *    entregues, e usá-las levanta "O objeto é inválido". Reler pelo grupo
+ *    devolve um handle válido de novo. Medido em AE 26.3x87 — foi a causa real
+ *    das falhas do comando.
+ * 2. **A expressão é avaliada na atribuição.** O template dereferencia
+ *    `thisLayer.parent`; escrevê-lo numa forma sem parent falha de verdade.
+ */
 class FakeProperty {
   /** `dono` e a camada de forma, para modelar a avaliacao real da expressao. */
-  constructor(matchName, dono = null) {
+  constructor(matchName, dono = null, pai = null) {
     this.matchName = matchName;
     this.dono = dono;
-    this.filhos = (FILHOS[matchName] ?? []).map((nome) => new FakeProperty(nome, dono));
+    this.pai = pai;
+    this.geracao = 0;
+    this.emitidaEm = pai ? pai.geracao : 0;
+    this.filhos = (FILHOS[matchName] ?? []).map((nome) => new FakeProperty(nome, dono, this));
     this.value = null;
     this.rejectSource = null;
     this._expression = "";
     this.expressionError = "";
   }
 
+  /** Levanta quando este handle ficou para trás de uma inserção no grupo pai. */
+  exigirHandleVivo() {
+    if (this.pai && this.emitidaEm !== this.pai.geracao) {
+      throw new Error("O objeto é inválido");
+    }
+  }
+
   get numProperties() {
+    this.exigirHandleVivo();
     return this.filhos.length;
   }
 
   property(chave) {
-    if (typeof chave === "number") return this.filhos[chave - 1] ?? null;
-    for (const filho of this.filhos) if (filho.matchName === chave) return filho;
-    return null;
+    this.exigirHandleVivo();
+    const achado =
+      typeof chave === "number"
+        ? this.filhos[chave - 1] ?? null
+        : this.filhos.find((filho) => filho.matchName === chave) ?? null;
+    // Reler revalida o handle, como no host.
+    if (achado) achado.emitidaEm = this.geracao;
+    return achado;
   }
 
   addProperty(matchName) {
-    const criado = new FakeProperty(matchName, this.dono);
+    this.exigirHandleVivo();
+    this.geracao += 1;
+    const criado = new FakeProperty(matchName, this.dono, this);
     this.filhos.push(criado);
     return criado;
   }
 
   setValue(valor) {
+    this.exigirHandleVivo();
     this.value = valor;
   }
 
@@ -76,6 +108,7 @@ class FakeProperty {
   }
 
   set expression(valor) {
+    this.exigirHandleVivo();
     this._expression = valor;
     if (valor === this.rejectSource) {
       this.expressionError = "synthetic expression error";
@@ -97,6 +130,7 @@ class FakeLayer {
     this.comp = comp;
     this.name = nome;
     this.parent = null;
+    this.selected = false;
     this.removed = false;
     this.moves = [];
   }
@@ -147,6 +181,10 @@ class FakeCompItem {
     this.layers = {
       addShape: () => {
         const forma = new FakeShapeLayer(this, "Shape Layer 1");
+        // O After Effects seleciona toda camada recem-criada. Sem modelar isto,
+        // o double nao veria a caixa entrar na selecao e a reaplicacao pelo
+        // painel continuaria falhando so no host.
+        forma.selected = true;
         this.camadas.unshift(forma);
         if (this.aoCriar) this.aoCriar(forma);
         return forma;
@@ -163,7 +201,7 @@ class FakeCompItem {
   }
 
   get selectedLayers() {
-    return this.camadas.filter((camada) => camada.selecionada === true);
+    return this.camadas.filter((camada) => camada.selected === true);
   }
 }
 
@@ -210,7 +248,7 @@ async function fixture({ camadas, semComp = false } = {}) {
 
 function texto(comp, nome, selecionada = true) {
   const camada = new FakeTextLayer(comp, nome);
-  camada.selecionada = selecionada;
+  camada.selected = selecionada;
   comp.camadas.push(camada);
   return camada;
 }
@@ -265,6 +303,41 @@ test("cria a caixa com expressões gerenciadas, parentesco e ordem abaixo do tex
   assert.deepEqual(forma.transformGroup.property(MN.position).value, [0, 0]);
   assert.deepEqual(forma.moves, ["Titulo"], "a §7 pede a caixa logo abaixo do texto");
   assert.equal(comp.camadas.indexOf(forma), comp.camadas.indexOf(textos[0]) + 1);
+});
+
+test("o double invalida handle antigo depois de inserir irmão, como o host", async () => {
+  // Pino no MODELO, não no comando. Este é o comportamento do After Effects que
+  // derrubou a caixa em host: `addProperty` invalida as referências já
+  // entregues pelo mesmo grupo. Se alguém "simplificar" o double removendo
+  // isto, a suíte volta a aceitar código que o host recusa.
+  const grupo = new FakeProperty(MN.groupContents);
+  const rect = grupo.addProperty(MN.rect);
+
+  assert.equal(rect.property(MN.rectRoundness).matchName, MN.rectRoundness);
+
+  grupo.addProperty(MN.fill);
+  assert.throws(() => rect.property(MN.rectRoundness), /inválido/);
+
+  // Reler pelo grupo devolve um handle vivo.
+  assert.doesNotThrow(() => grupo.property(MN.rect).property(MN.rectRoundness));
+});
+
+test("a seleção volta para o texto, e não fica na caixa recém-criada", async () => {
+  // Medido em host: o After Effects seleciona a camada nova, entao sem restaurar
+  // a selecao a segunda aplicacao recusava com INVALID_SELECTION_TYPE em vez de
+  // dar no-op. Este e o primeiro comando do projeto que altera selecao.
+  const { scope, comp, textos } = await comTextos("Titulo");
+
+  assert.equal(responder(scope).ok, true);
+
+  const forma = comp.camadas.find((camada) => camada instanceof FakeShapeLayer);
+  assert.equal(forma.selected, false, "a caixa nao pode ficar selecionada");
+  assert.equal(textos[0].selected, true, "o texto precisa continuar selecionado");
+
+  // E a consequencia que importa: reaplicar agora e no-op, nao erro.
+  const segunda = responder(scope);
+  assert.equal(segunda.ok, true);
+  assert.equal(segunda.data.unchangedCount, 1);
 });
 
 test("a expressão aponta pelo parent, nunca pelo nome da camada", async () => {
@@ -334,6 +407,7 @@ test("uma forma parenteada sem a expressão gerenciada não conta como caixa", a
   const { scope, comp, textos } = await comTextos("Titulo");
   const intrusa = comp.layers.addShape();
   intrusa.parent = textos[0];
+  intrusa.selected = false;
 
   const resposta = responder(scope);
 
@@ -378,7 +452,7 @@ test("uma falha no meio remove tudo o que já tinha sido criado", async () => {
 test("selecionar algo que não é texto falha com o código próprio", async () => {
   const { scope, comp } = await comTextos("Titulo");
   const forma = comp.layers.addShape();
-  forma.selecionada = true;
+  forma.selected = true;
 
   const resposta = responder(scope);
 

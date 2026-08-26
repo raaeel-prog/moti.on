@@ -65,6 +65,8 @@ declare class LayerCollection {
 
 declare class Layer {
   name: string;
+  /** Selecao da camada. O After Effects seleciona toda camada recem-criada. */
+  selected: boolean;
   /**
    * Camada pai. Atribuir aqui cria o vinculo de parentesco; o rig de caixa
    * reescreve ancora e posicao logo depois, entao nao depende de a atribuicao

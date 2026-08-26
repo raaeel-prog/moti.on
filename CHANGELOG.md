@@ -107,19 +107,33 @@ Se a montagem falhasse **depois** de `addShape()`, a camada meio-construída fic
 
 `anchorMode` e `multilineMode` continuam **bloqueados por definição de produto**, não por implementação: o spec lista os inputs mas não diz o que os modos são. Para uma caixa que já centraliza no bounding box, "modo de ancoragem" pode ser três features diferentes.
 
-#### A primeira execução em host falhou — e por quê
+#### Quatro falhas em host antes de passar
 
-Duas tentativas reais em AE 26.3x87 devolveram `HOST_OPERATION_FAILED` em 32 ms e 28 ms.
+Nenhuma das duas causas era detectável lendo o código, e nenhuma foi pega pelos 15 testes — porque o double era otimista demais. Cada correção veio acompanhada de uma correção **no modelo**, para a suíte parar de aceitar o que o host recusa.
 
-A causa: o template dereferencia `thisLayer.parent`, e eu escrevia as expressões **antes** de parentear a forma ao texto. Numa camada ainda sem parent isso é `null`, o After Effects rejeita a expressão no instante da atribuição, e o guarda de `expressionError` do próprio comando lançava. Parentear agora vem primeiro. Não é ordem por estilo: é a única que funciona.
+**1. Expressão escrita antes do parentesco.** O template dereferencia `thisLayer.parent`; numa camada sem parent isso é `null` e o After Effects rejeita a expressão na atribuição. Parentear passou a vir antes. O double agora avalia: escrever uma expressão com `thisLayer.parent` numa forma sem parent falha.
 
-O double não pegou porque só marcava `expressionError` quando a fonte batia com um `rejectSource` sintético — ele nunca modelava a avaliação. Agora modela: escrever uma expressão que contém `thisLayer.parent` numa forma sem parent produz erro. Com o double corrigido, **13 dos 15 testes falhavam** antes da correção do comando.
+**2. Handle de propriedade envelhecido — a que importa para o projeto inteiro.** Uma referência de propriedade no ExtendScript é presa ao índice dentro do grupo: acrescentar um irmão **invalida as referências já entregues**. O código guardava o `rect` devolvido por `addProperty` e adicionava o fill em seguida; o handle morria ali, e todo uso levantava "O objeto é inválido".
 
-#### Status honesto
+Os `matchName` estiveram certos o tempo todo — a sonda do slice anterior não reproduziu o problema porque não inseria nada depois de obter a referência. A regra que sai daí vale para todo comando futuro: **nunca segure referência de propriedade atravessando uma mutação estrutural do grupo que a contém.** O double modela isso com gerações, e há um teste que pina o modelo.
 
-`PARTIAL`, execução `FAIL` corrigido e **reteste pendente**. O comando falhou em host, a causa foi encontrada e corrigida, mas a execução pós-correção ainda não aconteceu — então ele não pode ser chamado de verificado.
+**3. O comando deixava a caixa selecionada.** O After Effects seleciona toda camada nova, então a segunda aplicação encontrava a *caixa* na seleção e recusava com `INVALID_SELECTION_TYPE` em vez de dar no-op. O comando agora devolve a seleção ao texto. Este é o primeiro comando do projeto que altera seleção, e o item 5 de `HOST_LIMITATIONS.md` já previa que o gate valeria a partir dele.
 
-O que continua sem medição: o alinhamento espacial da caixa, a interpretação da cor sob gerenciamento de cor, a ordem do preenchimento, o Undo de um passo e o `moveAfter` com várias camadas. Item 16 de `docs/HOST_LIMITATIONS.md`.
+#### Verificado em host real — After Effects 26.3x87, Windows 11
+
+| Verificação | Medido |
+|---|---|
+| criação | `ok: true`, `createdCount: 1` |
+| `Rect Size` avaliado | `[91.0664, 60.1504]` — exatamente `w+2·24`, `h+2·14` |
+| `Rect Position` avaliada | `[21.8145, -8.3057]` — exatamente o centro do bounding box |
+| `expressionError` | vazio nas duas, ambas habilitadas |
+| âncora e posição da camada | `[0, 0, 0]` e `[0, 0, 0]` |
+| ordem na timeline | caixa logo abaixo do texto |
+| texto apagado | recolheu para `[0, 0]` |
+| seleção após o comando | só o texto |
+| reaplicação | no-op, uma única caixa |
+
+Status: `IMPLEMENTED_AND_VERIFIED` nesse ambiente. `NOT RUN`: Ctrl+Z de um passo, cor não-preta pelo painel (o host foi exercitado com preto, e a conversão `hexToChannels` não foi medida), várias camadas selecionadas, multilinha, macOS e AE 25.x.
 
 ### CHMS-008 — navegação por ladrilhos, no lugar de uma aba por ferramenta
 

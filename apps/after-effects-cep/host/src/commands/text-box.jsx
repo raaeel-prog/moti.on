@@ -276,8 +276,24 @@
     var inner = group.property(MN.groupContents);
     // Retangulo antes do preenchimento: dentro de um grupo o fill pinta as
     // formas acima dele, que e a ordem que o proprio After Effects cria.
-    var rect = inner.addProperty(MN.rect);
-    var fill = inner.addProperty(MN.fill);
+    inner.addProperty(MN.rect);
+    inner.addProperty(MN.fill);
+
+    // RELER AS DUAS REFERENCIAS DEPOIS DE TODAS AS INSERCOES.
+    //
+    // Uma referencia de propriedade no ExtendScript e um handle preso ao indice
+    // dentro do grupo. Acrescentar um irmao invalida os handles ja obtidos: o
+    // `rect` devolvido por `addProperty` deixa de valer assim que o fill entra,
+    // e qualquer uso dele levanta "O objeto e invalido". Foi essa a causa das
+    // falhas medidas em AE 26.3x87 — os matchName sempre estiveram corretos.
+    //
+    // A regra geral: nunca segure referencia de propriedade atravessando uma
+    // mutacao estrutural do grupo que a contem.
+    var rect = inner.property(MN.rect);
+    var fill = inner.property(MN.fill);
+    if (!rect || !fill) {
+      throw new Error("After Effects nao devolveu o retangulo e o preenchimento da caixa.");
+    }
 
     rect.property(MN.rectRoundness).setValue(args.roundness);
 
@@ -366,6 +382,29 @@
           throw rollbackError;
         }
         throw applyError;
+      }
+
+      // RESTAURA A SELECAO.
+      //
+      // O After Effects seleciona toda camada recem-criada. Sem devolver a
+      // selecao ao texto, a proxima aplicacao veria a CAIXA na selecao e
+      // recusaria com INVALID_SELECTION_TYPE — medido em host. Este e o
+      // primeiro comando que altera selecao, e o item 5 de
+      // docs/HOST_LIMITATIONS.md ja previa que o gate valeria a partir dele.
+      //
+      // Fora do try/catch de rollback de proposito: a caixa ja existe e esta
+      // correta, e falhar em reselecionar nao justifica desfazer o trabalho.
+      try {
+        for (i = 0; i < created.length; i += 1) {
+          var criada = created[i];
+          if (criada) criada.selected = false;
+        }
+        for (i = 0; i < prepared.items.length; i += 1) {
+          var restaurado = prepared.items[i];
+          if (restaurado) /** @type {Layer} */ (restaurado.textLayer).selected = true;
+        }
+      } catch (selectionError) {
+        // Selecao e conveniencia, nao resultado. O comando continua bem-sucedido.
       }
 
       return {
