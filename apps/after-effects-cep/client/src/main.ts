@@ -158,6 +158,58 @@ const DEFAULT_PARENT: ParentDraft = {
   chainMode: "target"
 };
 
+type CutRangeMode =
+  | "beforeCti"
+  | "afterCti"
+  | "insideWorkArea"
+  | "outsideWorkArea"
+  | "betweenMarkers";
+
+interface CutKeysDraft {
+  rangeMode: CutRangeMode;
+  startTime: number;
+  endTime: number;
+  includeBoundary: boolean;
+}
+
+/**
+ * "Depois do cursor" é o corte mais comum e não pede nenhum número: a
+ * ferramenta abre pronta para uso.
+ *
+ * Os tempos nascem zerados porque o host exige que campos inativos sejam
+ * canônicos — ele recusa valores fora do modo em vez de ignorá-los em silêncio,
+ * e o painel precisa mandar exatamente zero quando o modo não os usa.
+ */
+const DEFAULT_CUT_KEYS: CutKeysDraft = {
+  rangeMode: "afterCti",
+  startTime: 0,
+  endTime: 0,
+  includeBoundary: false
+};
+
+type DelayOrder = "timeline" | "selection" | "name" | "distance" | "random";
+
+interface DelayDraft {
+  delayFrames: number;
+  order: DelayOrder;
+  reverse: boolean;
+  randomSeed: number;
+  originX: number;
+  originY: number;
+  shiftMode: "layerStart" | "keyframes";
+}
+
+/** Dois quadros por passo na ordem do timeline: a cascata clássica. */
+const DEFAULT_DELAY: DelayDraft = {
+  delayFrames: 2,
+  order: "timeline",
+  reverse: false,
+  randomSeed: 0,
+  originX: 0,
+  originY: 0,
+  shiftMode: "layerStart"
+};
+
 type LayerScope = "selected" | "composition";
 
 interface RenameDraft {
@@ -297,7 +349,9 @@ type ToolId =
   | "createNull"
   | "flip"
   | "rename"
-  | "reverseOrder";
+  | "reverseOrder"
+  | "cutKeys"
+  | "delay";
 
 /**
  * Uma ferramenta do navegador.
@@ -325,6 +379,13 @@ interface ToolDefinition {
    * declaram o gancho, e o botão Atualizar não aparece para elas.
    */
   load?(): Promise<void>;
+  /**
+   * Rótulo do botão de recarga. Existe porque `load` serve a duas coisas
+   * diferentes: o Parentesco relê a lista de camadas, e as ferramentas com
+   * prévia recalculam a prévia. Um rótulo só para os dois mentia em quatro
+   * das cinco ferramentas.
+   */
+  loadLabelKey?: MessageKey;
 }
 
 const TOOLS: readonly ToolDefinition[] = [
@@ -401,6 +462,34 @@ const TOOLS: readonly ToolDefinition[] = [
     }
   },
   {
+    id: "cutKeys",
+    nameKey: "tool.cutKeys.name",
+    descriptionKey: "tool.cutKeys.description",
+    render: renderCutKeys,
+    disabledReason: cutKeysDisabledReason,
+    apply: applyCutKeys,
+    load: refreshCutKeysPreview,
+    reset: () => {
+      state.cutKeys = { ...DEFAULT_CUT_KEYS };
+      state.cutKeysPreview = null;
+      state.previewError = null;
+    }
+  },
+  {
+    id: "delay",
+    nameKey: "tool.delay.name",
+    descriptionKey: "tool.delay.description",
+    render: renderDelay,
+    disabledReason: delayDisabledReason,
+    apply: applyDelay,
+    load: refreshDelayPreview,
+    reset: () => {
+      state.delay = { ...DEFAULT_DELAY };
+      state.delayPreview = null;
+      state.previewError = null;
+    }
+  },
+  {
     id: "flip",
     nameKey: "tool.flip.name",
     descriptionKey: "tool.flip.description",
@@ -430,6 +519,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: parentDisabledReason,
     apply: applyParent,
     load: loadLayers,
+    loadLabelKey: "action.refreshLayers",
     reset: () => {
       state.parent = { ...DEFAULT_PARENT };
     }
@@ -473,9 +563,13 @@ const state: {
   flip: FlipDraft;
   rename: RenameDraft;
   reverseOrder: ReverseOrderDraft;
+  cutKeys: CutKeysDraft;
+  delay: DelayDraft;
   /** Prévias em cache; `null` enquanto a primeira não voltou. */
   renamePreview: RenamePreviewData | null;
   reversePreview: ReversePreviewData | null;
+  cutKeysPreview: CutKeysPreviewData | null;
+  delayPreview: DelayPreviewData | null;
   /** Motivo da última prévia recusada, mostrado dentro da view. */
   previewError: string | null;
   /** Cache da lista de camadas; `null` enquanto nunca foi lida. */
@@ -499,8 +593,12 @@ const state: {
   flip: { ...DEFAULT_FLIP },
   rename: { ...DEFAULT_RENAME },
   reverseOrder: { ...DEFAULT_REVERSE_ORDER },
+  cutKeys: { ...DEFAULT_CUT_KEYS },
+  delay: { ...DEFAULT_DELAY },
   renamePreview: null,
   reversePreview: null,
+  cutKeysPreview: null,
+  delayPreview: null,
   previewError: null,
   layers: null,
   layersTotal: 0,
@@ -652,13 +750,13 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
     if (tool.load) {
       regions.actions.appendChild(
         button(document, {
-          label: i18n.t("action.refreshLayers"),
+          label: i18n.t(tool.loadLabelKey ?? "action.refreshPreview"),
           ...(state.busy
             ? { disabled: true as const, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
             : { disabled: false as const }),
           title: state.busy
             ? state.busyReason ?? i18n.t("status.initializing")
-            : i18n.t("action.refreshLayers"),
+            : i18n.t(tool.loadLabelKey ?? "action.refreshPreview"),
           onClick: () => void tool.load?.()
         })
       );
@@ -1852,6 +1950,471 @@ function renderPreviewRows(
       hint(document, i18n.t("message.previewMore", { count: total - PREVIEW_MAX_ROWS }))
     );
   }
+}
+
+interface CutKeysPreviewData {
+  totalCount: number;
+  propertyCount: number;
+  properties: Array<{ layerName: string; propertyName: string; keyCount: number }>;
+}
+
+interface DelayPreviewData {
+  targetCount: number;
+  targets: Array<{ name: string; offsetFrames: number }>;
+}
+
+function isCutKeysPreviewData(value: unknown): value is CutKeysPreviewData {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    Number.isInteger(record.totalCount) &&
+    Number.isInteger(record.propertyCount) &&
+    Array.isArray(record.properties) &&
+    record.properties.every((item) => {
+      if (typeof item !== "object" || item === null) return false;
+      const entrada = item as Record<string, unknown>;
+      return (
+        typeof entrada.layerName === "string" &&
+        typeof entrada.propertyName === "string" &&
+        Number.isInteger(entrada.keyCount)
+      );
+    })
+  );
+}
+
+function isDelayPreviewData(value: unknown): value is DelayPreviewData {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    Number.isInteger(record.targetCount) &&
+    Array.isArray(record.targets) &&
+    record.targets.every((item) => {
+      if (typeof item !== "object" || item === null) return false;
+      const entrada = item as Record<string, unknown>;
+      return typeof entrada.name === "string" && Number.isFinite(entrada.offsetFrames);
+    })
+  );
+}
+
+/** Argumentos do CutKeys, com os tempos canônicos que o host exige. */
+function cutKeysArgs(draft: CutKeysDraft, previewOnly: boolean): Record<string, unknown> {
+  const entreTempos = draft.rangeMode === "betweenMarkers";
+  return {
+    rangeMode: draft.rangeMode,
+    startTime: entreTempos ? draft.startTime : 0,
+    endTime: entreTempos ? draft.endTime : 0,
+    includeBoundary: draft.includeBoundary,
+    previewOnly
+  };
+}
+
+function delayArgs(draft: DelayDraft): Record<string, unknown> {
+  return {
+    delayFrames: draft.delayFrames,
+    order: draft.order,
+    reverse: draft.reverse,
+    randomSeed: draft.randomSeed,
+    spatialOrigin: [draft.originX, draft.originY],
+    shiftMode: draft.shiftMode
+  };
+}
+
+async function refreshCutKeysPreview(): Promise<void> {
+  const fiacao = wiringAtual;
+  if (!fiacao) return;
+
+  const sequencia = previewSequence + 1;
+  previewSequence = sequencia;
+
+  const response = await fiacao.client.execute<CutKeysPreviewData>(
+    "ae.keys.cut.preview",
+    cutKeysArgs(state.cutKeys, true)
+  );
+  if (sequencia !== previewSequence) return;
+
+  state.cutKeysPreview = response.ok && isCutKeysPreviewData(response.data) ? response.data : null;
+  state.previewError = response.ok ? null : describeFailure(fiacao.i18n, response);
+  fiacao.shell.rerender();
+}
+
+async function refreshDelayPreview(): Promise<void> {
+  const fiacao = wiringAtual;
+  if (!fiacao) return;
+
+  const sequencia = previewSequence + 1;
+  previewSequence = sequencia;
+
+  const response = await fiacao.client.execute<DelayPreviewData>(
+    "ae.keys.delay.preview",
+    delayArgs(state.delay)
+  );
+  if (sequencia !== previewSequence) return;
+
+  state.delayPreview = response.ok && isDelayPreviewData(response.data) ? response.data : null;
+  state.previewError = response.ok ? null : describeFailure(fiacao.i18n, response);
+  fiacao.shell.rerender();
+}
+
+function renderCutKeys(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.cutKeys;
+  const confirma = (mutacao: () => void) => {
+    mutacao();
+    shell.rerender();
+    void refreshCutKeysPreview();
+  };
+
+  regions.content.appendChild(notice(document, i18n.t("message.cutKeysInstructions")));
+  if (state.context && !state.context.isComposition) {
+    regions.content.appendChild(notice(document, i18n.t("message.cutKeysNoActiveComp"), "warning"));
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("cutKeys.section.range")));
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "cutkeys-range",
+      label: i18n.t("cutKeys.rangeMode"),
+      value: draft.rangeMode,
+      disabled: state.busy,
+      options: [
+        { value: "beforeCti", label: i18n.t("cutKeys.rangeMode.beforeCti") },
+        { value: "afterCti", label: i18n.t("cutKeys.rangeMode.afterCti") },
+        { value: "insideWorkArea", label: i18n.t("cutKeys.rangeMode.insideWorkArea") },
+        { value: "outsideWorkArea", label: i18n.t("cutKeys.rangeMode.outsideWorkArea") },
+        { value: "betweenMarkers", label: i18n.t("cutKeys.rangeMode.betweenMarkers") }
+      ],
+      onChange: (value) =>
+        confirma(() => {
+          state.cutKeys.rangeMode = value as CutRangeMode;
+        })
+    })
+  );
+
+  // De/Até só existem no modo que os usa. O host recusa valores fora do modo,
+  // então mostrá-los sempre convidaria a preencher algo que seria rejeitado.
+  if (draft.rangeMode === "betweenMarkers") {
+    const tempos: ReadonlyArray<{ campo: "startTime" | "endTime"; rotulo: MessageKey }> = [
+      { campo: "startTime", rotulo: "cutKeys.startTime" },
+      { campo: "endTime", rotulo: "cutKeys.endTime" }
+    ];
+    for (const { campo, rotulo } of tempos) {
+      regions.content.appendChild(
+        numberField(document, {
+          id: `cutkeys-${campo}`,
+          label: i18n.t(rotulo),
+          value: draft[campo],
+          min: -10_800,
+          max: 10_800,
+          step: 0.1,
+          unit: i18n.t("cutKeys.unit.seconds"),
+          disabled: state.busy,
+          onCommit: (value) =>
+            confirma(() => {
+              state.cutKeys[campo] = value;
+            })
+        })
+      );
+    }
+  }
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "cutkeys-boundary",
+      label: i18n.t("cutKeys.includeBoundary"),
+      description: i18n.t("cutKeys.includeBoundary.description"),
+      checked: draft.includeBoundary,
+      disabled: state.busy,
+      onChange: (checked) =>
+        confirma(() => {
+          state.cutKeys.includeBoundary = checked;
+        })
+    })
+  );
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("cutKeys.section.preview")));
+
+  if (state.previewError) {
+    regions.content.appendChild(notice(document, state.previewError, "warning"));
+    return;
+  }
+  const previa = state.cutKeysPreview;
+  if (!previa) {
+    regions.content.appendChild(hint(document, i18n.t("status.previewing")));
+    return;
+  }
+
+  renderPreviewRows(
+    regions,
+    i18n,
+    previa.properties.map((item) => ({
+      antes: `${item.layerName} › ${item.propertyName}`,
+      depois: String(item.keyCount)
+    })),
+    previa.propertyCount
+  );
+  regions.content.appendChild(
+    hint(
+      document,
+      previa.totalCount === 0
+        ? i18n.t("message.cutKeysNothing")
+        // Prévia fala no futuro. Reaproveitar a mensagem de sucesso aqui
+        // dizia que os keyframes já tinham saído, antes de qualquer clique.
+        : i18n.t("message.cutKeysWillRemove", { count: previa.totalCount })
+    )
+  );
+}
+
+function cutKeysDisabledReason(i18n: I18n): string | null {
+  if (state.busy) {
+    return state.busyReason ?? i18n.t("status.initializing");
+  }
+  if (!state.context?.isComposition) {
+    return i18n.t("message.cutKeysNoActiveComp");
+  }
+  if (state.previewError) {
+    return state.previewError;
+  }
+  if (state.cutKeysPreview && state.cutKeysPreview.totalCount === 0) {
+    return i18n.t("message.cutKeysNothing");
+  }
+  return null;
+}
+
+async function applyCutKeys(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.cutKeysNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingCutKeys"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingCutKeys"));
+
+  const response = await client.execute<CutKeysPreviewData>(
+    "ae.keys.cut",
+    cutKeysArgs(state.cutKeys, false),
+    { preserveSelection: true }
+  );
+  logger.recordResponse("ae.keys.cut", response);
+
+  if (!response.ok) {
+    reportFailure(shell, i18n, response);
+    setBusy(shell, false);
+    return;
+  }
+
+  state.lastError = null;
+  const removidos = isCutKeysPreviewData(response.data) ? response.data.totalCount : 0;
+  shell.setStatus(i18n.t("message.cutKeysApplied", { count: removidos }), "ok");
+  setBusy(shell, false);
+
+  await refreshCutKeysPreview();
+}
+
+function renderDelay(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.delay;
+  const confirma = (mutacao: () => void) => {
+    mutacao();
+    shell.rerender();
+    void refreshDelayPreview();
+  };
+
+  regions.content.appendChild(notice(document, i18n.t("message.delayInstructions")));
+  if (state.context && !state.context.isComposition) {
+    regions.content.appendChild(notice(document, i18n.t("message.delayNoActiveComp"), "warning"));
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("delay.section.amount")));
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "delay-frames",
+      label: i18n.t("delay.delayFrames"),
+      value: draft.delayFrames,
+      min: -100_000,
+      max: 100_000,
+      step: 1,
+      unit: i18n.t("delay.unit.frames"),
+      disabled: state.busy,
+      onCommit: (value) =>
+        confirma(() => {
+          state.delay.delayFrames = value;
+        })
+    })
+  );
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "delay-shift-mode",
+      label: i18n.t("delay.shiftMode"),
+      value: draft.shiftMode,
+      disabled: state.busy,
+      options: [
+        { value: "layerStart", label: i18n.t("delay.shiftMode.layerStart") },
+        { value: "keyframes", label: i18n.t("delay.shiftMode.keyframes") }
+      ],
+      onChange: (value) =>
+        confirma(() => {
+          state.delay.shiftMode = value === "keyframes" ? "keyframes" : "layerStart";
+        })
+    })
+  );
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("delay.section.order")));
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "delay-order",
+      label: i18n.t("delay.order"),
+      value: draft.order,
+      disabled: state.busy,
+      options: [
+        { value: "timeline", label: i18n.t("delay.order.timeline") },
+        { value: "selection", label: i18n.t("delay.order.selection") },
+        { value: "name", label: i18n.t("delay.order.name") },
+        { value: "distance", label: i18n.t("delay.order.distance") },
+        { value: "random", label: i18n.t("delay.order.random") }
+      ],
+      onChange: (value) =>
+        confirma(() => {
+          state.delay.order = value as DelayOrder;
+        })
+    })
+  );
+
+  // Semente e origem só aparecem no critério que as usa.
+  if (draft.order === "random") {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "delay-seed",
+        label: i18n.t("delay.randomSeed"),
+        value: draft.randomSeed,
+        min: 0,
+        max: 2_147_483_647,
+        step: 1,
+        disabled: state.busy,
+        onCommit: (value) =>
+          confirma(() => {
+            state.delay.randomSeed = value;
+          })
+      })
+    );
+  }
+  if (draft.order === "distance") {
+    const origens: ReadonlyArray<{ campo: "originX" | "originY"; rotulo: MessageKey }> = [
+      { campo: "originX", rotulo: "delay.originX" },
+      { campo: "originY", rotulo: "delay.originY" }
+    ];
+    for (const { campo, rotulo } of origens) {
+      regions.content.appendChild(
+        numberField(document, {
+          id: `delay-${campo}`,
+          label: i18n.t(rotulo),
+          value: draft[campo],
+          min: -100_000,
+          max: 100_000,
+          step: 10,
+          disabled: state.busy,
+          onCommit: (value) =>
+            confirma(() => {
+              state.delay[campo] = value;
+            })
+        })
+      );
+    }
+  }
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "delay-reverse",
+      label: i18n.t("delay.reverse"),
+      checked: draft.reverse,
+      disabled: state.busy,
+      onChange: (checked) =>
+        confirma(() => {
+          state.delay.reverse = checked;
+        })
+    })
+  );
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("delay.section.preview")));
+
+  if (state.previewError) {
+    regions.content.appendChild(notice(document, state.previewError, "warning"));
+    return;
+  }
+  const previa = state.delayPreview;
+  if (!previa) {
+    regions.content.appendChild(hint(document, i18n.t("status.previewing")));
+    return;
+  }
+
+  renderPreviewRows(
+    regions,
+    i18n,
+    previa.targets.map((alvo) => ({
+      antes: alvo.name,
+      depois: `${alvo.offsetFrames >= 0 ? "+" : ""}${alvo.offsetFrames} ${i18n.t("delay.unit.frames")}`
+    })),
+    previa.targetCount
+  );
+}
+
+function delayDisabledReason(i18n: I18n): string | null {
+  if (state.busy) {
+    return state.busyReason ?? i18n.t("status.initializing");
+  }
+  if (!state.context?.isComposition) {
+    return i18n.t("message.delayNoActiveComp");
+  }
+  return state.previewError;
+}
+
+async function applyDelay(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.delayNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingDelay"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingDelay"));
+
+  const response = await client.execute<DelayPreviewData>("ae.keys.delay", delayArgs(state.delay), {
+    preserveSelection: true
+  });
+  logger.recordResponse("ae.keys.delay", response);
+
+  if (!response.ok) {
+    reportFailure(shell, i18n, response);
+    setBusy(shell, false);
+    return;
+  }
+
+  state.lastError = null;
+  const alvos = isDelayPreviewData(response.data) ? response.data.targetCount : 0;
+  shell.setStatus(i18n.t("message.delayApplied", { count: alvos }), "ok");
+  setBusy(shell, false);
+
+  await refreshDelayPreview();
 }
 
 function renderRename(regions: RenderRegions, i18n: I18n): void {

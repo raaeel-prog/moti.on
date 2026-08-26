@@ -88,6 +88,61 @@ Status: `IMPLEMENTED_AND_VERIFIED` no ambiente acima.
 
 **Pendência de produto registrada:** a documentação diz que o offset controla o *valor inicial* do wiggle, mas o identificador da camada continua na composição da semente. Não foi medido se duas camadas com a mesma semente produzem movimento idêntico — pode ser que a semente iguale a fase e não a trajetória. Até isso ser medido, o produto **não promete "mesma semente, mesmo movimento" entre camadas**; o texto da interface fala apenas do comportamento por propriedade.
 
+### CHMS-016 — as quatro ferramentas no painel, e o painel finalmente verificado
+
+Renomear, Inverter ordem, Cortar keys e Atrasar entram na interface. Com elas o navegador chega a
+**doze ferramentas**, e o painel deixa de ser código que passa no gate para virar coisa medida.
+
+#### Prévia antes de mutar
+
+A §7 exige do Rename que o preview liste exatamente os nomes finais. As quatro seguem o mesmo
+padrão, e isso pediu infraestrutura compartilhada:
+
+- **`textField`** no `ui-core` — o painel não tinha campo de texto livre. Confirma em `change` e
+  não em `input`: cada confirmação dispara uma prévia que fala com o host, e reagir a cada tecla
+  daria uma ida ao host por caractere digitado.
+- **`hint`**, linha auxiliar discreta. Não é `notice`: aviso é caixa com peso visual, e
+  "mais 12 camadas" é rodapé. Usar aviso para isso gastaria a atenção que os avisos de verdade
+  precisam ter.
+- **Contador de sequência que descarta prévias fora de ordem.** Os campos confirmam rápido e uma
+  prévia pedida antes pode voltar depois; sem isso a lista mostraria o resultado de uma regra já
+  trocada, e a pessoa aplicaria confiando no que está vendo.
+- **Teto de 40 linhas** com rodapé de contagem: uma composição grande geraria centenas de nós a
+  cada confirmação de campo.
+
+#### O painel exercitado pela interface, não pelo dispatcher
+
+Até aqui todo comando tinha sido verificado por despacho direto. O `.debug` — que declara a porta
+do inspetor remoto — só é instalado sob `-EnableDebugMode`, e as instalações recentes rodaram sem
+a flag; o painel carregava, mas era mudo para inspeção. Com o arquivo no lugar, o painel foi
+aberto por `app.executeCommand(app.findMenuCommandId("Moti.on"))` e percorrido inteiro.
+
+| Verificação | Medido |
+|---|---|
+| grade | 12 ladrilhos, todos com ícone SVG |
+| abrir e voltar | as 12 desenham título, campos e ações, e devolvem a grade |
+| prévias | quatro ferramentas montaram lista com dados vindos do host |
+| aplicação pela interface | Inverter ordem previu `Titulo, alpha, beta` e produziu exatamente isso; Renomear previu `P_Titulo, P_alpha, P_beta` e renomeou as três |
+| largura | `compact` em 280 px, `standard` em 480 px, sem rolagem horizontal |
+| exceções | nenhuma |
+
+#### Quatro defeitos que só a interface revelou
+
+Nenhum apareceria em teste com double, porque nenhum é lógica — são contrato e texto.
+
+1. **`before`/`after` da prévia de reverse eram registros, não strings.** Eu tipei `string[]`; o
+   guarda rejeitaria a prévia em silêncio e a lista ficaria eternamente em "calculando".
+2. **`Atualizar lista` aparecia em quatro ferramentas que não têm lista.** O gancho de carga serve
+   a duas coisas diferentes, e um rótulo só mentia em quatro das cinco.
+3. **O rodapé da prévia do Cortar keys falava no passado**, dizendo que os keyframes já tinham
+   saído antes de qualquer clique.
+4. **O Espelhar tinha um campo chamado `Aplicar`**, idêntico ao botão ao lado.
+
+#### O que continua `NOT RUN`
+
+Teclado, foco e leitor de tela; larguras 360 e 720; e a aplicação pela interface das outras dez
+ferramentas — só duas foram clicadas até o fim. Item 20 de `docs/HOST_LIMITATIONS.md`.
+
 ### CHMS-015 — Flip (`ae.layer.flip`), fechando os três comandos
 
 Terceiro e último comando do CHMS-015. O critério de aceite é curto: flip duplo retorna ao estado

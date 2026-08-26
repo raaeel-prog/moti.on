@@ -32,7 +32,8 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | Premiere: transações/Undo | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Ordem `lockedAccess` → `executeTransaction` coberta por doubles |
 | Premiere: exportação de diagnóstico | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Picker e `File.write` documentados; host real não executado |
 | CHMS-009: núcleo puro de metadata de rigs | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | 24/24 testes focados; sem integração `Layer.comment`, filesystem ou Undo real |
-| UI responsiva e visual | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` parcial | Captura/interação no AE em largura compacta próxima de 280 px; matriz restante `NOT RUN` |
+| UI responsiva e visual | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: as 12 ferramentas abrem pela grade, desenham campos e prévias com dados reais do host, e voltam. Sem exceção e sem rolagem horizontal em 280 e 480 px (item 20) |
+| After Effects: CHMS-016 pelo painel | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Prévia e aplicação de Renomear e Inverter ordem executadas pela interface, não pelo dispatcher: a prévia previu e o apply produziu exatamente aquilo (item 20) |
 | Acessibilidade no runtime | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Sem teste real de teclado, foco ou leitor de tela nos hosts |
 | Convivência da instalação dev com outros hosts CEP | — | `INCONCLUSIVO` | Premiere 26.3.2.2 falhou uma vez e abriu outra com a extensão presente; sem causa estabelecida (item 14) |
 | `npm.cmd run check` integrado | — | `PASS` | Gate final: lint, typecheck, build, validate, 326/326 testes e skills validate |
@@ -309,6 +310,52 @@ exatamente o modo de falha deste comando.
 
 - **O painel.** Nenhum dos três comandos do CHMS-015 foi exercitado pela interface.
 - Ctrl+Z de um passo; macOS; AE 25.x.
+
+### 20. O painel, finalmente exercitado pela interface
+
+`IMPLEMENTED_AND_VERIFIED` num ambiente / execução `PASS`.
+
+Até aqui todos os comandos tinham sido exercitados **pelo dispatcher**, nunca pela interface. Essa
+lacuna já havia cobrado o preço uma vez: o painel tipava `before`/`after` da prévia de
+reverse-order como `string[]` quando o host devolve registros, e o guarda rejeitava a prévia em
+silêncio.
+
+#### Por que o painel não abria para inspeção
+
+O `.debug` — o arquivo que declara a porta 8091 do inspetor remoto — só é instalado sob
+`-EnableDebugMode`, e todas as instalações recentes rodaram sem a flag. O `PlayerDebugMode` do
+registro continuava ligado, então a extensão carregava normalmente; só o inspetor ficava mudo.
+
+O painel foi aberto por `app.executeCommand(app.findMenuCommandId("Moti.on"))`, sem depender de
+clique manual.
+
+#### Medido em AE 26.3x87
+
+| Verificação | Medido |
+|---|---|
+| grade | 12 ladrilhos, todos com ícone SVG — nenhum caiu no fallback `?` |
+| abrir e voltar | as 12 ferramentas desenham título, campos e ações, e devolvem a grade |
+| prévias | Renomear, Inverter ordem, Cortar keys e Atrasar montaram lista com dados vindos do host |
+| `Aplicar` desabilitado | Renomear com `0 de 3 mudam` e Parentesco sem alvo — os dois com motivo no tooltip |
+| aplicação pela interface | Inverter ordem previu `Titulo, alpha, beta` e produziu exatamente isso; Renomear previu `P_Titulo, P_alpha, P_beta` e renomeou as três |
+| largura | `compact` em 280 px e `standard` em 480 px, sem rolagem horizontal |
+| exceções | nenhuma |
+
+#### Três defeitos que só a passada pela interface revelou
+
+1. **`Atualizar lista` aparecia em quatro ferramentas que não têm lista.** O gancho de carga serve
+   a duas coisas — o Parentesco relê camadas, as outras recalculam a prévia — e um rótulo só
+   mentia em quatro das cinco. Agora o rótulo é por ferramenta.
+2. **O rodapé da prévia do Cortar keys falava no passado**: reaproveitava a mensagem de sucesso e
+   dizia que os keyframes já tinham saído, antes de qualquer clique.
+3. **O Espelhar tinha um campo chamado `Aplicar`**, idêntico ao botão de ação ao lado.
+
+#### O que continua `NOT RUN`
+
+- Teclado, foco e leitor de tela — a matriz de acessibilidade da §22 continua sem execução.
+- Largura 360 e 720 px; macOS; AE 25.x.
+- Aplicação pela interface das outras dez ferramentas: só Renomear e Inverter ordem foram
+  clicadas até o fim.
 
 ## Controles automatizados existentes
 

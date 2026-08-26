@@ -144,6 +144,7 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
     "flip.axis.horizontal",
     "flip.axis.vertical",
     "reverse.preserveTrackMattes",
+    "cutKeys.unit.seconds",
     "context.compositionValue",
     "value.none",
     "error.withCode"

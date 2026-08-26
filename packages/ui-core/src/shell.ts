@@ -38,6 +38,8 @@ const ICON_PATHS: Record<string, string> = {
   flip: "M9 2.5v13M3 5.5h3.5v7H3zM15 5.5h-3.5v7H15z",
   rename: "M3 5.5h7M3 9h9M3 12.5h5M12 3.5l2.5 2.5-5 5-2.5.5.5-2.5z",
   reverseOrder: "M3.5 4.5h11M3.5 9h11M3.5 13.5h11M12 2.5l2 2-2 2M6 15.5l-2-2 2-2",
+  cutKeys: "M9 2.5v13M5 6l-2.5 3 2.5 3M13 6l2.5 3-2.5 3",
+  delay: "M2.5 5h4M2.5 9h7M2.5 13h10M13 3.5l2.5 2.5-2.5 2.5",
   system: "M9 2.5l6 3.5v5l-6 3.5-6-3.5v-5zM6.5 8v2M11.5 8v2",
   diagnostics: "M3.5 4.5h11M3.5 9h11M3.5 13.5h7"
 };
@@ -56,6 +58,8 @@ const ICON_FALLBACKS: Record<string, string> = {
   flip: "><",
   rename: "Aa",
   reverseOrder: "⇅",
+  cutKeys: "✂",
+  delay: "≫",
   system: "S",
   diagnostics: "!"
 };
