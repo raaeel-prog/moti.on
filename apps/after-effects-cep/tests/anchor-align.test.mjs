@@ -9,6 +9,7 @@ const MODULES = [
   "src/json.jsx",
   "src/undo.jsx",
   "src/registry.jsx",
+  "src/transform-math.jsx",
   "src/commands/anchor-align.jsx",
   "src/dispatch.jsx"
 ];
@@ -18,7 +19,10 @@ const MN = {
   anchorPoint: "ADBE Anchor Point",
   position: "ADBE Position",
   scale: "ADBE Scale",
-  rotation: "ADBE Rotate Z"
+  rotation: "ADBE Rotate Z",
+  orientation: "ADBE Orientation",
+  rotateX: "ADBE Rotate X",
+  rotateY: "ADBE Rotate Y"
 };
 
 /**
@@ -56,13 +60,21 @@ class FakeProperty {
 }
 
 class FakeTransform {
-  constructor({ anchor, position, scale, rotation, positionKeys, scaleKeys, rotationKeys }) {
+  constructor(opcoes) {
+    const { anchor, position, scale, rotation, positionKeys, scaleKeys, rotationKeys } = opcoes;
     this.props = {
       [MN.anchorPoint]: new FakeProperty(anchor),
       [MN.position]: new FakeProperty(position, positionKeys),
       [MN.scale]: new FakeProperty(scale, scaleKeys),
       [MN.rotation]: new FakeProperty(rotation, rotationKeys)
     };
+    // Camada 2D nao tem orientation nem rotacao em X e Y. A ausencia e o que a
+    // matriz compartilhada trata como zero, e o double precisa reproduzi-la.
+    if (opcoes.threeD) {
+      this.props[MN.orientation] = new FakeProperty(opcoes.orientation ?? [0, 0, 0]);
+      this.props[MN.rotateX] = new FakeProperty(opcoes.rotationX ?? 0);
+      this.props[MN.rotateY] = new FakeProperty(opcoes.rotationY ?? 0);
+    }
   }
 
   property(matchName) {
@@ -85,7 +97,11 @@ class FakeLayer {
       rotation: opcoes.rotation ?? 0,
       positionKeys: opcoes.positionKeys ?? [],
       scaleKeys: opcoes.scaleKeys ?? [],
-      rotationKeys: opcoes.rotationKeys ?? []
+      rotationKeys: opcoes.rotationKeys ?? [],
+      threeD: this.threeDLayer,
+      orientation: opcoes.orientation,
+      rotationX: opcoes.rotationX,
+      rotationY: opcoes.rotationY
     });
   }
 
@@ -437,14 +453,48 @@ test("âncora animada é recusada", async () => {
   assert.equal(resposta.error.code, "KEYFRAME_CONFLICT");
 });
 
-test("camada 3D e camada sem retângulo são recusadas", async () => {
-  const tresD = await fixture();
-  const a = camada(tresD.comp, "A", { threeD: true, anchor: [0, 0] });
-  const r3d = alinha(tresD.scope, { gridPoint: "bottomRight" });
-  assert.equal(r3d.ok, false);
-  assert.equal(r3d.error.code, "INVALID_SELECTION_TYPE");
-  assert.deepEqual(a.ancora, [0, 0]);
+test("camada 3D preserva a terceira componente da âncora e da posição", async () => {
+  // Escrever duas componentes numa camada 3D zeraria a profundidade em
+  // silêncio. A matriz vem de MotionTransform, medida em host.
+  const { scope, comp } = await fixture();
+  const c = camada(comp, "A", {
+    threeD: true,
+    rect: { top: 0, left: 0, width: 100, height: 60 },
+    anchor: [0, 0, 7],
+    position: [200, 150, 40],
+    scale: [100, 100, 100],
+    rotation: 90
+  });
 
+  const resposta = alinha(scope, { gridPoint: "bottomRight" });
+
+  assert.equal(resposta.ok, true);
+  assert.deepEqual(c.ancora, [100, 60, 7], "o Z da âncora precisa sobreviver");
+  // rotZ 90 leva o delta [100, 60, 0] para [-60, 100, 0].
+  perto(c.posicao[0], 200 - 60, 1e-9);
+  perto(c.posicao[1], 150 + 100, 1e-9);
+  perto(c.posicao[2], 40, 1e-9);
+});
+
+test("camada 3D com orientation usa a composição medida", async () => {
+  // orientation Z de 90 graus compõe igual a uma rotação Z de 90: medido em
+  // host, e é o que distingue a matriz certa de um palpite.
+  const { scope, comp } = await fixture();
+  const c = camada(comp, "A", {
+    threeD: true,
+    rect: { top: 0, left: 0, width: 100, height: 60 },
+    anchor: [0, 0, 0],
+    position: [200, 150, 0],
+    orientation: [0, 0, 90]
+  });
+
+  alinha(scope, { gridPoint: "bottomRight" });
+
+  perto(c.posicao[0], 200 - 60, 1e-9);
+  perto(c.posicao[1], 150 + 100, 1e-9);
+});
+
+test("camada sem retângulo é recusada", async () => {
   const semRect = await fixture();
   const b = camada(semRect.comp, "B", { semRect: true, anchor: [0, 0] });
   const rr = alinha(semRect.scope, { gridPoint: "bottomRight" });

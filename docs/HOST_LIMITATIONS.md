@@ -27,7 +27,8 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | After Effects: Parentesco (`ae.layer.parent`, `ae.layer.list`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: `preserveWorldTransform` preservou o mundo exatamente; desligado, a camada pulou como pedido; ciclo e nome divergente recusados sem mutação; encadeamento seguiu a ordem do timeline; desparentear preservou o mundo. Painel: `NOT RUN` (item 17) |
 | After Effects: Create Null (`ae.layer.create-null`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: os três posicionamentos exatos, sonda temporária sempre apagada, e o critério de aceite cumprido — camadas rotacionadas e escaladas não se moveram ao serem parenteadas. Painel: `NOT RUN` (item 18) |
 | After Effects: Flip (`ae.layer.flip`) | `PARTIAL` | `PASS` para o escopo entregue | AE 26.3x87: flip duplo voltou idêntico; o canto espelhou em torno do pivô com erro de 1,1e-13; a conta de limites bate com a do motor de expressões. Camadas 3D, com pai e shape paths: recusadas ou fora de escopo (item 19) |
-| After Effects: Alinhador de âncora (`ae.anchor.align`) | `PARTIAL` | `PASS` para o escopo entregue | AE 26.3x87: pior erro visual de 1,2e-5 px contra o critério de 0,5 px da §14.6, incluindo camada parenteada a pai rotacionado e escalado. Convex, Concave e 3D fora de escopo (item 21) |
+| After Effects: Alinhador de âncora (`ae.anchor.align`) | `PARTIAL` | `PASS` para o escopo entregue | AE 26.3x87: pior erro visual de 1,2e-5 px contra o critério de 0,5 px da §14.6, incluindo camada parenteada e **camadas 3D**. Convex e Concave fora de escopo (item 21) |
+| After Effects: matriz de transform 3D (`MotionTransform`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Composição medida contra o host com erro de 5,684e-14. Registro em `docs/research/after-effects-3d-transform.md` (item 22) |
 | Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | APIs verificadas em documentação e doubles |
 | Premiere: versão/locale do host | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | `require("uxp").host.version`/`.uiLocale` documentados para 25.6+ |
 | Premiere: transações/Undo | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Ordem `lockedAccess` → `executeTransaction` coberta por doubles |
@@ -409,12 +410,66 @@ Duas recusas novas vieram junto, e são de verdade:
 
 - **Convex e Concave** dependem de análise de path — convex hull e sinal de cross product — e são
   corpo de trabalho próprio.
-- **Camadas 3D**: âncora de três componentes, três rotações e orientation; a derivação precisa de
-  matriz 4×4 ainda não verificada em host.
+- ~~**Camadas 3D**~~ — **resolvido**. A composição foi medida e vive em `MotionTransform`; o
+  alinhador aceita 3D com erro de `3,2e-6 px` (rotação nos três eixos) e `2,6e-6 px` (com
+  orientation). Ver item 22.
 - **Fontes de bounds** `source`, `mask`, `shapePath` e `selection`: só `visual` está implementada,
   e as outras são recusadas com erro tipado em vez de silenciosamente trocadas.
 - **União em comp space** para múltiplas camadas: com camadas rotacionadas o retângulo unido não
   tem canto bem definido no espaço de cada camada. Por enquanto cada camada usa o próprio bounds.
+
+### 22. A matriz de transform 3D, medida em vez de deduzida
+
+`IMPLEMENTED_AND_VERIFIED` num ambiente / execução `PASS`.
+
+Três comandos recusavam camadas 3D, e a recusa era honesta: sem saber a composição exata, a
+alternativa era escrever matriz por palpite e produzir camadas visualmente erradas **sem levantar**
+**erro nenhum**. Isso virou dívida sistemática, e este item a paga.
+
+```text
+toWorld(v) = posição + M · (v − âncora)
+
+M  = Ro · Rx(rx) · Ry(ry) · Rz(rz) · S
+Ro = Rx(ox) · Ry(oy) · Rz(oz)
+S  = diag(escalaX/100, escalaY/100, escalaZ/100)
+```
+
+Todas as rotações usam a matriz de **ângulo positivo** — não há inversão de sinal apesar do eixo Y
+apontar para baixo. **Erro máximo contra o host: `5,684e-14`**, que é precisão de máquina.
+
+#### O método importou mais que o resultado
+
+Adivinhar entre oito composições candidatas não converge: as oito erram, e o erro não diz por quê.
+O que resolveu foi **medir a matriz**: para uma camada sem pai, as colunas de `M` são diferenças de
+`toWorld` nos vetores da base, então quatro avaliações dão `M` inteira. Com ela na mão, cada
+hipótese vira comparação numérica em vez de palpite.
+
+Dois enganos apareceram assim, e nenhum seria óbvio:
+
+1. **`toComp` não serve.** Numa camada 3D ele já inclui a projeção da câmera — erro de **860 px**.
+   O que corresponde ao transform é `toWorld`.
+2. **Não há inversão de sinal.** Assumir que o eixo Y para baixo inverte as rotações respondia
+   sozinho por **165 px** de erro.
+
+#### Uma armadilha de diagnóstico, registrada
+
+Concatenar um array de valor de propriedade do After Effects numa string levanta `resultado`
+`numérico inválido (divisão por zero?)`. Isso custou uma rodada inteira: o log de sucesso explodia
+dentro do `try`, e o `catch` fazia parecer que a **escrita** tinha falhado quando ela funcionara.
+Em código de sonda, formatar elemento a elemento é o único caminho seguro.
+
+#### O que continua `NOT RUN`
+
+- **Camadas 3D com pai.** A compensação de âncora é local por construção e foi medida em 2D com
+  pai; em 3D com pai, `NOT RUN`.
+- Escala com componente negativo em 3D.
+- `Auto-Orient`: com ele ligado a rotação efetiva deixa de vir só das propriedades, e a matriz
+  lida aqui não a descreve.
+- **`ae.layer.create-null` ainda usa `toComp` na sonda de posicionamento.** Para camadas 3D isso é
+  a posição projetada pela câmera, e não a do transform — o mesmo engano que custou 860 px aqui.
+  Não foi medido se o resultado diverge do desejado nesse comando.
+- **`ae.layer.flip` continua recusando 3D**: a reflexão em três eixos é outra derivação, e
+  `MotionTransform` dá a matriz mas não a decomposição de volta em rotações que o flip precisaria.
 
 ## Controles automatizados existentes
 

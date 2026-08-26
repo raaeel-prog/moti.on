@@ -48,6 +48,7 @@ export const HOST_SOURCE_ORDER = [
   "undo.jsx",
   "registry.jsx",
   "expression-templates.jsx",
+  "transform-math.jsx",
   "keyframe-operations.jsx",
   "commands/context-read.jsx",
   "commands/capability-probe.jsx",

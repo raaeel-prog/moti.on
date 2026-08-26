@@ -184,6 +184,12 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       // keyframes preservando metadata.
       "MotionKeyframes",
       "MotionRegistry",
+      // Matriz de transform compartilhada. Mesmo estatuto de
+      // `MotionExpressions` e `MotionKeyframes`: modulo interno, sem
+      // superficie de dispatch. A composicao que ele implementa esta medida
+      // em docs/research/after-effects-3d-transform.md, e mante-la em um
+      // lugar so evita duas contas divergindo entre comandos.
+      "MotionTransform",
       "MotionUndo"
     ],
     "O conjunto de globais do host mudou. Só MotionAE é superfície pública; " +

@@ -19,13 +19,15 @@
  * lados passam pela mesma matriz de pai. A compensacao e inteiramente local, e
  * vale para qualquer profundidade de parentesco.
  *
+ * `R . S` vem de `MotionTransform.linearMatrix`, que serve 2D e 3D pelo mesmo
+ * caminho: a composicao esta medida em docs/research/after-effects-3d-transform.md,
+ * com erro de 5,684e-14 contra o host. Uma camada 2D e o caso em que
+ * orientation e as rotacoes X e Y sao zero.
+ *
  * ## Escopo recusado de proposito
  *
- * Camadas **3D** sao recusadas: a ancora tem tres componentes, a rotacao tem
- * tres eixos mais orientation, e a derivacao acima precisa de uma matriz 4x4
- * que ainda nao foi verificada em host. Os modos **Convex** e **Concave**
- * dependem de analise de path — convex hull e sinal de cross product — e sao
- * corpo de trabalho proprio.
+ * Os modos **Convex** e **Concave** dependem de analise de path — convex hull
+ * e sinal de cross product — e sao corpo de trabalho proprio.
  */
 (function () {
   var REQUIRED_ARGS = {
@@ -238,17 +240,6 @@
       var camada = /** @type {Layer} */ (selecionadas[i]);
       if (!camada) continue;
 
-      if (camada.threeDLayer === true) {
-        return {
-          error: failure(
-            MotionContracts.ERROR.INVALID_SELECTION_TYPE,
-            "Camada 3D: a compensacao em tres eixos ainda nao esta implementada.",
-            { layerIndex: camada.index }
-          ),
-          itens: []
-        };
-      }
-
       var retangulo;
       try {
         retangulo = camada.sourceRectAtTime(tempo, /** @type {boolean} */ (args.includeExtents));
@@ -271,6 +262,8 @@
       }
 
       var fracao = /** @type {number[]} */ (GRADE[ponto]);
+      // `sourceRectAtTime` e plano; o Z da ancora fica como esta. Mover a
+      // ancora em profundidade nao e o que a grade 3x3 pede.
       var novaAncora = [
         retangulo.left + retangulo.width * /** @type {number} */ (fracao[0]),
         retangulo.top + retangulo.height * /** @type {number} */ (fracao[1])
@@ -314,25 +307,27 @@
 
       var ancoraAtual = /** @type {number[]} */ (propAncora.value);
       var posicaoAtual = /** @type {number[]} */ (propPosicao.value);
-      var escala = /** @type {number[]} */ (propEscala.value);
-      var rotacao = /** @type {number} */ (propRotacao.value);
+      var tresD = camada.threeDLayer === true;
+      if (tresD) {
+        // A ancora de uma camada 3D tem tres componentes, e escrever duas
+        // zeraria a profundidade em silencio.
+        novaAncora.push(
+          ancoraAtual.length > 2 ? /** @type {number} */ (ancoraAtual[2]) : 0
+        );
+      }
 
       itens.push({
         camada: camada,
         grupo: grupo,
         posicaoAnimada: propPosicao.numKeys > 0,
         ponto: ponto,
-        ancoraAntes: [
-          /** @type {number} */ (ancoraAtual[0]),
-          /** @type {number} */ (ancoraAtual[1])
-        ],
+        tresD: tresD,
+        // `linearMatrix` le as propriedades da camada, e nao os valores
+        // capturados aqui: e a unica fonte da composicao medida.
+        matriz: MotionTransform.linearMatrix(camada),
+        ancoraAntes: recorta(ancoraAtual, tresD),
         ancoraDepois: novaAncora,
-        posicaoAntes: [
-          /** @type {number} */ (posicaoAtual[0]),
-          /** @type {number} */ (posicaoAtual[1])
-        ],
-        escala: [/** @type {number} */ (escala[0]), /** @type {number} */ (escala[1])],
-        rotacao: rotacao
+        posicaoAntes: recorta(posicaoAtual, tresD)
       });
     }
 
@@ -359,18 +354,32 @@
   function deslocamento(item) {
     var antes = /** @type {number[]} */ (item.ancoraAntes);
     var depois = /** @type {number[]} */ (item.ancoraDepois);
-    var escala = /** @type {number[]} */ (item.escala);
+    var d = [
+      /** @type {number} */ (depois[0]) - /** @type {number} */ (antes[0]),
+      /** @type {number} */ (depois[1]) - /** @type {number} */ (antes[1]),
+      (depois.length > 2 ? /** @type {number} */ (depois[2]) : 0) -
+        (antes.length > 2 ? /** @type {number} */ (antes[2]) : 0)
+    ];
+    var girado = MotionTransform.apply(/** @type {number[]} */ (item.matriz), d);
+    return recorta(girado, item.tresD === true);
+  }
 
-    var dx = (/** @type {number} */ (depois[0]) - /** @type {number} */ (antes[0])) *
-      /** @type {number} */ (escala[0]) / 100;
-    var dy = (/** @type {number} */ (depois[1]) - /** @type {number} */ (antes[1])) *
-      /** @type {number} */ (escala[1]) / 100;
-
-    var rad = /** @type {number} */ (item.rotacao) * Math.PI / 180;
-    var cos = Math.cos(rad);
-    var sin = Math.sin(rad);
-
-    return [dx * cos - dy * sin, dx * sin + dy * cos];
+  /**
+   * Duas ou tres componentes, conforme a camada.
+   *
+   * Gravar tres numa camada 2D ou duas numa 3D e erro de arity que o After
+   * Effects aceita de formas diferentes conforme a propriedade — recortar
+   * aqui evita descobrir isso caso a caso.
+   *
+   * @param {number[]} v @param {boolean} tresD @returns {number[]}
+   */
+  function recorta(v, tresD) {
+    var saida = [
+      /** @type {number} */ (v[0]),
+      /** @type {number} */ (v[1])
+    ];
+    if (tresD) saida.push(v.length > 2 ? /** @type {number} */ (v[2]) : 0);
+    return saida;
   }
 
   /**
@@ -384,13 +393,16 @@
    * @returns {void}
    */
   function deslocaKeyframes(propriedade, delta, sinal) {
-    var k;
+    var k, c;
     for (k = 1; k <= propriedade.numKeys; k += 1) {
       var valor = /** @type {number[]} */ (propriedade.keyValue(k));
-      propriedade.setValueAtKey(k, [
-        /** @type {number} */ (valor[0]) + /** @type {number} */ (delta[0]) * sinal,
-        /** @type {number} */ (valor[1]) + /** @type {number} */ (delta[1]) * sinal
-      ]);
+      /** @type {number[]} */
+      var novo = [];
+      for (c = 0; c < valor.length; c += 1) {
+        var passo = c < delta.length ? /** @type {number} */ (delta[c]) : 0;
+        novo.push(/** @type {number} */ (valor[c]) + passo * sinal);
+      }
+      propriedade.setValueAtKey(k, novo);
     }
   }
 
@@ -403,10 +415,14 @@
   function posicaoCompensada(item) {
     var posicao = /** @type {number[]} */ (item.posicaoAntes);
     var delta = deslocamento(item);
-    return [
-      /** @type {number} */ (posicao[0]) + /** @type {number} */ (delta[0]),
-      /** @type {number} */ (posicao[1]) + /** @type {number} */ (delta[1])
-    ];
+    /** @type {number[]} */
+    var saida = [];
+    var c;
+    for (c = 0; c < posicao.length; c += 1) {
+      var passo = c < delta.length ? /** @type {number} */ (delta[c]) : 0;
+      saida.push(/** @type {number} */ (posicao[c]) + passo);
+    }
+    return saida;
   }
 
   /** @param {Array<Record<string, unknown>>} itens @returns {Record<string, unknown>} */

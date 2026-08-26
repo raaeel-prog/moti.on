@@ -188,7 +188,6 @@ const ptBR = {
   "message.anchorNoActiveComp": "Abra ou ative uma composição antes de alinhar a âncora.",
   "message.anchorApplied": "Âncora alinhada em {count} camada(s). Um único Ctrl+Z desfaz toda a operação.",
   "message.anchorNothing": "As âncoras já estão no ponto pedido.",
-  "message.anchorUnsupported": "Camadas 3D ainda não são alinhadas: a compensação em três eixos, com orientation, ainda não foi verificada em host.",
 
   "loopOut.section.main": "Repetição",
   "loopOut.section.safety": "Segurança",
@@ -609,7 +608,6 @@ const enUS: Record<MessageKey, string> = {
   "message.anchorNoActiveComp": "Open or activate a composition before aligning the anchor.",
   "message.anchorApplied": "Anchor aligned on {count} layer(s). A single Ctrl+Z undoes the whole operation.",
   "message.anchorNothing": "The anchors are already at the requested point.",
-  "message.anchorUnsupported": "3D layers are not aligned yet: the three-axis compensation, with orientation, has not been verified in host.",
 
   "loopOut.section.main": "Loop",
   "loopOut.section.safety": "Safety",

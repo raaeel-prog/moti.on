@@ -79,6 +79,17 @@ declare const MotionJson: {
   readonly MAX_INPUT_LENGTH: number;
 };
 
+declare const MotionTransform: {
+  /**
+   * Matriz 3x3 linha-maior que leva um vetor do espaco da camada ao espaco
+   * do pai. Serve 2D e 3D pelo mesmo caminho.
+   */
+  linearMatrix(layer: Layer): number[];
+  multiply(a: number[], b: number[]): number[];
+  apply(matrix: number[], vector: number[]): number[];
+  readonly IDENTITY: number[];
+};
+
 declare const MotionUndo: {
   withUndoGroup<T>(label: string, callback: () => T): T;
 };

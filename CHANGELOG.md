@@ -88,6 +88,65 @@ Status: `IMPLEMENTED_AND_VERIFIED` no ambiente acima.
 
 **Pendência de produto registrada:** a documentação diz que o offset controla o *valor inicial* do wiggle, mas o identificador da camada continua na composição da semente. Não foi medido se duas camadas com a mesma semente produzem movimento idêntico — pode ser que a semente iguale a fase e não a trajetória. Até isso ser medido, o produto **não promete "mesma semente, mesmo movimento" entre camadas**; o texto da interface fala apenas do comportamento por propriedade.
 
+### Matriz de transform 3D: a dívida que bloqueava três comandos
+
+Flip, Alinhador de âncora e qualquer coisa que compense transform recusavam camadas 3D. A recusa
+era honesta — sem saber a composição exata, a alternativa seria escrever matriz por palpite e
+produzir camadas visualmente erradas **sem levantar erro nenhum**. Virou dívida sistemática, e
+este slice a paga.
+
+```text
+toWorld(v) = posicao + M . (v - ancora)
+
+M  = Ro . Rx(rx) . Ry(ry) . Rz(rz) . S
+Ro = Rx(ox) . Ry(oy) . Rz(oz)
+S  = diag(escalaX/100, escalaY/100, escalaZ/100)
+```
+
+Todas as rotações usam a matriz de **ângulo positivo** — não há inversão de sinal apesar do eixo
+Y apontar para baixo. **Erro máximo contra o host: `5,684e-14`**, precisão de máquina.
+
+#### O método importou mais que o resultado
+
+Adivinhar entre oito composições candidatas não converge: as oito erram, e o erro não diz **por**
+**quê**. O que resolveu foi medir a matriz — para uma camada sem pai, as colunas de `M` são
+diferenças de `toWorld` nos vetores da base, e quatro avaliações dão `M` inteira. Cada hipótese
+vira então uma comparação numérica em vez de um palpite.
+
+Dois enganos apareceram assim, e nenhum seria óbvio por leitura:
+
+1. **`toComp` não serve.** Numa camada 3D ele já inclui a projeção da câmera — erro de **860 px**.
+   O que corresponde ao transform é `toWorld`.
+2. **Não há inversão de sinal.** Assumir que o eixo Y para baixo inverte as rotações respondia
+   sozinho por **165 px**.
+
+#### O alinhador de âncora deixa de recusar 3D
+
+| Caso | Erro visual |
+|---|---|
+| 3D rotacionada nos três eixos | `3,212e-6 px` |
+| 3D com orientation | `2,613e-6 px` |
+
+Contra o critério de 0,5 px da §14.6. O comando também passou a preservar a terceira componente da
+âncora e da posição: escrever duas numa camada 3D zeraria a profundidade em silêncio.
+
+`MotionTransform` serve 2D e 3D pelo mesmo caminho — uma camada 2D é o caso em que orientation e
+as rotações X e Y são zero. A fórmula 2D usada antes é exatamente esta restrita ao plano, então o
+código específico de 2D saiu.
+
+#### Uma armadilha de diagnóstico, registrada
+
+Concatenar um array de valor de propriedade do After Effects numa string levanta `resultado`
+`numérico inválido (divisão por zero?)`. Custou uma rodada inteira: o log de sucesso explodia
+dentro do `try`, e o `catch` fazia parecer que a **escrita** tinha falhado quando ela funcionara.
+
+#### O que a dívida ainda cobra
+
+**`ae.layer.flip` continua recusando 3D**: refletir em três eixos é outra derivação, e a matriz
+sozinha não dá a decomposição de volta em rotações que o flip precisa escrever. E
+**`ae.layer.create-null` ainda usa `toComp`** na sonda de posicionamento — para camadas 3D isso é
+a posição projetada, o mesmo engano que custou 860 px aqui. Nenhum dos dois foi medido.
+
 ### CHMS-017 — Alinhador de âncora (`ae.anchor.align`)
 
 Décima terceira ferramenta do painel: move o ponto de ancoragem para um dos nove pontos do

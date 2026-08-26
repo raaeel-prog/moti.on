@@ -2101,7 +2101,6 @@ function renderAnchor(regions: RenderRegions, i18n: I18n): void {
   if (state.context && !state.context.isComposition) {
     regions.content.appendChild(notice(document, i18n.t("message.anchorNoActiveComp"), "warning"));
   }
-  regions.content.appendChild(notice(document, i18n.t("message.anchorUnsupported"), "warning"));
 
   regions.content.appendChild(sectionTitle(document, i18n.t("anchor.section.point")));
 
