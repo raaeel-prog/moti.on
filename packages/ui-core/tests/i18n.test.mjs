@@ -143,6 +143,7 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
     "createNull.dimension.3d",
     "flip.axis.horizontal",
     "flip.axis.vertical",
+    "reverse.preserveTrackMattes",
     "context.compositionValue",
     "value.none",
     "error.withCode"

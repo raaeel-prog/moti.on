@@ -18,6 +18,7 @@ import {
   colorField,
   createI18n,
   createShell,
+  hint,
   logLine,
   notice,
   normalizeHexColor,
@@ -25,6 +26,7 @@ import {
   propertyRow,
   sectionTitle,
   selectField,
+  textField,
   toolGrid,
   toolTile,
   type I18n,
@@ -156,6 +158,54 @@ const DEFAULT_PARENT: ParentDraft = {
   chainMode: "target"
 };
 
+type LayerScope = "selected" | "composition";
+
+interface RenameDraft {
+  scope: LayerScope;
+  prefix: string;
+  suffix: string;
+  find: string;
+  replace: string;
+  regex: boolean;
+  counterStart: number;
+  padding: number;
+  sourceName: boolean;
+}
+
+/**
+ * Contador desligado por padrão (`padding: 0`) e escopo na seleção.
+ *
+ * Abrir a ferramenta não pode propor uma renomeação em massa da composição
+ * inteira: o escopo mais amplo precisa ser uma escolha, não o que já está
+ * marcado quando a pessoa chega.
+ */
+const DEFAULT_RENAME: RenameDraft = {
+  scope: "selected",
+  prefix: "",
+  suffix: "",
+  find: "",
+  replace: "",
+  regex: false,
+  counterStart: 1,
+  padding: 0,
+  sourceName: false
+};
+
+interface ReverseOrderDraft {
+  scope: LayerScope;
+  preserveTrackMattes: boolean;
+  preserveParents: boolean;
+  reverseTimingToo: boolean;
+}
+
+/** Preservar relações é o padrão; mexer no tempo exige pedido explícito (§7). */
+const DEFAULT_REVERSE_ORDER: ReverseOrderDraft = {
+  scope: "selected",
+  preserveTrackMattes: true,
+  preserveParents: true,
+  reverseTimingToo: false
+};
+
 interface FlipDraft {
   axis: "horizontal" | "vertical";
   pivot: "anchor" | "selectionBounds" | "compCenter";
@@ -237,7 +287,17 @@ const DEFAULT_SMOOTH: SmoothDraft = {
 };
 
 type MessageKey = Parameters<I18n["t"]>[0];
-type ToolId = "loopOut" | "smooth" | "wiggle" | "flicker" | "textBox" | "parent" | "createNull" | "flip";
+type ToolId =
+  | "loopOut"
+  | "smooth"
+  | "wiggle"
+  | "flicker"
+  | "textBox"
+  | "parent"
+  | "createNull"
+  | "flip"
+  | "rename"
+  | "reverseOrder";
 
 /**
  * Uma ferramenta do navegador.
@@ -264,7 +324,7 @@ interface ToolDefinition {
    * buscá-los no meio do desenho. Ferramentas que não precisam simplesmente não
    * declaram o gancho, e o botão Atualizar não aparece para elas.
    */
-  load?(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void>;
+  load?(): Promise<void>;
 }
 
 const TOOLS: readonly ToolDefinition[] = [
@@ -310,6 +370,34 @@ const TOOLS: readonly ToolDefinition[] = [
     apply: applyFlicker,
     reset: () => {
       state.flicker = { ...DEFAULT_FLICKER };
+    }
+  },
+  {
+    id: "rename",
+    nameKey: "tool.rename.name",
+    descriptionKey: "tool.rename.description",
+    render: renderRename,
+    disabledReason: renameDisabledReason,
+    apply: applyRename,
+    load: refreshRenamePreview,
+    reset: () => {
+      state.rename = { ...DEFAULT_RENAME };
+      state.renamePreview = null;
+      state.previewError = null;
+    }
+  },
+  {
+    id: "reverseOrder",
+    nameKey: "tool.reverseOrder.name",
+    descriptionKey: "tool.reverseOrder.description",
+    render: renderReverseOrder,
+    disabledReason: reverseOrderDisabledReason,
+    apply: applyReverseOrder,
+    load: refreshReversePreview,
+    reset: () => {
+      state.reverseOrder = { ...DEFAULT_REVERSE_ORDER };
+      state.reversePreview = null;
+      state.previewError = null;
     }
   },
   {
@@ -383,6 +471,13 @@ const state: {
   parent: ParentDraft;
   createNull: CreateNullDraft;
   flip: FlipDraft;
+  rename: RenameDraft;
+  reverseOrder: ReverseOrderDraft;
+  /** Prévias em cache; `null` enquanto a primeira não voltou. */
+  renamePreview: RenamePreviewData | null;
+  reversePreview: ReversePreviewData | null;
+  /** Motivo da última prévia recusada, mostrado dentro da view. */
+  previewError: string | null;
   /** Cache da lista de camadas; `null` enquanto nunca foi lida. */
   layers: LayerSummary[] | null;
   layersTotal: number;
@@ -402,6 +497,11 @@ const state: {
   parent: { ...DEFAULT_PARENT },
   createNull: { ...DEFAULT_CREATE_NULL },
   flip: { ...DEFAULT_FLIP },
+  rename: { ...DEFAULT_RENAME },
+  reverseOrder: { ...DEFAULT_REVERSE_ORDER },
+  renamePreview: null,
+  reversePreview: null,
+  previewError: null,
   layers: null,
   layersTotal: 0,
   activeTool: null
@@ -469,6 +569,9 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
 
   const shell = regions.shell;
   const client = adapter.client;
+  // Sempre a fiação deste render: os handlers de campo disparam trabalho
+  // assíncrono e precisam do cliente que `render` não recebe.
+  wiringAtual = { shell, i18n, logger, client };
 
   // A falha pertence à tarefa que a pessoa acabou de executar, portanto aparece
   // na view atual — inclusive Sistema — e não fica escondida em outra aba.
@@ -520,7 +623,7 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
                 shell.rerender();
                 // Depois do rerender: a ferramenta já está desenhada quando a
                 // carga começa, então o estado ocupado aparece no lugar certo.
-                void item.load?.(shell, i18n, logger, client);
+                void item.load?.();
               }
             })
           )
@@ -556,7 +659,7 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
           title: state.busy
             ? state.busyReason ?? i18n.t("status.initializing")
             : i18n.t("action.refreshLayers"),
-          onClick: () => void tool.load?.(shell, i18n, logger, client)
+          onClick: () => void tool.load?.()
         })
       );
     }
@@ -1285,6 +1388,27 @@ function renderDiagnostics(regions: RenderRegions, i18n: I18n, logger: MotionLog
  * mensagem que o usuário lê inclui os três. Um erro sem ação corretiva obriga a
  * pessoa a adivinhar, e é isso que a §8 do master spec proíbe.
  */
+/**
+ * Texto local para uma falha de host.
+ *
+ * Separado de `reportFailure` porque a prévia precisa do texto sem mexer no
+ * status do painel: uma regra recusada na prévia é informação dentro da view, e
+ * não um erro da última ação.
+ */
+function describeFailure(i18n: I18n, response: CommandResponse): string {
+  const error = response.error;
+  if (!error) return i18n.t("message.failureWithoutReason");
+
+  const action = error.action
+    ? i18n.has(error.action)
+      ? i18n.t(error.action as Parameters<I18n["t"]>[0])
+      : error.action
+    : null;
+  const localizedMessage = i18n.t(error.recoverable ? "status.notCompleted" : "status.failed");
+  const failure = i18n.t("error.withCode", { code: error.code, message: localizedMessage });
+  return action ? `${failure} — ${action}` : failure;
+}
+
 function reportFailure(shell: Shell, i18n: I18n, response: CommandResponse): void {
   const error = response.error;
 
@@ -1452,13 +1576,10 @@ function isLayerListResultData(value: unknown): value is LayerListResultData {
  * desparentear, que não precisa de alvo. Deixar a ferramenta inteira inacessível
  * porque uma leitura falhou seria pior que a leitura ausente.
  */
-async function loadLayers(
-  shell: Shell,
-  i18n: I18n,
-  logger: MotionLogger,
-  client: Client
-): Promise<void> {
-  if (state.busy) return;
+async function loadLayers(): Promise<void> {
+  const fiacao = wiringAtual;
+  if (!fiacao || state.busy) return;
+  const { shell, i18n, logger, client } = fiacao;
   setBusy(shell, true, i18n.t("status.loadingLayers"));
 
   const response = await client.execute<LayerListResultData>("ae.layer.list", {});
@@ -1541,6 +1662,578 @@ function hexToChannels(hex: string): [number, number, number] {
     parseInt(normalized.slice(3, 5), 16) / 255,
     parseInt(normalized.slice(5, 7), 16) / 255
   ];
+}
+
+interface RenamePreviewItem {
+  index: number;
+  before: string;
+  after: string;
+}
+
+interface RenamePreviewData {
+  totalCount: number;
+  changedCount: number;
+  sourceChangedCount: number;
+  items: RenamePreviewItem[];
+}
+
+/**
+ * Uma posição na pilha, antes ou depois da inversão.
+ *
+ * O host devolve o registro inteiro — índice, índice original, nome e tempo — e
+ * não só o nome. Eu havia tipado como `string[]`, e a prévia teria sido
+ * rejeitada em silêncio pelo guarda a cada abertura da ferramenta: a lista
+ * ficaria eternamente em "calculando". Só a execução em host mostrou isso.
+ */
+interface ReverseOrderEntry {
+  index: number;
+  originalIndex: number;
+  name: string;
+  startTime: number;
+}
+
+interface ReversePreviewData {
+  targetCount: number;
+  timingChangedCount: number;
+  before: ReverseOrderEntry[];
+  after: ReverseOrderEntry[];
+}
+
+function isRenamePreviewData(value: unknown): value is RenamePreviewData {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    Number.isInteger(record.totalCount) &&
+    Number.isInteger(record.changedCount) &&
+    Number.isInteger(record.sourceChangedCount) &&
+    Array.isArray(record.items) &&
+    record.items.every((item) => {
+      if (typeof item !== "object" || item === null) return false;
+      const entry = item as Record<string, unknown>;
+      return (
+        Number.isInteger(entry.index) &&
+        typeof entry.before === "string" &&
+        typeof entry.after === "string"
+      );
+    })
+  );
+}
+
+function isReversePreviewData(value: unknown): value is ReversePreviewData {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  const entradas = (list: unknown): boolean =>
+    Array.isArray(list) &&
+    list.every((item) => {
+      if (typeof item !== "object" || item === null) return false;
+      const entrada = item as Record<string, unknown>;
+      return (
+        Number.isInteger(entrada.index) &&
+        Number.isInteger(entrada.originalIndex) &&
+        typeof entrada.name === "string" &&
+        typeof entrada.startTime === "number"
+      );
+    });
+  return (
+    Number.isInteger(record.targetCount) &&
+    Number.isInteger(record.timingChangedCount) &&
+    entradas(record.before) &&
+    entradas(record.after)
+  );
+}
+
+/**
+ * Teto de linhas desenhadas numa prévia.
+ *
+ * Uma composição com centenas de camadas produziria centenas de nós a cada
+ * confirmação de campo, e a lista é para conferir a regra — não para ler o
+ * projeto inteiro. O rodapé diz quantas ficaram de fora.
+ */
+const PREVIEW_MAX_ROWS = 40;
+
+interface FiacaoCorrente {
+  shell: Shell;
+  i18n: I18n;
+  logger: MotionLogger;
+  client: Client;
+}
+
+/**
+ * Fiação corrente, preenchida a cada render.
+ *
+ * `render` é síncrono e não recebe o cliente, mas os campos precisam pedir uma
+ * prévia nova ao host a cada confirmação. Guardar a fiação aqui é o que liga as
+ * duas coisas sem espalhar o cliente por dentro de cada componente.
+ */
+let wiringAtual: FiacaoCorrente | null = null;
+
+/**
+ * Descarta respostas de prévia que chegam fora de ordem.
+ *
+ * Os campos confirmam rápido, e uma prévia pedida antes pode voltar depois. Sem
+ * este contador, a lista mostraria o resultado de uma regra que a pessoa já
+ * trocou — e ela aplicaria confiando no que está vendo.
+ */
+let previewSequence = 0;
+
+async function refreshRenamePreview(): Promise<void> {
+  const fiacao = wiringAtual;
+  if (!fiacao) return;
+
+  const sequencia = previewSequence + 1;
+  previewSequence = sequencia;
+
+  const draft = state.rename;
+  const response = await fiacao.client.execute<RenamePreviewData>("ae.layer.rename.preview", {
+    scope: draft.scope,
+    prefix: draft.prefix,
+    suffix: draft.suffix,
+    find: draft.find,
+    replace: draft.replace,
+    regex: draft.regex,
+    counterStart: draft.counterStart,
+    padding: draft.padding,
+    sourceName: draft.sourceName,
+    preview: true
+  });
+
+  if (sequencia !== previewSequence) return;
+
+  state.renamePreview = response.ok && isRenamePreviewData(response.data) ? response.data : null;
+  // A prévia recusada é informação, não falha do painel: uma regex perigosa
+  // recusada aqui é exatamente o guarda funcionando, e a pessoa precisa ver o
+  // motivo antes de clicar em Aplicar.
+  state.previewError = response.ok ? null : describeFailure(fiacao.i18n, response);
+  fiacao.shell.rerender();
+}
+
+async function refreshReversePreview(): Promise<void> {
+  const fiacao = wiringAtual;
+  if (!fiacao) return;
+
+  const sequencia = previewSequence + 1;
+  previewSequence = sequencia;
+
+  const draft = state.reverseOrder;
+  const response = await fiacao.client.execute<ReversePreviewData>(
+    "ae.layer.reverse-order.preview",
+    {
+      scope: draft.scope,
+      preserveTrackMattes: draft.preserveTrackMattes,
+      preserveParents: draft.preserveParents,
+      reverseTimingToo: draft.reverseTimingToo
+    }
+  );
+
+  if (sequencia !== previewSequence) return;
+
+  state.reversePreview = response.ok && isReversePreviewData(response.data) ? response.data : null;
+  state.previewError = response.ok ? null : describeFailure(fiacao.i18n, response);
+  fiacao.shell.rerender();
+}
+
+/** Desenha a lista de prévia com teto de linhas e rodapé de contagem. */
+function renderPreviewRows(
+  regions: RenderRegions,
+  i18n: I18n,
+  linhas: readonly { antes: string; depois: string }[],
+  total: number
+): void {
+  if (linhas.length === 0) {
+    regions.content.appendChild(hint(document, i18n.t("message.previewEmpty")));
+    return;
+  }
+
+  for (const linha of linhas.slice(0, PREVIEW_MAX_ROWS)) {
+    regions.content.appendChild(propertyRow(document, linha.antes, linha.depois));
+  }
+  if (total > PREVIEW_MAX_ROWS) {
+    regions.content.appendChild(
+      hint(document, i18n.t("message.previewMore", { count: total - PREVIEW_MAX_ROWS }))
+    );
+  }
+}
+
+function renderRename(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.rename;
+  const confirma = (mutacao: () => void) => {
+    mutacao();
+    shell.rerender();
+    void refreshRenamePreview();
+  };
+
+  regions.content.appendChild(notice(document, i18n.t("message.renameInstructions")));
+  if (state.context && !state.context.isComposition) {
+    regions.content.appendChild(notice(document, i18n.t("message.renameNoActiveComp"), "warning"));
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("rename.section.rules")));
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "rename-scope",
+      label: i18n.t("field.scope"),
+      value: draft.scope,
+      disabled: state.busy,
+      options: [
+        { value: "selected", label: i18n.t("scope.selected") },
+        { value: "composition", label: i18n.t("scope.composition") }
+      ],
+      onChange: (value) =>
+        confirma(() => {
+          state.rename.scope = value === "composition" ? "composition" : "selected";
+        })
+    })
+  );
+
+  const textos: ReadonlyArray<{ campo: "find" | "replace" | "prefix" | "suffix"; rotulo: MessageKey }> = [
+    { campo: "find", rotulo: "rename.find" },
+    { campo: "replace", rotulo: "rename.replace" },
+    { campo: "prefix", rotulo: "rename.prefix" },
+    { campo: "suffix", rotulo: "rename.suffix" }
+  ];
+  for (const { campo, rotulo } of textos) {
+    regions.content.appendChild(
+      textField(document, {
+        id: `rename-${campo}`,
+        label: i18n.t(rotulo),
+        value: draft[campo],
+        maxLength: 256,
+        disabled: state.busy,
+        onCommit: (value) =>
+          confirma(() => {
+            state.rename[campo] = value;
+          })
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "rename-regex",
+      label: i18n.t("rename.regex"),
+      description: i18n.t("rename.regex.description"),
+      checked: draft.regex,
+      disabled: state.busy,
+      onChange: (checked) =>
+        confirma(() => {
+          state.rename.regex = checked;
+        })
+    })
+  );
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("rename.section.counter")));
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "rename-padding",
+      label: i18n.t("rename.padding"),
+      description: i18n.t("rename.padding.description"),
+      value: draft.padding,
+      min: 0,
+      max: 8,
+      step: 1,
+      disabled: state.busy,
+      onCommit: (value) =>
+        confirma(() => {
+          state.rename.padding = value;
+        })
+    })
+  );
+
+  // O início do contador só faz diferença com o contador ligado.
+  if (draft.padding > 0) {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "rename-counter-start",
+        label: i18n.t("rename.counterStart"),
+        value: draft.counterStart,
+        min: -9999,
+        max: 9999,
+        step: 1,
+        disabled: state.busy,
+        onCommit: (value) =>
+          confirma(() => {
+            state.rename.counterStart = value;
+          })
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "rename-source",
+      label: i18n.t("rename.sourceName"),
+      description: i18n.t("rename.sourceName.description"),
+      checked: draft.sourceName,
+      disabled: state.busy,
+      onChange: (checked) =>
+        confirma(() => {
+          state.rename.sourceName = checked;
+        })
+    })
+  );
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("rename.section.preview")));
+
+  if (state.previewError) {
+    regions.content.appendChild(notice(document, state.previewError, "warning"));
+    return;
+  }
+
+  const previa = state.renamePreview;
+  if (!previa) {
+    regions.content.appendChild(hint(document, i18n.t("status.previewing")));
+    return;
+  }
+
+  renderPreviewRows(
+    regions,
+    i18n,
+    previa.items.map((item) => ({ antes: item.before, depois: item.after })),
+    previa.totalCount
+  );
+  regions.content.appendChild(
+    hint(
+      document,
+      i18n.t("message.previewChanged", { changed: previa.changedCount, total: previa.totalCount })
+    )
+  );
+}
+
+function renameDisabledReason(i18n: I18n): string | null {
+  if (state.busy) {
+    return state.busyReason ?? i18n.t("status.initializing");
+  }
+  if (!state.context?.isComposition) {
+    return i18n.t("message.renameNoActiveComp");
+  }
+  // O motivo da prévia é o motivo do apply: os dois comandos compartilham o
+  // mesmo preflight, então uma regra recusada na prévia seria recusada aqui.
+  if (state.previewError) {
+    return state.previewError;
+  }
+  if (state.renamePreview && state.renamePreview.changedCount === 0) {
+    return i18n.t("message.renameNothingToChange");
+  }
+  return null;
+}
+
+async function applyRename(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.renameNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  const draft = state.rename;
+  shell.setStatus(i18n.t("status.applyingRename"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingRename"));
+
+  const response = await client.execute<RenamePreviewData>(
+    "ae.layer.rename",
+    {
+      scope: draft.scope,
+      prefix: draft.prefix,
+      suffix: draft.suffix,
+      find: draft.find,
+      replace: draft.replace,
+      regex: draft.regex,
+      counterStart: draft.counterStart,
+      padding: draft.padding,
+      sourceName: draft.sourceName,
+      preview: false
+    },
+    { preserveSelection: true }
+  );
+  logger.recordResponse("ae.layer.rename", response);
+
+  if (!response.ok) {
+    reportFailure(shell, i18n, response);
+    setBusy(shell, false);
+    return;
+  }
+
+  state.lastError = null;
+  const aplicadas = isRenameResultData(response.data) ? response.data.appliedCount : 0;
+  shell.setStatus(i18n.t("message.renameApplied", { count: aplicadas }), "ok");
+  setBusy(shell, false);
+
+  // Os nomes mudaram: a prévia em cache descreve um estado que não existe mais.
+  await refreshRenamePreview();
+}
+
+interface RenameResultData {
+  appliedCount: number;
+}
+
+function isRenameResultData(value: unknown): value is RenameResultData {
+  if (typeof value !== "object" || value === null) return false;
+  return Number.isInteger((value as Record<string, unknown>).appliedCount);
+}
+
+function renderReverseOrder(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.reverseOrder;
+  const confirma = (mutacao: () => void) => {
+    mutacao();
+    shell.rerender();
+    void refreshReversePreview();
+  };
+
+  regions.content.appendChild(notice(document, i18n.t("message.reverseInstructions")));
+  if (state.context && !state.context.isComposition) {
+    regions.content.appendChild(notice(document, i18n.t("message.reverseNoActiveComp"), "warning"));
+  }
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "reverse-scope",
+      label: i18n.t("field.scope"),
+      value: draft.scope,
+      disabled: state.busy,
+      options: [
+        { value: "selected", label: i18n.t("scope.selected") },
+        { value: "composition", label: i18n.t("scope.composition") }
+      ],
+      onChange: (value) =>
+        confirma(() => {
+          state.reverseOrder.scope = value === "composition" ? "composition" : "selected";
+        })
+    })
+  );
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("reverse.section.options")));
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "reverse-mattes",
+      label: i18n.t("reverse.preserveTrackMattes"),
+      checked: draft.preserveTrackMattes,
+      disabled: state.busy,
+      onChange: (checked) =>
+        confirma(() => {
+          state.reverseOrder.preserveTrackMattes = checked;
+        })
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "reverse-parents",
+      label: i18n.t("reverse.preserveParents"),
+      checked: draft.preserveParents,
+      disabled: state.busy,
+      onChange: (checked) =>
+        confirma(() => {
+          state.reverseOrder.preserveParents = checked;
+        })
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "reverse-timing",
+      label: i18n.t("reverse.reverseTimingToo"),
+      description: i18n.t("reverse.reverseTimingToo.description"),
+      checked: draft.reverseTimingToo,
+      disabled: state.busy,
+      onChange: (checked) =>
+        confirma(() => {
+          state.reverseOrder.reverseTimingToo = checked;
+        })
+    })
+  );
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("reverse.section.preview")));
+
+  if (state.previewError) {
+    regions.content.appendChild(notice(document, state.previewError, "warning"));
+    return;
+  }
+
+  const previa = state.reversePreview;
+  if (!previa) {
+    regions.content.appendChild(hint(document, i18n.t("status.previewing")));
+    return;
+  }
+
+  renderPreviewRows(
+    regions,
+    i18n,
+    previa.after.map((entrada, posicao) => ({
+      antes: previa.before[posicao]?.name ?? "",
+      depois: entrada.name
+    })),
+    previa.targetCount
+  );
+}
+
+function reverseOrderDisabledReason(i18n: I18n): string | null {
+  if (state.busy) {
+    return state.busyReason ?? i18n.t("status.initializing");
+  }
+  if (!state.context?.isComposition) {
+    return i18n.t("message.reverseNoActiveComp");
+  }
+  if (state.previewError) {
+    return state.previewError;
+  }
+  return null;
+}
+
+async function applyReverseOrder(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.reverseNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  const draft = state.reverseOrder;
+  shell.setStatus(i18n.t("status.applyingReverseOrder"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingReverseOrder"));
+
+  const response = await client.execute<ReversePreviewData>(
+    "ae.layer.reverse-order",
+    {
+      scope: draft.scope,
+      preserveTrackMattes: draft.preserveTrackMattes,
+      preserveParents: draft.preserveParents,
+      reverseTimingToo: draft.reverseTimingToo
+    },
+    { preserveSelection: true }
+  );
+  logger.recordResponse("ae.layer.reverse-order", response);
+
+  if (!response.ok) {
+    reportFailure(shell, i18n, response);
+    setBusy(shell, false);
+    return;
+  }
+
+  state.lastError = null;
+  const alvos = isReversePreviewData(response.data) ? response.data.targetCount : 0;
+  shell.setStatus(i18n.t("message.reverseApplied", { count: alvos }), "ok");
+  setBusy(shell, false);
+
+  await refreshReversePreview();
 }
 
 function renderFlip(regions: RenderRegions, i18n: I18n): void {
@@ -2096,7 +2789,7 @@ async function applyParent(
   setBusy(shell, false);
 
   // A hierarquia mudou; a lista em cache não reflete mais o projeto.
-  await loadLayers(shell, i18n, logger, client);
+  await loadLayers();
   shell.setStatus(success, "ok");
 }
 

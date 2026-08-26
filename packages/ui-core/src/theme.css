@@ -193,6 +193,13 @@ body,
   padding: 0 var(--ch-space-3) var(--ch-space-2) var(--ch-space-3);
 }
 
+/* Rodape de lista: contagem e resumo, sem o peso visual de um aviso. */
+.ch-hint {
+  padding: 4px 0 6px 0;
+  color: var(--ch-text-muted);
+  font-size: var(--ch-font-sm);
+}
+
 .ch-section-title {
   margin: 10px 0 var(--ch-space-1) 0;
   font-size: var(--ch-font-sm);
@@ -229,7 +236,8 @@ body,
 
 .ch-color,
 .ch-select,
-.ch-number {
+.ch-number,
+.ch-text {
   width: 100%;
   min-width: 0;
   height: var(--ch-size-control);
@@ -242,6 +250,10 @@ body,
 
 .ch-select {
   padding: 0 24px 0 7px;
+}
+
+.ch-text {
+  padding: 0 7px;
 }
 
 .ch-number {
@@ -278,6 +290,7 @@ body,
 }
 
 .ch-color:focus,
+.ch-text:focus,
 .ch-select:focus,
 .ch-number:focus,
 .ch-checkbox:focus {
@@ -286,6 +299,7 @@ body,
 }
 
 .ch-color[disabled],
+.ch-text[disabled],
 .ch-select[disabled],
 .ch-number[disabled],
 .ch-checkbox[disabled] {

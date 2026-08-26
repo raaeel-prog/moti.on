@@ -36,6 +36,8 @@ const ICON_PATHS: Record<string, string> = {
   parent: "M7 2.5h4v3H7zM9 5.5v2.5M4 8h10M4 8v2.5M14 8v2.5M2.5 10.5h3v3h-3zM12.5 10.5h3v3h-3z",
   createNull: "M5.5 5.5h7v7h-7zM9 2.5v3M9 12.5v3M2.5 9h3M12.5 9h3",
   flip: "M9 2.5v13M3 5.5h3.5v7H3zM15 5.5h-3.5v7H15z",
+  rename: "M3 5.5h7M3 9h9M3 12.5h5M12 3.5l2.5 2.5-5 5-2.5.5.5-2.5z",
+  reverseOrder: "M3.5 4.5h11M3.5 9h11M3.5 13.5h11M12 2.5l2 2-2 2M6 15.5l-2-2 2-2",
   system: "M9 2.5l6 3.5v5l-6 3.5-6-3.5v-5zM6.5 8v2M11.5 8v2",
   diagnostics: "M3.5 4.5h11M3.5 9h11M3.5 13.5h7"
 };
@@ -52,6 +54,8 @@ const ICON_FALLBACKS: Record<string, string> = {
   parent: "Y",
   createNull: "+",
   flip: "><",
+  rename: "Aa",
+  reverseOrder: "⇅",
   system: "S",
   diagnostics: "!"
 };
@@ -156,6 +160,17 @@ export function propertyRow(
 
 export function sectionTitle(doc: Document, text: string): HTMLElement {
   return createElement(doc, "div", "ch-section-title", text);
+}
+
+/**
+ * Linha auxiliar discreta, para contagem e resumo abaixo de uma lista.
+ *
+ * Não é `notice`: aviso é uma caixa com peso visual, e "mais 12 camadas" não é
+ * um aviso — é rodapé. Usar `notice` para isso encheria a view de caixas e
+ * gastaria a atenção que os avisos de verdade precisam ter.
+ */
+export function hint(doc: Document, text: string): HTMLElement {
+  return createElement(doc, "div", "ch-hint", text);
 }
 
 export interface ToolTileOptions {
@@ -315,6 +330,38 @@ export function numberField(doc: Document, options: NumberFieldOptions): HTMLEle
   if (options.unit) {
     field.control.appendChild(createElement(doc, "span", "ch-field__unit", options.unit));
   }
+  return field.root;
+}
+
+export interface TextFieldOptions extends FieldBaseOptions {
+  value: string;
+  /** Teto de caracteres. O host valida de novo; isto só evita digitação inútil. */
+  maxLength: number;
+  placeholder?: string;
+  onCommit(value: string): void;
+}
+
+/**
+ * Campo de texto livre.
+ *
+ * Confirma em `change`, e não em `input`: os consumidores disparam trabalho a
+ * cada confirmação — uma prévia que fala com o host, por exemplo — e reagir a
+ * cada tecla faria uma ida ao host por caractere digitado.
+ */
+export function textField(doc: Document, options: TextFieldOptions): HTMLElement {
+  const field = fieldRoot(doc, options);
+  const input = createElement(doc, "input", "ch-text") as HTMLInputElement;
+  input.type = "text";
+  input.value = options.value;
+  input.maxLength = options.maxLength;
+  input.setAttribute("spellcheck", "false");
+  if (options.placeholder) {
+    input.setAttribute("placeholder", options.placeholder);
+  }
+  applyFieldState(input, options);
+
+  input.addEventListener("change", () => options.onCommit(input.value));
+  field.control.appendChild(input);
   return field.root;
 }
 

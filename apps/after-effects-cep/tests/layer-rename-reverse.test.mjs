@@ -330,6 +330,46 @@ test("a ordem inverte, e o preview mostra a mesma ordem sem aplicá-la", async (
   assert.deepEqual(nomes(comp), ["base", "meio", "topo"]);
 });
 
+test("o preview de reverse devolve registros, e não apenas nomes", async () => {
+  // O painel tipava `before`/`after` como `string[]` e o guarda rejeitava a
+  // prévia em silêncio: a lista ficava eternamente em "calculando". Só a
+  // execução em host mostrou. Este teste fixa o formato do lado que o define.
+  const { scope, comp } = await fixture();
+  empilha(comp, "topo", "base");
+
+  const previsto = despacha(scope, "ae.layer.reverse-order.preview", reverseArgs());
+
+  for (const lista of [previsto.data.before, previsto.data.after]) {
+    assert.ok(Array.isArray(lista));
+    for (const entrada of lista) {
+      assert.equal(typeof entrada, "object");
+      assert.equal(typeof entrada.index, "number");
+      assert.equal(typeof entrada.originalIndex, "number");
+      assert.equal(typeof entrada.name, "string");
+      assert.equal(typeof entrada.startTime, "number");
+    }
+  }
+  assert.deepEqual(
+    previsto.data.after.map((entrada) => entrada.name),
+    ["base", "topo"]
+  );
+});
+
+test("o preview de rename devolve índice, antes e depois por camada", async () => {
+  const { scope, comp } = await fixture();
+  empilha(comp, "um");
+
+  const previsto = despacha(scope, "ae.layer.rename.preview", renameArgs({ preview: true, prefix: "N" }));
+
+  assert.equal(typeof previsto.data.totalCount, "number");
+  assert.equal(typeof previsto.data.changedCount, "number");
+  assert.equal(typeof previsto.data.sourceChangedCount, "number");
+  const [item] = previsto.data.items;
+  assert.equal(typeof item.index, "number");
+  assert.equal(item.before, "um");
+  assert.equal(item.after, "Num");
+});
+
 test("o timing só muda quando pedido explicitamente", async () => {
   // A §7 é explícita: "timing só muda se checkbox explícito". Mover camadas no
   // tempo sem pedido destruiria sincronia que a pessoa montou à mão.
