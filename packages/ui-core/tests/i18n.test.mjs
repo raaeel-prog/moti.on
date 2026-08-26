@@ -141,6 +141,8 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
     "tool.createNull.name",
     "createNull.dimension.2d",
     "createNull.dimension.3d",
+    "flip.axis.horizontal",
+    "flip.axis.vertical",
     "context.compositionValue",
     "value.none",
     "error.withCode"

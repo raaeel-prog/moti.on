@@ -56,6 +56,10 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
   "undo.ae.layer.createNull": {
     "en-US": "Moti.on: create null",
     "pt-BR": "Moti.on: criar null"
+  },
+  "undo.ae.layer.flip": {
+    "en-US": "Moti.on: flip layers",
+    "pt-BR": "Moti.on: espelhar camadas"
   }
 };
 

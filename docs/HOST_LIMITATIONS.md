@@ -26,6 +26,7 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | After Effects: Caixa de texto (`ae.text.box`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: caixa criada, `size` e `position` avaliados exatamente nos valores esperados, sem `expressionError`; texto vazio recolheu para `[0, 0]`; seleção restaurada e reaplicação devolveu no-op. Ctrl+Z de um passo e cor não-preta pelo painel: `NOT RUN` (item 16) |
 | After Effects: Parentesco (`ae.layer.parent`, `ae.layer.list`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: `preserveWorldTransform` preservou o mundo exatamente; desligado, a camada pulou como pedido; ciclo e nome divergente recusados sem mutação; encadeamento seguiu a ordem do timeline; desparentear preservou o mundo. Painel: `NOT RUN` (item 17) |
 | After Effects: Create Null (`ae.layer.create-null`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: os três posicionamentos exatos, sonda temporária sempre apagada, e o critério de aceite cumprido — camadas rotacionadas e escaladas não se moveram ao serem parenteadas. Painel: `NOT RUN` (item 18) |
+| After Effects: Flip (`ae.layer.flip`) | `PARTIAL` | `PASS` para o escopo entregue | AE 26.3x87: flip duplo voltou idêntico; o canto espelhou em torno do pivô com erro de 1,1e-13; a conta de limites bate com a do motor de expressões. Camadas 3D, com pai e shape paths: recusadas ou fora de escopo (item 19) |
 | Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | APIs verificadas em documentação e doubles |
 | Premiere: versão/locale do host | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | `require("uxp").host.version`/`.uiLocale` documentados para 25.6+ |
 | Premiere: transações/Undo | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Ordem `lockedAccess` → `executeTransaction` coberta por doubles |
@@ -261,6 +262,52 @@ O segundo é o mais instrutivo do slice: um comando pode estar completamente ver
 - **O painel.** Nenhum dos dois comandos do CHMS-015 foi exercitado pela interface.
 - Seleção com mais de 500 camadas, onde o comando recusa.
 - Camadas com expressão na posição, onde a reescrita de `preserveWorldTransform` pode falhar em silêncio.
+- Ctrl+Z de um passo; macOS; AE 25.x.
+
+### 19. Flip: a derivação importa mais que o código
+
+`PARTIAL` / execução `PASS` para o escopo entregue.
+
+**Espelhar não é negar a escala.** Sendo `M` a reflexão, o transform da camada é `T(p)·R(t)·S`, e:
+
+```text
+M·T(p)·R(t)·S = T(Mp)·M·R(t)·S = T(Mp)·R(-t)·M·S = T(Mp)·R(-t)·S'
+```
+
+A posição reflete em torno do pivô, **a rotação troca de sinal**, e a escala do eixo espelhado
+troca de sinal. Negar só a escala deixaria qualquer camada rotacionada no lugar errado, com o
+erro crescendo com o ângulo — e passando despercebido em qualquer teste com rotação zero.
+
+Como cada termo troca de sinal, aplicar duas vezes devolve o estado inicial exatamente.
+
+#### Evidência da execução aprovada
+
+| Verificação | Medido |
+|---|---|
+| flip duplo, camada rotacionada 35° e escalada 140×80 | voltou **idêntico** |
+| estado intermediário | `pos=[490, 120] esc=[-140, 80] rot=-35` |
+| canto medido por `toComp`, espelhado em torno de x=320 | erro de **1,137e-13** em x, **zero** em y |
+| centro dos limites: conta do comando vs motor de expressões | `269,4468` nos dois, diferença 8,7e-7 |
+| camada 3D e camada com pai | recusadas com `INVALID_SELECTION_TYPE` |
+| texto com legibilidade preservada | mudou de lado, escala continuou `[100, 100]` |
+
+A terceira linha é a que vale: a conta de limites que o comando faz à mão foi conferida contra a
+matemática nativa do After Effects, e não contra a expectativa de quem a escreveu.
+
+#### Escopo recusado, e por quê
+
+- **Camadas com pai.** Com um pai rotacionado o eixo de espelhamento deixa de ser alinhado no
+  espaço do pai, e a fórmula não vale. O comando recusa com erro tipado.
+- **Camadas 3D.** São três rotações e a derivação é outra.
+- **Shape paths.** A §7 diz "para paths, refletir vertices e tangents" — é uma segunda
+  implementação inteira, sobre `Shape` em vez de transform. Não está neste slice.
+
+Em todos os três a alternativa seria produzir silenciosamente um resultado errado, que é
+exatamente o modo de falha deste comando.
+
+#### O que continua `NOT RUN`
+
+- **O painel.** Nenhum dos três comandos do CHMS-015 foi exercitado pela interface.
 - Ctrl+Z de um passo; macOS; AE 25.x.
 
 ## Controles automatizados existentes

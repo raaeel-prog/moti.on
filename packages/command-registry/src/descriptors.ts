@@ -248,6 +248,21 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     timeoutMs: DEFAULT_TIMEOUT_MS
   },
   {
+    // Transform puro: nao le nem escreve expressao, entao nao exige motor.
+    id: "ae.layer.flip",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    // Espelhar de novo NAO e no-op: e a volta ao estado inicial, e continua
+    // sendo uma alteracao real do projeto.
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.layer.flip",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
     id: "pr.context.read",
     hosts: ["premiere-pro"],
     requirements: [],

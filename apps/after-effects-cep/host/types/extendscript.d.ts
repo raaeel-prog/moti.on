@@ -96,6 +96,11 @@ declare class Layer {
    * — o nome engana, o "jump" e o que ela causa, nao o que evita.
    */
   setParentWithJump(layer: Layer): void;
+  /**
+   * Retangulo da fonte no espaco da camada. `top` costuma ser negativo em
+   * texto, porque a origem fica na baseline.
+   */
+  sourceRectAtTime(time: number, includeExtents: boolean): SourceRect;
   /** Move esta camada para logo abaixo da informada, na ordem da timeline. */
   moveAfter(layer: Layer): void;
   remove(): void;
@@ -104,6 +109,14 @@ declare class Layer {
 declare class TextLayer extends Layer {}
 
 declare class ShapeLayer extends Layer {}
+
+/** Retangulo devolvido por `sourceRectAtTime`, no espaco da propria camada. */
+interface SourceRect {
+  readonly top: number;
+  readonly left: number;
+  readonly width: number;
+  readonly height: number;
+}
 
 /** Fonte de um solido ou null; largura e altura sao gravaveis. */
 declare class SolidSource {

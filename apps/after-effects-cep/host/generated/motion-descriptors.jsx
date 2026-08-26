@@ -167,6 +167,19 @@
         "en-US": "Moti.on: create null",
         "pt-BR": "Moti.on: criar null"
       }
+    },
+    "ae.layer.flip": {
+      id: "ae.layer.flip",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.layer.flip",
+      undoLabels: {
+        "en-US": "Moti.on: flip layers",
+        "pt-BR": "Moti.on: espelhar camadas"
+      }
     }
   };
 

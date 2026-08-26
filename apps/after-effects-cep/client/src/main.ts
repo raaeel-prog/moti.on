@@ -156,6 +156,26 @@ const DEFAULT_PARENT: ParentDraft = {
   chainMode: "target"
 };
 
+interface FlipDraft {
+  axis: "horizontal" | "vertical";
+  pivot: "anchor" | "selectionBounds" | "compCenter";
+  groupMode: "each" | "group";
+  preserveTextReadability: boolean;
+}
+
+/**
+ * Horizontal em torno da âncora é o espelhamento que a pessoa espera de um
+ * comando chamado "Espelhar": a camada não sai do lugar e só o conteúdo inverte.
+ * Legibilidade preservada nasce ligada porque texto invertido raramente é o
+ * pedido — e quem quiser o efeito desliga um campo.
+ */
+const DEFAULT_FLIP: FlipDraft = {
+  axis: "horizontal",
+  pivot: "anchor",
+  groupMode: "each",
+  preserveTextReadability: true
+};
+
 type NullPlacement = "compCenter" | "averageAnchor" | "selectionBounds";
 
 interface CreateNullDraft {
@@ -217,7 +237,7 @@ const DEFAULT_SMOOTH: SmoothDraft = {
 };
 
 type MessageKey = Parameters<I18n["t"]>[0];
-type ToolId = "loopOut" | "smooth" | "wiggle" | "flicker" | "textBox" | "parent" | "createNull";
+type ToolId = "loopOut" | "smooth" | "wiggle" | "flicker" | "textBox" | "parent" | "createNull" | "flip";
 
 /**
  * Uma ferramenta do navegador.
@@ -293,6 +313,17 @@ const TOOLS: readonly ToolDefinition[] = [
     }
   },
   {
+    id: "flip",
+    nameKey: "tool.flip.name",
+    descriptionKey: "tool.flip.description",
+    render: renderFlip,
+    disabledReason: flipDisabledReason,
+    apply: applyFlip,
+    reset: () => {
+      state.flip = { ...DEFAULT_FLIP };
+    }
+  },
+  {
     id: "createNull",
     nameKey: "tool.createNull.name",
     descriptionKey: "tool.createNull.description",
@@ -351,6 +382,7 @@ const state: {
   textBox: TextBoxDraft;
   parent: ParentDraft;
   createNull: CreateNullDraft;
+  flip: FlipDraft;
   /** Cache da lista de camadas; `null` enquanto nunca foi lida. */
   layers: LayerSummary[] | null;
   layersTotal: number;
@@ -369,6 +401,7 @@ const state: {
   textBox: { ...DEFAULT_TEXT_BOX },
   parent: { ...DEFAULT_PARENT },
   createNull: { ...DEFAULT_CREATE_NULL },
+  flip: { ...DEFAULT_FLIP },
   layers: null,
   layersTotal: 0,
   activeTool: null
@@ -1508,6 +1541,160 @@ function hexToChannels(hex: string): [number, number, number] {
     parseInt(normalized.slice(3, 5), 16) / 255,
     parseInt(normalized.slice(5, 7), 16) / 255
   ];
+}
+
+function renderFlip(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.flip;
+
+  regions.content.appendChild(notice(document, i18n.t("message.flipInstructions")));
+  if (state.context && !state.context.isComposition) {
+    regions.content.appendChild(notice(document, i18n.t("message.flipNoActiveComp"), "warning"));
+  }
+  // O limite é declarado de saída, e não só quando o comando recusa: descobrir
+  // a restrição depois de montar a seleção é pior que saber antes.
+  regions.content.appendChild(notice(document, i18n.t("message.flipUnsupportedLayer"), "warning"));
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("flip.section.axis")));
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "flip-axis",
+      label: i18n.t("flip.axis"),
+      value: draft.axis,
+      disabled: state.busy,
+      options: [
+        { value: "horizontal", label: i18n.t("flip.axis.horizontal") },
+        { value: "vertical", label: i18n.t("flip.axis.vertical") }
+      ],
+      onChange: (value) => {
+        state.flip.axis = value === "vertical" ? "vertical" : "horizontal";
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "flip-pivot",
+      label: i18n.t("flip.pivot"),
+      value: draft.pivot,
+      disabled: state.busy,
+      options: [
+        { value: "anchor", label: i18n.t("flip.pivot.anchor") },
+        { value: "selectionBounds", label: i18n.t("flip.pivot.selectionBounds") },
+        { value: "compCenter", label: i18n.t("flip.pivot.compCenter") }
+      ],
+      onChange: (value) => {
+        state.flip.pivot =
+          value === "selectionBounds" || value === "compCenter" ? value : "anchor";
+        shell.rerender();
+      }
+    })
+  );
+
+  // O centro da composição é o mesmo ponto para todas as camadas, então o modo
+  // de agrupamento não muda nada ali. Mostrá-lo seria oferecer uma escolha sem
+  // efeito.
+  if (draft.pivot !== "compCenter") {
+    regions.content.appendChild(
+      selectField(document, {
+        id: "flip-group-mode",
+        label: i18n.t("flip.groupMode"),
+        value: draft.groupMode,
+        disabled: state.busy,
+        options: [
+          { value: "each", label: i18n.t("flip.groupMode.each") },
+          { value: "group", label: i18n.t("flip.groupMode.group") }
+        ],
+        onChange: (value) => {
+          state.flip.groupMode = value === "group" ? "group" : "each";
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("flip.section.options")));
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "flip-text-readability",
+      label: i18n.t("flip.preserveTextReadability"),
+      description: i18n.t("flip.preserveTextReadability.description"),
+      checked: draft.preserveTextReadability,
+      disabled: state.busy,
+      onChange: (checked) => {
+        state.flip.preserveTextReadability = checked;
+        shell.rerender();
+      }
+    })
+  );
+}
+
+function flipDisabledReason(i18n: I18n): string | null {
+  if (state.busy) {
+    return state.busyReason ?? i18n.t("status.initializing");
+  }
+  if (!state.context?.isComposition) {
+    return i18n.t("message.flipNoActiveComp");
+  }
+  return null;
+}
+
+async function applyFlip(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.flipNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  const draft = state.flip;
+  shell.setStatus(i18n.t("status.applyingFlip"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingFlip"));
+
+  const response = await client.execute<SmoothResultData>(
+    "ae.layer.flip",
+    {
+      axis: draft.axis,
+      pivot: draft.pivot,
+      // O centro da composição é o mesmo ponto para todas, então o modo é
+      // irrelevante ali — o painel envia o valor canônico em vez de um resíduo
+      // do que o usuário escolheu antes de trocar de pivô.
+      groupMode: draft.pivot === "compCenter" ? "each" : draft.groupMode,
+      preserveTextReadability: draft.preserveTextReadability
+    },
+    { preserveSelection: true }
+  );
+  logger.recordResponse("ae.layer.flip", response);
+
+  if (!response.ok || !isSmoothResultData(response.data)) {
+    if (!response.ok) {
+      reportFailure(shell, i18n, response);
+    } else {
+      state.lastError = i18n.t("message.failureWithoutReason");
+      logger.error("Resposta de flip invalida.", {
+        command: "ae.layer.flip",
+        errorCode: "INVALID_HOST_RESPONSE",
+        result: "failure"
+      });
+      shell.setStatus(i18n.t("status.failed"), "error");
+    }
+    setBusy(shell, false);
+    return;
+  }
+
+  state.lastError = null;
+  shell.setStatus(i18n.t("message.flipApplied", { count: response.data.appliedCount }), "ok");
+  setBusy(shell, false);
 }
 
 interface CreateNullResultData {

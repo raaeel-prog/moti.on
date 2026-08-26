@@ -88,6 +88,58 @@ Status: `IMPLEMENTED_AND_VERIFIED` no ambiente acima.
 
 **Pendência de produto registrada:** a documentação diz que o offset controla o *valor inicial* do wiggle, mas o identificador da camada continua na composição da semente. Não foi medido se duas camadas com a mesma semente produzem movimento idêntico — pode ser que a semente iguale a fase e não a trajetória. Até isso ser medido, o produto **não promete "mesma semente, mesmo movimento" entre camadas**; o texto da interface fala apenas do comportamento por propriedade.
 
+### CHMS-015 — Flip (`ae.layer.flip`), fechando os três comandos
+
+Terceiro e último comando do CHMS-015. O critério de aceite é curto: flip duplo retorna ao estado
+inicial dentro de tolerância numérica.
+
+#### A derivação, que importa mais que o código
+
+**Espelhar não é negar a escala.** Sendo `M` a reflexão:
+
+```text
+M·T(p)·R(t)·S = T(Mp)·M·R(t)·S = T(Mp)·R(-t)·M·S = T(Mp)·R(-t)·S'
+```
+
+A posição reflete em torno do pivô, **a rotação troca de sinal**, e a escala do eixo espelhado
+troca de sinal.
+
+Sem negar a rotação, qualquer camada rotacionada termina no lugar errado — e o erro cresce com o
+ângulo. Numa camada sem rotação o resultado é idêntico, então um teste com valores redondos passa
+e o defeito só aparece no material real de quem usa. É o mesmo padrão do erro de âncora do Create
+Null: plausível, silencioso, e invisível para verificação que só confirma "não deu erro".
+
+Como cada termo troca de sinal, aplicar duas vezes devolve o estado inicial exatamente — o
+critério de aceite sai da álgebra, não de um ajuste.
+
+#### Verificado em host real — After Effects 26.3x87
+
+| Verificação | Medido |
+|---|---|
+| flip duplo, camada rotacionada 35° e escalada 140×80 | voltou **idêntico** |
+| estado intermediário | `pos=[490, 120] esc=[-140, 80] rot=-35` |
+| canto medido por `toComp`, espelhado em torno de x=320 | erro de **1,137e-13** em x, zero em y |
+| centro dos limites: conta do comando vs motor de expressões | `269,4468` nos dois |
+| 3D e camada com pai | recusadas com erro tipado |
+| texto com legibilidade preservada | mudou de lado, escala continuou `[100, 100]` |
+
+A quarta linha é a que mais vale: a conta de limites que o comando faz à mão foi conferida contra
+a matemática nativa do After Effects, e não contra a expectativa de quem a escreveu.
+
+#### Escopo recusado, e por quê
+
+Camadas **com pai** e camadas **3D** são recusadas com erro tipado, e **shape paths** ficam fora
+deste slice. Num pai rotacionado o eixo de espelhamento deixa de ser alinhado e a fórmula não
+vale; em 3D são três rotações e a derivação é outra; paths são uma segunda implementação inteira,
+sobre `Shape` em vez de transform.
+
+Nos três casos a alternativa seria produzir silenciosamente um resultado errado — que é
+exatamente o modo de falha deste comando. O painel declara o limite de saída, e não só quando o
+comando recusa: descobrir a restrição depois de montar a seleção é pior que saber antes.
+
+**O painel continua `NOT RUN`** para os três comandos do CHMS-015. Item 19 de
+`docs/HOST_LIMITATIONS.md`.
+
 ### CHMS-015 — Create Null (`ae.layer.create-null`)
 
 Segundo comando do CHMS-015. O critério de aceite é o mesmo: parentear camadas rotacionadas e escaladas não pode alterar a posição visual delas.
