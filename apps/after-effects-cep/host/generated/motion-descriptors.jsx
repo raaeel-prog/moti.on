@@ -128,6 +128,32 @@
         "en-US": "Moti.on: create text box",
         "pt-BR": "Moti.on: criar caixa de texto"
       }
+    },
+    "ae.layer.list": {
+      id: "ae.layer.list",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
+    "ae.layer.parent": {
+      id: "ae.layer.parent",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.layer.parent",
+      undoLabels: {
+        "en-US": "Moti.on: parent layers",
+        "pt-BR": "Moti.on: parentear camadas"
+      }
     }
   };
 

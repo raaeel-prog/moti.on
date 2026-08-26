@@ -14,6 +14,7 @@ import { buildCapabilities, type ProbeFacts } from "@motion/capability-matrix";
 import { createLogger, type MotionLogger } from "@motion/logging";
 import {
   button,
+  checkboxField,
   colorField,
   createI18n,
   createShell,
@@ -122,6 +123,39 @@ const DEFAULT_FLICKER: FlickerDraft = {
   seed: 0
 };
 
+interface LayerSummary {
+  index: number;
+  name: string;
+  type: string;
+  parentIndex: number | null;
+  selected: boolean;
+}
+
+type ChainMode = "target" | "chain";
+
+interface ParentDraft {
+  /** `0` significa "nenhum alvo". O host recusa isso fora do modo encadear. */
+  targetLayerIndex: number;
+  /** Soma de verificação contra timeline mudado entre a leitura e o clique. */
+  targetLayerName: string;
+  preserveWorldTransform: boolean;
+  unparent: boolean;
+  chainMode: ChainMode;
+}
+
+/**
+ * `preserveWorldTransform` nasce ligado porque é o comportamento do pickwhip do
+ * timeline: reparentar sem mexer na aparência. Chegar com ele desligado faria as
+ * camadas saltarem no primeiro clique de quem não leu o campo.
+ */
+const DEFAULT_PARENT: ParentDraft = {
+  targetLayerIndex: 0,
+  targetLayerName: "",
+  preserveWorldTransform: true,
+  unparent: false,
+  chainMode: "target"
+};
+
 interface TextBoxDraft {
   paddingX: number;
   paddingY: number;
@@ -157,7 +191,7 @@ const DEFAULT_SMOOTH: SmoothDraft = {
 };
 
 type MessageKey = Parameters<I18n["t"]>[0];
-type ToolId = "loopOut" | "smooth" | "wiggle" | "flicker" | "textBox";
+type ToolId = "loopOut" | "smooth" | "wiggle" | "flicker" | "textBox" | "parent";
 
 /**
  * Uma ferramenta do navegador.
@@ -176,6 +210,15 @@ interface ToolDefinition {
   disabledReason(i18n: I18n): string | null;
   apply(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void>;
   reset(): void;
+  /**
+   * Carga sob demanda ao abrir a ferramenta, e de novo pelo botão Atualizar.
+   *
+   * Existe porque `render` é síncrono e não fala com o host: uma ferramenta que
+   * precisa de dados do projeto — a lista de camadas, por exemplo — não pode
+   * buscá-los no meio do desenho. Ferramentas que não precisam simplesmente não
+   * declaram o gancho, e o botão Atualizar não aparece para elas.
+   */
+  load?(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void>;
 }
 
 const TOOLS: readonly ToolDefinition[] = [
@@ -224,6 +267,18 @@ const TOOLS: readonly ToolDefinition[] = [
     }
   },
   {
+    id: "parent",
+    nameKey: "tool.parent.name",
+    descriptionKey: "tool.parent.description",
+    render: renderParent,
+    disabledReason: parentDisabledReason,
+    apply: applyParent,
+    load: loadLayers,
+    reset: () => {
+      state.parent = { ...DEFAULT_PARENT };
+    }
+  },
+  {
     id: "textBox",
     nameKey: "tool.textBox.name",
     descriptionKey: "tool.textBox.description",
@@ -257,6 +312,10 @@ const state: {
   wiggle: WiggleDraft;
   flicker: FlickerDraft;
   textBox: TextBoxDraft;
+  parent: ParentDraft;
+  /** Cache da lista de camadas; `null` enquanto nunca foi lida. */
+  layers: LayerSummary[] | null;
+  layersTotal: number;
   /** `null` mostra a grade; um id abre o editor daquela ferramenta. */
   activeTool: ToolId | null;
 } = {
@@ -270,6 +329,9 @@ const state: {
   wiggle: { ...DEFAULT_WIGGLE },
   flicker: { ...DEFAULT_FLICKER },
   textBox: { ...DEFAULT_TEXT_BOX },
+  parent: { ...DEFAULT_PARENT },
+  layers: null,
+  layersTotal: 0,
   activeTool: null
 };
 
@@ -384,6 +446,9 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
                 state.activeTool = item.id;
                 state.lastError = null;
                 shell.rerender();
+                // Depois do rerender: a ferramenta já está desenhada quando a
+                // carga começa, então o estado ocupado aparece no lugar certo.
+                void item.load?.(shell, i18n, logger, client);
               }
             })
           )
@@ -407,6 +472,22 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
         onClick: () => void tool.apply(shell, i18n, logger, client)
       })
     );
+    // Só ferramentas que leem dados do projeto ganham Atualizar. Um botão que
+    // não faz nada nas outras cinco seria pior que a ausência dele.
+    if (tool.load) {
+      regions.actions.appendChild(
+        button(document, {
+          label: i18n.t("action.refreshLayers"),
+          ...(state.busy
+            ? { disabled: true as const, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
+            : { disabled: false as const }),
+          title: state.busy
+            ? state.busyReason ?? i18n.t("status.initializing")
+            : i18n.t("action.refreshLayers"),
+          onClick: () => void tool.load?.(shell, i18n, logger, client)
+        })
+      );
+    }
     regions.actions.appendChild(
       button(document, {
         label: i18n.t("action.reset"),
@@ -1262,6 +1343,91 @@ async function applyFlicker(
   setBusy(shell, false);
 }
 
+interface LayerListResultData {
+  layers: LayerSummary[];
+  totalCount: number;
+  truncated: boolean;
+}
+
+function isLayerSummary(value: unknown): value is LayerSummary {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    Number.isInteger(record.index) &&
+    (record.index as number) >= 1 &&
+    typeof record.name === "string" &&
+    typeof record.type === "string" &&
+    (record.parentIndex === null || Number.isInteger(record.parentIndex)) &&
+    typeof record.selected === "boolean"
+  );
+}
+
+function isLayerListResultData(value: unknown): value is LayerListResultData {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    Array.isArray(record.layers) &&
+    record.layers.every(isLayerSummary) &&
+    Number.isInteger(record.totalCount) &&
+    typeof record.truncated === "boolean"
+  );
+}
+
+/**
+ * Lê a lista de camadas para o seletor de alvo.
+ *
+ * Falha aqui não bloqueia a ferramenta: o painel continua utilizável para
+ * desparentear, que não precisa de alvo. Deixar a ferramenta inteira inacessível
+ * porque uma leitura falhou seria pior que a leitura ausente.
+ */
+async function loadLayers(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+  setBusy(shell, true, i18n.t("status.loadingLayers"));
+
+  const response = await client.execute<LayerListResultData>("ae.layer.list", {});
+  logger.recordResponse("ae.layer.list", response);
+
+  if (!response.ok || !isLayerListResultData(response.data)) {
+    state.layers = null;
+    state.layersTotal = 0;
+    if (!response.ok) {
+      reportFailure(shell, i18n, response);
+    } else {
+      logger.error("Resposta de lista de camadas invalida.", {
+        command: "ae.layer.list",
+        errorCode: "INVALID_HOST_RESPONSE",
+        result: "failure"
+      });
+    }
+    setBusy(shell, false);
+    return;
+  }
+
+  state.layers = response.data.layers;
+  state.layersTotal = response.data.totalCount;
+
+  // O alvo guardado pode ter sumido ou trocado de nome desde a última leitura.
+  // Mantê-lo apontando para um índice que virou outra camada é exatamente o erro
+  // silencioso que a soma de verificação do host existe para pegar.
+  const alvo = state.parent.targetLayerIndex;
+  if (alvo !== 0) {
+    const ainda = state.layers.find(
+      (camada) => camada.index === alvo && camada.name === state.parent.targetLayerName
+    );
+    if (!ainda) {
+      state.parent.targetLayerIndex = 0;
+      state.parent.targetLayerName = "";
+    }
+  }
+
+  setBusy(shell, false);
+}
+
 interface TextBoxResultData {
   createdCount: number;
   unchangedCount: number;
@@ -1303,6 +1469,190 @@ function hexToChannels(hex: string): [number, number, number] {
     parseInt(normalized.slice(3, 5), 16) / 255,
     parseInt(normalized.slice(5, 7), 16) / 255
   ];
+}
+
+function renderParent(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.parent;
+
+  regions.content.appendChild(notice(document, i18n.t("message.parentInstructions")));
+  if (state.context && !state.context.isComposition) {
+    regions.content.appendChild(notice(document, i18n.t("message.parentNoActiveComp"), "warning"));
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("parent.section.target")));
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "parent-unparent",
+      label: i18n.t("parent.unparent"),
+      description: i18n.t("parent.unparent.description"),
+      checked: draft.unparent,
+      disabled: state.busy,
+      onChange: (checked) => {
+        state.parent.unparent = checked;
+        // Desparentear não aceita alvo nem encadeamento: o host recusa a
+        // combinação, então a interface não pode deixá-la montada.
+        if (checked) {
+          state.parent.targetLayerIndex = 0;
+          state.parent.targetLayerName = "";
+          state.parent.chainMode = "target";
+        }
+        shell.rerender();
+      }
+    })
+  );
+
+  // Alvo e modo só aparecem quando fazem diferença. Mostrá-los desabilitados ao
+  // lado de "Desparentear" seria ruído permanente.
+  if (!draft.unparent) {
+    if (state.layers === null) {
+      regions.content.appendChild(notice(document, i18n.t("message.parentListEmpty"), "warning"));
+    } else {
+      if (state.layersTotal > state.layers.length) {
+        regions.content.appendChild(
+          notice(document, i18n.t("message.parentListTruncated", { count: state.layersTotal }), "warning")
+        );
+      }
+
+      regions.content.appendChild(
+        selectField(document, {
+          id: "parent-target",
+          label: i18n.t("parent.targetLayer"),
+          value: String(draft.targetLayerIndex),
+          disabled: state.busy,
+          options: [
+            { value: "0", label: i18n.t("value.noTarget") },
+            ...state.layers.map((camada) => ({
+              value: String(camada.index),
+              label: `${camada.index}. ${camada.name}`
+            }))
+          ],
+          onChange: (value) => {
+            const indice = Number(value);
+            const escolhida = state.layers?.find((camada) => camada.index === indice);
+            state.parent.targetLayerIndex = escolhida ? escolhida.index : 0;
+            state.parent.targetLayerName = escolhida ? escolhida.name : "";
+            shell.rerender();
+          }
+        })
+      );
+    }
+
+    regions.content.appendChild(
+      selectField(document, {
+        id: "parent-chain-mode",
+        label: i18n.t("parent.chainMode"),
+        value: draft.chainMode,
+        disabled: state.busy,
+        options: [
+          { value: "target", label: i18n.t("parent.chainMode.target") },
+          { value: "chain", label: i18n.t("parent.chainMode.chain") }
+        ],
+        onChange: (value) => {
+          state.parent.chainMode = value === "chain" ? "chain" : "target";
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("parent.section.options")));
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "parent-preserve",
+      label: i18n.t("parent.preserveWorldTransform"),
+      description: i18n.t("parent.preserveWorldTransform.description"),
+      checked: draft.preserveWorldTransform,
+      disabled: state.busy,
+      onChange: (checked) => {
+        state.parent.preserveWorldTransform = checked;
+        shell.rerender();
+      }
+    })
+  );
+}
+
+function parentDisabledReason(i18n: I18n): string | null {
+  if (state.busy) {
+    return state.busyReason ?? i18n.t("status.initializing");
+  }
+  if (!state.context?.isComposition) {
+    return i18n.t("message.parentNoActiveComp");
+  }
+  const draft = state.parent;
+  if (!draft.unparent && draft.chainMode === "target" && draft.targetLayerIndex === 0) {
+    return i18n.t("message.parentNeedsTarget");
+  }
+  return null;
+}
+
+async function applyParent(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.parentNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  const draft = state.parent;
+  if (!draft.unparent && draft.chainMode === "target" && draft.targetLayerIndex === 0) {
+    state.lastError = i18n.t("message.parentNeedsTarget");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingParent"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingParent"));
+
+  const response = await client.execute<SmoothResultData>(
+    "ae.layer.parent",
+    {
+      targetLayerIndex: draft.unparent ? 0 : draft.targetLayerIndex,
+      targetLayerName: draft.unparent ? "" : draft.targetLayerName,
+      preserveWorldTransform: draft.preserveWorldTransform,
+      unparent: draft.unparent,
+      chainMode: draft.unparent ? "target" : draft.chainMode
+    },
+    { preserveSelection: true }
+  );
+  logger.recordResponse("ae.layer.parent", response);
+
+  if (!response.ok || !isSmoothResultData(response.data)) {
+    if (!response.ok) {
+      reportFailure(shell, i18n, response);
+    } else {
+      state.lastError = i18n.t("message.failureWithoutReason");
+      logger.error("Resposta de parentesco invalida.", {
+        command: "ae.layer.parent",
+        errorCode: "INVALID_HOST_RESPONSE",
+        result: "failure"
+      });
+      shell.setStatus(i18n.t("status.failed"), "error");
+    }
+    setBusy(shell, false);
+    return;
+  }
+
+  state.lastError = null;
+  const success = response.data.appliedCount > 0
+    ? i18n.t("message.parentApplied", { count: response.data.appliedCount })
+    : i18n.t("message.parentAlreadyApplied", { count: response.data.unchangedCount });
+  shell.setStatus(success, "ok");
+  setBusy(shell, false);
+
+  // A hierarquia mudou; a lista em cache não reflete mais o projeto.
+  await loadLayers(shell, i18n, logger, client);
+  shell.setStatus(success, "ok");
 }
 
 function renderTextBox(regions: RenderRegions, i18n: I18n): void {

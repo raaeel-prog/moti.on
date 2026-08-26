@@ -88,6 +88,47 @@ Status: `IMPLEMENTED_AND_VERIFIED` no ambiente acima.
 
 **Pendência de produto registrada:** a documentação diz que o offset controla o *valor inicial* do wiggle, mas o identificador da camada continua na composição da semente. Não foi medido se duas camadas com a mesma semente produzem movimento idêntico — pode ser que a semente iguale a fase e não a trajetória. Até isso ser medido, o produto **não promete "mesma semente, mesmo movimento" entre camadas**; o texto da interface fala apenas do comportamento por propriedade.
 
+### CHMS-015 — Parentesco (`ae.layer.parent` + `ae.layer.list`)
+
+Primeiro dos três comandos do CHMS-015. O critério do roteiro é um só — *world transform preservado* — e ele depende inteiramente de um fato que precisava ser medido, não lido.
+
+#### A medição que decidiu o comando
+
+```
+layer.parent = alvo          PRESERVA o world transform
+layer.setParentWithJump(x)   NAO preserva — a camada pula
+```
+
+O nome da API engana: é natural ler `setParentWithJump` como "seta o parent evitando o pulo". É o contrário — o "jump" é o que ela causa. **Um palpite pelo nome teria invertido a feature, e o erro seria silencioso:** as camadas ficariam visualmente erradas sem nenhuma exceção.
+
+O experimento está em `docs/research/after-effects-parenting.md`. Detalhe do método que importa: o pai precisa estar rotacionado **e** escalado — com rotação sozinha uma filha na origem do pai fica parada nos dois modos, e o teste não distinguiria nada.
+
+#### Decisões
+
+- **Detecção de ciclo no preflight**, mesmo o After Effects recusando sozinho. Confiar na exceção do host faria o lote falhar no meio e devolveria uma mensagem de host não traduzida em vez de erro tipado.
+- **O nome do alvo viaja como soma de verificação**, não como identidade. Se o timeline mudou entre a leitura da lista e o clique, parentear pelo índice antigo acertaria a camada errada em silêncio.
+- **Encadeamento na ordem do timeline**, não na de seleção. `selectedLayers` não garante ordem: encadear por ela daria uma hierarquia diferente a cada clique, com os mesmos inputs.
+- **Reparentar para o mesmo pai é no-op.** Reescrever levaria o After Effects a recalcular o transform sem necessidade, e cada reaplicação acumularia arredondamento na posição.
+- `ae.layer.list` é comando próprio, e não um campo de `ae.context.read`: o contexto é lido a cada troca de foco, e uma composição com centenas de camadas transformaria isso num payload grande e constante.
+
+#### Uma suposição que estou declarando
+
+O spec lista `chainMode` sem dizer o que os modos são. Implementei os dois que a convenção do After Effects sustenta — *todas para o alvo* e *encadear na ordem do timeline*, com a última da pilha indo para o alvo. Diferente de `anchorMode` e `multilineMode` do Text Box, aqui existe uma leitura dominante, então preferi entregar a declarar bloqueio. Se a intenção era outra, é uma troca barata.
+
+#### Verificado em host real — After Effects 26.3x87
+
+| Verificação | Medido |
+|---|---|
+| `preserveWorldTransform: true` | mundo `[60, 60]` antes e depois |
+| `preserveWorldTransform: false` | `[120, 80]` → `[473.923, 311.962]` — pulou, como pedido |
+| reaplicar | `appliedCount: 0`, `unchangedCount: 1` |
+| ciclo | recusado, pai do alvo intocado |
+| nome divergente | recusado |
+| encadear | topo→meio→base→alvo |
+| desparentear | mundo preservado |
+
+**O painel continua `NOT RUN`:** o comando foi exercitado pelo dispatcher, não pela interface. Item 17 de `docs/HOST_LIMITATIONS.md`.
+
 ### CHMS-014 — Text Box: o rig completo, ainda sem medição em host
 
 O slice anterior deixou os `matchName` sondados e os templates prontos. Este monta o rig: `ae.text.box` cria uma shape layer atrás de cada camada de **texto** selecionada, parenteada, ordenada logo abaixo, com tamanho e posição dirigidos por expressão gerenciada.

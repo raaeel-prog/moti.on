@@ -24,6 +24,7 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | After Effects: Flicker (`ae.expression.flicker`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Aplicou em 1D e 2D na mesma seleção sem `expressionError`; valor avaliado saiu escalar e array respectivamente. Cor e 3D em host: `NOT RUN` |
 | After Effects: payload acima de 60.000 caracteres codificados | `PARTIAL` | `NOT RUN` | Rejeição tipada implementada; transporte por arquivo temporário ausente |
 | After Effects: Caixa de texto (`ae.text.box`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: caixa criada, `size` e `position` avaliados exatamente nos valores esperados, sem `expressionError`; texto vazio recolheu para `[0, 0]`; seleção restaurada e reaplicação devolveu no-op. Ctrl+Z de um passo e cor não-preta pelo painel: `NOT RUN` (item 16) |
+| After Effects: Parentesco (`ae.layer.parent`, `ae.layer.list`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87: `preserveWorldTransform` preservou o mundo exatamente; desligado, a camada pulou como pedido; ciclo e nome divergente recusados sem mutação; encadeamento seguiu a ordem do timeline; desparentear preservou o mundo. Painel: `NOT RUN` (item 17) |
 | Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | APIs verificadas em documentação e doubles |
 | Premiere: versão/locale do host | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | `require("uxp").host.version`/`.uiLocale` documentados para 25.6+ |
 | Premiere: transações/Undo | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Ordem `lockedAccess` → `executeTransaction` coberta por doubles |
@@ -201,6 +202,31 @@ O After Effects seleciona toda camada recém-criada. Sem restaurar a seleção, 
 - Aplicação com **várias camadas de texto selecionadas** em host real.
 - Comportamento com texto de múltiplas linhas e com `paddingX`/`paddingY` extremos.
 - macOS e AE 25.x.
+
+### 17. Parentesco: comando verificado, painel ainda não
+
+`IMPLEMENTED_AND_VERIFIED` num ambiente / execução `PASS` para o comando.
+
+**Medido em AE 26.3x87, 2026-08-26.** O ponto que exigia medição, e que teria sido invertido por um palpite, está em `docs/research/after-effects-parenting.md`: **`layer.parent = alvo` preserva o world transform e `setParentWithJump` não.** O nome da API sugere o contrário.
+
+| Verificação | Medido |
+|---|---|
+| `preserveWorldTransform: true` | mundo `[60, 60]` antes e depois |
+| `preserveWorldTransform: false` | `[120, 80]` → `[473.923, 311.962]` — pulou, como pedido |
+| reaplicar o mesmo parentesco | `appliedCount: 0`, `unchangedCount: 1` |
+| ciclo | `INVALID_SELECTION_TYPE`, pai do alvo intocado |
+| nome do alvo divergente | `INVALID_SELECTION_TYPE` |
+| encadear | topo→meio→base→alvo, na ordem do timeline |
+| desparentear | mundo preservado |
+| seleção após o comando | só a camada originalmente selecionada |
+
+#### O que continua `NOT RUN`
+
+- **O painel.** O comando foi exercitado pelo dispatcher, não pela interface: o seletor de alvo, o cache da lista e o botão Atualizar não foram usados em host.
+- **Parents aninhados de mais de dois níveis** com transform em cada nível — o critério de aceite do CHMS-015 os menciona.
+- **Camadas com expressão na posição.** Se o After Effects não conseguir reescrever um valor governado por expressão, `preserveWorldTransform` pode falhar em silêncio nessas camadas.
+- **Composição acima de 500 camadas**, onde a lista trunca.
+- Ctrl+Z de um passo para este comando; macOS; AE 25.x.
 
 ## Controles automatizados existentes
 

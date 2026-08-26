@@ -48,6 +48,10 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
   "undo.ae.text.box": {
     "en-US": "Moti.on: create text box",
     "pt-BR": "Moti.on: criar caixa de texto"
+  },
+  "undo.ae.layer.parent": {
+    "en-US": "Moti.on: parent layers",
+    "pt-BR": "Moti.on: parentear camadas"
   }
 };
 

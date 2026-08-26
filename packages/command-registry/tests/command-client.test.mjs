@@ -318,13 +318,16 @@ test("sucesso sem mudanca e opt-in e somente para comando mutante idempotente", 
     // comando, e nao um padrao herdado sem revisao. Os quatro primeiros aplicam
     // um template gerenciado idempotente — reaplicar o mesmo estado nao e falha.
     // `ae.text.box` entra pelo mesmo motivo, do lado da criacao: um texto que ja
-    // tem caixa gerenciada nao ganha uma segunda.
+    // tem caixa gerenciada nao ganha uma segunda. `ae.layer.parent` idem: uma
+    // camada ja parenteada ao alvo pedido nao e reescrita, porque reescrever
+    // faria o After Effects recalcular o transform e acumular arredondamento.
     [
       "ae.expression.loopout",
       "ae.expression.smooth",
       "ae.expression.wiggle",
       "ae.expression.flicker",
-      "ae.text.box"
+      "ae.text.box",
+      "ae.layer.parent"
     ]
   );
 });

@@ -57,6 +57,8 @@ export const HOST_SOURCE_ORDER = [
   "commands/expression-wiggle.jsx",
   "commands/expression-flicker.jsx",
   "commands/text-box.jsx",
+  "commands/layer-list.jsx",
+  "commands/layer-parent.jsx",
   // dispatch por ultimo: ele e o unico simbolo publico, e so faz sentido depois
   // que todos os comandos ja se registraram.
   "dispatch.jsx"

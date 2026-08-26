@@ -78,6 +78,16 @@ declare class Layer {
    * passar matchName: nome de exibicao muda conforme o idioma do aplicativo.
    */
   property(nameOrMatchName: string): PropertyGroup;
+  /** Posicao 1-indexada na ordem da timeline. */
+  readonly index: number;
+  /** `true` para camadas Null. Usado apenas para rotular o seletor de alvo. */
+  readonly nullLayer: boolean;
+  /**
+   * Parenteia SEM preservar o world transform: a camada pula para onde o
+   * transform do pai a levar. Medido em docs/research/after-effects-parenting.md
+   * — o nome engana, o "jump" e o que ela causa, nao o que evita.
+   */
+  setParentWithJump(layer: Layer): void;
   /** Move esta camada para logo abaixo da informada, na ordem da timeline. */
   moveAfter(layer: Layer): void;
   remove(): void;
