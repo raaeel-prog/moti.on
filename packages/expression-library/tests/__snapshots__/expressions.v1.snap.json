@@ -1,0 +1,7 @@
+{
+  "loopout-cycle-keyframes": "// MOTION_EXPRESSION v1 | ae.expression.loopout\nloopOut(\"cycle\", 3);",
+  "loopout-offset-duration": "// MOTION_EXPRESSION v1 | ae.expression.loopout\nloopOutDuration(\"offset\", 1.25);",
+  "loopout-continue": "// MOTION_EXPRESSION v1 | ae.expression.loopout\nloopOut(\"continue\");",
+  "smooth-current-time": "// MOTION_EXPRESSION v1 | ae.expression.smooth\nsmooth(0.2, 5, time);",
+  "smooth-fixed-time": "// MOTION_EXPRESSION v1 | ae.expression.smooth\nsmooth(0.125, 7, 1.5);"
+}

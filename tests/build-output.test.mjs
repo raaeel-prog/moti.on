@@ -171,7 +171,15 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
   const publicGlobals = [...source.matchAll(/^\s*global\.(Motion\w+)\s*=/gm)].map((m) => m[1]);
   assert.deepEqual(
     [...new Set(publicGlobals)].sort(),
-    ["MotionAE", "MotionContracts", "MotionDescriptors", "MotionJson", "MotionRegistry", "MotionUndo"],
+    [
+      "MotionAE",
+      "MotionContracts",
+      "MotionDescriptors",
+      "MotionExpressions",
+      "MotionJson",
+      "MotionRegistry",
+      "MotionUndo"
+    ],
     "O conjunto de globais do host mudou. Só MotionAE é superfície pública; " +
       "qualquer global novo contorna o dispatcher e precisa de justificativa."
   );

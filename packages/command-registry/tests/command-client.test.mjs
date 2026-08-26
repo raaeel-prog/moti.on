@@ -304,6 +304,28 @@ test("rótulo de Undo normaliza os formatos de locale devolvidos pelos hosts", (
   assert.equal(resolveUndoLabel(key, "de-DE"), "Moti.on: create test composition");
 });
 
+test("sucesso sem mudanca e opt-in e somente para comando mutante idempotente", () => {
+  for (const descriptor of COMMAND_DESCRIPTORS) {
+    assert.equal(typeof descriptor.allowsNoopSuccess, "boolean", `${descriptor.id}: flag ausente.`);
+    if (descriptor.allowsNoopSuccess) {
+      assert.equal(descriptor.mutates, true, `${descriptor.id}: no-op permitido em comando read-only.`);
+    }
+  }
+
+  assert.deepEqual(
+    COMMAND_DESCRIPTORS.filter((descriptor) => descriptor.allowsNoopSuccess).map((descriptor) => descriptor.id),
+    // Lista fixada de proposito: permitir "sucesso sem mudanca" e uma decisao por
+    // comando, e nao um padrao herdado sem revisao. Os dois aqui aplicam um
+    // template gerenciado idempotente — reaplicar o mesmo estado nao e falha.
+    [
+      "ae.expression.loopout",
+      "ae.expression.smooth",
+      "ae.expression.wiggle",
+      "ae.expression.flicker"
+    ]
+  );
+});
+
 test("ids de comando sao ASCII e nao repetem", () => {
   const ids = COMMAND_DESCRIPTORS.map((d) => d.id);
   assert.equal(new Set(ids).size, ids.length, "Há id de comando duplicado.");

@@ -78,6 +78,7 @@ export async function renderModule() {
       requirements: [${descriptor.requirements.map(quote).join(", ")}],
       destructive: ${descriptor.destructive ? "true" : "false"},
       mutates: ${descriptor.mutates ? "true" : "false"},
+      allowsNoopSuccess: ${descriptor.allowsNoopSuccess ? "true" : "false"},
       supportsDryRun: ${descriptor.supportsDryRun ? "true" : "false"},
       undoLabelKey: ${quote(descriptor.undoLabelKey)},
       undoLabels: {

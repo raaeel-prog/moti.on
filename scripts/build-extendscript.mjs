@@ -47,10 +47,15 @@ export const HOST_SOURCE_ORDER = [
   "json.jsx",
   "undo.jsx",
   "registry.jsx",
+  "expression-templates.jsx",
   "commands/context-read.jsx",
   "commands/capability-probe.jsx",
   "commands/diagnostics-echo.jsx",
   "commands/demo-create-composition.jsx",
+  "commands/expression-loopout.jsx",
+  "commands/expression-smooth.jsx",
+  "commands/expression-wiggle.jsx",
+  "commands/expression-flicker.jsx",
   // dispatch por ultimo: ele e o unico simbolo publico, e so faz sentido depois
   // que todos os comandos ja se registraram.
   "dispatch.jsx"

@@ -200,6 +200,83 @@ body,
   color: var(--ch-text-secondary);
 }
 
+.ch-field {
+  display: grid;
+  grid-template-columns: minmax(88px, 42%) minmax(0, 1fr);
+  align-items: center;
+  min-height: 32px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--ch-border-subtle);
+}
+
+.ch-field__label {
+  padding-right: var(--ch-space-2);
+  color: var(--ch-text-secondary);
+}
+
+.ch-field__control {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.ch-field__description {
+  grid-column: 1 / -1;
+  padding: 2px 0 4px 0;
+  color: var(--ch-text-muted);
+  font-size: var(--ch-font-sm);
+}
+
+.ch-select,
+.ch-number {
+  width: 100%;
+  min-width: 0;
+  height: var(--ch-size-control);
+  border: 1px solid var(--ch-border-default);
+  border-radius: var(--ch-radius-control);
+  background-color: var(--ch-surface-control);
+  color: var(--ch-text-primary);
+  font: inherit;
+}
+
+.ch-select {
+  padding: 0 24px 0 7px;
+}
+
+.ch-number {
+  padding: 0 7px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.ch-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--ch-accent);
+}
+
+.ch-field__unit {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  color: var(--ch-text-muted);
+  font-size: var(--ch-font-sm);
+}
+
+.ch-select:focus,
+.ch-number:focus,
+.ch-checkbox:focus {
+  outline: 1px solid var(--ch-border-focus);
+  outline-offset: 1px;
+}
+
+.ch-select[disabled],
+.ch-number[disabled],
+.ch-checkbox[disabled] {
+  color: var(--ch-text-disabled);
+  cursor: default;
+}
+
 /* Separador em vez de card: a §22 proibe card aninhado para cada grupo. */
 .ch-row {
   display: flex;
@@ -417,6 +494,10 @@ body,
   flex: 0 0 50%;
 }
 
+.ch-shell--compact .ch-field {
+  grid-template-columns: minmax(100px, 50%) minmax(0, 1fr);
+}
+
 .ch-shell--compact .ch-button {
   flex: 1 1 100%;
   margin: 0 0 6px 0;
@@ -436,6 +517,10 @@ body,
 
 .ch-shell--wide .ch-row__label {
   flex: 0 0 32%;
+}
+
+.ch-shell--wide .ch-field {
+  grid-template-columns: minmax(120px, 32%) minmax(0, 1fr);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -9,6 +9,9 @@
     { "path": "./packages/logging" },
     { "path": "./packages/ui-core" },
     { "path": "./packages/rig-metadata" },
+    { "path": "./packages/matrix-core" },
+    { "path": "./packages/expression-library" },
+    { "path": "./packages/keyframe-core" },
     { "path": "./apps/after-effects-cep/tsconfig.host.json" },
     { "path": "./apps/after-effects-cep/tsconfig.client.json" },
     { "path": "./apps/premiere-uxp" }

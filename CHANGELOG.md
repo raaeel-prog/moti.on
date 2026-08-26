@@ -26,6 +26,154 @@ O aceite antes parcial de CHMS-003 foi concluído e entrou no check integrado:
 
 Status automatizado: `IMPLEMENTED_AND_VERIFIED`. Isso não substitui nenhum gate Adobe aplicável.
 
+### CHMS-013 — Smooth (`ae.expression.smooth`)
+
+Segundo comando de expressão do P1, completando o que já existia pela metade: `@motion/expression-library` **já trazia** o template `ae.expression.smooth` com tokens, render e parse, mas não havia comando de host, descriptor nem interface. Este slice fecha os quatro.
+
+- **Host `expression-smooth.jsx`** com o mesmo contrato do LoopOut: a seleção inteira é validada antes do primeiro write, e conflito numa única propriedade recusa o lote todo. Aplicar metade de uma seleção seria pior que não aplicar nada, porque o usuário não tem como saber onde parou. Rollback restaura em ordem inversa quando o After Effects recusa a expressão.
+- **Mínimo de dois keyframes, com motivo.** `smooth()` calcula a média do valor ao longo do tempo; numa propriedade sem animação o resultado é a própria constante — um no-op que o usuário leria como "o comando não fez nada". Como o modo de conflito recusa propriedades que já têm expressão, keyframe é a única fonte de variação possível neste comando.
+- **Teste de paridade entre as duas implementações.** O template existe em ES5 no host e em TypeScript na biblioteca; um teste compara a fonte emitida pelos dois para quatro conjuntos de tokens. Se divergirem, `isManagedSmooth` deixaria de reconhecer o que o painel gerou e o comando trataria a própria expressão como conflito alheio.
+- **`allowsNoopSuccess` entrou na lista fixada do teste de descriptors**, que exige decisão consciente por comando em vez de padrão herdado sem revisão.
+- **View Smooth no painel**, com largura, amostras e referência. O campo de tempo fixo só aparece quando a referência é "Tempo fixo": mostrá-lo desabilitado ao lado de "Tempo atual" seria ruído permanente. `Aplicar` nasce desabilitado com o motivo no tooltip, conforme a §9.
+- **13 testes de host** cobrindo faixas, injeção no token de referência, corpo adulterado sob cabeçalho gerenciado, preservação de expressão alheia, contagem do lote, idempotência e rollback.
+
+#### Verificado em host real — After Effects 26.3x87, Windows 11, CEP 12.0.1
+
+Composição de teste com três keyframes de posição, propriedade selecionada, aplicação pelo botão do painel:
+
+| Ação | Resultado observado |
+|---|---|
+| 1ª aplicação | `smooth(0.2, 5, time);` com cabeçalho gerenciado, `expressionEnabled=true`, `expressionError` vazio, 3 keyframes preservados |
+| 2ª aplicação, mesmos tokens | "As 1 propriedade(s) selecionadas já usam exatamente este Smooth" — no-op reportado como sucesso, sem escrita |
+| 3ª aplicação, largura 1,5 s | substituiu o gerenciado anterior por `smooth(1.5, 5, time);` |
+
+Status: `IMPLEMENTED_AND_VERIFIED` no ambiente acima. `NOT RUN`: Ctrl+Z de um passo para este comando especificamente, macOS, AE 25.x e propriedades 3D/COLOR em host real.
+
+### CHMS-013 — Wiggle (`ae.expression.wiggle`)
+
+Terceiro comando de expressão do P1. Diferente do Smooth, aqui **nada existia**: template, tokens, parser, host, descriptor e interface entraram neste slice.
+
+#### A pesquisa mudou o desenho
+
+Registrada em `docs/research/after-effects-wiggle-and-seed.md`. A frase que decidiu o template:
+
+> *"The offset value, **but not the timeless value**, is also used to control the initial value of the wiggle function."*
+
+- **`seedRandom` é emitido sempre, com semente explícita.** Sem ele a semente do wiggle deriva do identificador da camada e da propriedade: duas camadas com os mesmos parâmetros se movem diferente, e o mesmo projeto reaberto não é comparável. A skill `engineering-motion-rigs` exige semente exposta e resultado reproduzível.
+- **`timeless` NÃO é emitido.** Ele não governa o wiggle. Emiti-lo sugeriria um controle que não existe e ampliaria o parser canônico sem ganho.
+- **`t` (tempo base) ficou fora da v1.** Seu uso real é truque de loop, que pertence ao CHMS-020.
+- **Proveniência declarada:** a página oficial da Adobe expirou em duas tentativas de 60 s nesta sessão. As assinaturas verbatim vieram do espelho mantido pela comunidade, corroboradas por um resumo do helpx — corroboração, não prova primária. Está anotado como incerteza aberta.
+
+#### Diferença de contrato
+
+**Wiggle não exige keyframes.** LoopOut e Smooth exigem dois porque operam sobre animação existente; `wiggle()` opera sobre valor estático, e sacudir uma camada parada é o uso principal. Exigir animação prévia bloquearia o caso mais comum. Há teste dedicado, com fixture de `numKeys = 0`.
+
+#### Cobertura
+
+19 testes novos: 6 na biblioteca (round-trip, faixas, corpo adulterado, semente removida) e 13 no host (paridade ES5↔TypeScript em quatro conjuntos de tokens, injeção pelo token numérico, lote atômico, idempotência, troca de semente, rollback).
+
+#### Verificado em host real — After Effects 26.3x87, Windows 11, CEP 12.0.1
+
+Composição com propriedade de posição **sem nenhum keyframe**, selecionada, aplicação pelo botão do painel:
+
+| Estado | Observado |
+|---|---|
+| antes | expressão vazia, `expressionEnabled = false`, `numKeys = 0` |
+| um clique em Aplicar | "Wiggle aplicado em 1 propriedade(s)" |
+| depois | `seedRandom(0);\nwiggle(2, 30, 1, 0.5);` com cabeçalho gerenciado, habilitada, sem erro, `numKeys = 0` |
+| reaplicar mesmos tokens | no-op reportado como sucesso, sem escrita |
+| trocar só a semente para 7 | reescreveu para `seedRandom(7);` |
+
+Status: `IMPLEMENTED_AND_VERIFIED` no ambiente acima.
+
+**Pendência de produto registrada:** a documentação diz que o offset controla o *valor inicial* do wiggle, mas o identificador da camada continua na composição da semente. Não foi medido se duas camadas com a mesma semente produzem movimento idêntico — pode ser que a semente iguale a fase e não a trajetória. Até isso ser medido, o produto **não promete "mesma semente, mesmo movimento" entre camadas**; o texto da interface fala apenas do comportamento por propriedade.
+
+### CHMS-014 — Text Box: pesquisa em host e núcleo de expressão (`PARTIAL`)
+
+Primeiro slice do Text Box. **Não é o comando completo** — ver o que ficou de fora, abaixo.
+
+#### `matchName` sondados no host, não lembrados
+
+O rig precisa construir uma shape layer. Em vez de escrever os `matchName` de memória, eles foram **enumerados no After Effects 26.3x87** criando uma shape layer de sonda e percorrendo as propriedades. Registro completo em `docs/research/after-effects-text-box-rig.md`.
+
+A sondagem confirmou por que a regra existe: os nomes de exibição voltaram **localizados** — `ADBE Vector Rect Size` aparece como "Tamanho", `ADBE Vector Rect Position` como "Posição". Lógica escrita sobre display name funcionaria na máquina de quem escreveu e falharia na do usuário.
+
+#### A caixa aponta pelo parentesco, não pelo nome
+
+A implementação clássica escreve `thisComp.layer("Nome do texto")`, que quebra em silêncio quando o usuário renomeia a camada e pega a camada errada quando há duas com o mesmo nome.
+
+Como o rig **já cria** o vínculo de parentesco que o spec exige, a expressão usa `thisLayer.parent`. Sobrevive a rename, reordenação e duplicação, e não há um segundo acoplamento para manter em sincronia. Se o usuário desparentar, a falha é visível e atribuível a uma ação explícita dele. Há teste que recusa qualquer fonte contendo `thisComp.layer(`.
+
+#### Texto vazio: medido, e mudou o template
+
+| Conteúdo | `sourceRectAtTime(0, false)` |
+|---|---|
+| `"Ag"` | width=91.873 height=76.476 |
+| `""` | **tudo zero** |
+| `" "` (só espaço) | **tudo zero** |
+| 3 linhas | height=268.845 |
+
+Sem tratamento, apagar o texto deixaria um bloco de cor órfão do tamanho do padding pousado na origem da camada — e um único espaço faria o mesmo, porque espaço não tem tinta e portanto não tem bounding box. O template de tamanho colapsa a caixa para `[0, 0]` nesse caso; ela some quando não há texto e volta sozinha quando o texto volta.
+
+Multilinha não precisou de tratamento: `sourceRectAtTime` já devolve o bounding box de todas as linhas.
+
+#### Entregue neste slice
+
+Templates `ae.textbox.size` e `ae.textbox.position` na `@motion/expression-library`, com padding validado, colapso de texto vazio, round-trip pelo parser e recusa de corpo adulterado. 6 testes novos.
+
+#### O que ficou de fora, e por quê
+
+A §7 lista como inputs mínimos `paddingX, paddingY, roundness, fill, stroke, anchorMode, multilineMode, createPerLayer`.
+
+- **`stroke`** — custo baixo, adiado só para não ampliar o rig gerenciado antes de o núcleo estar verificado em host.
+- **`anchorMode` e `multilineMode`** — **precisam de definição de produto**. O spec não diz o que os modos são. Para uma caixa que já centraliza no bounding box do texto, "modo de ancoragem" pode significar três features diferentes; e como `sourceRectAtTime` já cobre multilinha, não está escrito o que o modo deveria alternar. Escolher por conta própria seria inventar requisito.
+- **O comando de host** que cria a shape layer, parenteia e ordena abaixo do texto é o próximo slice.
+
+Status: `PARTIAL`. O critério de aceite da issue — mudar conteúdo, fontSize e alinhamento mantendo padding visual — só pode ser medido quando o comando existir.
+
+### CHMS-013 — Flicker (`ae.expression.flicker`), fechando o slice
+
+Quarto e último comando de expressão do CHMS-013. O aceite da issue — *"Wiggle/Flicker/LoopOut/Smooth · Host smoke tests"* — está completo.
+
+#### A dimensionalidade forçou o desenho
+
+`random(min, max)` com dois números devolve **um escalar**. Uma propriedade de posição espera um array. Emitir `random(0, 1)` cru quebraria tudo que não fosse 1D — e quebraria dentro do After Effects, não no build. O template resolve multiplicando o próprio valor:
+
+```text
+// MOTION_EXPRESSION v1 | ae.expression.flicker
+seedRandom(<seed>);
+posterizeTime(<rate>);
+value * random(<min>, <max>);
+```
+
+`value` carrega a dimensionalidade da propriedade, e `array * escalar` é válido na linguagem de expressões. Efeito colateral melhor que a alternativa: como multiplica em vez de substituir, **preserva a animação existente** da propriedade.
+
+- **Invariante entre campos:** `minFactor <= maxFactor`. `random(1, 0)` não é erro no After Effects, mas faz o contrário do que a interface declarou — é recusado antes de virar fonte, e a interface desabilita o botão com mensagem própria em vez do genérico "revise os valores".
+- **Não exige keyframes**, como o Wiggle.
+- 16 testes novos: 5 na biblioteca, 11 no host, incluindo aplicação simultânea em 1D, 2D, 3D e cor.
+
+#### Verificado em host real — After Effects 26.3x87, Windows 11, CEP 12.0.1
+
+Opacidade (1D) e Posição (2D) selecionadas juntas, nenhuma com keyframes, aplicação pelo botão:
+
+| Propriedade | `expressionError` | Valor avaliado em t=1 s |
+|---|---|---|
+| Opacidade (1D) | vazio | `28.37` — escalar |
+| Posição (2D) | vazio | `3.50, 1.96, 0` — array |
+
+O mesmo template serviu as duas dimensões sem ramificação: é a evidência que justifica a decisão de multiplicar `value`. A faixa invertida desabilitou a ação com o motivo correto. Nenhuma exceção no painel.
+
+Status: `IMPLEMENTED_AND_VERIFIED` no ambiente acima.
+
+**Observação de produto vinda da verificação:** multiplicar posição por um fator aleatório aproxima a camada da origem — matematicamente correto e provavelmente indesejado. Flicker é útil em opacidade e escala; em posição o resultado é um salto para perto de (0,0). O comando não bloqueia isso, e o texto da interface explica que o fator multiplica o valor, mas vale considerar um aviso por tipo de propriedade quando houver tela de presets.
+
+### Correção de codificação e guarda contra recorrência
+
+Três strings chegaram ao repositório com UTF-8 lido como Latin-1 — `loopOut.section.main` ("RepetiÃ§Ã£o"), `loopOut.section.safety` ("SeguranÃ§a") e uma mensagem de log em `main.ts`. Nenhum gate existente pegou: não quebra build, não quebra tipo, não quebra teste. Só aparece na tela do usuário, como título de seção do painel.
+
+- As três foram regravadas em UTF-8.
+- `tests/encoding.test.mjs`, novo: varre `packages/`, `apps/`, `scripts/` e `tests/` por sequências que só existem quando UTF-8 é interpretado como Latin-1. Tem teste positivo e negativo próprio — um detector sem teste nunca acusaria nada e ninguém perceberia.
+
 ### CHMS-009 — núcleo puro de metadata de rigs
 
 Novo package `@motion/rig-metadata`, sem acesso direto a APIs Adobe ou filesystem:

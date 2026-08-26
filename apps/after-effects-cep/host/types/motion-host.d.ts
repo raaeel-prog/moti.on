@@ -62,6 +62,7 @@ interface MotionHostDescriptor {
   requirements: string[];
   destructive: boolean;
   mutates: boolean;
+  allowsNoopSuccess: boolean;
   supportsDryRun: boolean;
   undoLabelKey: string;
   undoLabels: Record<string, string>;
@@ -80,6 +81,37 @@ declare const MotionJson: {
 
 declare const MotionUndo: {
   withUndoGroup<T>(label: string, callback: () => T): T;
+};
+
+declare const MotionExpressions: {
+  renderLoopOut(tokens: {
+    type: unknown;
+    numKeyframes: unknown;
+    duration: unknown;
+    useDuration: unknown;
+  }): string;
+  isManagedLoopOut(source: string): boolean;
+  renderSmooth(tokens: {
+    widthSeconds: unknown;
+    samples: unknown;
+    referenceTime: unknown;
+  }): string;
+  isManagedSmooth(source: string): boolean;
+  renderWiggle(tokens: {
+    frequency: unknown;
+    amplitude: unknown;
+    octaves: unknown;
+    amplitudeMultiplier: unknown;
+    seed: unknown;
+  }): string;
+  isManagedWiggle(source: string): boolean;
+  renderFlicker(tokens: {
+    rate: unknown;
+    minFactor: unknown;
+    maxFactor: unknown;
+    seed: unknown;
+  }): string;
+  isManagedFlicker(source: string): boolean;
 };
 
 /** Erro tipado que um `preflight` devolve para recusar o comando. */

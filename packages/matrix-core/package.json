@@ -1,0 +1,21 @@
+{
+  "name": "@motion/matrix-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Matematica pura e fail-closed para transforms 2D/3D, parents e compensacao de anchor.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b --pretty false",
+    "test": "npm run build && node --test \"tests/*.test.mjs\"",
+    "test:coverage": "npm run build && node --test --experimental-test-coverage \"tests/*.test.mjs\""
+  },
+  "license": "MIT"
+}

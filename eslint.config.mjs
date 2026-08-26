@@ -104,6 +104,8 @@ export default [
         CompItem: "readonly",
         File: "readonly",
         ParagraphJustification: "readonly",
+        PropertyType: "readonly",
+        PropertyValueType: "readonly",
         TextDocument: "readonly",
         // Fornecidos pelos proprios modulos do host. O ExtendScript nao tem
         // sistema de modulos: cada arquivo se pendura em $.global e os
@@ -112,6 +114,7 @@ export default [
         MotionContracts: "readonly",
         MotionDescriptors: "readonly",
         MotionJson: "readonly",
+        MotionExpressions: "readonly",
         MotionUndo: "readonly",
         MotionRegistry: "readonly",
         MotionAE: "readonly"

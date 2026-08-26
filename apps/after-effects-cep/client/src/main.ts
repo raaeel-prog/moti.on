@@ -18,8 +18,10 @@ import {
   createShell,
   logLine,
   notice,
+  numberField,
   propertyRow,
   sectionTitle,
+  selectField,
   type I18n,
   type RenderRegions,
   type RowTone,
@@ -41,8 +43,99 @@ interface ContextData {
   compFrameRate: number | null;
 }
 
+type LoopOutType = "cycle" | "pingpong" | "offset" | "continue";
+type LoopOutRange = "all" | "keys" | "duration";
+
+interface LoopOutDraft {
+  type: LoopOutType;
+  range: LoopOutRange;
+  numKeyframes: number;
+  duration: number;
+}
+
+interface LoopOutResultData {
+  appliedCount: number;
+  unchangedCount: number;
+}
+
+/** Mesma forma do LoopOut: os dois comandos reportam o lote da mesma maneira. */
+type SmoothResultData = LoopOutResultData;
+
+const DEFAULT_LOOP_OUT: LoopOutDraft = {
+  type: "cycle",
+  range: "all",
+  numKeyframes: 1,
+  duration: 1
+};
+
+type SmoothReference = "current" | "fixed";
+
+interface SmoothDraft {
+  widthSeconds: number;
+  samples: number;
+  reference: SmoothReference;
+  referenceTime: number;
+}
+
+interface WiggleDraft {
+  frequency: number;
+  amplitude: number;
+  octaves: number;
+  amplitudeMultiplier: number;
+  seed: number;
+}
+
+/**
+ * Padroes: 2 oscilacoes por segundo e amplitude 30, o exemplo mais comum de
+ * wiggle para posicao. Oitavas e queda repetem os padroes da propria Adobe (1 e
+ * 0.5), e semente 0 e o offset padrao — ou seja, o estado inicial nao altera o
+ * comportamento nativo da expressao.
+ */
+const DEFAULT_WIGGLE: WiggleDraft = {
+  frequency: 2,
+  amplitude: 30,
+  octaves: 1,
+  amplitudeMultiplier: 0.5,
+  seed: 0
+};
+
+interface FlickerDraft {
+  rate: number;
+  minFactor: number;
+  maxFactor: number;
+  seed: number;
+}
+
+/**
+ * Padroes: 12 atualizacoes por segundo, fator entre 0 e 1. O fator multiplica
+ * o valor da propriedade, entao 0 apaga no quadro sorteado e 1 mantem o valor
+ * original — a faixa padrao e a piscada classica de opacidade.
+ */
+const DEFAULT_FLICKER: FlickerDraft = {
+  rate: 12,
+  minFactor: 0,
+  maxFactor: 1,
+  seed: 0
+};
+
+/**
+ * Padroes do `smooth()` do After Effects: janela de 0,2 s e 5 amostras. Sao os
+ * valores que a documentacao da Adobe usa quando os argumentos sao omitidos, e
+ * comecar longe deles faria o resultado surpreender quem ja conhece a expressao.
+ */
+const DEFAULT_SMOOTH: SmoothDraft = {
+  widthSeconds: 0.2,
+  samples: 5,
+  reference: "current",
+  referenceTime: 0
+};
+
 const VIEWS: ShellView[] = [
   { id: "context", labelKey: "nav.context", titleKey: "view.context.title" },
+  { id: "loopOut", labelKey: "nav.loopOut", titleKey: "view.loopOut.title" },
+  { id: "smooth", labelKey: "nav.smooth", titleKey: "view.smooth.title" },
+  { id: "wiggle", labelKey: "nav.wiggle", titleKey: "view.wiggle.title" },
+  { id: "flicker", labelKey: "nav.flicker", titleKey: "view.flicker.title" },
   { id: "system", labelKey: "nav.system", titleKey: "view.system.title" },
   { id: "diagnostics", labelKey: "nav.diagnostics", titleKey: "view.diagnostics.title" }
 ];
@@ -56,12 +149,20 @@ const state: {
   lastError: string | null;
   busy: boolean;
   busyReason: string | null;
+  loopOut: LoopOutDraft;
+  smooth: SmoothDraft;
+  wiggle: WiggleDraft;
+  flicker: FlickerDraft;
 } = {
   context: null,
   capabilities: null,
   lastError: null,
   busy: false,
-  busyReason: null
+  busyReason: null,
+  loopOut: { ...DEFAULT_LOOP_OUT },
+  smooth: { ...DEFAULT_SMOOTH },
+  wiggle: { ...DEFAULT_WIGGLE },
+  flicker: { ...DEFAULT_FLICKER }
 };
 
 function start(): void {
@@ -155,6 +256,126 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
     return;
   }
 
+  if (viewId === "loopOut") {
+    renderLoopOut(regions, i18n);
+
+    const disabledReason = loopOutDisabledReason(i18n);
+    regions.actions.appendChild(
+      button(document, {
+        label: i18n.t("action.apply"),
+        variant: "primary",
+        ...(disabledReason ? { disabled: true as const, disabledReason } : { disabled: false as const }),
+        title: disabledReason ?? i18n.t("action.apply"),
+        onClick: () => void applyLoopOut(shell, i18n, logger, client)
+      })
+    );
+    regions.actions.appendChild(
+      button(document, {
+        label: i18n.t("action.reset"),
+        ...(state.busy
+          ? { disabled: true as const, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
+          : { disabled: false as const }),
+        title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.reset"),
+        onClick: () => {
+          state.loopOut = { ...DEFAULT_LOOP_OUT };
+          state.lastError = null;
+          shell.rerender();
+        }
+      })
+    );
+    return;
+  }
+
+  if (viewId === "smooth") {
+    renderSmooth(regions, i18n);
+
+    const disabledReason = smoothDisabledReason(i18n);
+    regions.actions.appendChild(
+      button(document, {
+        label: i18n.t("action.apply"),
+        variant: "primary",
+        ...(disabledReason ? { disabled: true as const, disabledReason } : { disabled: false as const }),
+        title: disabledReason ?? i18n.t("action.apply"),
+        onClick: () => void applySmooth(shell, i18n, logger, client)
+      })
+    );
+    regions.actions.appendChild(
+      button(document, {
+        label: i18n.t("action.reset"),
+        ...(state.busy
+          ? { disabled: true as const, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
+          : { disabled: false as const }),
+        title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.reset"),
+        onClick: () => {
+          state.smooth = { ...DEFAULT_SMOOTH };
+          state.lastError = null;
+          shell.rerender();
+        }
+      })
+    );
+    return;
+  }
+
+  if (viewId === "wiggle") {
+    renderWiggle(regions, i18n);
+
+    const disabledReason = wiggleDisabledReason(i18n);
+    regions.actions.appendChild(
+      button(document, {
+        label: i18n.t("action.apply"),
+        variant: "primary",
+        ...(disabledReason ? { disabled: true as const, disabledReason } : { disabled: false as const }),
+        title: disabledReason ?? i18n.t("action.apply"),
+        onClick: () => void applyWiggle(shell, i18n, logger, client)
+      })
+    );
+    regions.actions.appendChild(
+      button(document, {
+        label: i18n.t("action.reset"),
+        ...(state.busy
+          ? { disabled: true as const, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
+          : { disabled: false as const }),
+        title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.reset"),
+        onClick: () => {
+          state.wiggle = { ...DEFAULT_WIGGLE };
+          state.lastError = null;
+          shell.rerender();
+        }
+      })
+    );
+    return;
+  }
+
+  if (viewId === "flicker") {
+    renderFlicker(regions, i18n);
+
+    const disabledReason = flickerDisabledReason(i18n);
+    regions.actions.appendChild(
+      button(document, {
+        label: i18n.t("action.apply"),
+        variant: "primary",
+        ...(disabledReason ? { disabled: true as const, disabledReason } : { disabled: false as const }),
+        title: disabledReason ?? i18n.t("action.apply"),
+        onClick: () => void applyFlicker(shell, i18n, logger, client)
+      })
+    );
+    regions.actions.appendChild(
+      button(document, {
+        label: i18n.t("action.reset"),
+        ...(state.busy
+          ? { disabled: true as const, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
+          : { disabled: false as const }),
+        title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.reset"),
+        onClick: () => {
+          state.flicker = { ...DEFAULT_FLICKER };
+          state.lastError = null;
+          shell.rerender();
+        }
+      })
+    );
+    return;
+  }
+
   if (viewId === "system") {
     renderSystem(regions, i18n);
     regions.actions.appendChild(
@@ -220,6 +441,507 @@ function renderContext(regions: RenderRegions, i18n: I18n): void {
     }
   }
 
+}
+
+function isLoopOutType(value: string): value is LoopOutType {
+  return value === "cycle" || value === "pingpong" || value === "offset" || value === "continue";
+}
+
+function isLoopOutRange(value: string): value is LoopOutRange {
+  return value === "all" || value === "keys" || value === "duration";
+}
+
+function isLoopOutDraftValid(draft: LoopOutDraft): boolean {
+  if (draft.type === "continue" || draft.range === "all") {
+    return true;
+  }
+  if (draft.range === "keys") {
+    return Number.isFinite(draft.numKeyframes) && Number.isInteger(draft.numKeyframes) &&
+      draft.numKeyframes >= 1 && draft.numKeyframes <= 1000;
+  }
+  return Number.isFinite(draft.duration) && draft.duration > 0 && draft.duration <= 3600;
+}
+
+function loopOutDisabledReason(i18n: I18n): string | null {
+  if (state.busy) {
+    return state.busyReason ?? i18n.t("status.initializing");
+  }
+  if (!state.context?.isComposition) {
+    return i18n.t("message.loopOutNoActiveComp");
+  }
+  if (!isLoopOutDraftValid(state.loopOut)) {
+    return i18n.t("message.loopOutInvalidNumber");
+  }
+  return null;
+}
+
+/** As faixas repetem host e biblioteca; ver docs/research/after-effects-wiggle-and-seed.md. */
+function isFlickerDraftValid(draft: FlickerDraft): boolean {
+  if (!Number.isFinite(draft.rate) || draft.rate <= 0 || draft.rate > 120) return false;
+  if (!Number.isFinite(draft.minFactor) || draft.minFactor < 0 || draft.minFactor > 10) return false;
+  if (!Number.isFinite(draft.maxFactor) || draft.maxFactor < 0 || draft.maxFactor > 10) return false;
+  if (draft.minFactor > draft.maxFactor) return false;
+  return Number.isInteger(draft.seed) && draft.seed >= 0 && draft.seed <= 100_000;
+}
+
+function flickerDisabledReason(i18n: I18n): string | null {
+  if (state.busy) {
+    return state.busyReason ?? i18n.t("status.initializing");
+  }
+  if (!state.context?.isComposition) {
+    return i18n.t("message.flickerNoActiveComp");
+  }
+  // A faixa invertida ganha mensagem propria: o usuario precisa saber QUAL
+  // regra quebrou, e nao apenas que algum numero esta errado.
+  if (state.flicker.minFactor > state.flicker.maxFactor) {
+    return i18n.t("message.flickerRangeInverted");
+  }
+  if (!isFlickerDraftValid(state.flicker)) {
+    return i18n.t("message.flickerInvalidNumber");
+  }
+  return null;
+}
+
+function renderFlicker(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.flicker;
+
+  regions.content.appendChild(notice(document, i18n.t("message.flickerInstructions")));
+  if (state.context && !state.context.isComposition) {
+    regions.content.appendChild(notice(document, i18n.t("message.flickerNoActiveComp"), "warning"));
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("flicker.section.main")));
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "flicker-rate",
+      label: i18n.t("flicker.rate"),
+      value: draft.rate,
+      min: 0.1,
+      max: 120,
+      step: 1,
+      unit: i18n.t("flicker.unit.perSecond"),
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.flicker.rate = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "flicker-min",
+      label: i18n.t("flicker.minFactor"),
+      value: draft.minFactor,
+      min: 0,
+      max: 10,
+      step: 0.05,
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.flicker.minFactor = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "flicker-max",
+      label: i18n.t("flicker.maxFactor"),
+      value: draft.maxFactor,
+      min: 0,
+      max: 10,
+      step: 0.05,
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.flicker.maxFactor = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "flicker-seed",
+      label: i18n.t("flicker.seed"),
+      description: i18n.t("flicker.seed.description"),
+      value: draft.seed,
+      min: 0,
+      max: 100_000,
+      step: 1,
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.flicker.seed = value;
+        shell.rerender();
+      }
+    })
+  );
+}
+
+/** As faixas repetem host e biblioteca; ver docs/research/after-effects-wiggle-and-seed.md. */
+function isWiggleDraftValid(draft: WiggleDraft): boolean {
+  if (!Number.isFinite(draft.frequency) || draft.frequency <= 0 || draft.frequency > 100) return false;
+  if (!Number.isFinite(draft.amplitude) || draft.amplitude < 0 || draft.amplitude > 100_000) return false;
+  if (!Number.isInteger(draft.octaves) || draft.octaves < 1 || draft.octaves > 10) return false;
+  if (
+    !Number.isFinite(draft.amplitudeMultiplier) ||
+    draft.amplitudeMultiplier < 0 ||
+    draft.amplitudeMultiplier > 10
+  ) {
+    return false;
+  }
+  return Number.isInteger(draft.seed) && draft.seed >= 0 && draft.seed <= 100_000;
+}
+
+function wiggleDisabledReason(i18n: I18n): string | null {
+  if (state.busy) {
+    return state.busyReason ?? i18n.t("status.initializing");
+  }
+  if (!state.context?.isComposition) {
+    return i18n.t("message.wiggleNoActiveComp");
+  }
+  if (!isWiggleDraftValid(state.wiggle)) {
+    return i18n.t("message.wiggleInvalidNumber");
+  }
+  return null;
+}
+
+function renderWiggle(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.wiggle;
+
+  regions.content.appendChild(notice(document, i18n.t("message.wiggleInstructions")));
+  if (state.context && !state.context.isComposition) {
+    regions.content.appendChild(notice(document, i18n.t("message.wiggleNoActiveComp"), "warning"));
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("wiggle.section.main")));
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "wiggle-frequency",
+      label: i18n.t("wiggle.frequency"),
+      value: draft.frequency,
+      min: 0.01,
+      max: 100,
+      step: 0.1,
+      unit: i18n.t("wiggle.unit.hertz"),
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.wiggle.frequency = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "wiggle-amplitude",
+      label: i18n.t("wiggle.amplitude"),
+      value: draft.amplitude,
+      min: 0,
+      max: 100_000,
+      step: 1,
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.wiggle.amplitude = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  // Oitavas e queda controlam o detalhe do ruido. Ficam numa secao propria
+  // porque a maioria dos usos nao os altera.
+  regions.content.appendChild(sectionTitle(document, i18n.t("wiggle.section.detail")));
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "wiggle-octaves",
+      label: i18n.t("wiggle.octaves"),
+      value: draft.octaves,
+      min: 1,
+      max: 10,
+      step: 1,
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.wiggle.octaves = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "wiggle-falloff",
+      label: i18n.t("wiggle.amplitudeMultiplier"),
+      value: draft.amplitudeMultiplier,
+      min: 0,
+      max: 10,
+      step: 0.05,
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.wiggle.amplitudeMultiplier = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "wiggle-seed",
+      label: i18n.t("wiggle.seed"),
+      description: i18n.t("wiggle.seed.description"),
+      value: draft.seed,
+      min: 0,
+      max: 100_000,
+      step: 1,
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.wiggle.seed = value;
+        shell.rerender();
+      }
+    })
+  );
+}
+
+function isSmoothReference(value: string): value is SmoothReference {
+  return value === "current" || value === "fixed";
+}
+
+/**
+ * As faixas repetem as do host e as da biblioteca de propósito.
+ *
+ * Validar aqui evita uma ida ao ExtendScript para receber `INVALID_PRESET`, e o
+ * host valida de novo porque nada que atravessa a ponte é confiável.
+ */
+function isSmoothDraftValid(draft: SmoothDraft): boolean {
+  if (!Number.isFinite(draft.widthSeconds) || draft.widthSeconds <= 0 || draft.widthSeconds > 3600) {
+    return false;
+  }
+  if (
+    !Number.isInteger(draft.samples) ||
+    draft.samples < 1 ||
+    draft.samples > 101
+  ) {
+    return false;
+  }
+  if (draft.reference === "current") {
+    return true;
+  }
+  return Number.isFinite(draft.referenceTime) && draft.referenceTime >= 0;
+}
+
+function smoothDisabledReason(i18n: I18n): string | null {
+  if (state.busy) {
+    return state.busyReason ?? i18n.t("status.initializing");
+  }
+  if (!state.context?.isComposition) {
+    return i18n.t("message.smoothNoActiveComp");
+  }
+  if (!isSmoothDraftValid(state.smooth)) {
+    return i18n.t("message.smoothInvalidNumber");
+  }
+  return null;
+}
+
+function renderSmooth(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.smooth;
+
+  regions.content.appendChild(notice(document, i18n.t("message.smoothInstructions")));
+  if (state.context && !state.context.isComposition) {
+    regions.content.appendChild(notice(document, i18n.t("message.smoothNoActiveComp"), "warning"));
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("smooth.section.main")));
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "smooth-width",
+      label: i18n.t("smooth.width"),
+      value: draft.widthSeconds,
+      min: 0.001,
+      max: 3600,
+      step: 0.05,
+      unit: i18n.t("smooth.unit.seconds"),
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.smooth.widthSeconds = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "smooth-samples",
+      label: i18n.t("smooth.samples"),
+      value: draft.samples,
+      min: 1,
+      max: 101,
+      step: 1,
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.smooth.samples = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "smooth-reference",
+      label: i18n.t("smooth.reference"),
+      value: draft.reference,
+      options: [
+        { value: "current", label: i18n.t("smooth.reference.current") },
+        { value: "fixed", label: i18n.t("smooth.reference.fixed") }
+      ],
+      disabled: state.busy,
+      onChange: (value) => {
+        if (!isSmoothReference(value)) return;
+        state.smooth.reference = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  // O campo de tempo só aparece quando ele governa alguma coisa: mostrá-lo
+  // desabilitado ao lado de "Tempo atual" seria ruído permanente.
+  if (draft.reference === "fixed") {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "smooth-reference-time",
+        label: i18n.t("smooth.referenceTime"),
+        value: draft.referenceTime,
+        min: 0,
+        max: 10800,
+        step: 0.1,
+        unit: i18n.t("smooth.unit.seconds"),
+        disabled: state.busy,
+        onCommit: (value) => {
+          state.smooth.referenceTime = value;
+          shell.rerender();
+        }
+      })
+    );
+  }
+}
+
+function renderLoopOut(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.loopOut;
+
+  regions.content.appendChild(notice(document, i18n.t("message.loopOutInstructions")));
+  if (state.context && !state.context.isComposition) {
+    regions.content.appendChild(notice(document, i18n.t("message.loopOutNoActiveComp"), "warning"));
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("loopOut.section.main")));
+  regions.content.appendChild(
+    selectField(document, {
+      id: "motion-loopout-type",
+      label: i18n.t("loopOut.type"),
+      value: draft.type,
+      options: [
+        { value: "cycle", label: i18n.t("loopOut.type.cycle") },
+        { value: "pingpong", label: i18n.t("loopOut.type.pingpong") },
+        { value: "offset", label: i18n.t("loopOut.type.offset") },
+        { value: "continue", label: i18n.t("loopOut.type.continue") }
+      ],
+      ...(state.busy
+        ? { disabled: true, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
+        : { disabled: false }),
+      onChange: (value) => {
+        if (!isLoopOutType(value)) return;
+        state.loopOut.type = value;
+        if (value === "continue") state.loopOut.range = "all";
+        shell.rerender();
+      }
+    })
+  );
+
+  const continueMode = draft.type === "continue";
+  regions.content.appendChild(
+    selectField(document, {
+      id: "motion-loopout-range",
+      label: i18n.t("loopOut.range"),
+      value: continueMode ? "all" : draft.range,
+      options: [
+        { value: "all", label: i18n.t("loopOut.range.all") },
+        { value: "keys", label: i18n.t("loopOut.range.keys") },
+        { value: "duration", label: i18n.t("loopOut.range.duration") }
+      ],
+      ...(state.busy || continueMode
+        ? {
+            disabled: true,
+            disabledReason: state.busy
+              ? state.busyReason ?? i18n.t("status.initializing")
+              : i18n.t("loopOut.type.continue")
+          }
+        : { disabled: false }),
+      onChange: (value) => {
+        if (!isLoopOutRange(value)) return;
+        state.loopOut.range = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  if (!continueMode && draft.range === "keys") {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "motion-loopout-keyframes",
+        label: i18n.t("loopOut.numKeyframes"),
+        value: draft.numKeyframes,
+        min: 1,
+        max: 1000,
+        step: 1,
+        ...(state.busy
+          ? { disabled: true, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
+          : { disabled: false }),
+        onInput: (value) => {
+          state.loopOut.numKeyframes = value;
+        },
+        onCommit: (value) => {
+          state.loopOut.numKeyframes = value;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  if (!continueMode && draft.range === "duration") {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "motion-loopout-duration",
+        label: i18n.t("loopOut.duration"),
+        value: draft.duration,
+        min: 0.01,
+        max: 3600,
+        step: 0.01,
+        unit: "s",
+        ...(state.busy
+          ? { disabled: true, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
+          : { disabled: false }),
+        onInput: (value) => {
+          state.loopOut.duration = value;
+        },
+        onCommit: (value) => {
+          state.loopOut.duration = value;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("loopOut.section.safety")));
+  regions.content.appendChild(
+    propertyRow(document, i18n.t("loopOut.safeConflict"), i18n.t("loopOut.safeConflict.value"), "ok")
+  );
+  regions.content.appendChild(notice(document, i18n.t("loopOut.safeConflict.description")));
 }
 
 function renderSystem(regions: RenderRegions, i18n: I18n): void {
@@ -403,6 +1125,280 @@ async function refreshContext(
   state.lastError = null;
   logger.setHost("after-effects", response.data.hostVersion ?? undefined);
   shell.setStatus(successStatus ?? i18n.t("status.connected"), "ok");
+  setBusy(shell, false);
+}
+
+function isLoopOutResultData(value: unknown): value is LoopOutResultData {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<LoopOutResultData>;
+  return Number.isInteger(candidate.appliedCount) && (candidate.appliedCount ?? -1) >= 0 &&
+    Number.isInteger(candidate.unchangedCount) && (candidate.unchangedCount ?? -1) >= 0;
+}
+
+async function applyFlicker(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.flickerNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  const draft = state.flicker;
+  if (!isFlickerDraftValid(draft)) {
+    state.lastError = draft.minFactor > draft.maxFactor
+      ? i18n.t("message.flickerRangeInverted")
+      : i18n.t("message.flickerInvalidNumber");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingFlicker"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingFlicker"));
+
+  const response = await client.execute<SmoothResultData>(
+    "ae.expression.flicker",
+    {
+      rate: draft.rate,
+      minFactor: draft.minFactor,
+      maxFactor: draft.maxFactor,
+      seed: draft.seed,
+      conflictMode: "skip"
+    },
+    { preserveSelection: true }
+  );
+  logger.recordResponse("ae.expression.flicker", response);
+
+  if (!response.ok || !isSmoothResultData(response.data)) {
+    if (!response.ok) {
+      reportFailure(shell, i18n, response);
+    } else {
+      state.lastError = i18n.t("message.failureWithoutReason");
+      logger.error("Resposta Flicker invalida.", {
+        command: "ae.expression.flicker",
+        errorCode: "INVALID_HOST_RESPONSE",
+        result: "failure"
+      });
+      shell.setStatus(i18n.t("status.failed"), "error");
+    }
+    setBusy(shell, false);
+    return;
+  }
+
+  state.lastError = null;
+  const success = response.data.appliedCount > 0
+    ? i18n.t("message.flickerApplied", { count: response.data.appliedCount })
+    : i18n.t("message.flickerAlreadyApplied", { count: response.data.unchangedCount });
+  shell.setStatus(success, "ok");
+  setBusy(shell, false);
+}
+
+async function applyWiggle(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.wiggleNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  const draft = state.wiggle;
+  if (!isWiggleDraftValid(draft)) {
+    state.lastError = i18n.t("message.wiggleInvalidNumber");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingWiggle"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingWiggle"));
+
+  const response = await client.execute<SmoothResultData>(
+    "ae.expression.wiggle",
+    {
+      frequency: draft.frequency,
+      amplitude: draft.amplitude,
+      octaves: draft.octaves,
+      amplitudeMultiplier: draft.amplitudeMultiplier,
+      seed: draft.seed,
+      conflictMode: "skip"
+    },
+    { preserveSelection: true }
+  );
+  logger.recordResponse("ae.expression.wiggle", response);
+
+  if (!response.ok || !isSmoothResultData(response.data)) {
+    if (!response.ok) {
+      reportFailure(shell, i18n, response);
+    } else {
+      state.lastError = i18n.t("message.failureWithoutReason");
+      logger.error("Resposta Wiggle invalida.", {
+        command: "ae.expression.wiggle",
+        errorCode: "INVALID_HOST_RESPONSE",
+        result: "failure"
+      });
+      shell.setStatus(i18n.t("status.failed"), "error");
+    }
+    setBusy(shell, false);
+    return;
+  }
+
+  state.lastError = null;
+  const success = response.data.appliedCount > 0
+    ? i18n.t("message.wiggleApplied", { count: response.data.appliedCount })
+    : i18n.t("message.wiggleAlreadyApplied", { count: response.data.unchangedCount });
+  shell.setStatus(success, "ok");
+  setBusy(shell, false);
+}
+
+function isSmoothResultData(value: unknown): value is SmoothResultData {
+  return isLoopOutResultData(value);
+}
+
+async function applySmooth(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.smoothNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  const draft = state.smooth;
+  if (!isSmoothDraftValid(draft)) {
+    state.lastError = i18n.t("message.smoothInvalidNumber");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  // "current" vira o token que o host traduz para `time`; o tempo fixo viaja
+  // como número. A conversão acontece aqui, e não no host, para que o host
+  // continue recebendo apenas tokens da allowlist.
+  const referenceTime = draft.reference === "current" ? "current" : draft.referenceTime;
+
+  shell.setStatus(i18n.t("status.applyingSmooth"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingSmooth"));
+
+  const response = await client.execute<SmoothResultData>(
+    "ae.expression.smooth",
+    {
+      widthSeconds: draft.widthSeconds,
+      samples: draft.samples,
+      referenceTime,
+      conflictMode: "skip"
+    },
+    { preserveSelection: true }
+  );
+  logger.recordResponse("ae.expression.smooth", response);
+
+  if (!response.ok || !isSmoothResultData(response.data)) {
+    if (!response.ok) {
+      reportFailure(shell, i18n, response);
+    } else {
+      state.lastError = i18n.t("message.failureWithoutReason");
+      logger.error("Resposta Smooth inválida.", {
+        command: "ae.expression.smooth",
+        errorCode: "INVALID_HOST_RESPONSE",
+        result: "failure"
+      });
+      shell.setStatus(i18n.t("status.failed"), "error");
+    }
+    setBusy(shell, false);
+    return;
+  }
+
+  state.lastError = null;
+  const success = response.data.appliedCount > 0
+    ? i18n.t("message.smoothApplied", { count: response.data.appliedCount })
+    : i18n.t("message.smoothAlreadyApplied", { count: response.data.unchangedCount });
+  shell.setStatus(success, "ok");
+  setBusy(shell, false);
+}
+
+async function applyLoopOut(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.loopOutNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  const draft = state.loopOut;
+  if (!isLoopOutDraftValid(draft)) {
+    state.lastError = i18n.t("message.loopOutInvalidNumber");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  const useDuration = draft.type !== "continue" && draft.range === "duration";
+  const numKeyframes = draft.type !== "continue" && draft.range === "keys" ? draft.numKeyframes : 0;
+  const duration = useDuration ? draft.duration : 0;
+
+  shell.setStatus(i18n.t("status.applyingLoopOut"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingLoopOut"));
+
+  const response = await client.execute<LoopOutResultData>(
+    "ae.expression.loopout",
+    {
+      type: draft.type,
+      numKeyframes,
+      duration,
+      useDuration,
+      conflictMode: "skip"
+    },
+    { preserveSelection: true }
+  );
+  logger.recordResponse("ae.expression.loopout", response);
+
+  if (!response.ok || !isLoopOutResultData(response.data)) {
+    if (!response.ok) {
+      reportFailure(shell, i18n, response);
+    } else {
+      state.lastError = i18n.t("message.failureWithoutReason");
+      logger.error("Resposta LoopOut inválida.", {
+        command: "ae.expression.loopout",
+        errorCode: "INVALID_HOST_RESPONSE",
+        result: "failure"
+      });
+      shell.setStatus(i18n.t("status.failed"), "error");
+    }
+    setBusy(shell, false);
+    return;
+  }
+
+  state.lastError = null;
+  const success = response.data.appliedCount > 0
+    ? i18n.t("message.loopOutApplied", { count: response.data.appliedCount })
+    : i18n.t("message.loopOutAlreadyApplied", { count: response.data.unchangedCount });
+  shell.setStatus(success, "ok");
   setBusy(shell, false);
 }
 

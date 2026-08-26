@@ -44,6 +44,14 @@ const ALLOWED = new Map([
   [
     "scripts/validate.mjs",
     "A assercao que rejeita o namespace placeholder nos manifests construidos precisa citar o namespace que rejeita."
+  ],
+  [
+    "scripts/uninstall-ae-dev.ps1",
+    "O desinstalador remove explicitamente uma instalacao legada do starter para ela nao permanecer na pasta CEP compartilhada."
+  ],
+  [
+    "scripts/uninstall-ae-dev.sh",
+    "O desinstalador remove explicitamente uma instalacao legada do starter para ela nao permanecer na pasta CEP compartilhada."
   ]
 ]);
 

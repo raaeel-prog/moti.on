@@ -37,6 +37,8 @@ declare class CompItem extends Item {
   readonly height: number;
   readonly duration: number;
   readonly frameRate: number;
+  time: number;
+  readonly selectedProperties: Array<PropertyGroup & Property>;
   readonly layers: LayerCollection;
 }
 
@@ -70,9 +72,36 @@ declare class PropertyGroup {
 }
 
 declare class Property {
+  readonly propertyType: number;
+  readonly propertyValueType: number;
+  readonly canSetExpression: boolean;
+  expression: string;
+  expressionEnabled: boolean;
+  readonly expressionError: string;
+  readonly numKeys: number;
   value: unknown;
   setValue(value: unknown): void;
 }
+
+declare const PropertyType: {
+  readonly PROPERTY: number;
+};
+
+declare const PropertyValueType: {
+  readonly NO_VALUE: number;
+  readonly ThreeD_SPATIAL: number;
+  readonly ThreeD: number;
+  readonly TwoD_SPATIAL: number;
+  readonly TwoD: number;
+  readonly OneD: number;
+  readonly COLOR: number;
+  readonly CUSTOM_VALUE: number;
+  readonly MARKER: number;
+  readonly LAYER_INDEX: number;
+  readonly MASK_INDEX: number;
+  readonly SHAPE: number;
+  readonly TEXT_DOCUMENT: number;
+};
 
 declare class TextDocument {
   fontSize: number;

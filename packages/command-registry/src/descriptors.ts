@@ -44,6 +44,9 @@ export interface CommandDescriptor {
    */
   mutates: boolean;
 
+  /** Sucesso idempotente quando o estado desejado ja existe. */
+  allowsNoopSuccess: boolean;
+
   supportsDryRun: boolean;
   supportsCancel: boolean;
 
@@ -78,6 +81,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     requirements: [],
     destructive: false,
     mutates: false,
+    allowsNoopSuccess: false,
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.none",
@@ -89,6 +93,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     requirements: [],
     destructive: false,
     mutates: false,
+    allowsNoopSuccess: false,
     supportsDryRun: true,
     supportsCancel: false,
     undoLabelKey: "undo.none",
@@ -100,6 +105,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     requirements: [],
     destructive: false,
     mutates: false,
+    allowsNoopSuccess: false,
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.none",
@@ -111,6 +117,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     requirements: [],
     destructive: false,
     mutates: false,
+    allowsNoopSuccess: false,
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.none",
@@ -122,6 +129,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     requirements: ["hasProject"],
     destructive: false,
     mutates: true,
+    allowsNoopSuccess: false,
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.ae.demo.createComposition",
@@ -130,11 +138,62 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     timeoutMs: 30_000
   },
   {
+    id: "ae.expression.loopout",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.expression.loopout",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.expression.smooth",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    // Reaplicar o mesmo Smooth em propriedades que ja o tem e um no-op legitimo,
+    // e nao uma falha: o usuario pediu um estado, e o estado ja e esse.
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.expression.smooth",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.expression.wiggle",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.expression.wiggle",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.expression.flicker",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.expression.flicker",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
     id: "pr.context.read",
     hosts: ["premiere-pro"],
     requirements: [],
     destructive: false,
     mutates: false,
+    allowsNoopSuccess: false,
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.none",
@@ -146,6 +205,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     requirements: [],
     destructive: false,
     mutates: false,
+    allowsNoopSuccess: false,
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.none",

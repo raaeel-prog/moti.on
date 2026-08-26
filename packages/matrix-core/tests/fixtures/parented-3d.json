@@ -1,0 +1,26 @@
+{
+  "root": {
+    "position": [50, -30, 80],
+    "anchor": [2, 4, -1],
+    "scale": [1.2, -0.9, 1.5],
+    "rotationDegrees": [15, -25, 35],
+    "rotationOrder": "XYZ"
+  },
+  "parent": {
+    "position": [-12, 22, 5],
+    "anchor": [-3, 1, 6],
+    "scale": [-0.75, 1.1, 0.8],
+    "rotationDegrees": [-20, 10, 30],
+    "rotationOrder": "ZXY"
+  },
+  "local": {
+    "position": [7, -9, 14],
+    "anchor": [4, -2, 3],
+    "scale": [0.5, -1.25, 2],
+    "rotationDegrees": [40, 5, -15],
+    "rotationOrder": "YZX"
+  },
+  "point": [6, -7, 2],
+  "vector": [-2, 4, 1],
+  "nextAnchor": [-5, 8, -4]
+}

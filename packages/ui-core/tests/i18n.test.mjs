@@ -122,6 +122,22 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
     "app.title",
     "app.subtitle.afterEffects",
     "app.subtitle.premiere",
+    "nav.loopOut",
+    "view.loopOut.title",
+    // Nome proprio da expressao do After Effects: traduzir "Smooth" faria o
+    // rotulo divergir do que a documentacao da Adobe chama.
+    "nav.smooth",
+    "view.smooth.title",
+    "nav.wiggle",
+    "view.wiggle.title",
+    // Simbolo de unidade e nome de parametro iguais nos dois idiomas.
+    "wiggle.unit.hertz",
+    "wiggle.amplitude",
+    "nav.flicker",
+    "view.flicker.title",
+    "flicker.unit.perSecond",
+    // Simbolo de unidade, igual nos dois idiomas.
+    "smooth.unit.seconds",
     "context.compositionValue",
     "value.none",
     "error.withCode"

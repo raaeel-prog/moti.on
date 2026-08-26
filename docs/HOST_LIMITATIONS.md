@@ -19,6 +19,9 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | After Effects: carregamento/bootstrap | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | AE 26.3x87/CEP 12.0.1/Windows 11: `<ScriptPath>` falhou com modal; depois da remoção, inicialização limpa e `$.evalFile` passaram |
 | After Effects: round-trip Unicode | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Botão do build atual preservou português, japonês, emoji, aspas e barras |
 | After Effects: Undo da composição de teste | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Um único Ctrl+Z removeu `Moti.on Demo`; menu exibiu o rótulo pt-BR esperado após correção de locale |
+| After Effects: Smooth (`ae.expression.smooth`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Aplicou, reaplicou como no-op e substituiu tokens numa propriedade com 3 keyframes; Ctrl+Z de um passo para este comando: `NOT RUN` |
+| After Effects: Wiggle (`ae.expression.wiggle`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Aplicou em propriedade **sem keyframes**, reaplicou como no-op e trocou a semente; reprodutibilidade entre camadas e Ctrl+Z deste comando: `NOT RUN` |
+| After Effects: Flicker (`ae.expression.flicker`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Aplicou em 1D e 2D na mesma seleção sem `expressionError`; valor avaliado saiu escalar e array respectivamente. Cor e 3D em host: `NOT RUN` |
 | After Effects: payload acima de 60.000 caracteres codificados | `PARTIAL` | `NOT RUN` | Rejeição tipada implementada; transporte por arquivo temporário ausente |
 | Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | APIs verificadas em documentação e doubles |
 | Premiere: versão/locale do host | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | `require("uxp").host.version`/`.uiLocale` documentados para 25.6+ |
@@ -27,6 +30,7 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | CHMS-009: núcleo puro de metadata de rigs | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | 24/24 testes focados; sem integração `Layer.comment`, filesystem ou Undo real |
 | UI responsiva e visual | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` parcial | Captura/interação no AE em largura compacta próxima de 280 px; matriz restante `NOT RUN` |
 | Acessibilidade no runtime | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Sem teste real de teclado, foco ou leitor de tela nos hosts |
+| Convivência da instalação dev com outros hosts CEP | — | `INCONCLUSIVO` | Premiere 26.3.2.2 falhou uma vez e abriu outra com a extensão presente; sem causa estabelecida (item 14) |
 | `npm.cmd run check` integrado | — | `PASS` | Gate final: lint, typecheck, build, validate, 326/326 testes e skills validate |
 
 ## Detalhes e limites conhecidos
@@ -102,6 +106,50 @@ O shell declara relações ARIA, foco visível e navegação de abas por teclado
 O package puro `@motion/rig-metadata` cria, lê, atualiza, remove e migra o bloco `[MOTION_META_V1]`. Ele preserva byte a byte o texto do usuário fora do span gerenciado, exige um único bloco válido, usa JSON recursivamente canônico, UTF-8 estrito, base64url sem padding e SHA-256, e falha fechado em corrupção ou migração não registrada. O limite inline é fornecido pelo adapter; o retorno é um plano inline/sidecar, sem I/O dentro do package.
 
 Evidência automatizada: **24/24 testes focados `PASS`**, incluídos no check integrado de 2026-08-25. Evidência no After Effects: `NOT RUN`. Ainda não existem neste slice o adapter de `Layer.comment`, escrita/rename/remoção atômicos do sidecar, fronteira de Undo, teste de limite real do comentário, reabertura/persistência no `.aep` ou um rig visual aplicado. O status agregado de CHMS-009 é `IMPLEMENTED_NOT_HOST_VERIFIED`.
+
+### 14. A instalação de desenvolvimento coincidiu com o Premiere Pro não inicializar
+
+`FAIL` observado em **2026-08-25**, Windows 11, Premiere Pro **26.3.2.2**.
+
+`%APPDATA%\Adobe\CEP\extensions` **não é uma pasta do After Effects**: é compartilhada por todos os hosts CEP da máquina, e cada um a varre na inicialização. Com `com.motion.plugin.ae` presente ali, o Premiere Pro não concluiu a abertura.
+
+| Tentativa | Extensão na pasta CEP | Resultado |
+|---|---|---|
+| 1 | ausente (movida para quarentena) | abriu; projeto carregado e utilizável |
+| 2 | presente, **sem** `.debug` | travou ~60 s, caiu, reabriu, travou de novo e morreu; não abriu em 3 min |
+| 3 | removida | abriu e respondeu |
+| 4 | presente, **com** `.debug` | **abriu e respondeu**; projeto carregado, 14,7 GB; fechado depois sem evento de crash |
+
+O Windows registrou `Application Hang` para `Adobe Premiere Pro.exe 26.3.2.2` no episódio original. O log de licenciamento (NGL) completou com status 200 — não é licença.
+
+**A tentativa 4 contradiz a leitura simples de "extensão presente ⇒ Premiere trava".** Com a extensão instalada — e desta vez inclusive com `.debug` —, o Premiere abriu normalmente. A tentativa 2 aconteceu logo depois de um ciclo de queda e recuperação do próprio Premiere, o que é explicação ao menos tão boa quanto a presença da extensão. O projeto usado nas medições ocupa cerca de 14 GB de RAM, e este Premiere já foi observado caindo na inicialização **sem** extensão nenhuma (tentativa 3).
+
+Conclusão honesta do conjunto: **não há causa estabelecida.** Duas aberturas com a extensão ausente, uma falha e uma abertura com ela presente. O que existe é uma correlação observada uma única vez, mais o relato do usuário, contra um contraexemplo direto.
+
+**O que está descartado:**
+
+- não é o `.debug`: a tentativa 2 rodou sem ele e falhou do mesmo jeito;
+- não é o painel carregando e quebrando: o manifest declara `AEFT` como único host, e **não existe log `CEPHtmlEngine*-PPRO-*` do episódio**. O Premiere nunca criou renderer CEP para esta extensão. A falha acontece antes disso;
+- não é `PlayerDebugMode`: a chave já estava em `1` para CSXS.11 e CSXS.12 antes de qualquer instalação deste projeto;
+- não é plugin UXP: nenhum estava instalado (`%APPDATA%\Adobe\UXP\Plugins` inexistente).
+
+**O que NÃO está provado:** que a extensão cause o travamento. A amostra é de quatro execuções, com um contraexemplo direto (tentativa 4), e o mecanismo nunca foi identificado.
+
+**Regra operacional, agora por precaução e não por causa estabelecida:** o desinstalador `scripts/uninstall-ae-dev.ps1` / `.sh` existe e a remoção é um comando. Ele deve ser usado quando o Premiere apresentar problema de inicialização, para eliminar a variável rapidamente — não como ritual a cada sessão. Os scripts de instalação avisam que a pasta é compartilhada, o que continua sendo verdade e continua valendo como cuidado.
+
+**O que fecha este item:** um experimento controlado, com o mesmo projeto e a mesma máquina em estado limpo, alternando só a presença da extensão por três execuções de cada lado. Se a correlação não se sustentar, este item vira uma nota sobre a instabilidade do Premiere com projetos grandes. Se sustentar, `Process Monitor` ou o log CEP do Premiere mostram em que passo da varredura ele para.
+
+### 15. Reprodutibilidade do Wiggle entre camadas
+
+`IMPLEMENTED_NOT_HOST_VERIFIED` / execução `NOT RUN`.
+
+O template emite `seedRandom(<semente>)` antes de `wiggle(...)` porque a referência afirma que o offset controla o valor inicial do wiggle. Isso está medido: aplicar, reaplicar e trocar a semente funcionam, e a fonte gerada é canônica.
+
+**O que NÃO está medido:** se duas camadas diferentes, com a mesma semente e os mesmos parâmetros, produzem movimento idêntico. A documentação diz que o seed padrão é função do identificador da camada, da propriedade e do tempo, e que o offset entra nessa composição — o offset pode igualar apenas a fase, e não a trajetória inteira.
+
+Até que isso seja medido, o produto **não promete** "mesma semente, mesmo movimento" entre camadas. O texto da interface descreve o efeito por propriedade.
+
+**O que fecha este item:** duas camadas na mesma composição, mesma semente e mesmos parâmetros, comparando o valor da propriedade quadro a quadro. Se divergirem, a semente é controle de variação por propriedade e o rótulo precisa dizer isso; se coincidirem, o produto ganha uma promessa que hoje não pode fazer.
 
 ## Controles automatizados existentes
 

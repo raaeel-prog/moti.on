@@ -1,0 +1,23 @@
+{
+  "root": {
+    "position": [120, -35],
+    "anchor": [10, 5],
+    "scale": [1.5, 0.75],
+    "rotationDegrees": 30
+  },
+  "parent": {
+    "position": [-20, 45],
+    "anchor": [-4, 6],
+    "scale": [-0.8, 1.25],
+    "rotationDegrees": -20
+  },
+  "local": {
+    "position": [35, 18],
+    "anchor": [7, -3],
+    "scale": [0.6, -1.1],
+    "rotationDegrees": 40
+  },
+  "point": [12, -8],
+  "vector": [3, 5],
+  "nextAnchor": [-5, 9]
+}

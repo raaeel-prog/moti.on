@@ -1,0 +1,21 @@
+{
+  "name": "@motion/expression-library",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Templates de expressao versionados, renderer seguro e planos puros de Apply, Adjust e Restore.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b --pretty false",
+    "test": "npm run build && node --test \"tests/*.test.mjs\"",
+    "test:coverage": "npm run build && node --test --experimental-test-coverage \"tests/*.test.mjs\""
+  },
+  "license": "MIT"
+}

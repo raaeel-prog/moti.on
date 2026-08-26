@@ -17,6 +17,7 @@
       requirements: [],
       destructive: false,
       mutates: false,
+      allowsNoopSuccess: false,
       supportsDryRun: false,
       undoLabelKey: "undo.none",
       undoLabels: {
@@ -29,6 +30,7 @@
       requirements: [],
       destructive: false,
       mutates: false,
+      allowsNoopSuccess: false,
       supportsDryRun: true,
       undoLabelKey: "undo.none",
       undoLabels: {
@@ -41,6 +43,7 @@
       requirements: [],
       destructive: false,
       mutates: false,
+      allowsNoopSuccess: false,
       supportsDryRun: false,
       undoLabelKey: "undo.none",
       undoLabels: {
@@ -53,11 +56,64 @@
       requirements: ["hasProject"],
       destructive: false,
       mutates: true,
+      allowsNoopSuccess: false,
       supportsDryRun: false,
       undoLabelKey: "undo.ae.demo.createComposition",
       undoLabels: {
         "en-US": "Moti.on: create test composition",
         "pt-BR": "Moti.on: criar composição de teste"
+      }
+    },
+    "ae.expression.loopout": {
+      id: "ae.expression.loopout",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.expression.loopout",
+      undoLabels: {
+        "en-US": "Moti.on: apply LoopOut",
+        "pt-BR": "Moti.on: aplicar LoopOut"
+      }
+    },
+    "ae.expression.smooth": {
+      id: "ae.expression.smooth",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.expression.smooth",
+      undoLabels: {
+        "en-US": "Moti.on: apply Smooth",
+        "pt-BR": "Moti.on: aplicar Smooth"
+      }
+    },
+    "ae.expression.wiggle": {
+      id: "ae.expression.wiggle",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.expression.wiggle",
+      undoLabels: {
+        "en-US": "Moti.on: apply Wiggle",
+        "pt-BR": "Moti.on: aplicar Wiggle"
+      }
+    },
+    "ae.expression.flicker": {
+      id: "ae.expression.flicker",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.expression.flicker",
+      undoLabels: {
+        "en-US": "Moti.on: apply Flicker",
+        "pt-BR": "Moti.on: aplicar Flicker"
       }
     }
   };

@@ -28,6 +28,22 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
   "undo.ae.demo.createComposition": {
     "en-US": "Moti.on: create test composition",
     "pt-BR": "Moti.on: criar composição de teste"
+  },
+  "undo.ae.expression.loopout": {
+    "en-US": "Moti.on: apply LoopOut",
+    "pt-BR": "Moti.on: aplicar LoopOut"
+  },
+  "undo.ae.expression.smooth": {
+    "en-US": "Moti.on: apply Smooth",
+    "pt-BR": "Moti.on: aplicar Smooth"
+  },
+  "undo.ae.expression.wiggle": {
+    "en-US": "Moti.on: apply Wiggle",
+    "pt-BR": "Moti.on: aplicar Wiggle"
+  },
+  "undo.ae.expression.flicker": {
+    "en-US": "Moti.on: apply Flicker",
+    "pt-BR": "Moti.on: aplicar Flicker"
   }
 };
 

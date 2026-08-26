@@ -27,6 +27,10 @@ export type StatusState = "ok" | "error" | "busy";
 
 const ICON_PATHS: Record<string, string> = {
   context: "M3 4h12v3H3zM3 9h5v6H3zM10 9h5v6h-5z",
+  loopOut: "M5 5h7.5l-2-2M13 13H5.5l2 2M14 5a5 5 0 0 1 0 8M4 13a5 5 0 0 1 0-8",
+  smooth: "M2.5 12.5c3.5 0 4-7 6.5-7s3 7 6.5 7",
+  wiggle: "M2 9l2.5-4.5L7 13.5l2.5-9L12 13.5l2-4.5h2",
+  flicker: "M9 2l-3.5 7h3L7 16l5-7.5H9L11 2z",
   system: "M9 2.5l6 3.5v5l-6 3.5-6-3.5v-5zM6.5 8v2M11.5 8v2",
   diagnostics: "M3.5 4.5h11M3.5 9h11M3.5 13.5h7"
 };
@@ -34,6 +38,10 @@ const ICON_PATHS: Record<string, string> = {
 /** Marcadores distintos para runtimes que nao implementam SVG inline. */
 const ICON_FALLBACKS: Record<string, string> = {
   context: "C",
+  loopOut: "L",
+  smooth: "~",
+  wiggle: "W",
+  flicker: "F",
   system: "S",
   diagnostics: "!"
 };
@@ -138,6 +146,130 @@ export function propertyRow(
 
 export function sectionTitle(doc: Document, text: string): HTMLElement {
   return createElement(doc, "div", "ch-section-title", text);
+}
+
+interface FieldBaseOptions {
+  id: string;
+  label: string;
+  description?: string;
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
+export interface SelectFieldOption {
+  value: string;
+  label: string;
+}
+
+export interface SelectFieldOptions extends FieldBaseOptions {
+  value: string;
+  options: readonly SelectFieldOption[];
+  onChange(value: string): void;
+}
+
+export interface NumberFieldOptions extends FieldBaseOptions {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  unit?: string;
+  onInput?(value: number): void;
+  onCommit(value: number): void;
+}
+
+export interface CheckboxFieldOptions extends FieldBaseOptions {
+  checked: boolean;
+  onChange(checked: boolean): void;
+}
+
+function fieldRoot(doc: Document, options: FieldBaseOptions): {
+  root: HTMLElement;
+  control: HTMLElement;
+} {
+  const root = createElement(doc, "div", "ch-field");
+  const label = createElement(doc, "label", "ch-field__label", options.label) as HTMLLabelElement;
+  label.htmlFor = options.id;
+  root.appendChild(label);
+
+  const control = createElement(doc, "div", "ch-field__control");
+  root.appendChild(control);
+
+  if (options.description) {
+    const description = createElement(doc, "div", "ch-field__description", options.description);
+    description.setAttribute("id", `${options.id}-description`);
+    root.appendChild(description);
+  }
+
+  return { root, control };
+}
+
+function applyFieldState(
+  node: HTMLInputElement | HTMLSelectElement,
+  options: FieldBaseOptions
+): void {
+  node.id = options.id;
+  if (options.description) {
+    node.setAttribute("aria-describedby", `${options.id}-description`);
+  }
+  if (options.disabled) {
+    node.disabled = true;
+    node.setAttribute("aria-disabled", "true");
+    node.title = options.disabledReason ?? options.description ?? options.label;
+  }
+}
+
+/** Campo select nativo, mantido pequeno para funcionar igualmente em CEP e UXP. */
+export function selectField(doc: Document, options: SelectFieldOptions): HTMLElement {
+  const field = fieldRoot(doc, options);
+  const select = createElement(doc, "select", "ch-select") as HTMLSelectElement;
+  applyFieldState(select, options);
+
+  for (const item of options.options) {
+    const option = createElement(doc, "option", undefined, item.label) as HTMLOptionElement;
+    option.value = item.value;
+    option.selected = item.value === options.value;
+    select.appendChild(option);
+  }
+
+  select.value = options.value;
+  select.addEventListener("change", () => options.onChange(select.value));
+  field.control.appendChild(select);
+  return field.root;
+}
+
+/** Campo numérico preciso; `input` atualiza o draft e `change` confirma o valor. */
+export function numberField(doc: Document, options: NumberFieldOptions): HTMLElement {
+  const field = fieldRoot(doc, options);
+  const input = createElement(doc, "input", "ch-number") as HTMLInputElement;
+  input.type = "number";
+  input.value = String(options.value);
+  input.min = String(options.min);
+  input.max = String(options.max);
+  input.step = String(options.step);
+  applyFieldState(input, options);
+
+  const read = (): number => Number(input.value);
+  if (options.onInput) {
+    input.addEventListener("input", () => options.onInput?.(read()));
+  }
+  input.addEventListener("change", () => options.onCommit(read()));
+
+  field.control.appendChild(input);
+  if (options.unit) {
+    field.control.appendChild(createElement(doc, "span", "ch-field__unit", options.unit));
+  }
+  return field.root;
+}
+
+export function checkboxField(doc: Document, options: CheckboxFieldOptions): HTMLElement {
+  const field = fieldRoot(doc, options);
+  const input = createElement(doc, "input", "ch-checkbox") as HTMLInputElement;
+  input.type = "checkbox";
+  input.checked = options.checked;
+  applyFieldState(input, options);
+  input.addEventListener("change", () => options.onChange(input.checked));
+  field.control.appendChild(input);
+  return field.root;
 }
 
 interface ButtonBaseOptions {

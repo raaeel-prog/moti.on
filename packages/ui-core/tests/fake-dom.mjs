@@ -34,6 +34,15 @@ export function createFakeDocument({ supportsNamespaces = true, clientWidth = 36
       textContent: "",
       title: "",
       disabled: false,
+      value: "",
+      checked: false,
+      selected: false,
+      type: "",
+      id: "",
+      htmlFor: "",
+      min: "",
+      max: "",
+      step: "",
       offsetWidth: 0,
       attributes: {},
       children: [],
@@ -60,6 +69,9 @@ export function createFakeDocument({ supportsNamespaces = true, clientWidth = 36
       addEventListener(type, handler) {
         listeners[type] = listeners[type] || [];
         listeners[type].push(handler);
+      },
+      emit(type) {
+        (listeners[type] || []).forEach((handler) => handler({ target: this }));
       },
       click() {
         (listeners.click || []).forEach((handler) => handler());

@@ -57,6 +57,24 @@
     return details;
   }
 
+  /**
+   * O unico codigo que um handler pode elevar por excecao e ROLLBACK_FAILED.
+   * Outros codigos continuam normalizados como HOST_OPERATION_FAILED para que
+   * um modulo nao consiga inventar semantica de erro depois de mutar o projeto.
+   * @param {unknown} error
+   * @returns {string}
+   */
+  function exceptionCode(error) {
+    try {
+      var tagged = /** @type {{motionCode?: unknown}} */ (error);
+      return tagged && tagged.motionCode === ERROR.ROLLBACK_FAILED
+        ? ERROR.ROLLBACK_FAILED
+        : ERROR.HOST_OPERATION_FAILED;
+    } catch (tagReadError) {
+      return ERROR.HOST_OPERATION_FAILED;
+    }
+  }
+
   /** @returns {string} */
   function nowIso() {
     // O ExtendScript nao tem toISOString em todas as versoes. Montar a mao evita
@@ -480,9 +498,13 @@
       //    A secao 8 diz: "O resultado nunca retorna ok: true quando nenhuma
       //    alteracao esperada ocorreu." Aqui isso e verificado pelo dispatcher, e
       //    nao confiado a cada comando: um comando que muta e reporta
-      //    changed: false responde ok: false, sempre, independentemente do que
-      //    ele ache que fez.
-      if (descriptor.mutates && result.changed !== true) {
+      //    changed: false responde ok: false, exceto quando o descriptor declara
+      //    explicitamente um no-op idempotente como sucesso observavel.
+      if (
+        descriptor.mutates &&
+        result.changed !== true &&
+        descriptor.allowsNoopSuccess !== true
+      ) {
         return respond(
           requestId, false, null,
           (result.warnings || []).concat([
@@ -511,8 +533,8 @@
       return respond(
         requestId, false, null, [],
         makeError(
-          ERROR.HOST_OPERATION_FAILED,
-          ERROR.HOST_OPERATION_FAILED,
+          exceptionCode(error),
+          exceptionCode(error),
           exceptionDetails(request.command, error)
         ),
         startedAt, startedMs
