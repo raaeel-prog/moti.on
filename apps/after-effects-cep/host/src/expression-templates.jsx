@@ -13,6 +13,20 @@
   var WIGGLE_HEADER = MotionContracts.EXPRESSION_HEADER + WIGGLE_ID + "\n";
   var FLICKER_ID = "ae.expression.flicker";
   var FLICKER_HEADER = MotionContracts.EXPRESSION_HEADER + FLICKER_ID + "\n";
+  var TEXTBOX_SIZE_HEADER = MotionContracts.EXPRESSION_HEADER + "ae.textbox.size\n";
+  var TEXTBOX_POSITION_HEADER = MotionContracts.EXPRESSION_HEADER + "ae.textbox.position\n";
+
+  /**
+   * A caixa aponta para o texto por `thisLayer.parent`, e nao por
+   * `thisComp.layer("nome")`: o vinculo de parentesco ja e criado pelo proprio
+   * rig, sobrevive a rename e a reordenacao, e nao existe um segundo
+   * acoplamento para manter em sincronia.
+   */
+  var TEXTBOX_PREFIXO =
+    "var alvo = thisLayer.parent;\n" +
+    "var r = alvo.sourceRectAtTime(time, false);\n";
+
+  var TEXTBOX_POSITION_BODY = "[r.left + r.width / 2, r.top + r.height / 2];";
 
   /** @param {unknown} value @returns {boolean} */
   function isFiniteNumber(value) {
@@ -320,6 +334,74 @@
     return minFactor <= maxFactor;
   }
 
+  /** @param {unknown} value @returns {void} */
+  function assertPadding(value) {
+    // Padding negativo encolheria a caixa para dentro do texto, cortando-o.
+    if (!isFiniteNumber(value) || /** @type {number} */ (value) < 0 || /** @type {number} */ (value) > 10000) {
+      throw new Error("Padding de caixa invalido.");
+    }
+  }
+
+  /**
+   * Texto vazio e texto so com espaco devolvem o retangulo zerado — medido no
+   * host, em docs/research/after-effects-text-box-rig.md. Sem o colapso para
+   * `[0, 0]`, apagar o texto deixaria um bloco de cor orfao, do tamanho do
+   * padding, pousado na origem da camada.
+   *
+   * @param {{paddingX: unknown, paddingY: unknown}} tokens
+   * @returns {string}
+   */
+  function renderTextBoxSize(tokens) {
+    if (!tokens) throw new Error("Tokens de caixa ausentes.");
+    assertPadding(tokens.paddingX);
+    assertPadding(tokens.paddingY);
+    return (
+      TEXTBOX_SIZE_HEADER + TEXTBOX_PREFIXO +
+      "r.width === 0 && r.height === 0 ? [0, 0] : [r.width + " +
+      canonicalNumber(/** @type {number} */ (tokens.paddingX)) + " * 2, r.height + " +
+      canonicalNumber(/** @type {number} */ (tokens.paddingY)) + " * 2];"
+    );
+  }
+
+  /**
+   * O centro e o do bounding box do texto, nao a origem da camada: e isso que
+   * faz a caixa acompanhar alinhamento a esquerda, ao centro e a direita sem
+   * nenhum input adicional. Nao depende de padding, entao nao recebe tokens.
+   *
+   * @returns {string}
+   */
+  function renderTextBoxPosition() {
+    return TEXTBOX_POSITION_HEADER + TEXTBOX_PREFIXO + TEXTBOX_POSITION_BODY;
+  }
+
+  var NUMERO = "(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:e[+-]?[0-9]+)?";
+  var TEXTBOX_SIZE_RE = new RegExp(
+    "^var alvo = thisLayer\\.parent;\\nvar r = alvo\\.sourceRectAtTime\\(time, false\\);\\n" +
+      "r\\.width === 0 && r\\.height === 0 \\? \\[0, 0\\] : " +
+      "\\[r\\.width \\+ (" + NUMERO + ") \\* 2, r\\.height \\+ (" + NUMERO + ") \\* 2\\];$"
+  );
+
+  /** @param {string} source @returns {boolean} */
+  function isManagedTextBoxSize(source) {
+    if (typeof source !== "string") return false;
+    var normalized = source.replace(/\r\n?/g, "\n");
+    if (normalized.indexOf(TEXTBOX_SIZE_HEADER) !== 0) return false;
+
+    var match = TEXTBOX_SIZE_RE.exec(normalized.substring(TEXTBOX_SIZE_HEADER.length));
+    if (!match) return false;
+
+    var paddingX = Number(match[1]);
+    var paddingY = Number(match[2]);
+    if (!isFiniteNumber(paddingX) || paddingX > 10000 || canonicalNumber(paddingX) !== match[1]) return false;
+    return isFiniteNumber(paddingY) && paddingY <= 10000 && canonicalNumber(paddingY) === match[2];
+  }
+
+  /** @param {string} source @returns {boolean} */
+  function isManagedTextBoxPosition(source) {
+    if (typeof source !== "string") return false;
+    return source.replace(/\r\n?/g, "\n") === renderTextBoxPosition();
+  }
+
   global.MotionExpressions = {
     renderLoopOut: renderLoopOut,
     isManagedLoopOut: isManagedLoopOut,
@@ -328,6 +410,10 @@
     renderWiggle: renderWiggle,
     isManagedWiggle: isManagedWiggle,
     renderFlicker: renderFlicker,
-    isManagedFlicker: isManagedFlicker
+    isManagedFlicker: isManagedFlicker,
+    renderTextBoxSize: renderTextBoxSize,
+    isManagedTextBoxSize: isManagedTextBoxSize,
+    renderTextBoxPosition: renderTextBoxPosition,
+    isManagedTextBoxPosition: isManagedTextBoxPosition
   };
 }($.global));

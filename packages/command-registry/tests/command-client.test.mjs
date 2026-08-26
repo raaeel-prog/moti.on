@@ -315,13 +315,16 @@ test("sucesso sem mudanca e opt-in e somente para comando mutante idempotente", 
   assert.deepEqual(
     COMMAND_DESCRIPTORS.filter((descriptor) => descriptor.allowsNoopSuccess).map((descriptor) => descriptor.id),
     // Lista fixada de proposito: permitir "sucesso sem mudanca" e uma decisao por
-    // comando, e nao um padrao herdado sem revisao. Os dois aqui aplicam um
-    // template gerenciado idempotente — reaplicar o mesmo estado nao e falha.
+    // comando, e nao um padrao herdado sem revisao. Os quatro primeiros aplicam
+    // um template gerenciado idempotente — reaplicar o mesmo estado nao e falha.
+    // `ae.text.box` entra pelo mesmo motivo, do lado da criacao: um texto que ja
+    // tem caixa gerenciada nao ganha uma segunda.
     [
       "ae.expression.loopout",
       "ae.expression.smooth",
       "ae.expression.wiggle",
-      "ae.expression.flicker"
+      "ae.expression.flicker",
+      "ae.text.box"
     ]
   );
 });

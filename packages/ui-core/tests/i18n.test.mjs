@@ -135,6 +135,8 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
     "flicker.unit.perSecond",
     // Simbolo de unidade, igual nos dois idiomas.
     "smooth.unit.seconds",
+    "textBox.unit.px",
+    "textBox.unit.percent",
     "context.compositionValue",
     "value.none",
     "error.withCode"

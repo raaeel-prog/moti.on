@@ -23,6 +23,7 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | After Effects: Wiggle (`ae.expression.wiggle`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Aplicou em propriedade **sem keyframes**, reaplicou como no-op e trocou a semente; reprodutibilidade entre camadas e Ctrl+Z deste comando: `NOT RUN` |
 | After Effects: Flicker (`ae.expression.flicker`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Aplicou em 1D e 2D na mesma seleção sem `expressionError`; valor avaliado saiu escalar e array respectivamente. Cor e 3D em host: `NOT RUN` |
 | After Effects: payload acima de 60.000 caracteres codificados | `PARTIAL` | `NOT RUN` | Rejeição tipada implementada; transporte por arquivo temporário ausente |
+| After Effects: Caixa de texto (`ae.text.box`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | 15 testes de host em doubles cobrem criação, idempotência estrutural, rollback e recusa de argumento; nada executado no After Effects (item 16) |
 | Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | APIs verificadas em documentação e doubles |
 | Premiere: versão/locale do host | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | `require("uxp").host.version`/`.uiLocale` documentados para 25.6+ |
 | Premiere: transações/Undo | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Ordem `lockedAccess` → `executeTransaction` coberta por doubles |
@@ -150,6 +151,24 @@ O template emite `seedRandom(<semente>)` antes de `wiggle(...)` porque a referê
 Até que isso seja medido, o produto **não promete** "mesma semente, mesmo movimento" entre camadas. O texto da interface descreve o efeito por propriedade.
 
 **O que fecha este item:** duas camadas na mesma composição, mesma semente e mesmos parâmetros, comparando o valor da propriedade quadro a quadro. Se divergirem, a semente é controle de variação por propriedade e o rótulo precisa dizer isso; se coincidirem, o produto ganha uma promessa que hoje não pode fazer.
+
+### 16. Caixa de texto: o rig inteiro está sem medição em host
+
+`IMPLEMENTED_NOT_HOST_VERIFIED` / execução `NOT RUN`.
+
+Este é o primeiro comando que **cria camadas** em vez de anotar propriedades existentes, e por isso a distância entre "os testes passam" e "funciona no After Effects" é maior do que nos comandos de expressão. Os `matchName` foram sondados no host real (registro em `docs/research/after-effects-text-box-rig.md`), mas o rig montado com eles não foi.
+
+**O que está medido:** os identificadores existem e a árvore de conteúdo de uma shape layer tem a forma esperada; `sourceRectAtTime` devolve o retângulo no espaço da camada de texto, com `top` negativo, e colapsa para zero em texto vazio.
+
+**O que NÃO está medido, em ordem de risco:**
+
+1. **O alinhamento espacial.** A caixa só cai no lugar se a origem da camada de forma coincidir com a origem do texto. O comando parenteia e depois zera âncora e posição justamente para não depender da semântica de `layer.parent = x` — mas que o resultado seja o esperado é raciocínio, não medição.
+2. **A cor.** `hexToChannels` divide por 255 e entrega sRGB direto. Com gerenciamento de cor ativo no projeto, o After Effects pode interpretar esses números no espaço de trabalho e a cor exibida divergir do seletor.
+3. **A ordem do preenchimento.** O retângulo é adicionado antes do fill, que é a ordem que o próprio After Effects cria — mas se estiver invertida, a caixa fica invisível.
+4. **Undo de um passo.** Como em todos os outros comandos, `NOT RUN`.
+5. **`moveAfter` com várias camadas selecionadas**, onde os índices mudam a cada criação.
+
+**O que fecha este item:** criar a caixa sobre uma camada de texto real e conferir posição, cor e ordem; editar o texto e ver a caixa acompanhar; reaplicar e observar no-op; desfazer com um Ctrl+Z.
 
 ## Controles automatizados existentes
 

@@ -32,6 +32,7 @@ const ICON_PATHS: Record<string, string> = {
   smooth: "M2.5 12.5c3.5 0 4-7 6.5-7s3 7 6.5 7",
   wiggle: "M2 9l2.5-4.5L7 13.5l2.5-9L12 13.5l2-4.5h2",
   flicker: "M9 2l-3.5 7h3L7 16l5-7.5H9L11 2z",
+  textBox: "M2.5 5.5h13v7h-13zM5.5 8h5M5.5 10h3",
   system: "M9 2.5l6 3.5v5l-6 3.5-6-3.5v-5zM6.5 8v2M11.5 8v2",
   diagnostics: "M3.5 4.5h11M3.5 9h11M3.5 13.5h7"
 };
@@ -44,6 +45,7 @@ const ICON_FALLBACKS: Record<string, string> = {
   smooth: "~",
   wiggle: "W",
   flicker: "F",
+  textBox: "[]",
   system: "S",
   diagnostics: "!"
 };
@@ -307,6 +309,61 @@ export function numberField(doc: Document, options: NumberFieldOptions): HTMLEle
   if (options.unit) {
     field.control.appendChild(createElement(doc, "span", "ch-field__unit", options.unit));
   }
+  return field.root;
+}
+
+export interface ColorFieldOptions extends FieldBaseOptions {
+  /** Sempre `#rrggbb` minusculo — a forma canonica aceita por `input[type=color]`. */
+  value: string;
+  onCommit(value: string): void;
+}
+
+const HEX_COLOR = /^#([0-9a-fA-F]{6})$/;
+
+/**
+ * Aceita `#rrggbb` com ou sem `#`, em qualquer caixa, e devolve a forma
+ * canonica. Devolve `null` para qualquer outra coisa: o campo de texto de
+ * fallback e digitavel, e digitacao livre nao pode virar cor silenciosamente.
+ */
+export function normalizeHexColor(value: string): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  const match = HEX_COLOR.exec(trimmed.charAt(0) === "#" ? trimmed : `#${trimmed}`);
+  return match?.[1] ? `#${match[1].toLowerCase()}` : null;
+}
+
+/**
+ * `input[type=color]` e a unica primitiva do shell que NAO esta na intersecao
+ * verificada de CEP e UXP: no Chromium do CEP ela abre o seletor nativo, e no
+ * UXP nao ha confirmacao de suporte. Por isso o tipo e sondado apos atribuido —
+ * um `type` que nao gruda denuncia o host — e o campo cai para texto hex, que
+ * continua editavel, em vez de virar um controle mudo.
+ */
+export function colorField(doc: Document, options: ColorFieldOptions): HTMLElement {
+  const field = fieldRoot(doc, options);
+  const input = createElement(doc, "input", "ch-color") as HTMLInputElement;
+  input.type = "color";
+
+  if (input.type !== "color") {
+    input.type = "text";
+    input.className = "ch-color ch-color--text";
+    input.setAttribute("placeholder", "#rrggbb");
+    input.setAttribute("spellcheck", "false");
+  }
+
+  input.value = options.value;
+  applyFieldState(input, options);
+  input.addEventListener("change", () => {
+    const normalized = normalizeHexColor(input.value);
+    if (normalized === null) {
+      input.value = options.value;
+      return;
+    }
+    input.value = normalized;
+    options.onCommit(normalized);
+  });
+
+  field.control.appendChild(input);
   return field.root;
 }
 

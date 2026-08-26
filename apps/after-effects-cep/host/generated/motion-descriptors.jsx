@@ -115,6 +115,19 @@
         "en-US": "Moti.on: apply Flicker",
         "pt-BR": "Moti.on: aplicar Flicker"
       }
+    },
+    "ae.text.box": {
+      id: "ae.text.box",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.text.box",
+      undoLabels: {
+        "en-US": "Moti.on: create text box",
+        "pt-BR": "Moti.on: criar caixa de texto"
+      }
     }
   };
 

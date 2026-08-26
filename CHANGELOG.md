@@ -88,6 +88,29 @@ Status: `IMPLEMENTED_AND_VERIFIED` no ambiente acima.
 
 **Pendência de produto registrada:** a documentação diz que o offset controla o *valor inicial* do wiggle, mas o identificador da camada continua na composição da semente. Não foi medido se duas camadas com a mesma semente produzem movimento idêntico — pode ser que a semente iguale a fase e não a trajetória. Até isso ser medido, o produto **não promete "mesma semente, mesmo movimento" entre camadas**; o texto da interface fala apenas do comportamento por propriedade.
 
+### CHMS-014 — Text Box: o rig completo, ainda sem medição em host
+
+O slice anterior deixou os `matchName` sondados e os templates prontos. Este monta o rig: `ae.text.box` cria uma shape layer atrás de cada camada de **texto** selecionada, parenteada, ordenada logo abaixo, com tamanho e posição dirigidos por expressão gerenciada.
+
+- Toda a estrutura é endereçada por `matchName`. Nome de exibição volta localizado do host — `ADBE Vector Rect Size` aparece como "Tamanho" num After Effects em português — então qualquer lógica escrita sobre display name funcionaria só na máquina de quem escreveu.
+- A caixa é reconhecida como gerenciada por **estrutura mais cabeçalho versionado**: ser forma, ter o texto como parent, e carregar a expressão gerenciada no `ADBE Vector Rect Size`. Nunca pelo nome da camada, que o usuário renomeia. Renomear a caixa não a esconde, e uma forma que o usuário parenteou à mão não é confundida com rig nosso.
+- Parenteia e **depois** zera âncora e posição. Assim o resultado não depende de `layer.parent = x` preservar ou não o transform: ele é escrito explicitamente.
+- `colorField` novo no `@motion/ui-core`, com detecção de suporte: `input[type=color]` é a única primitiva do shell fora da interseção verificada de CEP e UXP, então o campo sonda o tipo depois de atribuí-lo e cai para texto hex editável quando o runtime não o implementa.
+
+#### Um defeito que o teste encontrou antes do host
+
+Se a montagem falhasse **depois** de `addShape()`, a camada meio-construída ficava órfã no projeto: ela ainda não tinha sido registrada para rollback. Criação e montagem foram separadas, e agora a camada entra na lista de rollback no instante em que passa a existir — antes de qualquer configuração.
+
+#### Escopo recusado, e por quê
+
+`createPerLayer` está no contrato mas o host **recusa `false`** em vez de aceitar e criar por camada assim mesmo. Uma caixa única em volta de várias camadas não consegue usar `thisLayer.parent` — há um só parent — e precisaria referenciar cada texto por nome ou índice, que é a fragilidade que este rig existe para evitar.
+
+`anchorMode` e `multilineMode` continuam **bloqueados por definição de produto**, não por implementação: o spec lista os inputs mas não diz o que os modos são. Para uma caixa que já centraliza no bounding box, "modo de ancoragem" pode ser três features diferentes.
+
+#### Status honesto
+
+`IMPLEMENTED_NOT_HOST_VERIFIED`. São 15 testes de host em doubles cobrindo criação, idempotência, rollback e recusa de argumento — e **nada disso foi executado no After Effects**. Este é o primeiro comando que cria camadas, então a distância entre "verde" e "funciona" é maior que nos comandos de expressão. Os cinco pontos sem medição estão listados no item 16 de `docs/HOST_LIMITATIONS.md`, com o alinhamento espacial e a interpretação da cor em primeiro lugar.
+
 ### CHMS-008 — navegação por ladrilhos, no lugar de uma aba por ferramenta
 
 Cada comando de expressão tinha virado uma aba. Com quatro comandos o painel gastava **sete abas**, e a §22 pede o contrário: grade de ícones, sem inspector até a ferramenta ser escolhida, uma tarefa dominante por vez. O CHMS-014 e o CHMS-015 acrescentariam mais duas cada.

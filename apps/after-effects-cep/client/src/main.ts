@@ -14,10 +14,12 @@ import { buildCapabilities, type ProbeFacts } from "@motion/capability-matrix";
 import { createLogger, type MotionLogger } from "@motion/logging";
 import {
   button,
+  colorField,
   createI18n,
   createShell,
   logLine,
   notice,
+  normalizeHexColor,
   numberField,
   propertyRow,
   sectionTitle,
@@ -120,6 +122,28 @@ const DEFAULT_FLICKER: FlickerDraft = {
   seed: 0
 };
 
+interface TextBoxDraft {
+  paddingX: number;
+  paddingY: number;
+  roundness: number;
+  /** `#rrggbb` minusculo; convertido para os canais 0..1 do host no envio. */
+  fillColor: string;
+  fillOpacity: number;
+}
+
+/**
+ * Padroes de legenda: margem confortavel, canto levemente arredondado, preto
+ * opaco. Preto e a escolha que funciona sobre qualquer material sem virar
+ * decisao de design — quem quiser cor troca num campo.
+ */
+const DEFAULT_TEXT_BOX: TextBoxDraft = {
+  paddingX: 24,
+  paddingY: 14,
+  roundness: 8,
+  fillColor: "#000000",
+  fillOpacity: 100
+};
+
 /**
  * Padroes do `smooth()` do After Effects: janela de 0,2 s e 5 amostras. Sao os
  * valores que a documentacao da Adobe usa quando os argumentos sao omitidos, e
@@ -133,7 +157,7 @@ const DEFAULT_SMOOTH: SmoothDraft = {
 };
 
 type MessageKey = Parameters<I18n["t"]>[0];
-type ToolId = "loopOut" | "smooth" | "wiggle" | "flicker";
+type ToolId = "loopOut" | "smooth" | "wiggle" | "flicker" | "textBox";
 
 /**
  * Uma ferramenta do navegador.
@@ -198,6 +222,17 @@ const TOOLS: readonly ToolDefinition[] = [
     reset: () => {
       state.flicker = { ...DEFAULT_FLICKER };
     }
+  },
+  {
+    id: "textBox",
+    nameKey: "tool.textBox.name",
+    descriptionKey: "tool.textBox.description",
+    render: renderTextBox,
+    disabledReason: textBoxDisabledReason,
+    apply: applyTextBox,
+    reset: () => {
+      state.textBox = { ...DEFAULT_TEXT_BOX };
+    }
   }
 ];
 
@@ -221,6 +256,7 @@ const state: {
   smooth: SmoothDraft;
   wiggle: WiggleDraft;
   flicker: FlickerDraft;
+  textBox: TextBoxDraft;
   /** `null` mostra a grade; um id abre o editor daquela ferramenta. */
   activeTool: ToolId | null;
 } = {
@@ -233,6 +269,7 @@ const state: {
   smooth: { ...DEFAULT_SMOOTH },
   wiggle: { ...DEFAULT_WIGGLE },
   flicker: { ...DEFAULT_FLICKER },
+  textBox: { ...DEFAULT_TEXT_BOX },
   activeTool: null
 };
 
@@ -1221,6 +1258,225 @@ async function applyFlicker(
   const success = response.data.appliedCount > 0
     ? i18n.t("message.flickerApplied", { count: response.data.appliedCount })
     : i18n.t("message.flickerAlreadyApplied", { count: response.data.unchangedCount });
+  shell.setStatus(success, "ok");
+  setBusy(shell, false);
+}
+
+interface TextBoxResultData {
+  createdCount: number;
+  unchangedCount: number;
+}
+
+function isTextBoxResultData(value: unknown): value is TextBoxResultData {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    Number.isInteger(record.createdCount) &&
+    (record.createdCount as number) >= 0 &&
+    Number.isInteger(record.unchangedCount) &&
+    (record.unchangedCount as number) >= 0
+  );
+}
+
+function isTextBoxDraftValid(draft: TextBoxDraft): boolean {
+  for (const valor of [draft.paddingX, draft.paddingY, draft.roundness]) {
+    if (!Number.isFinite(valor) || valor < 0 || valor > 10_000) return false;
+  }
+  if (!Number.isFinite(draft.fillOpacity) || draft.fillOpacity < 0 || draft.fillOpacity > 100) {
+    return false;
+  }
+  return normalizeHexColor(draft.fillColor) !== null;
+}
+
+/**
+ * `#rrggbb` para os tres canais 0..1 que o `ADBE Vector Fill Color` recebe.
+ *
+ * A divisao por 255 e a conversao direta do valor sRGB. Se o projeto estiver com
+ * gerenciamento de cor ativo, o After Effects pode interpretar esses numeros no
+ * espaco de trabalho e a cor exibida nao bater exatamente com o seletor — isso
+ * ainda nao foi medido em host e esta registrado em docs/HOST_LIMITATIONS.md.
+ */
+function hexToChannels(hex: string): [number, number, number] {
+  const normalized = normalizeHexColor(hex) ?? "#000000";
+  return [
+    parseInt(normalized.slice(1, 3), 16) / 255,
+    parseInt(normalized.slice(3, 5), 16) / 255,
+    parseInt(normalized.slice(5, 7), 16) / 255
+  ];
+}
+
+function renderTextBox(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.textBox;
+
+  regions.content.appendChild(notice(document, i18n.t("message.textBoxInstructions")));
+  if (state.context && !state.context.isComposition) {
+    regions.content.appendChild(notice(document, i18n.t("message.textBoxNoActiveComp"), "warning"));
+  }
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("textBox.section.size")));
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "textbox-padding-x",
+      label: i18n.t("textBox.paddingX"),
+      value: draft.paddingX,
+      min: 0,
+      max: 10_000,
+      step: 1,
+      unit: i18n.t("textBox.unit.px"),
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.textBox.paddingX = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "textbox-padding-y",
+      label: i18n.t("textBox.paddingY"),
+      description: i18n.t("textBox.paddingY.description"),
+      value: draft.paddingY,
+      min: 0,
+      max: 10_000,
+      step: 1,
+      unit: i18n.t("textBox.unit.px"),
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.textBox.paddingY = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "textbox-roundness",
+      label: i18n.t("textBox.roundness"),
+      value: draft.roundness,
+      min: 0,
+      max: 10_000,
+      step: 1,
+      unit: i18n.t("textBox.unit.px"),
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.textBox.roundness = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(sectionTitle(document, i18n.t("textBox.section.fill")));
+
+  regions.content.appendChild(
+    colorField(document, {
+      id: "textbox-fill-color",
+      label: i18n.t("textBox.fillColor"),
+      value: draft.fillColor,
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.textBox.fillColor = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "textbox-fill-opacity",
+      label: i18n.t("textBox.fillOpacity"),
+      value: draft.fillOpacity,
+      min: 0,
+      max: 100,
+      step: 1,
+      unit: i18n.t("textBox.unit.percent"),
+      disabled: state.busy,
+      onCommit: (value) => {
+        state.textBox.fillOpacity = value;
+        shell.rerender();
+      }
+    })
+  );
+}
+
+function textBoxDisabledReason(i18n: I18n): string | null {
+  if (state.busy) {
+    return state.busyReason ?? i18n.t("status.initializing");
+  }
+  if (!state.context?.isComposition) {
+    return i18n.t("message.textBoxNoActiveComp");
+  }
+  if (!isTextBoxDraftValid(state.textBox)) {
+    return i18n.t("message.textBoxInvalidNumber");
+  }
+  return null;
+}
+
+async function applyTextBox(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.textBoxNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  const draft = state.textBox;
+  if (!isTextBoxDraftValid(draft)) {
+    state.lastError = i18n.t("message.textBoxInvalidNumber");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingTextBox"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingTextBox"));
+
+  const response = await client.execute<TextBoxResultData>(
+    "ae.text.box",
+    {
+      paddingX: draft.paddingX,
+      paddingY: draft.paddingY,
+      roundness: draft.roundness,
+      fillColor: hexToChannels(draft.fillColor),
+      fillOpacity: draft.fillOpacity,
+      // Uma caixa por camada de texto é a única forma implementada; o host
+      // recusa `false` em vez de ignorar. Ver docs/HOST_LIMITATIONS.md.
+      createPerLayer: true,
+      conflictMode: "skip"
+    },
+    { preserveSelection: true }
+  );
+  logger.recordResponse("ae.text.box", response);
+
+  if (!response.ok || !isTextBoxResultData(response.data)) {
+    if (!response.ok) {
+      reportFailure(shell, i18n, response);
+    } else {
+      state.lastError = i18n.t("message.failureWithoutReason");
+      logger.error("Resposta de caixa de texto invalida.", {
+        command: "ae.text.box",
+        errorCode: "INVALID_HOST_RESPONSE",
+        result: "failure"
+      });
+      shell.setStatus(i18n.t("status.failed"), "error");
+    }
+    setBusy(shell, false);
+    return;
+  }
+
+  state.lastError = null;
+  const success = response.data.createdCount > 0
+    ? i18n.t("message.textBoxCreated", { count: response.data.createdCount })
+    : i18n.t("message.textBoxAlreadyCreated", { count: response.data.unchangedCount });
   shell.setStatus(success, "ok");
   setBusy(shell, false);
 }

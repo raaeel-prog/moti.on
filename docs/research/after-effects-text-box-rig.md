@@ -83,7 +83,9 @@ O centro do retângulo é o centro do bounding box do texto, e não a origem da 
 
 A §7 lista como inputs mínimos `paddingX, paddingY, roundness, fill, stroke, anchorMode, multilineMode, createPerLayer`.
 
-**Entregue neste slice:** `paddingX`, `paddingY`, `roundness`, `fillColor`, `fillOpacity`, `createPerLayer`.
+**Entregue neste slice:** `paddingX`, `paddingY`, `roundness`, `fillColor`, `fillOpacity`.
+
+`createPerLayer` existe no contrato, mas o host aceita somente `true` e **recusa `false` explicitamente**, em vez de aceitar o valor e criar por camada assim mesmo. O motivo e estrutural: uma caixa unica em volta de varias camadas nao consegue usar `thisLayer.parent` — ha um so parent — e precisaria referenciar cada texto por nome ou indice, que e exatamente a fragilidade que este rig existe para evitar. Enquanto essa segunda forma nao for desenhada, recusar e mais honesto do que ignorar.
 
 **Adiado, com motivo:**
 

@@ -39,7 +39,11 @@ declare class CompItem extends Item {
   readonly frameRate: number;
   time: number;
   readonly selectedProperties: Array<PropertyGroup & Property>;
+  readonly selectedLayers: Layer[];
   readonly layers: LayerCollection;
+  readonly numLayers: number;
+  /** 1-indexado, como todo indice de colecao no ExtendScript. */
+  layer(index: number): Layer;
 }
 
 declare class ItemCollection {
@@ -55,20 +59,39 @@ declare class ItemCollection {
 
 declare class LayerCollection {
   addText(sourceText?: string): TextLayer;
+  /** Cria uma shape layer vazia no topo da composicao. */
+  addShape(): ShapeLayer;
 }
 
 declare class Layer {
+  name: string;
+  /**
+   * Camada pai. Atribuir aqui cria o vinculo de parentesco; o rig de caixa
+   * reescreve ancora e posicao logo depois, entao nao depende de a atribuicao
+   * preservar ou nao o transform.
+   */
+  parent: Layer | null;
   /**
    * Busca por matchName ou por nome de exibicao. A camada de host deve sempre
    * passar matchName: nome de exibicao muda conforme o idioma do aplicativo.
    */
   property(nameOrMatchName: string): PropertyGroup;
+  /** Move esta camada para logo abaixo da informada, na ordem da timeline. */
+  moveAfter(layer: Layer): void;
+  remove(): void;
 }
 
 declare class TextLayer extends Layer {}
 
+declare class ShapeLayer extends Layer {}
+
 declare class PropertyGroup {
+  readonly matchName: string;
+  readonly numProperties: number;
   property(nameOrMatchName: string): PropertyGroup & Property;
+  /** 1-indexado. Usado para varrer conteudo de shape, cujo tamanho e variavel. */
+  property(index: number): PropertyGroup & Property;
+  addProperty(matchName: string): PropertyGroup & Property;
 }
 
 declare class Property {

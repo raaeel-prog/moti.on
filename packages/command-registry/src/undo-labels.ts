@@ -44,6 +44,10 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
   "undo.ae.expression.flicker": {
     "en-US": "Moti.on: apply Flicker",
     "pt-BR": "Moti.on: aplicar Flicker"
+  },
+  "undo.ae.text.box": {
+    "en-US": "Moti.on: create text box",
+    "pt-BR": "Moti.on: criar caixa de texto"
   }
 };
 

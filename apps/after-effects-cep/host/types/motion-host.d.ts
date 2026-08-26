@@ -112,6 +112,11 @@ declare const MotionExpressions: {
     seed: unknown;
   }): string;
   isManagedFlicker(source: string): boolean;
+  renderTextBoxSize(tokens: { paddingX: unknown; paddingY: unknown }): string;
+  isManagedTextBoxSize(source: string): boolean;
+  /** Sem tokens: o centro do bounding box nao depende de padding. */
+  renderTextBoxPosition(): string;
+  isManagedTextBoxPosition(source: string): boolean;
 };
 
 /** Erro tipado que um `preflight` devolve para recusar o comando. */

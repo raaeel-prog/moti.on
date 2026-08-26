@@ -188,6 +188,22 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     timeoutMs: DEFAULT_TIMEOUT_MS
   },
   {
+    // Diferente dos comandos de expressao, este CRIA camadas — nao anota
+    // propriedades ja existentes. `allowsNoopSuccess` continua verdadeiro
+    // porque reaplicar sobre um texto que ja tem caixa gerenciada e um no-op
+    // legitimo, e nao um erro.
+    id: "ae.text.box",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.text.box",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
     id: "pr.context.read",
     hosts: ["premiere-pro"],
     requirements: [],

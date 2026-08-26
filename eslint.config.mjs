@@ -107,6 +107,8 @@ export default [
         PropertyType: "readonly",
         PropertyValueType: "readonly",
         TextDocument: "readonly",
+        ShapeLayer: "readonly",
+        TextLayer: "readonly",
         // Fornecidos pelos proprios modulos do host. O ExtendScript nao tem
         // sistema de modulos: cada arquivo se pendura em $.global e os
         // seguintes o enxergam como identificador nu. A ordem de carregamento

@@ -227,6 +227,7 @@ body,
   font-size: var(--ch-font-sm);
 }
 
+.ch-color,
 .ch-select,
 .ch-number {
   width: 100%;
@@ -249,6 +250,19 @@ body,
   text-align: right;
 }
 
+/* O seletor nativo desenha a amostra na area de conteudo: padding aqui deixaria
+   uma moldura clara em volta da cor, ilegivel sobre o #1D1D1D do painel. */
+.ch-color {
+  padding: 2px;
+  cursor: pointer;
+}
+
+.ch-color--text {
+  padding: 0 7px;
+  font-family: Consolas, "SF Mono", Menlo, monospace;
+  cursor: text;
+}
+
 .ch-checkbox {
   width: 16px;
   height: 16px;
@@ -263,6 +277,7 @@ body,
   font-size: var(--ch-font-sm);
 }
 
+.ch-color:focus,
 .ch-select:focus,
 .ch-number:focus,
 .ch-checkbox:focus {
@@ -270,6 +285,7 @@ body,
   outline-offset: 1px;
 }
 
+.ch-color[disabled],
 .ch-select[disabled],
 .ch-number[disabled],
 .ch-checkbox[disabled] {
