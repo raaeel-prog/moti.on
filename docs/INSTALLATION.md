@@ -32,13 +32,38 @@ O `PASS` automatizado registrado acima pode ser reproduzido antes da instalaçã
 
 ## 2. Premiere Pro — UXP
 
-**Pré-requisitos:** Premiere Pro 25.6+, UXP Developer Tool 2.2+, Developer Mode ligado nas preferências de Plugins do Premiere.
+Há dois caminhos, e eles servem a propósitos diferentes.
+
+### 2a. UPIA — para instalar e verificar (sem elevação)
+
+Medido em 2026-08-30 no Premiere Pro 26.3.2/Windows 11: instala sem UXP Developer Tool, sem Developer Mode e sem privilégio de administrador. É o caminho para pôr o painel dentro do host.
+
+```powershell
+npm run build
+Compress-Archive -Path 'dist\premiere-uxp\*' -DestinationPath motion.zip -Force
+Rename-Item motion.zip motion.ccx
+& "$env:CommonProgramFiles\Adobe\Adobe Desktop Common\RemoteComponents\UPI\UnifiedPluginInstallerAgent\UnifiedPluginInstallerAgent.exe" /install (Resolve-Path motion.ccx)
+```
+
+Confira com `... \UnifiedPluginInstallerAgent.exe /list all`: o Premiere deve listar `Moti.on 0.1.0` como `Enabled`. Reinicie o Premiere e abra a aba **Moti.on** no grupo de painéis. Para remover, use `/remove` com o mesmo caminho.
+
+O painel só executa quando é exibido: enquanto ninguém clicar na aba, ele existe no manifesto e nada roda. `panel.started` no log confirma que rodou (veja abaixo).
+
+### 2b. UXP Developer Tool — para depurar
+
+**Pré-requisitos:** UXP Developer Tool 2.2+ e **Developer Mode**, que exige elevação: o UDT pede na primeira abertura, ou crie `{ "developer": true }` em `%CommonProgramFiles%\Adobe\UXP\Developer\settings.json` como administrador. Sem isso o UDT encerra sozinho e não conecta.
 
 1. Abra o Premiere Pro.
 2. Abra o UXP Developer Tool.
 3. **Add Plugin** → selecione `dist/premiere-uxp/manifest.json`.
 4. **Load & Watch**.
 5. No Premiere: `Window > UXP Plugins > Moti.on`.
+
+Só este caminho dá hot reload, console e inspetor.
+
+### Onde ler a saída do painel
+
+`%APPDATA%\Adobe\Premiere Pro\Logs\UXPLogs_*.log`, um arquivo por sessão. É possível conferir o carregamento sem GUI: `upic::plugin with id: com.motion.plugin.premiere ... status as enabled` prova o registro, e `panel.started` prova que o painel foi instanciado.
 
 ### O que verificar
 

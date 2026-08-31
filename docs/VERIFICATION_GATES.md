@@ -14,7 +14,7 @@ Uma caixa só pode ser marcada quando a linha contém `PASS` e aponta para evid�
 | JSON Schemas/validadores do contrato | `PASS` automatizado | Quatro schemas Draft 2020-12, codegen standalone CSP-safe e guards profundos; CHMS-003 `IMPLEMENTED_AND_VERIFIED` |
 | Núcleo puro de metadata de rigs | `PASS` automatizado | 24/24 testes focados; CHMS-009 `IMPLEMENTED_NOT_HOST_VERIFIED` porque `Layer.comment`, filesystem e Undo real estão `NOT RUN` |
 | After Effects, build atual | `PASS` parcial | AE 26.3x87/CEP 12.0.1/Windows 11: inicialização limpa, contexto, capabilities, Unicode, demo, rótulo de Undo pt-BR e Undo em um passo |
-| Premiere Pro, build atual | `NOT RUN` | Pesquisa oficial e doubles não substituem o host |
+| Premiere Pro, build atual | `NOT RUN` | O plugin **está instalado e habilitado** no Premiere 26.3.2 (UPIA, sem UDT e sem elevação) e a aba `Moti.on` aparece no workspace, mas o painel não foi instanciado — sem `panel.started` no log, nada do runtime está verificado. O bloqueio que restava era o Developer Mode, que exige elevação; ele não é necessário para instalar, só para depurar |
 | QA visual/acessível nos hosts | `PASS` parcial | Screenshot/interação em largura compacta no AE e **navegação por teclado medida** (ver Gate de interface); matriz de larguras/DPI, leitor de tela e todo o Premiere continuam `NOT RUN` |
 | Revisão visual no browser | `NOT RUN` | Nenhuma captura ou interação de browser foi executada neste ciclo |
 | Pesquisa oficial de ambiente, picker e capabilities UXP | `PASS` | Registros `premiere-uxp-host-environment-and-diagnostics-export.md` e `premiere-uxp-capability-probes.md`; não fecham gate de host |

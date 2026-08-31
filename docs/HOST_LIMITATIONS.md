@@ -29,7 +29,7 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | After Effects: Flip (`ae.layer.flip`) | `PARTIAL` | `PASS` para o escopo entregue | AE 26.3x87: flip duplo voltou idêntico; o canto espelhou em torno do pivô com erro de 1,1e-13; a conta de limites bate com a do motor de expressões. Camadas 3D, com pai e shape paths: recusadas ou fora de escopo (item 19) |
 | After Effects: Alinhador de âncora (`ae.anchor.align`) | `PARTIAL` | `PASS` para o escopo entregue | AE 26.3x87: pior erro visual de 1,2e-5 px contra o critério de 0,5 px da §14.6, incluindo camada parenteada e **camadas 3D**. Convex e Concave fora de escopo (item 21) |
 | After Effects: matriz de transform 3D (`MotionTransform`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Composição medida contra o host com erro de 5,684e-14. Registro em `docs/research/after-effects-3d-transform.md` (item 22) |
-| Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | APIs verificadas em documentação e doubles |
+| Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | **Instalado e habilitado** no Premiere 26.3.2 via UPIA, e a aba `Moti.on` aparece no workspace; o painel não chegou a ser instanciado (sem `panel.started` no log), então nada do runtime está verificado. Ver `docs/research/premiere-uxp-plugin-installation.md` |
 | Premiere: versão/locale do host | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | `require("uxp").host.version`/`.uiLocale` documentados para 25.6+ |
 | Premiere: transações/Undo | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Ordem `lockedAccess` → `executeTransaction` coberta por doubles |
 | Premiere: exportação de diagnóstico | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Picker e `File.write` documentados; host real não executado |
@@ -130,12 +130,24 @@ Evidência automatizada: **24/24 testes focados `PASS`**, incluídos no check in
 | 2 | presente, **sem** `.debug` | travou ~60 s, caiu, reabriu, travou de novo e morreu; não abriu em 3 min |
 | 3 | removida | abriu e respondeu |
 | 4 | presente, **com** `.debug` | **abriu e respondeu**; projeto carregado, 14,7 GB; fechado depois sem evento de crash |
+| 5 | presente, **com** `.debug` | processo **ausente** na verificação seguinte; log parou 30 s após abrir (2026-08-30, Premiere 26.3.2, projeto vazio) |
+| 6 | presente, **com** `.debug` | processo **ausente** na verificação seguinte; log parou 36 s após abrir |
+| 7 | ausente (desinstalada) | vivo e responsivo em todas as verificações; encerrado por mim aos 236 s |
+| 8 | ausente, **com plugin UXP instalado** | vivo e responsivo; 5 min 45 s de uptime no momento em que isto foi escrito |
+
+Método das tentativas 5–8: a janela de atividade vem de `CreationTime`/`LastWriteTime` dos arquivos `%APPDATA%\Adobe\Premiere Pro\Logs\UXPLogs_*.log`, e a **morte** vem de `Get-Process` — o log parar de escrever não prova que o processo caiu, e por isso as duas coisas foram medidas separadamente. As tentativas 5 e 6 tiveram a ausência do processo confirmada; as 7 e 8, a presença.
+
+No mesmo dia, antes de qualquer instalação deste ciclo, o usuário rodou sessões de 32 min, 72 min, 88 min e 2 h 38 min. As de 30 s e 36 s são as únicas curtas do histórico, e ambas com a extensão presente. Nenhum evento de crash foi registrado no log de aplicativos do Windows para elas — a saída foi silenciosa, diferente do `Application Hang` do episódio original.
 
 O Windows registrou `Application Hang` para `Adobe Premiere Pro.exe 26.3.2.2` no episódio original. O log de licenciamento (NGL) completou com status 200 — não é licença.
 
 **A tentativa 4 contradiz a leitura simples de "extensão presente ⇒ Premiere trava".** Com a extensão instalada — e desta vez inclusive com `.debug` —, o Premiere abriu normalmente. A tentativa 2 aconteceu logo depois de um ciclo de queda e recuperação do próprio Premiere, o que é explicação ao menos tão boa quanto a presença da extensão. O projeto usado nas medições ocupa cerca de 14 GB de RAM, e este Premiere já foi observado caindo na inicialização **sem** extensão nenhuma (tentativa 3).
 
-Conclusão honesta do conjunto: **não há causa estabelecida.** Duas aberturas com a extensão ausente, uma falha e uma abertura com ela presente. O que existe é uma correlação observada uma única vez, mais o relato do usuário, contra um contraexemplo direto.
+Conclusão honesta do conjunto: **ainda não há causa estabelecida, mas a correlação ficou mais forte.** O placar passou a ser quatro aberturas saudáveis com a extensão ausente (1, 3, 7, 8) contra três falhas e uma abertura com ela presente (2, 5, 6 contra 4). A tentativa 4 segue sendo o contraexemplo que impede afirmar causa, e a perna confirmatória — reinstalar a extensão e medir de novo — **não foi executada**, porque exigiria derrubar a sessão do Premiere em que o plugin UXP está instalado à espera de verificação.
+
+Também não foi provado que as tentativas 7 e 8 teriam morrido: elas passaram de 5 min, não de 30 min. Contra as sessões de horas do próprio usuário, 5 min é indício, não prova.
+
+O que mudou desde o episódio original: `%APPDATA%\Adobe\UXP\Plugins` **agora existe**, com `com.motion.plugin.premiere` instalado (ver `docs/research/premiere-uxp-plugin-installation.md`). O descarte "não é plugin UXP" abaixo vale para as tentativas 1–6; na 8 já havia plugin UXP instalado e o Premiere seguiu saudável, o que também o torna improvável como causa.
 
 **O que está descartado:**
 
