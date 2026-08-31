@@ -444,12 +444,30 @@
   }
 
   /**
-   * Media das ancoras das camadas, em espaco de composicao.
+   * `toComp` ou `toWorld`, conforme o destino do valor.
+   *
+   * Numa camada 3D `toComp` devolve a posicao PROJETADA pela camera. Medido:
+   * com camadas em z=-400 e z=+600 as duas leituras divergem 787 px, e o z
+   * da projecao nao tem significado no espaco do transform.
+   *
+   * A regra segue o destino: um null 2D vive no plano da composicao e quer a
+   * posicao PROJETADA, que e onde as camadas aparecem; um null 3D vive no
+   * mundo e quer `toWorld`.
+   *
+   * @param {unknown} paraMundo @returns {string}
+   */
+  function metodoDeEspaco(paraMundo) {
+    if (typeof paraMundo !== "boolean") throw new Error("Espaco de sonda invalido.");
+    return paraMundo ? "toWorld" : "toComp";
+  }
+
+  /** Media das ancoras das camadas.
    *
    * @param {unknown} indices
+   * @param {unknown} paraMundo
    * @returns {string}
    */
-  function renderAnchorAverageProbe(indices) {
+  function renderAnchorAverageProbe(indices, paraMundo) {
     // `toComp` devolve DOIS componentes numa camada 2D e tres numa 3D — medido
     // em AE 26.3x87. Ler `p[2]` sem guarda numa camada 2D produz "Valor
     // indefinido usado na expressao" e o After Effects desabilita a expressao.
@@ -469,7 +487,7 @@
       "var soma = [0, 0, 0];\n" +
       "for (var i = 0; i < idx.length; i++) {\n" +
       "  var l = thisComp.layer(idx[i]);\n" +
-      "  var p = l.toComp(l.anchorPoint);\n" +
+      "  var p = l." + metodoDeEspaco(paraMundo) + "(l.anchorPoint);\n" +
       "  var z = p.length > 2 ? p[2] : 0;\n" +
       "  soma = [soma[0] + p[0], soma[1] + p[1], soma[2] + z];\n" +
       "}\n" +
@@ -485,9 +503,10 @@
    * dois cantos daria um retangulo errado depois da rotacao.
    *
    * @param {unknown} indices
+   * @param {unknown} paraMundo
    * @returns {string}
    */
-  function renderBoundsCenterProbe(indices) {
+  function renderBoundsCenterProbe(indices, paraMundo) {
     return (
       "var idx = " + renderIndexList(indices) + ";\n" +
       "var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;\n" +
@@ -498,7 +517,7 @@
       "  var ys = [r.top, r.top + r.height];\n" +
       "  for (var m = 0; m < 2; m++) {\n" +
       "    for (var n = 0; n < 2; n++) {\n" +
-      "      var p = l.toComp([xs[m], ys[n], 0]);\n" +
+      "      var p = l." + metodoDeEspaco(paraMundo) + "([xs[m], ys[n], 0]);\n" +
       "      if (p[0] < minX) minX = p[0];\n" +
       "      if (p[0] > maxX) maxX = p[0];\n" +
       "      if (p[1] < minY) minY = p[1];\n" +

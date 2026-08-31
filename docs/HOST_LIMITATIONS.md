@@ -465,9 +465,12 @@ Em código de sonda, formatar elemento a elemento é o único caminho seguro.
 - Escala com componente negativo em 3D.
 - `Auto-Orient`: com ele ligado a rotação efetiva deixa de vir só das propriedades, e a matriz
   lida aqui não a descreve.
-- **`ae.layer.create-null` ainda usa `toComp` na sonda de posicionamento.** Para camadas 3D isso é
-  a posição projetada pela câmera, e não a do transform — o mesmo engano que custou 860 px aqui.
-  Não foi medido se o resultado diverge do desejado nesse comando.
+- ~~**`ae.layer.create-null` usa `toComp` na sonda**~~ — **resolvido e medido**. A divergência era
+  real: com camadas em `z=-400` e `z=+600`, `toComp` e `toWorld` diferiam **787 px**, e o `z` da
+  projeção não tinha significado no espaço do transform. O espaço da sonda passou a seguir a
+  dimensão do **null**, que é quem recebe o valor: um null 3D mede em `toWorld` e pousou em
+  `[300, 185, 100]`, exatamente a média mundo; um null 2D mede em `toComp` e pousa onde as
+  camadas aparecem, que é o certo para uma camada no plano da composição.
 - **`ae.layer.flip` continua recusando 3D**: a reflexão em três eixos é outra derivação, e
   `MotionTransform` dá a matriz mas não a decomposição de volta em rotações que o flip precisaria.
 

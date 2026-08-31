@@ -140,12 +140,29 @@ Concatenar um array de valor de propriedade do After Effects numa string levanta
 `numérico inválido (divisão por zero?)`. Custou uma rodada inteira: o log de sucesso explodia
 dentro do `try`, e o `catch` fazia parecer que a **escrita** tinha falhado quando ela funcionara.
 
+#### O Create Null media no espaço errado — 787 px de erro
+
+A sonda de posicionamento usava `toComp` para todos os casos. Numa camada 3D isso é a posição
+**projetada pela câmera**, o mesmo engano que custou 860 px na pesquisa da matriz. Medido com
+camadas em `z=-400` e `z=+600`: `toComp` e `toWorld` divergem **787 px**, e o `z` da projeção não
+tem significado no espaço do transform.
+
+A regra agora segue o **destino do valor**, e não a natureza das camadas medidas: quem recebe o
+número é o null.
+
+| Destino | Espaço | Medido em host |
+|---|---|---|
+| null 3D | `toWorld` | `[300, 185, 100]` — a média mundo exata |
+| null 2D | `toComp` | `[234,790, 164,668, 0]` — onde as camadas aparecem |
+
+Um null 2D vive no plano da composição, então a posição projetada é a resposta certa para ele. O
+argumento de espaço é **obrigatório** nas duas sondas: um default silencioso escolheria a projeção
+para um null 3D, que foi exatamente o defeito.
+
 #### O que a dívida ainda cobra
 
 **`ae.layer.flip` continua recusando 3D**: refletir em três eixos é outra derivação, e a matriz
-sozinha não dá a decomposição de volta em rotações que o flip precisa escrever. E
-**`ae.layer.create-null` ainda usa `toComp`** na sonda de posicionamento — para camadas 3D isso é
-a posição projetada, o mesmo engano que custou 860 px aqui. Nenhum dos dois foi medido.
+sozinha não dá a decomposição de volta em rotações que o flip precisa escrever nas propriedades.
 
 ### CHMS-017 — Alinhador de âncora (`ae.anchor.align`)
 

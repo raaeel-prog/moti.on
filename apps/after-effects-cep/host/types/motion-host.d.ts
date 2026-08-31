@@ -128,9 +128,14 @@ declare const MotionExpressions: {
   /** Sem tokens: o centro do bounding box nao depende de padding. */
   renderTextBoxPosition(): string;
   isManagedTextBoxPosition(source: string): boolean;
-  /** Sondas temporarias de posicionamento; nunca persistidas. */
-  renderAnchorAverageProbe(indices: readonly number[]): string;
-  renderBoundsCenterProbe(indices: readonly number[]): string;
+  /**
+   * Sondas temporarias de posicionamento; nunca persistidas.
+   *
+   * `toWorld` quando o destino e uma camada 3D, `toComp` quando e 2D: numa
+   * camada 3D o `toComp` devolve a posicao projetada pela camera.
+   */
+  renderAnchorAverageProbe(indices: readonly number[], toWorld: boolean): string;
+  renderBoundsCenterProbe(indices: readonly number[], toWorld: boolean): string;
 };
 
 interface MotionCapturedEase {

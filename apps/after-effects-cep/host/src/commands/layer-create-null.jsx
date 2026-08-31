@@ -263,9 +263,12 @@
             indices.push(/** @type {Layer} */ (selecionadas[i]).index);
           }
 
+          // O espaco da sonda segue a dimensao do null, nao a das camadas
+          // medidas: e o null que recebe o valor.
+          var paraMundo = args.dimension === "3d";
           var fonte = args.placement === "selectionBounds"
-            ? MotionExpressions.renderBoundsCenterProbe(indices)
-            : MotionExpressions.renderAnchorAverageProbe(indices);
+            ? MotionExpressions.renderBoundsCenterProbe(indices, paraMundo)
+            : MotionExpressions.renderAnchorAverageProbe(indices, paraMundo);
 
           var medido = avalia(posicao, fonte);
           posicao.setValue(

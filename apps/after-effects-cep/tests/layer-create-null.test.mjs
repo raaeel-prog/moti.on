@@ -281,6 +281,28 @@ test("os índices da sonda são lidos DEPOIS de o null existir", async () => {
   assert.match(capturado[0].fontesEscritas[0], /var idx = \[2, 3\];/);
 });
 
+test("o espaço da sonda segue a dimensão do null", async () => {
+  // Numa camada 3D o `toComp` devolve a posição PROJETADA pela câmera. Medido
+  // em host: com camadas em z=-400 e z=+600 as duas leituras divergem 787 px, e
+  // o z da projeção não tem significado no espaço do transform.
+  //
+  // A regra segue o destino do valor: um null 2D vive no plano da composição e
+  // quer onde as camadas aparecem; um null 3D vive no mundo.
+  const doisD = await fixture();
+  empilha(doisD.comp, "A");
+  doisD.comp.aoCriarNull = (n) => { n.transform.posicao.avaliador = () => [0, 0, 0]; };
+  criar(doisD.scope, { placement: "averageAnchor", dimension: "2d" });
+  assert.match(nullDe(doisD.comp).transform.posicao.fontesEscritas[0], /l\.toComp\(/);
+
+  const tresD = await fixture();
+  empilha(tresD.comp, "A");
+  tresD.comp.aoCriarNull = (n) => { n.transform.posicao.avaliador = () => [0, 0, 0]; };
+  criar(tresD.scope, { placement: "averageAnchor", dimension: "3d" });
+  const fonte3d = nullDe(tresD.comp).transform.posicao.fontesEscritas[0];
+  assert.match(fonte3d, /l\.toWorld\(/);
+  assert.doesNotMatch(fonte3d, /toComp/);
+});
+
 test("selectionBounds projeta os quatro cantos, não dois", async () => {
   // Uma camada rotacionada tem bounding box alinhado ao eixo no espaço DELA;
   // projetar só dois cantos daria um retângulo errado depois da rotação.
@@ -388,8 +410,8 @@ test("nenhuma sonda lê o terceiro componente sem guarda de tamanho", async () =
   // O double não interpreta expressões, então este teste guarda a FONTE.
   const { scope } = await fixture();
   const fontes = [
-    scope.MotionExpressions.renderAnchorAverageProbe([1, 2]),
-    scope.MotionExpressions.renderBoundsCenterProbe([1, 2])
+    scope.MotionExpressions.renderAnchorAverageProbe([1, 2], false),
+    scope.MotionExpressions.renderBoundsCenterProbe([1, 2], false)
   ];
 
   for (const fonte of fontes) {
@@ -400,7 +422,7 @@ test("nenhuma sonda lê o terceiro componente sem guarda de tamanho", async () =
   }
 
   assert.match(
-    scope.MotionExpressions.renderAnchorAverageProbe([1]),
+    scope.MotionExpressions.renderAnchorAverageProbe([1], false),
     /var z = p\.length > 2 \? p\[2\] : 0;/
   );
 });
@@ -409,12 +431,15 @@ test("a sonda recusa índice que não é inteiro positivo", async () => {
   const { scope } = await fixture();
   const render = scope.MotionExpressions.renderAnchorAverageProbe;
 
-  assert.match(render([1, 2, 3]), /var idx = \[1, 2, 3\];/);
-  assert.throws(() => render([]), /Quantidade/);
-  assert.throws(() => render([0]), /Indice/);
-  assert.throws(() => render([1.5]), /Indice/);
-  assert.throws(() => render(["1"]), /Indice/);
-  assert.throws(() => render("1,2"), /Lista/);
+  assert.match(render([1, 2, 3], false), /var idx = \[1, 2, 3\];/);
+  assert.throws(() => render([], false), /Quantidade/);
+  assert.throws(() => render([0], false), /Indice/);
+  assert.throws(() => render([1.5], false), /Indice/);
+  assert.throws(() => render(["1"], false), /Indice/);
+  assert.throws(() => render("1,2", false), /Lista/);
+  // O espaco e obrigatorio. Um default silencioso escolheria a projecao da
+  // camera para um null 3D — o defeito de 787 px medido em host.
+  assert.throws(() => render([1]), /Espaco/);
 });
 
 test("sem composição falha antes de qualquer criação", async () => {
