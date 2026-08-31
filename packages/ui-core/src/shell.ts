@@ -357,11 +357,45 @@ export interface AnchorGridOptions {
  * `radiogroup` em vez de nove botões soltos: o leitor de tela anuncia o
  * conjunto e a posição dentro dele, e as setas navegam a grade.
  */
+/**
+ * A §14.2 fixa a grade em três colunas, e é isso que dá sentido às setas
+ * verticais: elas andam de linha, não de item.
+ */
+const ANCHOR_GRID_COLUMNS = 3;
+
 export function anchorGrid(doc: Document, options: AnchorGridOptions): HTMLElement {
   const grade = createElement(doc, "div", "ch-anchor-grid");
   grade.setAttribute("role", "radiogroup");
 
-  for (const item of options.labels) {
+  const celulas: HTMLButtonElement[] = [];
+  const total = options.labels.length;
+  // Sem correspondência a primeira célula é a tabulável: um radiogroup em que
+  // nenhum item aceita foco é um controle que o teclado não alcança.
+  const marcadoEm = options.labels.findIndex((item) => item.value === options.value);
+  const tabulavelEm = marcadoEm === -1 ? 0 : marcadoEm;
+
+  /**
+   * Move foco e seleção juntos, que é o contrato do `radiogroup`: dentro de um
+   * grupo de rádio a seta escolhe, não apenas passeia.
+   *
+   * O foco vai antes do `onSelect` de propósito. O callback costuma redesenhar
+   * a view e descartar estas células; ao focar antes, o shell encontra a chave
+   * de foco já na célula de destino e a restaura no nó reconstruído.
+   */
+  function move(destino: number): void {
+    const item = options.labels[destino];
+    const celula = celulas[destino];
+    if (!item || !celula) {
+      return;
+    }
+    for (const [indice, candidata] of celulas.entries()) {
+      candidata.setAttribute("tabindex", indice === destino ? "0" : "-1");
+    }
+    celula.focus();
+    options.onSelect(item.value);
+  }
+
+  for (const [indice, item] of options.labels.entries()) {
     const marcado = item.value === options.value;
     const celula = createElement(
       doc,
@@ -374,6 +408,10 @@ export function anchorGrid(doc: Document, options: AnchorGridOptions): HTMLEleme
     // O rótulo textual não cabe numa célula de grade, então vive no nome
     // acessível: sem ele o leitor de tela anunciaria nove botões idênticos.
     celula.setAttribute("aria-label", item.label);
+    // Roving tabindex: o grupo inteiro é uma parada de Tab, e as setas andam
+    // dentro dele. Nove paradas atravessariam o painel a golpe de Tab.
+    celula.setAttribute("tabindex", indice === tabulavelEm ? "0" : "-1");
+    celula.setAttribute("data-focus-key", `anchor-cell-${item.value}`);
     celula.title = item.label;
     if (options.disabled) {
       celula.disabled = true;
@@ -381,6 +419,34 @@ export function anchorGrid(doc: Document, options: AnchorGridOptions): HTMLEleme
     }
     celula.appendChild(createElement(doc, "span", "ch-anchor-grid__dot"));
     celula.addEventListener("click", () => options.onSelect(item.value));
+    celula.addEventListener("keydown", (event) => {
+      if (options.disabled || total === 0) {
+        return;
+      }
+      const key = (event as KeyboardEvent).key;
+      let destino: number;
+
+      if (key === "ArrowRight") {
+        destino = (indice + 1) % total;
+      } else if (key === "ArrowLeft") {
+        destino = (indice - 1 + total) % total;
+      } else if (key === "ArrowDown") {
+        destino = (indice + ANCHOR_GRID_COLUMNS) % total;
+      } else if (key === "ArrowUp") {
+        destino = (indice - ANCHOR_GRID_COLUMNS + total * ANCHOR_GRID_COLUMNS) % total;
+      } else if (key === "Home") {
+        destino = 0;
+      } else if (key === "End") {
+        destino = total - 1;
+      } else {
+        // Tab e tudo o mais pertencem ao painel, não ao grupo.
+        return;
+      }
+
+      event.preventDefault();
+      move(destino);
+    });
+    celulas.push(celula);
     grade.appendChild(celula);
   }
 
@@ -647,6 +713,43 @@ export function createShell(options: ShellOptions): Shell {
     return views.find((view) => view.id === activeId);
   }
 
+  /**
+   * O elemento focado está dentro da subárvore que o `render` vai descartar?
+   *
+   * Varredura manual em vez de `Node.contains`: este shell também roda no UXP,
+   * que implementa um pedaço do DOM, e o DOM falso dos testes existe justamente
+   * para travar esse subconjunto.
+   */
+  function contem(raiz: Element, alvo: Element): boolean {
+    for (let i = 0; i < raiz.children.length; i += 1) {
+      const filho = raiz.children[i];
+      if (!filho) {
+        continue;
+      }
+      if (filho === alvo || contem(filho, alvo)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function buscaPorChave(raiz: Element, chave: string): HTMLElement | null {
+    for (let i = 0; i < raiz.children.length; i += 1) {
+      const filho = raiz.children[i] as HTMLElement | undefined;
+      if (!filho) {
+        continue;
+      }
+      if (filho.getAttribute("data-focus-key") === chave || filho.getAttribute("id") === chave) {
+        return filho;
+      }
+      const achado = buscaPorChave(filho, chave);
+      if (achado) {
+        return achado;
+      }
+    }
+    return null;
+  }
+
   function render(): void {
     const view = currentView();
     if (!view) {
@@ -658,9 +761,24 @@ export function createShell(options: ShellOptions): Shell {
     if (activeTab) {
       content.setAttribute("aria-labelledby", activeTab.getAttribute("id") ?? "");
     }
+
+    // Um campo confirma, a view redesenha, e a subárvore com o elemento focado
+    // vira lixo. Sem devolver o foco ao mesmo controle, cada confirmação joga o
+    // usuário de teclado para fora do painel — e andar pela grade 3×3 com as
+    // setas custaria um Tab de volta a cada tecla.
+    const ativo = doc.activeElement;
+    const chaveFoco =
+      ativo && contem(content, ativo)
+        ? (ativo.getAttribute("data-focus-key") ?? ativo.getAttribute("id"))
+        : null;
+
     clearNode(content);
     clearNode(actions);
     options.onRender(view.id, { content, actions, shell });
+
+    if (chaveFoco) {
+      buscaPorChave(content, chaveFoco)?.focus();
+    }
   }
 
   function navigate(viewId: string): void {

@@ -15,7 +15,7 @@ Uma caixa só pode ser marcada quando a linha contém `PASS` e aponta para evid�
 | Núcleo puro de metadata de rigs | `PASS` automatizado | 24/24 testes focados; CHMS-009 `IMPLEMENTED_NOT_HOST_VERIFIED` porque `Layer.comment`, filesystem e Undo real estão `NOT RUN` |
 | After Effects, build atual | `PASS` parcial | AE 26.3x87/CEP 12.0.1/Windows 11: inicialização limpa, contexto, capabilities, Unicode, demo, rótulo de Undo pt-BR e Undo em um passo |
 | Premiere Pro, build atual | `NOT RUN` | Pesquisa oficial e doubles não substituem o host |
-| QA visual/acessível nos hosts | `PASS` parcial | Screenshot/interação em largura compacta no AE; matriz de larguras/DPI/teclado/leitor e todo o Premiere continuam `NOT RUN` |
+| QA visual/acessível nos hosts | `PASS` parcial | Screenshot/interação em largura compacta no AE e **navegação por teclado medida** (ver Gate de interface); matriz de larguras/DPI, leitor de tela e todo o Premiere continuam `NOT RUN` |
 | Revisão visual no browser | `NOT RUN` | Nenhuma captura ou interação de browser foi executada neste ciclo |
 | Pesquisa oficial de ambiente, picker e capabilities UXP | `PASS` | Registros `premiere-uxp-host-environment-and-diagnostics-export.md` e `premiere-uxp-capability-probes.md`; não fecham gate de host |
 
@@ -27,7 +27,16 @@ O build Moti.on reproduziu um `FAIL` do `<ScriptPath>` com modal de sintaxe na l
 - [x] `PASS` parcial — uma tarefa principal por view no AE medido.
 - [x] `PASS` parcial — sem dashboard com todos os módulos no AE medido.
 - [ ] `NOT RUN` — 280, 360, 480 e 720 px testados.
-- [ ] `NOT RUN` — focus-visible e navegação por teclado.
+- [x] `PASS` — focus-visible e navegação por teclado, no AE 26.3x87/CEP 12.0.1/Windows 11 em 2026-08-30, com teclas entregues pelo Chromium via `Input.dispatchKeyEvent` (CDP 8091), não por evento sintético:
+  - 4 abas, 1 tabulável, 1 selecionada — a navegação é uma parada de Tab só;
+  - a grade 3×3 do alinhador é **uma** parada, não nove: uma volta completa de Tab tem 9 paradas, 1 delas na grade;
+  - `ArrowRight` moveu Centro → Meio direito e `ArrowDown` moveu Meio direito → Inferior direito, com foco e `aria-checked` juntos;
+  - o foco sobreviveu ao redesenho que a seleção dispara, restaurado por `data-focus-key` no controle equivalente do nó novo;
+  - as setas não rolaram o painel (`scrollTop` 0 → 0);
+  - as 9 paradas da volta trazem `outline` sólido; nenhuma sem contorno de foco.
+- [ ] `NOT RUN` — leitor de tela (NVDA/Narrator) ainda não foi executado; ARIA correta no DOM não prova o que é anunciado.
+- [x] `PASS` automatizado — contraste da paleta inteira sobre as quatro superfícies, com piso 4.5:1 para texto e 3:1 para o anel de foco. A medição achou duas reprovações que a versão anterior não via, porque só media `--ch-text-muted` sobre duas superfícies: `--ch-text-muted` dava 4.27:1 sobre `--ch-surface-control` e o rótulo do botão primário dava 4.40:1 sobre `--ch-accent-pressed`. Corrigidos para 4.62:1 e 4.68:1.
+- [x] `PASS` automatizado — `prefers-reduced-motion` zera `--ch-motion-fast` na raiz, e o teste recusa qualquer `transition` que cronometre fora do token. A versão anterior nomeava dois seletores e já deixava `.ch-tool` escapar.
 - [ ] `NOT RUN` — loading, empty, disabled, success e error.
 - [x] `PASS` parcial — sem overflow horizontal aparente na largura compacta observada; demais larguras continuam abertas.
 - [x] `PASS` parcial — screenshot e interação dentro do After Effects; Premiere continua pendente e `NOT RUN`.

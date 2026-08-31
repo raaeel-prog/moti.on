@@ -46,8 +46,19 @@ test("foco tem fallback seguro e respeita focus-visible", () => {
   assert.match(css, /\.ch-button:focus-visible\s*\{/);
 });
 
-test("preferencia por movimento reduzido remove transicoes decorativas", () => {
-  assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*\.ch-nav__item,[^}]*\.ch-button\s*\{[^}]*transition:\s*none;/s);
+test("movimento reduzido zera a duracao na raiz, cobrindo toda transicao", () => {
+  assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{\s*:root\s*\{[^}]*--ch-motion-fast:\s*0s;/s);
+
+  // A regra so vale se ninguem cronometrar transicao fora do token: um
+  // "transition: ... 90ms" literal escaparia do bloco acima sem barulho.
+  const declaracoes = css.match(/transition:[^;]+;/g) ?? [];
+  assert.ok(declaracoes.length > 0, "o painel tem transicoes a governar");
+  for (const declaracao of declaracoes) {
+    assert.ok(
+      declaracao.includes("var(--ch-motion-fast)"),
+      `transicao fora do token escapa do movimento reduzido: ${declaracao}`
+    );
+  }
 });
 
 test("texto muted mantem contraste AA nas duas superficies base", () => {
@@ -57,4 +68,61 @@ test("texto muted mantem contraste AA nas duas superficies base", () => {
 
   assert.ok(contrast(muted, canvas) >= 4.5, "muted precisa atingir 4.5:1 no canvas");
   assert.ok(contrast(muted, panel) >= 4.5, "muted precisa atingir 4.5:1 no painel");
+});
+
+/**
+ * Contraste da paleta inteira, e nao so do texto secundario.
+ *
+ * A §22.4 pede contraste e pede que a cor nao carregue sozinha o significado.
+ * As cores semanticas sao justamente as que carregam estado, entao sao as que
+ * mais precisam ser legiveis — e nunca tinham sido medidas.
+ */
+const SUPERFICIES = [
+  "ch-surface-canvas",
+  "ch-surface-panel",
+  "ch-surface-raised",
+  "ch-surface-control"
+];
+
+test("todo texto do painel atinge AA sobre qualquer superficie em que pousa", () => {
+  for (const texto of ["ch-text-primary", "ch-text-secondary", "ch-text-muted"]) {
+    for (const superficie of SUPERFICIES) {
+      const medido = contrast(colorToken(texto), colorToken(superficie));
+      assert.ok(
+        medido >= 4.5,
+        `--${texto} sobre --${superficie} deu ${medido.toFixed(2)}:1, abaixo de 4.5:1`
+      );
+    }
+  }
+});
+
+test("as cores de estado sao legiveis, porque o estado nao pode viver so na cor", () => {
+  for (const estado of ["ch-danger", "ch-warning", "ch-info", "ch-success"]) {
+    for (const superficie of SUPERFICIES) {
+      const medido = contrast(colorToken(estado), colorToken(superficie));
+      assert.ok(
+        medido >= 4.5,
+        `--${estado} sobre --${superficie} deu ${medido.toFixed(2)}:1, abaixo de 4.5:1`
+      );
+    }
+  }
+});
+
+test("o rotulo do botao primario e legivel sobre o proprio acento", () => {
+  for (const fundo of ["ch-accent", "ch-accent-hover", "ch-accent-pressed"]) {
+    const medido = contrast(colorToken("ch-accent-contrast"), colorToken(fundo));
+    assert.ok(medido >= 4.5, `texto do botao sobre --${fundo} deu ${medido.toFixed(2)}:1`);
+  }
+});
+
+test("o anel de foco se destaca da superficie que ele contorna", () => {
+  // 1.4.11: componente nao textual pede 3:1. Um anel de foco invisivel e a
+  // navegacao por teclado funcionando as cegas.
+  for (const superficie of SUPERFICIES) {
+    const medido = contrast(colorToken("ch-border-focus"), colorToken(superficie));
+    assert.ok(
+      medido >= 3,
+      `anel de foco sobre --${superficie} deu ${medido.toFixed(2)}:1, abaixo de 3:1`
+    );
+  }
 });

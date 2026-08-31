@@ -31,13 +31,13 @@
 
   --ch-text-primary: #e7e7e7;
   --ch-text-secondary: #a6a6a6;
-  --ch-text-muted: #8a8a8a;
+  --ch-text-muted: #909090;
   --ch-text-disabled: #555555;
 
   --ch-accent: #35c978;
   --ch-accent-hover: #45d889;
   --ch-accent-pressed: #26985d;
-  --ch-accent-contrast: #10251a;
+  --ch-accent-contrast: #0d1f15;
 
   --ch-danger: #e36a6a;
   --ch-warning: #d8a54a;
@@ -695,9 +695,16 @@ body,
   grid-template-columns: minmax(120px, 32%) minmax(0, 1fr);
 }
 
+/*
+ * Movimento reduzido pela raiz do token, e nao por lista de seletores.
+ *
+ * Toda transicao do painel mede a duracao em --ch-motion-fast, entao zerar o
+ * token cobre as tres que existem hoje e a proxima que alguem escrever. A
+ * versao anterior nomeava .ch-nav__item e .ch-button, e ja deixava a transicao
+ * de .ch-tool passar.
+ */
 @media (prefers-reduced-motion: reduce) {
-  .ch-nav__item,
-  .ch-button {
-    transition: none;
+  :root {
+    --ch-motion-fast: 0s;
   }
 }

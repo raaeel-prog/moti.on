@@ -466,3 +466,44 @@ test("toda view e ferramenta do painel tem icone proprio", () => {
 
   assert.deepEqual(semIcone, [], "id sem icone cai no marcador de interrogacao");
 });
+
+/**
+ * `rerender` descarta a subarvore de conteudo inteira e a reconstroi. O nodo
+ * focado vai junto, e sem restauracao o foco cai fora do painel a cada
+ * confirmacao de campo — o que torna a grade 3x3 inutilizavel pelas setas,
+ * porque cada tecla exigiria um Tab de volta.
+ */
+test("o foco sobrevive ao redesenho, no controle equivalente do nodo novo", () => {
+  const doc = createFakeDocument();
+  const construidos = [];
+  const { shell } = montar({
+    document: doc,
+    onRender: (_viewId, regions) => {
+      const celula = doc.createElement("button");
+      celula.setAttribute("data-focus-key", "anchor-cell-center");
+      construidos.push(celula);
+      regions.content.appendChild(celula);
+    }
+  });
+
+  construidos[0].focus();
+  assert.equal(construidos.length, 1);
+
+  shell.rerender();
+
+  assert.equal(construidos.length, 2, "o redesenho constroi um nodo novo");
+  assert.equal(doc.activeElement, construidos[1], "o foco migra para o nodo novo");
+  assert.notEqual(doc.activeElement, construidos[0], "o nodo velho foi descartado");
+});
+
+test("o redesenho nao rouba o foco de quem esta fora do conteudo", () => {
+  const doc = createFakeDocument();
+  const { raiz, shell } = montar({ document: doc });
+
+  const aba = raiz.getElementsByTagName("button").find((n) => n.getAttribute("role") === "tab");
+  aba.focus();
+
+  shell.rerender();
+
+  assert.equal(doc.activeElement, aba, "o foco na navegacao nao pertence ao conteudo");
+});
