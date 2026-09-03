@@ -33,10 +33,11 @@ declare class Item {
 }
 
 declare class CompItem extends Item {
-  readonly width: number;
-  readonly height: number;
-  readonly duration: number;
-  readonly frameRate: number;
+  /** Gravaveis: sao o que `ae.comp.fast-edit` ajusta. */
+  width: number;
+  height: number;
+  duration: number;
+  frameRate: number;
   readonly frameDuration: number;
   time: number;
   readonly workAreaStart: number;
@@ -66,9 +67,20 @@ declare class LayerCollection {
   addShape(): ShapeLayer;
   /** Cria um null no topo da composicao. Nasce selecionado. */
   addNull(): Layer;
+  addCamera(name: string, centerPoint: readonly [number, number]): CameraLayer;
+  /** Precompoe as camadas dos indices informados numa nova composicao. */
+  precompose(layerIndices: readonly number[], name: string, moveAllAttributes?: boolean): CompItem;
 }
 
 declare class Layer {
+  /** Campo do usuario. O plugin so escreve entre os marcadores de metadata. */
+  comment: string;
+  /** Uma adjustment layer afeta tudo que estiver abaixo dela na composicao. */
+  adjustmentLayer: boolean;
+  /** Janela em que a camada existe na composicao. */
+  inPoint: number;
+  outPoint: number;
+  duplicate(): Layer;
   readonly parentProperty: null;
   name: string;
   /** Selecao da camada. O After Effects seleciona toda camada recem-criada. */
@@ -139,7 +151,11 @@ declare class SolidSource {
 }
 
 declare class PropertyGroup {
-  readonly name: string;
+  /**
+   * Gravavel quando o grupo e membro de um grupo indexado — o caso dos
+   * operadores de shape, que e como o Trim Paths recebe o nome gerenciado.
+   */
+  name: string;
   readonly matchName: string;
   readonly propertyIndex: number;
   readonly parentProperty: PropertyGroup | Layer | null;
@@ -148,6 +164,13 @@ declare class PropertyGroup {
   /** 1-indexado. Usado para varrer conteudo de shape, cujo tamanho e variavel. */
   property(index: number): PropertyGroup & Property;
   addProperty(matchName: string): PropertyGroup & Property;
+  /**
+   * O efeito pode ser acrescentado nesta instalacao? E a unica sonda honesta:
+   * o After Effects nao expoe catalogo de efeitos consultavel.
+   */
+  canAddProperty(matchName: string): boolean;
+  /** Remove este grupo do pai. Usado para desfazer grupos criados por um comando. */
+  remove(): void;
 }
 
 declare class Property {
@@ -160,8 +183,10 @@ declare class Property {
   readonly canSetExpression: boolean;
   expression: string;
   expressionEnabled: boolean;
+  readonly canVaryOverTime: boolean;
   readonly expressionError: string;
   readonly numKeys: number;
+  readonly selectedKeys: number[];
   /** Valor do keyframe de indice 1-baseado. */
   keyValue(index: number): unknown;
   /**
@@ -206,6 +231,17 @@ declare class Property {
   setLabelAtKey(index: number, label: number): void;
 }
 
+/**
+ * Caminho vetorial nativo. E o unico jeito de descrever linha, seta e balao sem
+ * importar asset, que a §"ae.shape.library" proibe.
+ */
+declare class Shape {
+  vertices: number[][];
+  inTangents: number[][];
+  outTangents: number[][];
+  closed: boolean;
+}
+
 declare class KeyframeEase {
   constructor(speed: number, influence: number);
   readonly speed: number;
@@ -230,6 +266,12 @@ declare const PropertyValueType: {
   readonly MASK_INDEX: number;
   readonly SHAPE: number;
   readonly TEXT_DOCUMENT: number;
+};
+
+declare const KeyframeInterpolationType: {
+  readonly LINEAR: number;
+  readonly BEZIER: number;
+  readonly HOLD: number;
 };
 
 declare class TextDocument {

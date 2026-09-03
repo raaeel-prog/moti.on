@@ -60,5 +60,8 @@ export type {
   TemporalEaseSnapshot,
   TemporalRestoreStep,
   Timebase,
-  TimebaseOptions
+  TimebaseOptions,
+  CubicBezierCurve
 } from "./types.js";
+
+export { curveToTemporalEase, applyCurveToDimensions } from "./bezier.js";

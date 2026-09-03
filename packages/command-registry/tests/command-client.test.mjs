@@ -283,6 +283,26 @@ test("comando destrutivo tambem muta", () => {
   }
 });
 
+test("comando que muta nao promete execucao sem mutacao", () => {
+  // O dispatcher recusa `dryRun` sempre que o descriptor declara `mutates`:
+  // servir uma prévia exigiria um handler separado, e falhar fechado evita uma
+  // prévia falsa. Declarar `supportsDryRun` num comando que muta é, então, uma
+  // promessa que o dispatcher nunca cumpre — o painel oferece a opção e recebe
+  // CAPABILITY_UNAVAILABLE.
+  //
+  // `ae.project.clean` declarava as duas coisas. A prévia dele existe, mas por
+  // outro caminho: `removeConfirmed: false` devolve a contagem sem remover.
+  for (const descriptor of COMMAND_DESCRIPTORS) {
+    if (descriptor.mutates) {
+      assert.equal(
+        descriptor.supportsDryRun,
+        false,
+        `${descriptor.id} muta e mesmo assim declara supportsDryRun.`
+      );
+    }
+  }
+});
+
 test("comando que nao muta usa o rotulo de Undo vazio", () => {
   for (const descriptor of COMMAND_DESCRIPTORS) {
     if (!descriptor.mutates) {
@@ -338,7 +358,30 @@ test("sucesso sem mudanca e opt-in e somente para comando mutante idempotente", 
       "ae.keys.cut",
       // Offsets todos zero, que é o caso de uma única camada selecionada com
       // atraso por índice. Reportar falha aí puniria um pedido bem formado.
-      "ae.keys.delay"
+      "ae.keys.delay",
+      "ae.keys.ease.apply",
+      // Reaplicar a mesma inercia numa propriedade que ja a tem: o usuario
+      // ajusta amplitude, volta ao valor anterior e reaplica.
+      "ae.animate.inertial",
+      // Reaplicar o mesmo corte num grupo que ja o tem e o modo Adjust do
+      // criterio de aceite: o pedido do usuario ja vale.
+      "ae.shape.trim-path",
+      // Reaplicar o mesmo effector nas mesmas camadas e pedido ja satisfeito.
+      "ae.rig.effector",
+      // Reajustar o raio ou a aresta do rig existente e o Adjust da secao.
+      "ae.3d.cylinder",
+      "ae.3d.cube",
+      "ae.effect.wave",
+      // O modo grade reaplicado com os mesmos numeros e o Adjust da secao.
+      "ae.effect.tile",
+      // Reapontar para o mesmo alvo com os mesmos eixos, e reajustar o mesmo
+      // preset de eco: os dois sao pedidos ja satisfeitos.
+      // Reajustar o rig com os mesmos numeros e o modo Adjust da secao, e nao
+      // uma falha: o estado pedido ja vale.
+      "ae.animate.parallax.quick",
+      "ae.3d.look-at",
+      "ae.effect.echo",
+      "ae.project.clean"
     ]
   );
 });
@@ -353,7 +396,10 @@ test("ids de comando sao ASCII e nao repetem", () => {
     // O hífen é a convenção do spec para segmentos de várias palavras:
     // `ae.layer.create-null`, `ae.shape.trim-path`, `ae.layer.reverse-order`.
     // O guarda existe para manter o id ASCII e estável, não para proibir hífen.
-    assert.match(id, /^[a-z]{2}\.[a-zA-Z.-]+$/, `Id fora do padrão: ${id}`);
+    // O catalogo do master spec traz `ae.3d.orbit` e `ae.3d.look-at`: o segmento
+    // do meio pode comecar por digito. O padrao anterior recusava um id que o
+    // proprio spec define.
+    assert.match(id, /^[a-z]{2}\.[a-zA-Z0-9.-]+$/, `Id fora do padrão: ${id}`);
     assert.equal(getDescriptor(id).id, id);
   }
 });

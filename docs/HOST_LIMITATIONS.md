@@ -29,7 +29,30 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | After Effects: Flip (`ae.layer.flip`) | `PARTIAL` | `PASS` para o escopo entregue | AE 26.3x87: flip duplo voltou idêntico; o canto espelhou em torno do pivô com erro de 1,1e-13; a conta de limites bate com a do motor de expressões. Camadas 3D, com pai e shape paths: recusadas ou fora de escopo (item 19) |
 | After Effects: Alinhador de âncora (`ae.anchor.align`) | `PARTIAL` | `PASS` para o escopo entregue | AE 26.3x87: pior erro visual de 1,2e-5 px contra o critério de 0,5 px da §14.6, incluindo camada parenteada e **camadas 3D**. Convex e Concave fora de escopo (item 21) |
 | After Effects: matriz de transform 3D (`MotionTransform`) | `IMPLEMENTED_AND_VERIFIED` em um ambiente | `PASS` | Composição medida contra o host com erro de 5,684e-14. Registro em `docs/research/after-effects-3d-transform.md` (item 22) |
-| Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | **Instalado e habilitado** no Premiere 26.3.2 via UPIA, e a aba `Moti.on` aparece no workspace; o painel não chegou a ser instanciado (sem `panel.started` no log), então nada do runtime está verificado. Ver `docs/research/premiere-uxp-plugin-installation.md` |
+| After Effects: Ease por curva (`ae.keys.ease.apply`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | A conversão curva→velocidade/influência é exercitada por teste, inclusive o caso de alça vertical. O que só o host prova: se `setTemporalEaseAtKey` aceita a escrita em keyframe Hold, e se a curva desenhada bate com a curva que o After Effects mostra no Graph Editor (item 23) |
+| After Effects: Reverse/Clone de keys (`ae.keys.reverse`, `ae.keys.clone`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Teste garante que o grupo de Undo é um só e vem do dispatcher. Falta medir no host: se um Ctrl+Z devolve o estado anterior, e se as tangentes espaciais invertidas produzem o mesmo caminho de trás para frente (item 24) |
+| After Effects: Time Controller (`ae.time.controller`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Expressão gerada, reconhecida e revertida por teste. **Não verificado no host**: se `valueAtTime` sobre a própria propriedade avalia sem referência circular em Time Remap, e o comportamento de `reverse` em camada com time stretch (item 25) |
+| After Effects: Marker Loop (`ae.time.marker-loop`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Escape de nome, criação e rollback de markers cobertos por teste. **Premissa não medida**: a expressão compara `thisLayer.marker.key(nome).time` com `time` diretamente, assumindo a mesma base de tempo. Em camada com `startTime` diferente de zero ou com time stretch isso pode deslocar o loop — medir antes de fechar o item (item 26) |
+| After Effects: Kinetic (`ae.animate.kinetic`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | O overshoot usa `add`/`sub`/`mul` porque o motor JavaScript do After Effects não aplica operador aritmético a array, e `k2.value - k1.value` em Position daria NaN. **Isso foi corrigido por leitura da documentação, não medido no host**: confirmar em Position 2D e 3D, e confirmar que o animador de texto criado some com o Undo (item 27) |
+| After Effects: Inércia (`ae.animate.inertial`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Expressão gerenciada, conflito e rollback cobertos por teste, incluindo as duas proteções do critério de aceite: índice zero antes do primeiro keyframe e janela que zera em `maxDuration`. **Não medido no host**: se `velocityAtTime` logo antes de um keyframe Hold devolve zero como se espera, e o resultado visual em Position 3D (item 28) |
+| After Effects: Salto (`ae.animate.jump`) | `PARTIAL` | `PASS` para o escopo entregue | Grava keyframes reais. Testado: começa e termina no mesmo ponto, altura exata e duração exata a 24/30/60 fps, stagger por camada sem tocar `startTime`. **Fora de escopo e recusado com erro tipado**: camada cujo pai gira ou escala, e Position com dimensões separadas. **Não medido no host**: se a influência 0,1/75 produz o arco de gravidade pretendido (item 29) |
+| After Effects: Copiar/colar chaves (`ae.keys.copy`, `ae.keys.paste`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Clipboard interno versionado, sem tocar o clipboard do sistema. Round-trip de valores, eases e tangentes verificado, e incompatibilidade de dimensão vira warning por propriedade em vez de derrubar a colagem. **Não medido no host**: se `restoreProperty` recria os eases com a precisão que o Graph Editor mostra (item 30) |
+| After Effects: Biblioteca de formas (`ae.shape.library`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | As oito formas saem de operadores nativos ou de caminho declarado neste módulo — nenhum asset importado, como a §exige. Teste garante que retângulo, elipse e estrela permanecem paramétricos, e que a camada é removida se a montagem falhar. **Não medido no host**: se os `matchName` de estrela e traço batem em AE 26.3x87, e se seta e balão desenham a silhueta pretendida (item 31) |
+| After Effects: Trim Paths (`ae.shape.trim-path`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Escopo por camada e por grupo, revelação animada no CTI e rollback cobertos por teste. Um Trim Paths do usuário é preservado: o comando recusa em vez de sobrescrever. **Heurística não medida**: o reconhecimento do operador gerenciado usa o `RIG_PREFIX` no nome, e não uma identidade real — renomear o operador faz o comando passar a recusar, que é o lado seguro (item 32) |
+| After Effects: Parallax Quick (`ae.animate.parallax.quick`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | O critério de enquadramento é **medido** em teste, não assumido: o tamanho aparente de três camadas de tamanhos diferentes é reconstruído antes e depois do rig e bate com erro abaixo de 1e-9, porque `(D + z) / D` desfaz exatamente o encolhimento da perspectiva. A participação no rig vem do parentesco, e não de id guardado — o After Effects não tem uuid de camada e a §11 proíbe usar nome. **Não medido no host**: se `camera.zoom` é de fato a distância ao plano `z = 0` em AE 26.3x87 (item 37) |
+| After Effects: Look At (`ae.3d.look-at`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Os seis eixos frontais funcionam. Os quatro do plano XZ saem de somar na componente Y; os dois verticais compõem `R_lookAt · Rx(±90)` e decompõem o resultado, agora que `MotionTransform` sabe decompor. **Não medido no host**: se `lookAt` de fato devolve `[rx, ry, 0]` em AE 26.3x87, que é a premissa de toda a derivação (item 33) |
+| After Effects: Orbit (`ae.3d.orbit`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Raio constante por construção, verificado numericamente em sete fases; bake grava exatamente os valores avaliados, então a tolerância subpixel sai por construção. As camadas são parenteadas ao controller, o que dispensa referência por nome ou índice na expressão. **Não medido no host**: se `valueAtTime(t, false)` devolve o valor com a expressão aplicada como a documentação diz (item 34) |
+| After Effects: Echo (`ae.effect.echo`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Nunca apaga efeito preexistente, e um Echo do usuário é recusado em vez de sobrescrito. Valores anteriores capturados antes de escrever. **Não medido no host**: os `matchName` dos cinco parâmetros (`ADBE Echo-0001`..`-0005`) e a numeração do menu Operador (item 35) |
+| After Effects: Fast Edit (`ae.comp.fast-edit`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | As oito operações, cada uma com prévia própria — o dispatcher recusa `dryRun` em comando mutante, então o resumo vem de `ae.comp.fast-edit.preview`, que compartilha o mesmo planejador. `cropToSelectedBounds` mede a união dos quatro cantos de cada camada já passados pela matriz, e move as camadas junto com o enquadramento. Declarado destrutivo: exige `allowDestructive`. **Não medido no host**: `sourceRectAtTime` com camadas giradas e o comportamento de `precompose` (item 36) |
+| After Effects: Wave (`ae.effect.wave`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Amplitude zero devolve exatamente `value`, por construção da expressão. Sem o Wave Warp instalado o modo efeito **recusa** com `CAPABILITY_UNAVAILABLE` em vez de cair calado para transform, porque os dois modos dão resultados visuais diferentes. **Não medido no host**: os `matchName` dos cinco parâmetros do Wave Warp e o mapeamento de direção para graus (item 38) |
+| After Effects: Tile (`ae.effect.tile`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Modo efeito com Mirror Edges, modo grade com controller e teto de 400 células. **Não medido no host**: os `matchName` do Motion Tile e se Mirror Edges de fato elimina a emenda ao ampliar a saída, que é o critério de aceite e só é visível renderizando (item 39) |
+| After Effects: Glitch (`ae.effect.glitch`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | O rig inteiro vive numa adjustment layer própria, que é o que faz desligar o olho zerar o efeito e remover o rig não tocar outras adjustment layers. Efeito ausente na instalação vira warning e o glitch continua com os demais. **Não medido no host**: os `matchName` dos três efeitos e se `adjustmentLayer` pode ser ligado num null (item 40) |
+| After Effects: Cylinder (`ae.3d.cylinder`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Distribuição uniforme **medida** ângulo a ângulo, e o raio conferido em cada camada. Arco fechado divide por `count` (0° e 360° são o mesmo ponto); arco aberto por `count - 1`, para as pontas receberem camada. A orientação é verificada reconstruindo a normal por `MotionTransform`, não pelos números da tabela. **Não medido no host**: se a distribuição visual bate com a geométrica sob perspectiva (item 41) |
+| After Effects: Cube (`ae.3d.cube`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | As seis faces a meia aresta do centro, com `faceFit` escalando cada camada para exatamente a aresta — as duas condições que fecham as emendas. A normal de cada face é reconstruída por matriz e conferida contra a direção que sai do centro. **Não medido no host**: se as emendas fecham de fato no render, que é o critério de aceite e só é visível renderizando (item 42) |
+| After Effects: Transições de câmera (`ae.camera.transition`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Os onze presets, todos com a câmera nativa — nenhum plug-in de terceiro, que é o "sem dependência externa" do critério. O teste tem a tabela dos onze escrita à mão, e não derivada do comando, e confere que cada um move a propriedade certa no sentido certo. A curva do editor Bézier vira o ease pela mesma conversão do `ae.keys.ease.apply`. **Não medido no host**: se `ADBE Camera Zoom` é o matchName do zoom e se orientação é o caminho certo para pan e tilt numa câmera de dois nós (item 43) |
+| After Effects: Effector (`ae.rig.effector`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | O critério central — fora do raio a propriedade volta **exatamente** ao valor base — é medido extraindo a fórmula de influência do próprio template e avaliando-a na borda e além dela. As três curvas de queda zeram em zero: linear e smoothstep por forma fechada, a Bézier customizada por bissecção de vinte passos, com precisão melhor que 1e-6. O controller nasce com cinco sliders em vez de valores assados, para o raio poder ser animado. **Não medido no host**: se `effect(nome)(1)` lê o Slider Control como a documentação diz, e se `toWorld` numa camada 2D devolve o vetor de três componentes que a expressão assume (item 44) |
+| After Effects: Break Shape (`ae.shape.break`) | `PARTIAL` | `PASS` para o escopo entregue | O critério de aceite é uma comparação visual dentro de 1 px, e ele reduz a uma propriedade numérica que **é medida**: três pontos do grupo caem na mesma posição da composição antes e depois de separar, com erro abaixo de 1e-9 px — não 1 px. A separação duplica a camada e apaga os outros grupos, então o conteúdo nunca é reconstruído. **Fora de escopo, com aviso em vez de silêncio**: grupo com cisalhamento, e combinação de escala não uniforme com rotação, que não cabem num transform de camada; nesses casos o transform do grupo fica aninhado e a aparência segue exata. **Não medido no host**: o render em si, e se `duplicate` copia o contents como o teste assume (item 45) |
+| Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | **Instalado e habilitado** no Premiere 26.3.2 via UPIA, e a aba `Moti.on` aparece no workspace; o painel não chegou a ser instanciado (sem `panel.started` no log), então nada do runtime está verificado. O ajuste de `entrypoints.setup`/`plugin.create` está implementado e coberto por teste, mas ainda sem smoke no host. Ver `docs/research/premiere-uxp-plugin-installation.md` e `docs/research/premiere-uxp-entrypoints-lifecycle.md` |
 | Premiere: versão/locale do host | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | `require("uxp").host.version`/`.uiLocale` documentados para 25.6+ |
 | Premiere: transações/Undo | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Ordem `lockedAccess` → `executeTransaction` coberta por doubles |
 | Premiere: exportação de diagnóstico | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Picker e `File.write` documentados; host real não executado |
@@ -486,6 +509,63 @@ Em código de sonda, formatar elemento a elemento é o único caminho seguro.
 - **`ae.layer.flip` continua recusando 3D**: a reflexão em três eixos é outra derivação, e
   `MotionTransform` dá a matriz mas não a decomposição de volta em rotações que o flip precisaria.
 
+- **Base de tempo dos markers de camada (item 26)**: a documentação de expressões do After
+  Effects não é explícita sobre `marker.key(n).time` estar em tempo da composição ou da camada.
+  A implementação assume tempo da composição, que é o caso comum de `startTime = 0`. Medir com
+  uma camada deslocada no tempo antes de marcar CHMS-020 como verificado.
+
+- **Escopo P1 fechado em código (itens 28 a 30)**: os quinze comandos da seção "P1 — Core After
+  Effects" têm descriptor, host, interface e teste. `Inertial`, `Jump` e `Copy Keys` eram os três
+  que faltavam. O gate do P1 pede *smoke host* para todos, e isso continua `NOT RUN`.
+
+- **Identidade de operador de shape (item 32)**: a §11 diz que nome não é identificador, e um
+  operador de shape não tem onde guardar `rigId`. Enquanto CHMS-009 não estiver integrado à camada
+  de host, o Trim Paths reconhece o que é dele pelo prefixo no nome. É heurística declarada, e
+  falha fechada: sem o prefixo, o comando recusa.
+
+- ~~**Decomposição de Euler**~~ — **resolvida**. `MotionTransform.eulerFromMatrix` desfaz
+  `Rx . Ry . Rz`: `b` sai do arco-seno de `m02`, `a` e `c` de dois `atan2` que preservam o
+  quadrante, e no gimbal lock a convenção fixa X em zero em vez de devolver NaN. Medida por
+  round-trip em treze rotações, incluindo os dois polos, com erro abaixo de 1e-9. Isso desbloqueou
+  os eixos verticais do `ae.3d.look-at` e o `cropToSelectedBounds` do `ae.comp.fast-edit`.
+  **`ae.layer.flip` em 3D continua fora**: reflexão tem determinante negativo e não é rotação, então
+  a decomposição não a alcança — é outro problema, não este.
+- **Duas cópias da decomposição**: o Look At precisa dela em tempo de avaliação, dentro da
+  expressão, porque `lookAt` depende das posições do frame. `euler-paridade.test.mjs` extrai a
+  versão da expressão do próprio template e a compara com a do host numa tabela de rotações, para
+  as duas não poderem divergir — o mesmo guarda que `ease-paridade.test.mjs` faz para a curva.
+
+- **Metadata de rig no host (item 37)**: `ae.animate.parallax.quick` é o primeiro comando a escrever
+  o bloco `[MOTION_META_V1]` no comentário de uma camada. A escrita preserva o texto do usuário
+  antes e depois dos marcadores, e há teste para isso — mas `Layer.comment` real, limite de
+  tamanho e reabertura do projeto continuam `NOT RUN`, como o CHMS-009 já registrava.
+
+- **Auditoria de rollback**: uma varredura dos 34 arquivos de comando achou três mutantes sem
+  rollback — `keys-reverse`, `keys-clone` e `keys-ease` — e um que colava expressão sem ler
+  `expressionError` (`keys-copy`). Os quatro foram corrigidos, e `rollback-cobertura.test.mjs`
+  faz a escrita falhar de propósito para provar que o estado anterior volta, inclusive no caso em
+  que a segunda propriedade falha depois de a primeira já ter sido reescrita.
+
+- **Módulo `MotionEffects`**: Echo, Wave, Tile e Glitch faziam a mesma sequência — achar o efeito
+  gerenciado, recusar quando existe um do usuário, guardar os valores anteriores e saber voltar.
+  Quatro cópias disso divergiriam, como já aconteceu com a conversão de curva do CHMS-018. O
+  módulo entrou na allowlist de globais do host com justificativa: é interno, não expõe dispatch.
+
+- **Dois defeitos achados pelos próprios testes desta entrega**: o Tile iterava a lista viva de
+  seleção enquanto duplicava camadas — no After Effects a duplicata nasce selecionada, e isso é um
+  laço que não termina. E os fakes de efeito não removiam de verdade da lista, o que faria o teste
+  concordar com um comando que nunca remove nada. Os dois foram corrigidos.
+
+- **Módulo `MotionRigMeta`**: Parallax e Cylinder precisavam do mesmo bloco de metadata no
+  comentário da camada, e Cube passou a ser o terceiro. Duas cópias de "onde começa e onde termina
+  o bloco" divergiriam no primeiro caso de borda — comentário sem marcador de fechamento, por
+  exemplo. O módulo entrou na allowlist de globais com justificativa, junto de `MotionEffects`.
+
+- **`MotionKeyframes.curveToEase`**: a conversão curva→ease saiu de dentro do `keys-ease` e virou
+  função do módulo, porque o `ae.camera.transition` precisa da mesma — seria a terceira cópia da
+  fórmula que já ficou errada em dois lugares ao mesmo tempo. `ease-paridade.test.mjs` continua
+  comparando o host com a referência em `packages/keyframe-core`, agora sobre o código movido.
+
 ## Controles automatizados existentes
 
 Em **2026-08-25**, o gate final integrado concluiu `npm.cmd run check` com `PASS`: lint, typecheck, build, validate, **326/326 testes** e skills validate. O check cobre:
@@ -515,3 +595,26 @@ Siga [`INSTALLATION.md`](INSTALLATION.md) e registre para cada execução: commi
 4. no Premiere, testar contexto, versão/locale, System Check, picker salvo/cancelado e conteúdo redigido; testar transação/Undo quando houver um consumidor real;
 5. nos dois hosts, repetir 280/360/480/720 px, 100/125/150/200% de escala, teclado, foco, estados, overflow e screenshots;
 6. repetir a matriz necessária em Windows e macOS — aprovação numa plataforma não fecha a outra.
+
+### 23. Parallax completo: o que só o After Effects prova
+
+As quatro operações do CHMS-023 (`ae.parallax.auto-focus`, `.zoom`, `.wiggle`,
+`.bake`) estão `IMPLEMENTED_NOT_HOST_VERIFIED`. O que a suíte automatizada mede
+é a lógica: validação de argumento, ausência de grupo de Undo aninhado, rollback,
+formato da expressão e caminhada na grade de quadros. O que continua `NOT RUN`,
+e só o host real responde:
+
+- **`comp.activeCamera`** — se ele devolve a câmera esperada quando há mais de
+  uma na composição, e o que devolve no tempo em que nenhuma está ativa. O
+  comando recusa quando vem nulo, mas a semântica exata não foi medida.
+- **`ADBE Camera Depth of Field`** — se o valor `1` liga a profundidade de campo
+  em todas as versões, ou se o parâmetro é booleano em alguma.
+- **`toWorld` na camada alvo do foco** — para camada 2D, se devolve o ponto com
+  `z = 0` como esperado. Item 26 já cobre a dúvida geral sobre `toWorld` em 2D.
+- **`valueAtTime(t, false)` durante o bake** — se ignorar a expressão devolve
+  mesmo o valor pré-expressão em propriedade com keyframes preexistentes.
+- **`setTemporalEaseAtKey` no Zoom**, que é 1-D: se um único `KeyframeEase` por
+  lado é aceito, como a documentação indica.
+
+O que **não** depende de host, e por isso foi medido aqui: a câmera é encontrada
+por estrutura e não por nome, então renomear ou reordenar não quebra o comando.

@@ -14,6 +14,25 @@ Fase P0 (fundação) conforme `docs/MASTER_BUILD_SPEC.md` §39. Ainda não é re
 
 O vocabulário acima é literal: `PASS` significa executado e aprovado, `FAIL` significa executado e reprovado, e `NOT RUN` significa que o item não foi executado no escopo declarado para o build atual. Pesquisa de API e teste com doubles não viram `PASS` de host.
 
+### CHMS-UX-001 — tokens escuro/claro e gate de contraste
+
+- O addendum normativo foi anexado integralmente em `docs/ADDENDUM_A_QUICK_UX_SPEC.md` e passou a ser a referência para Quick/Advanced, Live Controls, acessibilidade, breakpoints e movimento.
+- O novo package `@motion/ui-tokens` centraliza os temas escuro/claro, espaçamento, raios, elevação e a base de movimento. O tema embarcado por `@motion/ui-core` continua autocontido para CEP/UXP, com teste de drift contra a fonte canônica e o espelho em `shared/`.
+- A superfície-base exigida pelo projeto permanece `#1D1D1D`; o accent normativo do addendum é `#7C8CFF`. `txt-3` e `danger` receberam ajustes mínimos documentados porque os valores ilustrativos falhavam no próprio piso AA em superfícies permitidas.
+- `npm.cmd run a11y:contrast` audita 68 pares nos dois temas e agora faz parte de `npm.cmd run check`. A preferência interna `data-reduced-motion="true"` e a preferência do sistema convergem nos mesmos tokens de duração.
+- `docs/UI_FOUNDATION.md`, o perfil compartilhado e as skills de UI foram alinhados à nova fonte e sincronizados para o espelho Claude.
+
+Status: `IMPLEMENTED_NOT_HOST_VERIFIED`. Testes de contrato/contraste estão automatizados; capturas em 280/360/480/720 px, DPI 100–200 %, filtros de daltonismo, leitor de tela e render dentro de AE/Premiere com este tema permanecem `NOT RUN`.
+
+### CHMS-UX-002 — catálogo de movimento e preferência reduzida
+
+- O novo package `@motion/ui-motion` codifica os 25 movimentos de A6.2, na ordem normativa, com IDs estáveis, propriedades explícitas, duração/easing por tokens e comportamento reduzido declarado.
+- `motion.css` fornece a API cross-host `data-motion`, mantém o press e o progresso essenciais, suprime ripple e substitui os demais movimentos conforme a especificação. `transition: all`, durações literais e keyframes de layout são rejeitados por testes.
+- After Effects CEP e Premiere Pro UXP ganharam a view **Settings → Interface** com o toggle **Reduzir movimento**. O controller persiste a escolha quando `localStorage` está disponível e calcula a preferência efetiva como `interno OR sistema`, sem impedir o bootstrap quando o runtime bloqueia storage ou `matchMedia`.
+- O build concatena a folha de movimento ao único `theme.css` autocontido entregue a cada host. Os testes focados passam em 20/20, com 100 % de linhas/funções e 97,78 % de branches; o check integrado completo está verde.
+
+Status: `IMPLEMENTED_NOT_HOST_VERIFIED`. Build e contratos estão verdes; interação, persistência, visual, acessibilidade e performance dentro de AE/Premiere reais permanecem `NOT RUN`.
+
 ### CHMS-003 — JSON Schemas e validadores standalone
 
 O aceite antes parcial de CHMS-003 foi concluído e entrou no check integrado:

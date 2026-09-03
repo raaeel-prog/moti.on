@@ -154,8 +154,8 @@ test("o host montado registra todo comando que o descriptor declara", async () =
 
   // Um descriptor sem implementacao vira um botao que responde "não implementado
   // neste build". Compila, passa no lint, e so aparece quando alguem clica.
-  const declared = [...source.matchAll(/^\s{4}"(ae\.[a-zA-Z.]+)":\s*\{/gm)].map((m) => m[1]);
-  const registered = [...source.matchAll(/MotionRegistry\.register\("(ae\.[a-zA-Z.]+)"/g)].map(
+  const declared = [...source.matchAll(/^\s{4}"(ae\.[a-zA-Z.-]+)":\s*\{/gm)].map((m) => m[1]);
+  const registered = [...source.matchAll(/MotionRegistry\.register\("(ae\.[a-zA-Z.-]+)"/g)].map(
     (m) => m[1]
   );
 
@@ -175,6 +175,12 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       "MotionAE",
       "MotionContracts",
       "MotionDescriptors",
+      // Operacoes comuns sobre efeitos nativos, compartilhadas por Echo, Wave,
+      // Tile e Glitch. Mesmo estatuto de `MotionKeyframes`: modulo interno, sem
+      // superficie de dispatch. Existe como global porque o ExtendScript nao tem
+      // sistema de modulos, e quatro copias do mesmo reconhecimento de efeito
+      // gerenciado divergiriam.
+      "MotionEffects",
       "MotionExpressions",
       "MotionJson",
       // Módulo interno compartilhado por `keys-cut` e `keys-delay`, no mesmo
@@ -184,6 +190,11 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       // keyframes preservando metadata.
       "MotionKeyframes",
       "MotionRegistry",
+      // Bloco de metadata de rig no comentario da camada. Mesmo estatuto dos
+      // outros modulos internos: sem superficie de dispatch. Existe separado
+      // porque Parallax e Cylinder ja precisam do mesmo bloco, e duas copias de
+      // "onde comeca e onde termina" divergiriam no primeiro caso de borda.
+      "MotionRigMeta",
       // Matriz de transform compartilhada. Mesmo estatuto de
       // `MotionExpressions` e `MotionKeyframes`: modulo interno, sem
       // superficie de dispatch. A composicao que ele implementa esta medida

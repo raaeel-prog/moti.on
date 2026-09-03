@@ -1,7 +1,7 @@
 interface:
   display_name: "Adobe Workstation UI"
   short_description: "Design a subtle, minimal, host-native dark panel"
-  brand_color: "#35C978"
+  brand_color: "#7C8CFF"
   default_prompt: "Use $designing-adobe-workstation-ui for this task and follow its verification gates."
 policy:
   allow_implicit_invocation: true

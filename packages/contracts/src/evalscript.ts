@@ -176,7 +176,7 @@ export function buildHostBootstrapCall(extensionPath: string): string {
   return (
     `(function(){try{$.evalFile(new File("${encoded}"));` +
     `return (${HOST_DISPATCH_READY_EXPRESSION})?"function":"undefined";` +
-    `}catch(e){return "bootstrap-failed";}})()`
+    `}catch(e){return "bootstrap-failed:" + String(e.message || e) + ":L" + String(e.line || "?");}})()`
   );
 }
 

@@ -209,14 +209,15 @@ export function createAeHostAdapter(logger: {
         const loaded = raw === HOST_BOOTSTRAP_OK;
 
         if (!loaded) {
+          const isBootstrapFailed = raw.startsWith("bootstrap-failed");
           logger.warn(
             "O host ExtendScript não pôde ser carregado. Reinstale a extensão e reabra o painel.",
             {
               resultado:
                 raw === CEP_EVAL_FAILURE
                   ? "CEP_EVAL_FAILURE"
-                  : raw === "bootstrap-failed"
-                    ? "BOOTSTRAP_FAILED"
+                  : isBootstrapFailed
+                    ? raw // Record full error payload
                     : "DISPATCH_NOT_READY"
             }
           );
@@ -228,7 +229,7 @@ export function createAeHostAdapter(logger: {
             ? "READY"
             : raw === CEP_EVAL_FAILURE
               ? "CEP_EVAL_FAILURE"
-              : raw === "bootstrap-failed"
+              : raw.startsWith("bootstrap-failed")
                 ? "BOOTSTRAP_FAILED"
                 : "DISPATCH_NOT_READY"
         );

@@ -1,7 +1,11 @@
 {
   "schemaVersion": 1,
   "product": "CrossHost Motion Suite",
-  "designRead": "A native-feeling Adobe workstation panel: dark, restrained, compact, precise, and task-focused.",
+  "designRead": "A native-feeling Adobe workstation panel: restrained, compact, precise, task-focused, and operated Quick-first with host-persistent Live Controls.",
+  "normativeAddendum": "docs/ADDENDUM_A_QUICK_UX_SPEC.md",
+  "canonicalTokens": "packages/ui-tokens/src/tokens.css",
+  "canonicalMotion": "packages/ui-motion/src/motion.css",
+  "reducedMotionPreference": "internal OR system",
   "references": [
     "BadFX",
     "Brazu",
@@ -10,6 +14,7 @@
   ],
   "referenceUse": "Infer density, navigation, parameter-row behavior and compact tool access. Never clone branding, assets or exact layouts.",
   "dashboardBackground": "#1D1D1D",
+  "accent": "#7C8CFF",
   "dials": {
     "designVariance": 2,
     "motionIntensity": 2,

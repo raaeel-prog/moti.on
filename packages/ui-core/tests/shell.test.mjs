@@ -377,6 +377,7 @@ test("o ladrilho de ferramenta mantem rotulo textual, e nao so icone", () => {
 
   assert.equal(tile.className, "ch-tool");
   assert.equal(tile.getAttribute("type"), "button");
+  assert.equal(tile.getAttribute("data-motion"), "tile-hover tile-press");
   assert.equal(tile.title, "Oscila a propriedade com semente reproduzível.");
 
   const rotulo = tile.children.find((filho) => filho.className === "ch-tool__label");
@@ -456,7 +457,7 @@ test("toda view e ferramenta do painel tem icone proprio", () => {
   // Ferramentas em host real: o gate nao pegava porque nada testava cobertura
   // de icone. Os ids abaixo sao os que os paineis realmente usam.
   const doc = createFakeDocument({ supportsNamespaces: false });
-  const ids = ["context", "tools", "system", "diagnostics", "loopOut", "smooth", "wiggle", "flicker"];
+  const ids = ["context", "tools", "system", "diagnostics", "settings", "loopOut", "smooth", "wiggle", "flicker"];
 
   const semIcone = ids.filter((id) => {
     const tile = toolTile(doc, { id, label: id, onSelect: () => {} });

@@ -7,6 +7,8 @@
     { "path": "./packages/command-registry" },
     { "path": "./packages/capability-matrix" },
     { "path": "./packages/logging" },
+    { "path": "./packages/ui-tokens" },
+    { "path": "./packages/ui-motion" },
     { "path": "./packages/ui-core" },
     { "path": "./packages/rig-metadata" },
     { "path": "./packages/matrix-core" },

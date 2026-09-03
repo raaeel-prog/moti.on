@@ -259,7 +259,7 @@ test("aspa no caminho nao fecha o literal do bootstrap", () => {
     call.slice(fechamento),
     '"));return (typeof $.global.MotionAE === "object" && $.global.MotionAE !== null && ' +
       'typeof $.global.MotionAE.dispatch === "function")?"function":"undefined";' +
-      '}catch(e){return "bootstrap-failed";}})()',
+      '}catch(e){return "bootstrap-failed:" + String(e.message || e) + ":L" + String(e.line || "?");}})()',
     "o literal precisa terminar exatamente onde o construtor previu"
   );
 });

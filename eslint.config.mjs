@@ -119,7 +119,9 @@ export default [
         MotionJson: "readonly",
         MotionExpressions: "readonly",
         MotionTransform: "readonly",
+        MotionEffects: "readonly",
         MotionKeyframes: "readonly",
+        MotionRigMeta: "readonly",
         MotionUndo: "readonly",
         MotionRegistry: "readonly",
         MotionAE: "readonly"

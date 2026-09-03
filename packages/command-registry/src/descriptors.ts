@@ -389,6 +389,341 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     timeoutMs: 30_000
   },
   {
+    id: "ae.keys.ease.apply",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.keys.ease.apply",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.keys.reverse",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.keys.reverse",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.keys.clone",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.keys.clone",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.time.controller",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.time.controller",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.animate.kinetic",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.animate.kinetic",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.time.marker-loop",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.time.markerLoop",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.animate.inertial",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    // Reaplicar o mesmo preset numa propriedade que ja o tem e no-op legitimo:
+    // o usuario ajusta amplitude, volta ao valor anterior e reaplica.
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.animate.inertial",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.animate.jump",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.animate.jump",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    // Copiar le e nao muta: sem grupo de Undo, porque nao ha o que desfazer.
+    id: "ae.keys.copy",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: false,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.none",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.keys.paste",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.keys.paste",
+    timeoutMs: 30_000
+  },
+  {
+    id: "ae.shape.library",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    // Cada aplicacao cria uma nova shape layer editavel. Um resultado sem layer
+    // criada e falha, nao idempotencia.
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.shape.library",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.shape.trim-path",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    // Reaplicar o mesmo corte num grupo que ja o tem e o modo Adjust do
+    // criterio de aceite, e nao uma falha.
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.shape.trimPath",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.shape.break",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    // Cria uma camada por grupo e pode remover a original: reversivel por Undo,
+    // mas nao e uma edicao pequena.
+    destructive: true,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.shape.break",
+    timeoutMs: 60_000
+  },
+  {
+    id: "ae.rig.effector",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    // Reaplicar o mesmo effector nas mesmas camadas e pedido ja satisfeito.
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.rig.effector",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.camera.transition",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    // Cada aplicacao escreve dois keyframes novos; nao ha estado ja satisfeito.
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.camera.transition",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.3d.cylinder",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    // Pode duplicar camadas para preencher o arco.
+    destructive: true,
+    mutates: true,
+    // Reajustar o raio do rig existente e o Adjust da secao, e nao falha.
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.3d.cylinder",
+    timeoutMs: 60_000
+  },
+  {
+    id: "ae.3d.cube",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: true,
+    mutates: true,
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.3d.cube",
+    timeoutMs: 60_000
+  },
+  {
+    id: "ae.effect.wave",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    // Reaplicar o mesmo preset e pedido ja satisfeito.
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.effect.wave",
+    // Assar percorre a composicao quadro a quadro.
+    timeoutMs: 60_000
+  },
+  {
+    id: "ae.effect.tile",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    // O modo grade cria dezenas de camadas: e reversivel por Undo, mas nao e
+    // uma edicao pequena.
+    destructive: true,
+    mutates: true,
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.effect.tile",
+    timeoutMs: 60_000
+  },
+  {
+    id: "ae.effect.glitch",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.effect.glitch",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.animate.parallax.quick",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    // Reajustar o rig com os mesmos numeros e o modo Adjust da §, e nao falha.
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.animate.parallaxQuick",
+    timeoutMs: 60_000
+  },
+  {
+    id: "ae.3d.look-at",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    // Reapontar para o mesmo alvo com os mesmos eixos e um pedido ja satisfeito.
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.3d.lookAt",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.3d.orbit",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.3d.orbit",
+    // Assar percorre a composicao quadro a quadro: precisa de mais folga.
+    timeoutMs: 60_000
+  },
+  {
+    id: "ae.effect.echo",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.effect.echo",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    // A previa e leitura pura: sem grupo de Undo, porque nao ha o que desfazer.
+    id: "ae.comp.fast-edit.preview",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: false,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.none",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.comp.fast-edit",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    // Mudar duracao, resolucao ou precompor reescreve a composicao inteira: e
+    // reversivel por Undo, mas nao e uma edicao pequena.
+    destructive: true,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.comp.fastEdit",
+    timeoutMs: 60_000
+  },
+  {
     id: "pr.context.read",
     hosts: ["premiere-pro"],
     requirements: [],
@@ -401,6 +736,66 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     timeoutMs: DEFAULT_TIMEOUT_MS
   },
   {
+    id: "ae.vector.ai-to-vector",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.vector.aiToVector",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.parallax.auto-focus",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.parallax.autoFocus",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.parallax.wiggle",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.parallax.wiggle",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.parallax.zoom",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.parallax.zoom",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.parallax.bake",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: true,
+    undoLabelKey: "undo.ae.parallax.bake",
+    timeoutMs: 30000
+  },
+  {
     id: "pr.diagnostics.selfTest",
     hosts: ["premiere-pro"],
     requirements: [],
@@ -411,6 +806,58 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsCancel: false,
     undoLabelKey: "undo.none",
     timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.vector.text-to-vector",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.vector.textToVector",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.effect.particles",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.effect.particles",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.asset.texture",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.asset.texture",
+    timeoutMs: 60000
+  },
+  {
+    id: "ae.project.clean",
+    hosts: ["after-effects"],
+    requirements: ["hasProject"],
+    destructive: true,
+    mutates: true,
+    allowsNoopSuccess: true,
+    // O dispatcher recusa `dryRun` em comando que muta, então declarar suporte
+    // aqui era uma promessa que ele nunca cumpria. A prévia deste comando existe
+    // por outro caminho: `removeConfirmed: false` devolve quantos itens estão
+    // sem uso, sem remover nenhum.
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.project.clean",
+    timeoutMs: 60000
   }
 ] as const;
 

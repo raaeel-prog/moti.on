@@ -46,8 +46,9 @@ test("foco tem fallback seguro e respeita focus-visible", () => {
   assert.match(css, /\.ch-button:focus-visible\s*\{/);
 });
 
-test("movimento reduzido zera a duracao na raiz, cobrindo toda transicao", () => {
-  assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{\s*:root\s*\{[^}]*--ch-motion-fast:\s*0s;/s);
+test("movimento reduzido encurta a duracao na raiz, cobrindo toda transicao", () => {
+  assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{\s*:root\s*\{[^}]*--ch-motion-fast:\s*1ms;/s);
+  assert.match(css, /\[data-reduced-motion="true"\]\s*\{[^}]*--ch-motion-fast:\s*1ms;/s);
 
   // A regra so vale se ninguem cronometrar transicao fora do token: um
   // "transition: ... 90ms" literal escaparia do bloco acima sem barulho.

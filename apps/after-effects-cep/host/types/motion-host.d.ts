@@ -54,6 +54,9 @@ declare const MotionContracts: {
   readonly META_OPEN: string;
   readonly META_CLOSE: string;
   readonly RIG_PREFIX: string;
+  readonly META_OPEN: string;
+  readonly META_CLOSE: string;
+  readonly PLUGIN_VERSION?: string;
   readonly EXPRESSION_HEADER: string;
 };
 
@@ -87,6 +90,13 @@ declare const MotionTransform: {
   linearMatrix(layer: Layer): number[];
   multiply(a: number[], b: number[]): number[];
   apply(matrix: number[], vector: number[]): number[];
+  /** Decompoe `Rx . Ry . Rz` de volta em angulos, em graus. */
+  eulerFromMatrix(m: number[]): number[];
+  /** Caminho de ida que `eulerFromMatrix` desfaz. */
+  matrixFromEuler(euler: readonly number[]): number[];
+  rotX(graus: number): number[];
+  rotY(graus: number): number[];
+  rotZ(graus: number): number[];
   readonly IDENTITY: number[];
 };
 
@@ -136,7 +146,81 @@ declare const MotionExpressions: {
    */
   renderAnchorAverageProbe(indices: readonly number[], toWorld: boolean): string;
   renderBoundsCenterProbe(indices: readonly number[], toWorld: boolean): string;
+  renderTimeController(tokens: {
+    offsetFrames?: unknown;
+    speedPercent?: unknown;
+    reverse?: unknown;
+    freeze?: unknown;
+    freezeFrame?: unknown;
+  }): string;
+  isManagedTimeController(source: string): boolean;
+  renderMarkerLoop(tokens: {
+    inMarkerName: string;
+    outMarkerName: string;
+    loopType: string;
+    clampToLayer: boolean;
+  }): string;
+  isManagedMarkerLoop(source: string): boolean;
+  renderKinetic(tokens: {
+    durationFrames: unknown;
+    overshoot: unknown;
+    direction: unknown;
+    delayFrames: unknown;
+  }): string;
+  isManagedKinetic(source: string): boolean;
+  renderInertial(tokens: {
+    amplitude: unknown;
+    frequency: unknown;
+    decay: unknown;
+    maxDurationFrames: unknown;
+    startMode: unknown;
+  }): string;
+  isManagedInertial(source: string): boolean;
+  renderLookAt(tokens: {
+    targetLayerName: unknown;
+    forwardAxis: unknown;
+    offsetOrientation: unknown;
+    constrainAxes: unknown;
+  }): string;
+  isManagedLookAt(source: string): boolean;
+  lookAtSupportedAxes(): readonly string[];
+  renderOrbit(tokens: { radius: unknown; speed: unknown; inclination: unknown; phase: unknown }): string;
+  isManagedOrbit(source: string): boolean;
+  renderOrbitFacing(): string;
+  isManagedOrbitFacing(source: string): boolean;
+  renderWave(tokens: { amplitude: unknown; frequency: unknown; phase: unknown; direction: unknown }): string;
+  isManagedWave(source: string): boolean;
+  renderGlitchDisplacement(tokens: { amount: unknown; frequency: unknown; seed: unknown }): string;
+  isManagedGlitchDisplacement(source: string): boolean;
+  renderEffector(tokens: {
+    controllerName: unknown;
+    radiusEffectName: unknown;
+    amountEffectName: unknown;
+    falloffCurve: unknown;
+    curve: unknown;
+    target: unknown;
+  }): string;
+  isManagedEffector(source: string): boolean;
+  renderParallaxFocus(tokens: { targetLayerName: unknown; focusOffset: unknown }): string;
+  isManagedParallaxFocus(source: string): boolean;
+  renderParallaxWiggle(tokens: { controllerName: unknown; seed: unknown }): string;
+  isManagedParallaxWiggle(source: string): boolean;
+  /** Nomes dos sliders que o wiggle cria no controller, para o comando e o teste lerem do mesmo lugar. */
+  parallaxWiggleSliderNames: { frequency: string; amplitude: string };
 };
+
+/** Camera nativa. Ja e 3D por natureza, e por isso o Look At a aceita sem exigir threeDLayer. */
+declare class CameraLayer extends Layer {}
+
+/** After Effects built-in MarkerValue constructor. */
+declare class MarkerValue {
+  constructor(comment?: string, chapter?: string, url?: string, frameTarget?: string);
+  comment: string;
+  chapter: string;
+  url: string;
+  frameTarget: string;
+  duration: number;
+}
 
 interface MotionCapturedEase {
   speed: number;
@@ -173,12 +257,40 @@ interface MotionPropertySnapshot {
 }
 
 /** Adapter compartilhado de snapshot/restore do CHMS-016. */
+/** Operacoes comuns sobre efeitos nativos, compartilhadas por Echo, Glitch, Wave e Tile. */
+declare const MotionEffects: {
+  readonly PARADE: string;
+  parade(layer: unknown): PropertyGroup | null;
+  findManaged(lista: PropertyGroup, matchName: string, nomeGerenciado: string): PropertyGroup | null;
+  findAny(lista: PropertyGroup, matchName: string): PropertyGroup | null;
+  add(lista: PropertyGroup, matchName: string, nomeGerenciado: string): PropertyGroup;
+  setStatic(property: Property, valor: unknown): void;
+  snapshot(
+    efeito: PropertyGroup,
+    parametros: readonly string[]
+  ): { efeito: PropertyGroup; nome: string; valores: Array<Record<string, unknown>> };
+  restore(anterior: { efeito: PropertyGroup; nome: string; valores: Array<Record<string, unknown>> }): void;
+};
+
+/** Bloco de metadata de rig no comentario da camada, compartilhado pelos rigs. */
+declare const MotionRigMeta: {
+  write(comentario: unknown, bloco: string): string;
+  has(comentario: unknown, rigType: string): boolean;
+  findController(comp: CompItem, rigType: string): Layer | null;
+  findMembers(comp: CompItem, controller: Layer): Layer[];
+};
+
 declare const MotionKeyframes: {
   readonly MAX_KEYS_PER_BATCH: number;
   isSupportedProperty(property: Property): boolean;
   captureProperty(property: Property): MotionPropertySnapshot;
   restoreProperty(snapshot: MotionPropertySnapshot, overrideTimes: number[] | null): void;
   removeIndicesDescending(property: Property, indices: number[]): void;
+  curveToEase(
+    curva: { x1: number; y1: number; x2: number; y2: number },
+    duracaoSegundos: number,
+    diferencaDeValor: number
+  ): { outSpeed: number; outInfluence: number; inSpeed: number; inInfluence: number };
   describeProperty(comp: CompItem, property: Property): {
     id: string;
     layerIndex: number;

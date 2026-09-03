@@ -22,6 +22,10 @@ const ALLOWED = new Map([
     "Especificacao normativa. Usa o codigo temporario CHMS e o prefixo de rig CHMS | como parte do texto que define a propria convencao."
   ],
   [
+    "docs/ADDENDUM_A_QUICK_UX_SPEC.md",
+    "Addendum normativo anexado sem alteracoes. Cita CHMS_EXPRESSION ao especificar a migracao dos identificadores legados."
+  ],
+  [
     "docs/BASELINE_STARTER_0.1.0.md",
     "Registro historico do starter antes do rebranding. Citar os identificadores antigos e o proposito do documento."
   ],

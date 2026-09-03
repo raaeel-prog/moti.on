@@ -58,15 +58,15 @@ if (process.argv.includes("--clean-only")) {
 }
 
 /**
- * O protocolo legado e o tema ainda sao arquivos unicos copiados para dentro de
- * cada host, e nao um bundle. Os caminhos de destino sao os que o HTML e o
- * `require` de cada app esperam, e nao podem mudar sem mudar os apps junto.
+ * O tema distribuido continua sendo um arquivo unico porque CEP e UXP carregam
+ * o mesmo caminho. Ele e composto no build a partir da base visual e do catalogo
+ * de movimento; isso evita `@import`, que nao e uma dependencia segura nos dois
+ * runtimes, sem duplicar o catalogo nos fontes.
  */
-const SHARED_ASSETS = [
-  {
-    from: path.join(packages, "ui-core", "src", "theme.css"),
-    to: path.join("styles", "theme.css")
-  }
+const SHARED_THEME_SOURCES = [
+  path.join(packages, "ui-core", "src", "theme.css"),
+  path.join(packages, "ui-core", "src", "components.css"),
+  path.join(packages, "ui-motion", "src", "motion.css")
 ];
 
 async function copyAppShell(appName, outputName) {
@@ -86,11 +86,12 @@ async function copyAppShell(appName, outputName) {
     }
   });
 
-  for (const asset of SHARED_ASSETS) {
-    const destination = path.join(output, asset.to);
-    await mkdir(path.dirname(destination), { recursive: true });
-    await cp(asset.from, destination);
-  }
+  const themeDestination = path.join(output, "styles", "theme.css");
+  const themeParts = await Promise.all(
+    SHARED_THEME_SOURCES.map((source) => readFile(source, "utf8"))
+  );
+  await mkdir(path.dirname(themeDestination), { recursive: true });
+  await writeFile(themeDestination, `${themeParts.join("\n\n").trimEnd()}\n`, "utf8");
 }
 
 // Geracao antes da copia: o modulo ES5 do contrato faz parte do host montado, e

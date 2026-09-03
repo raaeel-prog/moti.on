@@ -13,6 +13,7 @@ import {
 import { createLogger, type MotionLogger } from "@motion/logging";
 import {
   button,
+  checkboxField,
   createI18n,
   createShell,
   logLine,
@@ -25,11 +26,20 @@ import {
   type Shell,
   type ShellView
 } from "@motion/ui-core";
+import {
+  createBrowserReducedMotionController,
+  type ReducedMotionController
+} from "@motion/ui-motion";
 
 import { createPremiereAdapter } from "../../host/src/adapter.js";
 import { capabilityProbe, contextRead, selfTest } from "../../host/src/commands.js";
 import type { PremiereModule } from "../../host/src/premiere-api.js";
-import { createPanelLifecycle, type ManagedPanelRuntime } from "./lifecycle.js";
+import {
+  buildEntrypointConfig,
+  createPanelLifecycle,
+  type ManagedPanelRuntime,
+  type UxpEntrypointConfig
+} from "./lifecycle.js";
 import {
   createPremiereMessages,
   localizeCommandFailure,
@@ -43,18 +53,8 @@ import {
   type UxpHostEnvironment
 } from "./uxp-runtime.js";
 
-interface UxpPanelHandler {
-  create?: (rootNode?: unknown) => void;
-  show?: (rootNode?: unknown) => void;
-  hide?: (rootNode?: unknown) => void;
-  destroy?: (rootNode?: unknown) => void;
-}
-
 interface UxpEntrypoints {
-  setup(config: {
-    plugin?: { create?: () => void; destroy?: () => void };
-    panels?: Record<string, UxpPanelHandler>;
-  }): void;
+  setup(config: UxpEntrypointConfig<unknown>): void;
 }
 
 interface UxpModuleWithEntrypoints {
@@ -87,12 +87,14 @@ interface PanelServices {
   dispatcher: Dispatcher | null;
   uxp: unknown;
   canWriteFiles: RuntimeProbeResult;
+  motionPreference: ReducedMotionController;
 }
 
 const VIEWS: ShellView[] = [
   { id: "context", labelKey: "nav.context", titleKey: "view.context.title" },
   { id: "system", labelKey: "nav.system", titleKey: "view.system.title" },
-  { id: "diagnostics", labelKey: "nav.diagnostics", titleKey: "view.diagnostics.title" }
+  { id: "diagnostics", labelKey: "nav.diagnostics", titleKey: "view.diagnostics.title" },
+  { id: "settings", labelKey: "nav.settings", titleKey: "view.settings.title" }
 ];
 
 const PLUGIN_VERSION = "0.1.0";
@@ -196,13 +198,15 @@ function createPanelRuntime(uxp: unknown, rootNode?: unknown): ManagedPanelRunti
   }
 
   const dispatcher = premiere ? createDispatcher(premiere, logger, environment) : null;
+  const motionPreference = createBrowserReducedMotionController(document.documentElement, window);
   const services: PanelServices = {
     i18n,
     messages,
     logger,
     dispatcher,
     uxp,
-    canWriteFiles: environment.canWriteFiles
+    canWriteFiles: environment.canWriteFiles,
+    motionPreference
   };
 
   const shell = createShell({
@@ -238,6 +242,7 @@ function createPanelRuntime(uxp: unknown, rootNode?: unknown): ManagedPanelRunti
 
     dispose() {
       stopObservingWidth();
+      motionPreference.dispose();
       logger.info("panel.destroyed", { command: "panel.destroyed" });
       resetState();
     }
@@ -246,6 +251,11 @@ function createPanelRuntime(uxp: unknown, rootNode?: unknown): ManagedPanelRunti
 
 function renderView(viewId: string, regions: RenderRegions, services: PanelServices): void {
   const { i18n, messages, dispatcher } = services;
+
+  if (viewId === "settings") {
+    renderSettings(regions, services);
+    return;
+  }
 
   if (!dispatcher) {
     regions.content.appendChild(notice(document, i18n.t("message.outsideHost"), "error"));
@@ -417,6 +427,23 @@ function renderSystem(regions: RenderRegions, services: PanelServices): void {
   if (!capabilities && !state.selfTest) {
     regions.content.appendChild(notice(document, messages.t("message.systemCheckNotRun")));
   }
+}
+
+function renderSettings(regions: RenderRegions, services: PanelServices): void {
+  const { i18n, motionPreference } = services;
+  regions.content.appendChild(sectionTitle(document, i18n.t("settings.interface.title")));
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "settings-reduce-motion",
+      label: i18n.t("settings.reduceMotion.label"),
+      description: i18n.t("settings.reduceMotion.description"),
+      checked: motionPreference.snapshot().internal,
+      onChange: (checked) => {
+        motionPreference.setInternal(checked);
+        regions.shell.rerender();
+      }
+    })
+  );
 }
 
 function renderDiagnostics(regions: RenderRegions, services: PanelServices): void {
@@ -711,22 +738,7 @@ if (uxpModule) {
 
   // Erros de setup não são capturados: mascará-los com o fallback de DOM faria
   // uma falha real de lifecycle parecer uma inicialização normal.
-  entrypoints.setup({
-    plugin: {
-      destroy: () => panelLifecycle.destroy()
-    },
-    panels: {
-      mainPanel: {
-        create: (rootNode) => {
-          panelLifecycle.create(rootNode);
-        },
-        show: (rootNode) => {
-          panelLifecycle.show(rootNode);
-        },
-        destroy: () => panelLifecycle.destroy()
-      }
-    }
-  });
+  entrypoints.setup(buildEntrypointConfig(panelLifecycle));
 } else {
   // Fallback exclusivo para preview fora do UXP. Dentro do host, somente os
   // callbacks documentados controlam montagem e cleanup.

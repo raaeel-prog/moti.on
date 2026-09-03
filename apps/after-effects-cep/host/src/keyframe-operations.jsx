@@ -291,12 +291,56 @@
     };
   }
 
+  /**
+   * Converte uma curva Bezier cubica em velocidade e influencia do After Effects,
+   * para uma dimensao.
+   *
+   * A influencia e o X da alca em percentual do segmento, limitada ao piso de
+   * 0,1% do host. A **velocidade** usa essa mesma influencia limitada como
+   * denominador da inclinacao, e nao o X cru: com alca vertical (`x1 = 0`) a
+   * conta crua seria divisao por zero, e devolver zero ali transformaria a
+   * arrancada numa pausa em silencio.
+   *
+   * `packages/keyframe-core/src/bezier.ts` e a implementacao de referencia da
+   * mesma formula, e `ease-paridade.test.mjs` compara as duas numa tabela de
+   * curvas para elas nao poderem divergir.
+   *
+   * @param {{x1: number, y1: number, x2: number, y2: number}} curva
+   * @param {number} duracaoSegundos
+   * @param {number} diferencaDeValor
+   * @returns {{outSpeed: number, outInfluence: number, inSpeed: number, inInfluence: number}}
+   */
+  function curveToEase(curva, duracaoSegundos, diferencaDeValor) {
+    var outInfluence = Math.max(0.1, Math.min(curva.x1 * 100, 100));
+    var inInfluence = Math.max(0.1, Math.min((1 - curva.x2) * 100, 100));
+
+    var outSpeed = 0;
+    var inSpeed = 0;
+
+    if (diferencaDeValor !== 0 && duracaoSegundos > 0) {
+      var outSlope = curva.y1 / (outInfluence / 100);
+      var inSlope = (1 - curva.y2) / (inInfluence / 100);
+
+      var unitSpeed = diferencaDeValor / duracaoSegundos;
+      outSpeed = outSlope * unitSpeed;
+      inSpeed = inSlope * unitSpeed;
+    }
+
+    return {
+      outSpeed: outSpeed,
+      outInfluence: outInfluence,
+      inSpeed: inSpeed,
+      inInfluence: inInfluence
+    };
+  }
+
   global.MotionKeyframes = {
     MAX_KEYS_PER_BATCH: MAX_KEYS_PER_BATCH,
     isSupportedProperty: isSupportedProperty,
     captureProperty: captureProperty,
     restoreProperty: restoreProperty,
     removeIndicesDescending: removeIndicesDescending,
-    describeProperty: describeProperty
+    describeProperty: describeProperty,
+    curveToEase: curveToEase
   };
 }($.global));

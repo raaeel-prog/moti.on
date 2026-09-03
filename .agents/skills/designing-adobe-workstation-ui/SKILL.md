@@ -7,7 +7,7 @@ description: "Designs and reviews the CrossHost plugin interface as a subtle Ado
 
 This skill defines the visual taste and interaction discipline for the CrossHost panel. The product must feel like a focused professional tool inside After Effects or Premiere Pro, not a standalone SaaS dashboard.
 
-Before designing or coding, read `docs/UI_FOUNDATION.md`, `shared/product-ui-profile.json`, and the shared design tokens. Use `docs/design-references/target-minimal-parallax.png` only as directional evidence; simplify further whenever the active workflow allows it.
+Before designing or coding, read `docs/UI_FOUNDATION.md`, `docs/ADDENDUM_A_QUICK_UX_SPEC.md`, `shared/product-ui-profile.json`, `packages/ui-tokens/src/tokens.css`, and `packages/ui-motion/src/motion.css`. The addendum is normative for Quick/Advanced interaction, accessibility, breakpoints, color and motion. Use `docs/design-references/target-minimal-parallax.png` only as directional evidence; simplify further whenever the active workflow allows it.
 
 ## Mandatory design read
 
@@ -34,27 +34,21 @@ Increasing feature count must not increase simultaneous visual density. Use prog
 The user-selected dashboard base is non-negotiable:
 
 ```css
---ch-bg-base: #1D1D1D;
---ch-bg-panel: #202020;
---ch-bg-raised: #242424;
---ch-bg-hover: #292929;
---ch-bg-active: #2D2D2D;
---ch-border-subtle: #333333;
---ch-border-strong: #454545;
---ch-text-primary: #E6E6E6;
---ch-text-secondary: #A8A8A8;
---ch-text-muted: #747474;
---ch-accent: #35C978;
---ch-accent-hover: #45D889;
---ch-focus: #6F9DFF;
---ch-danger: #D96B70;
---ch-warning: #D0A24A;
+--bg-host: #1D1D1D;
+--bg-0: #0E1013;
+--bg-1: #141619;
+--bg-2: #1A1D21;
+--bg-3: #22262B;
+--bg-4: #2A2F35;
+--accent: #7C8CFF;
 ```
+
+The complete dark/light palette and AA-corrected implementation values live in `packages/ui-tokens/src/tokens.css`; never retype a partial palette in a component.
 
 Rules:
 
 - Neutral surfaces carry the interface; accent color carries selection and primary action only.
-- No purple/blue “AI glow,” mesh gradient, glassmorphism, or neon halo as a default.
+- No “AI glow,” mesh gradient, glassmorphism, or neon halo as a default. The violet-blue accent is semantic and must not become decoration.
 - Use a one-pixel border or surface contrast, not both everywhere.
 - Avoid pure black and pure white except tiny glyph details.
 - Status must never depend on color alone.
@@ -123,9 +117,9 @@ A slider must support a precise numeric value. A numeric value must define units
 
 ## Responsive docking
 
-Design and test three width classes:
+Design and test four width classes:
 
-### Compact: 280–359 px
+### Compact: 280–339 px
 
 - one column;
 - icon-first navigation;
@@ -134,14 +128,20 @@ Design and test three width classes:
 - advanced sections closed by default;
 - primary action remains visible without horizontal scroll.
 
-### Standard: 360–559 px
+### Default: 340–479 px
 
 - one main column;
 - labeled navigation or compact tabs;
 - two controls per row only for naturally paired values;
 - presets may use two columns when thumbnails are essential.
 
-### Wide: 560 px and above
+### Comfort: 480–719 px
+
+- four-column tool grid when the active surface supports it;
+- a 320 px overlay Inspector with restrained dimming;
+- keep primary actions visible and content order identical to the DOM.
+
+### Wide: 720 px and above
 
 - optional two-column tool editor;
 - secondary inspector appears only when it reduces navigation cost;
@@ -153,12 +153,14 @@ The panel must also tolerate short heights. Preserve the active action area and 
 
 Use motion only to explain state:
 
-- 100–160 ms hover/press transitions;
-- 140–220 ms disclosure transitions when runtime performance is stable;
+- consume the stable A6.2 IDs through `data-motion`; do not create component-local motion dialects;
+- 90 ms hover/press transitions;
+- 140–280 ms disclosure transitions when runtime performance is stable;
+- 420 ms is the absolute ceiling for one-shot confirmation feedback;
 - no looping decoration;
 - no parallax, spring bounce, or animated gradient in the panel shell;
-- respect reduced-motion preferences;
-- never animate layout while the user is dragging a slider.
+- respect the effective reduced-motion preference (`internal OR system`) and keep its toggle in Settings → Interface;
+- animate only `transform` and `opacity` for motion; never animate layout while the user is dragging a slider.
 
 Use inline validation and restrained toasts. Common messages must not open blocking modals.
 

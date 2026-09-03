@@ -7,6 +7,10 @@ description: "Builds the shared HTML, CSS, TypeScript, state, and component laye
 
 Use this skill to implement the visual system defined by `designing-adobe-workstation-ui` across the CEP and UXP clients without allowing host-specific details to leak through the component tree.
 
+Before UI implementation, read `docs/ADDENDUM_A_QUICK_UX_SPEC.md` and consume `packages/ui-tokens/src/tokens.css` plus `packages/ui-motion/src/motion.css`. The addendum supersedes older §22.3/§22.4 interaction details; the host base remains `#1D1D1D` through the compatibility alias.
+
+Use the shared `data-motion` IDs and reduced-motion controller from `@motion/ui-motion`. Both hosts expose the internal preference in Settings → Interface; host code may feature-detect storage/media support, but components must not fork the effective `internal OR system` rule.
+
 ## Architecture boundary
 
 Organize the UI into four layers:
@@ -153,9 +157,10 @@ The UI must ignore stale responses from superseded requests. Never infer success
 
 Implement width and height queries in application state or CSS where supported. At minimum:
 
-- 280 px: single column, compact navigation;
-- 360 px: standard narrow layout;
-- 560 px: optional split layout;
+- 280–339 px: compact, two-column tool grid and full-panel Inspector;
+- 340–479 px: default, three-column grid and overlay Inspector;
+- 480–719 px: comfort, four-column grid and 320 px Inspector;
+- 720 px+: wide split layout with a fixed 360 px Inspector;
 - short-height mode: sticky local action bar, scrollable content region.
 
 Never hide a required input only because the panel is narrow. Move it behind a disclosure section or change the composition.

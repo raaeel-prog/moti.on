@@ -30,12 +30,17 @@ import {
   textField,
   toolGrid,
   toolTile,
+  bezierEditor,
   type I18n,
   type RenderRegions,
   type RowTone,
   type Shell,
   type ShellView
 } from "@motion/ui-core";
+import {
+  createBrowserReducedMotionController,
+  type ReducedMotionController
+} from "@motion/ui-motion";
 
 import { createAeHostAdapter } from "./host-adapter.js";
 
@@ -180,8 +185,8 @@ const ANCHOR_GRID: ReadonlyArray<{ ponto: AnchorGridPoint; rotulo: MessageKey }>
   { ponto: "bottomLeft", rotulo: "anchor.grid.bottomLeft" },
   { ponto: "bottomCenter", rotulo: "anchor.grid.bottomCenter" },
   { ponto: "bottomRight", rotulo: "anchor.grid.bottomRight" }
-];
 
+];
 interface AnchorDraft {
   gridPoint: AnchorGridPoint;
   mode: "normal" | "reverse" | "random";
@@ -386,6 +391,542 @@ const DEFAULT_SMOOTH: SmoothDraft = {
   referenceTime: 0
 };
 
+
+interface EaseDraft {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  applyIn: boolean;
+  applyOut: boolean;
+}
+
+
+type TimeControllerApplyTo = "layer" | "properties";
+
+interface TimeControllerDraft {
+  applyTo: TimeControllerApplyTo;
+  speedPercent: number;
+  offsetFrames: number;
+  reverse: boolean;
+  freeze: boolean;
+  freezeFrame: number;
+}
+
+const DEFAULT_TIME_CONTROLLER: TimeControllerDraft = {
+  applyTo: "layer",
+  speedPercent: 100,
+  offsetFrames: 0,
+  reverse: false,
+  freeze: false,
+  freezeFrame: 0
+};
+
+
+type ReverseKeysDraft = Record<string, never>;
+const DEFAULT_REVERSE_KEYS: ReverseKeysDraft = {};
+type CloneKeysMode = "repeat" | "mirror";
+interface CloneKeysDraft { mode: CloneKeysMode; }
+const DEFAULT_CLONE_KEYS: CloneKeysDraft = { mode: "repeat" };
+
+type AnimateKineticDirection = "in" | "out" | "both";
+type AnimateKineticSplit = "none" | "chars" | "words" | "lines";
+
+interface AnimateKineticDraft {
+  direction: AnimateKineticDirection;
+  durationFrames: number;
+  /**
+   * Quanto a animação passa do alvo antes de assentar. É **número**, de 0 a 10,
+   * e não um liga/desliga: o host recusa qualquer outra coisa. Estava declarado
+   * `boolean` aqui, e por isso o comando falhava em toda execução.
+   */
+  overshoot: number;
+  rotation: number;
+  scale: number;
+  opacity: number;
+  staggerFrames: number;
+  splitMode: AnimateKineticSplit;
+}
+const DEFAULT_ANIMATE_KINETIC: AnimateKineticDraft = {
+  direction: "in",
+  durationFrames: 15,
+  overshoot: 1.2,
+  rotation: 0,
+  scale: 100,
+  opacity: 100,
+  staggerFrames: 0,
+  // O host aceita "none" | "chars" | "words" | "lines"; estava "word".
+  splitMode: "none"
+};
+
+type InertialStartMode = "everyKey" | "lastKey";
+
+interface InertialDraft {
+  amplitude: number;
+  frequency: number;
+  decay: number;
+  maxDurationFrames: number;
+  startMode: InertialStartMode;
+}
+
+const DEFAULT_INERTIAL: InertialDraft = {
+  amplitude: 100,
+  frequency: 2,
+  decay: 4,
+  maxDurationFrames: 30,
+  startMode: "lastKey"
+};
+
+type JumpDirection = "up" | "down" | "left" | "right";
+
+interface JumpDraft {
+  height: number;
+  durationFrames: number;
+  direction: JumpDirection;
+  squashStretch: number;
+  anticipationFrames: number;
+  staggerFrames: number;
+}
+
+const DEFAULT_JUMP: JumpDraft = {
+  height: 300,
+  durationFrames: 20,
+  direction: "up",
+  squashStretch: 12,
+  anticipationFrames: 4,
+  staggerFrames: 0
+};
+
+type LookAtAxis = "+z" | "-z" | "+x" | "-x";
+
+interface LookAtDraft {
+  targetLayerName: string;
+  forwardAxis: LookAtAxis;
+  constrainAxes: { x: boolean; y: boolean; z: boolean };
+}
+
+const DEFAULT_LOOK_AT: LookAtDraft = {
+  targetLayerName: "",
+  forwardAxis: "+z",
+  constrainAxes: { x: false, y: false, z: false }
+};
+
+type OrbitTargetMode = "newController" | "reuseController";
+
+interface OrbitDraft {
+  radius: number;
+  speed: number;
+  inclination: number;
+  phase: number;
+  targetMode: OrbitTargetMode;
+  faceTarget: boolean;
+  bake: boolean;
+}
+
+const DEFAULT_ORBIT: OrbitDraft = {
+  radius: 400,
+  speed: 60,
+  inclination: 15,
+  phase: 0,
+  targetMode: "newController",
+  faceTarget: true,
+  bake: false
+};
+
+type EchoOperator =
+  | "add"
+  | "maximum"
+  | "minimum"
+  | "screen"
+  | "compositeInBack"
+  | "compositeInFront"
+  | "blend";
+
+interface EchoDraft {
+  echoTime: number;
+  numberOfEchoes: number;
+  startingIntensity: number;
+  decay: number;
+  operator: EchoOperator;
+  animate: boolean;
+}
+
+const DEFAULT_ECHO: EchoDraft = {
+  echoTime: -0.05,
+  numberOfEchoes: 6,
+  startingIntensity: 0.9,
+  decay: 0.7,
+  operator: "screen",
+  animate: false
+};
+
+type FastEditOperation =
+  | "trimToWorkArea"
+  | "setDuration"
+  | "setFrameRate"
+  | "setResolution"
+  | "fitLayers"
+  | "shiftLayersToZero"
+  | "precompose";
+
+interface FastEditDraft {
+  operation: FastEditOperation;
+  duration: number;
+  frameRate: number;
+  width: number;
+  height: number;
+  precomposeName: string;
+  moveAllAttributes: boolean;
+}
+
+type BreakShapeNaming = "groupName" | "indexed";
+
+interface BreakShapeDraft {
+  keepOriginal: boolean;
+  preserveAppearance: boolean;
+  namingMode: BreakShapeNaming;
+}
+
+const DEFAULT_BREAK_SHAPE: BreakShapeDraft = {
+  keepOriginal: true,
+  preserveAppearance: true,
+  namingMode: "groupName"
+};
+
+type EffectorFalloff = "linear" | "smoothstep" | "bezier";
+
+interface EffectorDraft {
+  radius: number;
+  falloffCurve: EffectorFalloff;
+  curve: { x1: number; y1: number; x2: number; y2: number };
+  positionAmount: number;
+  scaleAmount: number;
+  rotationAmount: number;
+  opacityAmount: number;
+}
+
+const DEFAULT_EFFECTOR: EffectorDraft = {
+  radius: 400,
+  falloffCurve: "smoothstep",
+  curve: { x1: 0.33, y1: 0, x2: 0.67, y2: 1 },
+  positionAmount: 200,
+  scaleAmount: 0,
+  rotationAmount: 0,
+  opacityAmount: 0
+};
+
+/** Os onze presets do CHMS-024, na ordem em que o painel os lista. */
+const CAMERA_TRANSITION_PRESETS = [
+  "pushIn",
+  "pullOut",
+  "truckLeft",
+  "truckRight",
+  "craneUp",
+  "craneDown",
+  "panLeft",
+  "panRight",
+  "tiltUp",
+  "tiltDown",
+  "zoomIn"
+] as const;
+
+type CameraTransitionPreset = (typeof CAMERA_TRANSITION_PRESETS)[number];
+
+interface CameraTransitionDraft {
+  preset: CameraTransitionPreset;
+  durationFrames: number;
+  amount: number;
+  curve: { x1: number; y1: number; x2: number; y2: number };
+}
+
+const DEFAULT_CAMERA_TRANSITION: CameraTransitionDraft = {
+  preset: "pushIn",
+  durationFrames: 24,
+  amount: 400,
+  // Ease in-out simétrico: o começo e o fim suaves, que é o que um movimento de
+  // câmera pede por padrão.
+  curve: { x1: 0.33, y1: 0, x2: 0.67, y2: 1 }
+};
+
+type CylinderFaceMode = "inward" | "outward" | "none";
+
+interface CylinderDraft {
+  radius: number;
+  height: number;
+  count: number;
+  faceMode: CylinderFaceMode;
+  startAngle: number;
+  arcDegrees: number;
+  createCamera: boolean;
+}
+
+const DEFAULT_CYLINDER: CylinderDraft = {
+  radius: 500,
+  height: 0,
+  count: 8,
+  faceMode: "outward",
+  startAngle: 0,
+  arcDegrees: 360,
+  createCamera: true
+};
+
+type CubeSourceMode = "sixLayers" | "duplicateOne";
+
+interface CubeDraft {
+  size: number;
+  sourceMode: CubeSourceMode;
+  faceFit: boolean;
+  createCamera: boolean;
+}
+
+const DEFAULT_CUBE: CubeDraft = {
+  size: 400,
+  sourceMode: "duplicateOne",
+  faceFit: true,
+  createCamera: true
+};
+
+type WaveMode = "transform" | "effect";
+type WaveDirection = "horizontal" | "vertical";
+
+interface WaveDraft {
+  mode: WaveMode;
+  amplitude: number;
+  frequency: number;
+  speed: number;
+  direction: WaveDirection;
+  phase: number;
+  falloff: number;
+  bake: boolean;
+}
+
+const DEFAULT_WAVE: WaveDraft = {
+  mode: "transform",
+  amplitude: 40,
+  frequency: 50,
+  speed: 1,
+  direction: "vertical",
+  phase: 0,
+  falloff: 0,
+  bake: false
+};
+
+type TileMode = "effect" | "grid";
+
+interface TileDraft {
+  mode: TileMode;
+  outputWidth: number;
+  outputHeight: number;
+  mirrorEdges: boolean;
+  gridRows: number;
+  gridColumns: number;
+  spacing: number;
+}
+
+const DEFAULT_TILE: TileDraft = {
+  mode: "effect",
+  outputWidth: 200,
+  outputHeight: 200,
+  mirrorEdges: true,
+  gridRows: 3,
+  gridColumns: 3,
+  spacing: 200
+};
+
+type GlitchMode = "continuous" | "oneShot";
+
+interface GlitchDraft {
+  mode: GlitchMode;
+  intensity: number;
+  frequency: number;
+  rgbSplit: number;
+  displacement: number;
+  seed: number;
+  durationFrames: number;
+}
+
+const DEFAULT_GLITCH: GlitchDraft = {
+  mode: "continuous",
+  intensity: 0.6,
+  frequency: 12,
+  rgbSplit: 15,
+  displacement: 40,
+  seed: 1,
+  durationFrames: 12
+};
+
+type ParallaxFullOperation = "autoFocus" | "zoom" | "wiggle" | "bake";
+
+interface ParallaxFullDraft {
+  operation: ParallaxFullOperation;
+  targetLayerName: string;
+  focusOffset: number;
+  enableDepthOfField: boolean;
+  zoomLevel: number;
+  zoomDurationFrames: number;
+  frequency: number;
+  amplitude: number;
+  seed: number;
+  stepFrames: number;
+}
+
+const DEFAULT_PARALLAX_FULL: ParallaxFullDraft = {
+  operation: "autoFocus",
+  targetLayerName: "",
+  focusOffset: 0,
+  enableDepthOfField: true,
+  zoomLevel: 2000,
+  zoomDurationFrames: 30,
+  frequency: 2,
+  amplitude: 50,
+  seed: 12345,
+  stepFrames: 1
+};
+
+type ParallaxOrderMode = "selection" | "timeline";
+
+interface ParallaxDraft {
+  depthStep: number;
+  strength: number;
+  orderMode: ParallaxOrderMode;
+  createCamera: boolean;
+  preserveFraming: boolean;
+  controllerName: string;
+}
+
+const DEFAULT_PARALLAX: ParallaxDraft = {
+  depthStep: 200,
+  strength: 1,
+  orderMode: "selection",
+  createCamera: true,
+  preserveFraming: true,
+  controllerName: "Parallax"
+};
+
+const DEFAULT_FAST_EDIT: FastEditDraft = {
+  operation: "trimToWorkArea",
+  duration: 10,
+  frameRate: 25,
+  width: 1920,
+  height: 1080,
+  precomposeName: "Precomp",
+  moveAllAttributes: true
+};
+
+type ShapeType =
+  | "circle"
+  | "rectangle"
+  | "roundedRectangle"
+  | "polygon"
+  | "star"
+  | "line"
+  | "arrow"
+  | "callout";
+
+interface ShapeLibraryDraft {
+  shapeType: ShapeType;
+  size: number;
+  fillColor: readonly [number, number, number];
+  strokeColor: readonly [number, number, number];
+  strokeWidth: number;
+  roundness: number;
+  points: number;
+}
+
+const DEFAULT_SHAPE_LIBRARY: ShapeLibraryDraft = {
+  shapeType: "rectangle",
+  size: 200,
+  // RGB normalizado, que e o que o After Effects usa. Cinza claro para a forma
+  // aparecer contra o fundo escuro de uma composicao recem-criada.
+  fillColor: [0.85, 0.85, 0.85],
+  strokeColor: [0, 0, 0],
+  strokeWidth: 0,
+  roundness: 20,
+  points: 5
+};
+
+type TrimPathScope = "layer" | "group";
+
+interface TrimPathDraft {
+  scope: TrimPathScope;
+  start: number;
+  end: number;
+  offset: number;
+  animate: boolean;
+  durationFrames: number;
+  reverse: boolean;
+}
+
+const DEFAULT_TRIM_PATH: TrimPathDraft = {
+  scope: "layer",
+  start: 0,
+  end: 100,
+  offset: 0,
+  animate: true,
+  durationFrames: 24,
+  reverse: false
+};
+
+type PasteTimeMode = "cti" | "layerIn" | "original";
+type PasteMappingMode = "matchName" | "order";
+
+interface CopyKeysDraft {
+  pasteTime: PasteTimeMode;
+  mappingMode: PasteMappingMode;
+  relativeTiming: boolean;
+  includeExpressions: boolean;
+  includeTangents: boolean;
+}
+
+const DEFAULT_COPY_KEYS: CopyKeysDraft = {
+  pasteTime: "cti",
+  mappingMode: "matchName",
+  relativeTiming: true,
+  includeExpressions: false,
+  includeTangents: true
+};
+
+type TimeMarkerLoopType = "cycle" | "pingpong";
+
+interface TimeMarkerLoopDraft {
+  inMarkerName: string;
+  outMarkerName: string;
+  loopType: TimeMarkerLoopType;
+  autoCreateMarkers: boolean;
+  clampToLayer: boolean;
+}
+const DEFAULT_TIME_MARKER_LOOP: TimeMarkerLoopDraft = {
+  inMarkerName: "in",
+  outMarkerName: "out",
+  loopType: "cycle",
+  autoCreateMarkers: false,
+  clampToLayer: true
+};
+
+const DEFAULT_EASE: EaseDraft = {
+  x1: 0.25,
+  y1: 0.1,
+  x2: 0.25,
+  y2: 1.0,
+  applyIn: true,
+  applyOut: true
+};
+
+
+interface AiToVectorDraft { keepOriginal: boolean; }
+const DEFAULT_AI_TO_VECTOR: AiToVectorDraft = { keepOriginal: true };
+
+interface TextToVectorDraft { keepOriginal: boolean; }
+const DEFAULT_TEXT_TO_VECTOR: TextToVectorDraft = { keepOriginal: true };
+
+interface ParticlesDraft { birthRate: number; longevity: number; velocity: number; }
+const DEFAULT_PARTICLES: ParticlesDraft = { birthRate: 2, longevity: 1, velocity: 1 };
+
+interface TextureDraft { blendMode: string; opacity: number; }
+const DEFAULT_TEXTURE: TextureDraft = { blendMode: "overlay", opacity: 100 };
+
+interface CleanDraft { removeConfirmed: boolean; }
+const DEFAULT_CLEAN: CleanDraft = { removeConfirmed: false };
 type MessageKey = Parameters<I18n["t"]>[0];
 type ToolId =
   | "loopOut"
@@ -400,7 +941,38 @@ type ToolId =
   | "reverseOrder"
   | "cutKeys"
   | "delay"
-  | "anchor";
+  | "anchor"
+  | "ease"
+  | "aiToVector"
+  | "textToVector"
+  | "particles"
+  | "texture"
+  | "clean"
+  | "reverseKeys"
+  | "cloneKeys"
+  | "timeController"
+  | "animateKinetic"
+  | "timeMarkerLoop"
+  | "inertial"
+  | "jump"
+  | "copyKeys"
+  | "pasteKeys"
+  | "trimPath"
+  | "shapeLibrary"
+  | "lookAt"
+  | "orbit"
+  | "echo"
+  | "fastEdit"
+  | "parallax"
+  | "wave"
+  | "tile"
+  | "glitch"
+  | "cylinder"
+  | "cube"
+  | "cameraTransition"
+  | "effector"
+  | "breakShape"
+  | "parallaxFull";
 
 /**
  * Uma ferramenta do navegador.
@@ -597,14 +1169,341 @@ const TOOLS: readonly ToolDefinition[] = [
     reset: () => {
       state.textBox = { ...DEFAULT_TEXT_BOX };
     }
-  }
+  },
+  {
+    id: "ease",
+    nameKey: "tool.ease.name",
+    descriptionKey: "tool.ease.description",
+    render: renderEase,
+    disabledReason: easeDisabledReason,
+    apply: applyEase,
+    reset: () => {
+      state.ease = { ...DEFAULT_EASE };
+    }
+  },
+  {
+    id: "aiToVector",
+    nameKey: "tool.aiToVector.name",
+    descriptionKey: "tool.aiToVector.description",
+    render: renderAiToVector,
+    disabledReason: aiToVectorDisabledReason,
+    apply: applyAiToVector,
+    reset: () => { state.aiToVector = { ...DEFAULT_AI_TO_VECTOR }; }
+  },
+  {
+    id: "textToVector",
+    nameKey: "tool.textToVector.name",
+    descriptionKey: "tool.textToVector.description",
+    render: renderTextToVector,
+    disabledReason: textToVectorDisabledReason,
+    apply: applyTextToVector,
+    reset: () => { state.textToVector = { ...DEFAULT_TEXT_TO_VECTOR }; }
+  },
+  {
+    id: "particles",
+    nameKey: "tool.particles.name",
+    descriptionKey: "tool.particles.description",
+    render: renderParticles,
+    disabledReason: particlesDisabledReason,
+    apply: applyParticles,
+    reset: () => { state.particles = { ...DEFAULT_PARTICLES }; }
+  },
+  {
+    id: "texture",
+    nameKey: "tool.texture.name",
+    descriptionKey: "tool.texture.description",
+    render: renderTexture,
+    disabledReason: textureDisabledReason,
+    apply: applyTexture,
+    reset: () => { state.texture = { ...DEFAULT_TEXTURE }; }
+  },
+  {
+    id: "clean",
+    nameKey: "tool.clean.name",
+    descriptionKey: "tool.clean.description",
+    render: renderClean,
+    disabledReason: cleanDisabledReason,
+    apply: applyClean,
+    reset: () => { state.clean = { ...DEFAULT_CLEAN }; }
+  },
+  {
+    id: "reverseKeys",
+    nameKey: "tool.reverseKeys.name",
+    descriptionKey: "tool.reverseKeys.description",
+    render: renderReverseKeys,
+    disabledReason: reverseKeysDisabledReason,
+    apply: applyReverseKeys,
+    reset: () => { state.reverseKeys = { ...DEFAULT_REVERSE_KEYS }; }
+  },
+  {
+    id: "cloneKeys",
+    nameKey: "tool.cloneKeys.name",
+    descriptionKey: "tool.cloneKeys.description",
+    render: renderCloneKeys,
+    disabledReason: cloneKeysDisabledReason,
+    apply: applyCloneKeys,
+    reset: () => { state.cloneKeys = { ...DEFAULT_CLONE_KEYS }; }
+  },
+  {
+    id: "timeController",
+    nameKey: "tool.timeController.name",
+    descriptionKey: "tool.timeController.description",
+    render: renderTimeController,
+    disabledReason: timeControllerDisabledReason,
+    apply: applyTimeController,
+    reset: () => { state.timeController = { ...DEFAULT_TIME_CONTROLLER }; }
+  },
+  {
+    id: "animateKinetic",
+    nameKey: "tool.animateKinetic.name",
+    descriptionKey: "tool.animateKinetic.description",
+    render: renderAnimateKinetic,
+    disabledReason: animateKineticDisabledReason,
+    apply: applyAnimateKinetic,
+    reset: () => { state.animateKinetic = { ...DEFAULT_ANIMATE_KINETIC }; }
+  },
+  {
+    id: "inertial",
+    nameKey: "tool.inertial.name",
+    descriptionKey: "tool.inertial.description",
+    render: renderInertial,
+    disabledReason: inertialDisabledReason,
+    apply: applyInertial,
+    reset: () => {
+      state.inertial = { ...DEFAULT_INERTIAL };
+    }
+  },
+  {
+    id: "jump",
+    nameKey: "tool.jump.name",
+    descriptionKey: "tool.jump.description",
+    render: renderJump,
+    disabledReason: jumpDisabledReason,
+    apply: applyJump,
+    reset: () => {
+      state.jump = { ...DEFAULT_JUMP };
+    }
+  },
+  {
+    id: "copyKeys",
+    nameKey: "tool.copyKeys.name",
+    descriptionKey: "tool.copyKeys.description",
+    render: renderCopyKeys,
+    disabledReason: copyKeysDisabledReason,
+    apply: applyCopyKeys,
+    reset: () => {
+      state.copyKeys = { ...DEFAULT_COPY_KEYS };
+    }
+  },
+  {
+    id: "pasteKeys",
+    nameKey: "tool.pasteKeys.name",
+    descriptionKey: "tool.pasteKeys.description",
+    render: renderPasteKeys,
+    disabledReason: copyKeysDisabledReason,
+    apply: applyPasteKeys,
+    reset: () => {
+      state.copyKeys = { ...DEFAULT_COPY_KEYS };
+    }
+  },
+  {
+    id: "lookAt",
+    nameKey: "tool.lookAt.name",
+    descriptionKey: "tool.lookAt.description",
+    render: renderLookAt,
+    disabledReason: lookAtDisabledReason,
+    apply: applyLookAt,
+    reset: () => {
+      state.lookAt = { ...DEFAULT_LOOK_AT };
+    }
+  },
+  {
+    id: "orbit",
+    nameKey: "tool.orbit.name",
+    descriptionKey: "tool.orbit.description",
+    render: renderOrbit,
+    disabledReason: orbitDisabledReason,
+    apply: applyOrbit,
+    reset: () => {
+      state.orbit = { ...DEFAULT_ORBIT };
+    }
+  },
+  {
+    id: "breakShape",
+    nameKey: "tool.breakShape.name",
+    descriptionKey: "tool.breakShape.description",
+    render: renderBreakShape,
+    disabledReason: breakShapeDisabledReason,
+    apply: applyBreakShape,
+    reset: () => {
+      state.breakShape = { ...DEFAULT_BREAK_SHAPE };
+    }
+  },
+  {
+    id: "effector",
+    nameKey: "tool.effector.name",
+    descriptionKey: "tool.effector.description",
+    render: renderEffector,
+    disabledReason: effectorDisabledReason,
+    apply: applyEffector,
+    reset: () => {
+      state.effector = { ...DEFAULT_EFFECTOR };
+    }
+  },
+  {
+    id: "cameraTransition",
+    nameKey: "tool.cameraTransition.name",
+    descriptionKey: "tool.cameraTransition.description",
+    render: renderCameraTransition,
+    disabledReason: cameraTransitionDisabledReason,
+    apply: applyCameraTransition,
+    reset: () => {
+      state.cameraTransition = { ...DEFAULT_CAMERA_TRANSITION };
+    }
+  },
+  {
+    id: "cylinder",
+    nameKey: "tool.cylinder.name",
+    descriptionKey: "tool.cylinder.description",
+    render: renderCylinder,
+    disabledReason: cylinderDisabledReason,
+    apply: applyCylinder,
+    reset: () => {
+      state.cylinder = { ...DEFAULT_CYLINDER };
+    }
+  },
+  {
+    id: "cube",
+    nameKey: "tool.cube.name",
+    descriptionKey: "tool.cube.description",
+    render: renderCube,
+    disabledReason: cubeDisabledReason,
+    apply: applyCube,
+    reset: () => {
+      state.cube = { ...DEFAULT_CUBE };
+    }
+  },
+  {
+    id: "wave",
+    nameKey: "tool.wave.name",
+    descriptionKey: "tool.wave.description",
+    render: renderWave,
+    disabledReason: waveDisabledReason,
+    apply: applyWave,
+    reset: () => {
+      state.wave = { ...DEFAULT_WAVE };
+    }
+  },
+  {
+    id: "tile",
+    nameKey: "tool.tile.name",
+    descriptionKey: "tool.tile.description",
+    render: renderTile,
+    disabledReason: tileDisabledReason,
+    apply: applyTile,
+    reset: () => {
+      state.tile = { ...DEFAULT_TILE };
+    }
+  },
+  {
+    id: "glitch",
+    nameKey: "tool.glitch.name",
+    descriptionKey: "tool.glitch.description",
+    render: renderGlitch,
+    disabledReason: glitchDisabledReason,
+    apply: applyGlitch,
+    reset: () => {
+      state.glitch = { ...DEFAULT_GLITCH };
+    }
+  },
+  {
+    id: "echo",
+    nameKey: "tool.echo.name",
+    descriptionKey: "tool.echo.description",
+    render: renderEcho,
+    disabledReason: echoDisabledReason,
+    apply: applyEcho,
+    reset: () => {
+      state.echo = { ...DEFAULT_ECHO };
+    }
+  },
+  {
+    id: "parallaxFull",
+    nameKey: "tool.parallaxFull.name",
+    descriptionKey: "tool.parallaxFull.description",
+    render: renderParallaxFull,
+    disabledReason: parallaxFullDisabledReason,
+    apply: applyParallaxFull,
+    reset: () => {
+      state.parallaxFull = { ...DEFAULT_PARALLAX_FULL };
+    }
+  },
+  {
+    id: "parallax",
+    nameKey: "tool.parallax.name",
+    descriptionKey: "tool.parallax.description",
+    render: renderParallax,
+    disabledReason: parallaxDisabledReason,
+    apply: applyParallax,
+    reset: () => {
+      state.parallax = { ...DEFAULT_PARALLAX };
+    }
+  },
+  {
+    id: "fastEdit",
+    nameKey: "tool.fastEdit.name",
+    descriptionKey: "tool.fastEdit.description",
+    render: renderFastEdit,
+    disabledReason: fastEditDisabledReason,
+    apply: applyFastEdit,
+    // O resumo é lido do host por um comando próprio, porque o dispatcher
+    // recusa `dryRun` em comando que muta. Sem este gancho a prévia existia mas
+    // nunca era pedida, e o painel mostrava o campo sempre vazio.
+    load: refreshFastEditSummary,
+    reset: () => {
+      state.fastEdit = { ...DEFAULT_FAST_EDIT };
+      state.fastEditSummary = null;
+    }
+  },
+  {
+    id: "shapeLibrary",
+    nameKey: "tool.shapeLibrary.name",
+    descriptionKey: "tool.shapeLibrary.description",
+    render: renderShapeLibrary,
+    disabledReason: shapeLibraryDisabledReason,
+    apply: applyShapeLibrary,
+    reset: () => {
+      state.shapeLibrary = { ...DEFAULT_SHAPE_LIBRARY };
+    }
+  },
+  {
+    id: "trimPath",
+    nameKey: "tool.trimPath.name",
+    descriptionKey: "tool.trimPath.description",
+    render: renderTrimPath,
+    disabledReason: trimPathDisabledReason,
+    apply: applyTrimPath,
+    reset: () => {
+      state.trimPath = { ...DEFAULT_TRIM_PATH };
+    }
+  },
+  {
+    id: "timeMarkerLoop",
+    nameKey: "tool.timeMarkerLoop.name",
+    descriptionKey: "tool.timeMarkerLoop.description",
+    render: renderTimeMarkerLoop,
+    disabledReason: timeMarkerLoopDisabledReason,
+    apply: applyTimeMarkerLoop,
+    reset: () => { state.timeMarkerLoop = { ...DEFAULT_TIME_MARKER_LOOP }; }
+  },
 ];
 
 const VIEWS: ShellView[] = [
   { id: "context", labelKey: "nav.context", titleKey: "view.context.title" },
   { id: "tools", labelKey: "nav.tools", titleKey: "view.tools.title" },
   { id: "system", labelKey: "nav.system", titleKey: "view.system.title" },
-  { id: "diagnostics", labelKey: "nav.diagnostics", titleKey: "view.diagnostics.title" }
+  { id: "diagnostics", labelKey: "nav.diagnostics", titleKey: "view.diagnostics.title" },
+  { id: "settings", labelKey: "nav.settings", titleKey: "view.settings.title" }
 ];
 
 /** Versão do plugin, embutida no bundle para aparecer no bundle de suporte. */
@@ -629,11 +1528,43 @@ const state: {
   cutKeys: CutKeysDraft;
   delay: DelayDraft;
   anchor: AnchorDraft;
+  aiToVector: AiToVectorDraft;
+  textToVector: TextToVectorDraft;
+  particles: ParticlesDraft;
+  texture: TextureDraft;
+  clean: CleanDraft;
   /** Prévias em cache; `null` enquanto a primeira não voltou. */
   renamePreview: RenamePreviewData | null;
   reversePreview: ReversePreviewData | null;
   cutKeysPreview: CutKeysPreviewData | null;
   delayPreview: DelayPreviewData | null;
+
+  ease: EaseDraft;
+  reverseKeys: ReverseKeysDraft;
+  cloneKeys: CloneKeysDraft;
+  timeController: TimeControllerDraft;
+  animateKinetic: AnimateKineticDraft;
+  inertial: InertialDraft;
+  jump: JumpDraft;
+  copyKeys: CopyKeysDraft;
+  trimPath: TrimPathDraft;
+  shapeLibrary: ShapeLibraryDraft;
+  lookAt: LookAtDraft;
+  orbit: OrbitDraft;
+  echo: EchoDraft;
+  fastEdit: FastEditDraft;
+  parallax: ParallaxDraft;
+  parallaxFull: ParallaxFullDraft;
+  breakShape: BreakShapeDraft;
+  effector: EffectorDraft;
+  cameraTransition: CameraTransitionDraft;
+  cylinder: CylinderDraft;
+  cube: CubeDraft;
+  wave: WaveDraft;
+  tile: TileDraft;
+  glitch: GlitchDraft;
+  fastEditSummary: string | null;
+  timeMarkerLoop: TimeMarkerLoopDraft;
   anchorPreview: AnchorPreviewData | null;
   /** Motivo da última prévia recusada, mostrado dentro da view. */
   previewError: string | null;
@@ -661,10 +1592,42 @@ const state: {
   cutKeys: { ...DEFAULT_CUT_KEYS },
   delay: { ...DEFAULT_DELAY },
   anchor: { ...DEFAULT_ANCHOR },
+  ease: { ...DEFAULT_EASE },
+  aiToVector: { ...DEFAULT_AI_TO_VECTOR },
+  textToVector: { ...DEFAULT_TEXT_TO_VECTOR },
+  particles: { ...DEFAULT_PARTICLES },
+  texture: { ...DEFAULT_TEXTURE },
+  clean: { ...DEFAULT_CLEAN },
+  reverseKeys: { ...DEFAULT_REVERSE_KEYS },
+  cloneKeys: { ...DEFAULT_CLONE_KEYS },
+  timeController: { ...DEFAULT_TIME_CONTROLLER },
+  animateKinetic: { ...DEFAULT_ANIMATE_KINETIC },
+  inertial: { ...DEFAULT_INERTIAL },
+  jump: { ...DEFAULT_JUMP },
+  copyKeys: { ...DEFAULT_COPY_KEYS },
+  trimPath: { ...DEFAULT_TRIM_PATH },
+  shapeLibrary: { ...DEFAULT_SHAPE_LIBRARY },
+  lookAt: { ...DEFAULT_LOOK_AT },
+  orbit: { ...DEFAULT_ORBIT },
+  echo: { ...DEFAULT_ECHO },
+  fastEdit: { ...DEFAULT_FAST_EDIT },
+  parallax: { ...DEFAULT_PARALLAX },
+  parallaxFull: { ...DEFAULT_PARALLAX_FULL },
+  breakShape: { ...DEFAULT_BREAK_SHAPE },
+  effector: { ...DEFAULT_EFFECTOR },
+  cameraTransition: { ...DEFAULT_CAMERA_TRANSITION },
+  cylinder: { ...DEFAULT_CYLINDER },
+  cube: { ...DEFAULT_CUBE },
+  wave: { ...DEFAULT_WAVE },
+  tile: { ...DEFAULT_TILE },
+  glitch: { ...DEFAULT_GLITCH },
+  fastEditSummary: null,
+  timeMarkerLoop: { ...DEFAULT_TIME_MARKER_LOOP },
   renamePreview: null,
   reversePreview: null,
   cutKeysPreview: null,
   delayPreview: null,
+
   anchorPreview: null,
   previewError: null,
   layers: null,
@@ -680,6 +1643,12 @@ function start(): void {
 
   const logger = createLogger({ pluginVersion: PLUGIN_VERSION });
   const i18n = createI18n({});
+  const motionPreference = createBrowserReducedMotionController(document.documentElement, window);
+  const disposeMotionPreference = (): void => {
+    motionPreference.dispose();
+    window.removeEventListener("unload", disposeMotionPreference);
+  };
+  window.addEventListener("unload", disposeMotionPreference);
 
   // O adapter precisa do logger antes de o shell existir: ele reporta falha de
   // transporte, e uma falha logo no primeiro comando não pode depender de a
@@ -704,7 +1673,8 @@ function start(): void {
     i18n,
     subtitleKey: "app.subtitle.afterEffects",
     views: VIEWS,
-    onRender: (viewId, regions) => renderView(viewId, regions, { i18n, logger, adapter })
+    onRender: (viewId, regions) =>
+      renderView(viewId, regions, { i18n, logger, adapter, motionPreference })
   });
 
   shell.observeWidth(window);
@@ -722,10 +1692,16 @@ interface Wiring {
   i18n: I18n;
   logger: MotionLogger;
   adapter: ReturnType<typeof createAeHostAdapter>;
+  motionPreference: ReducedMotionController;
 }
 
 function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): void {
-  const { i18n, logger, adapter } = wiring;
+  const { i18n, logger, adapter, motionPreference } = wiring;
+
+  if (viewId === "settings") {
+    renderSettings(regions, i18n, motionPreference);
+    return;
+  }
 
   if (!adapter) {
     regions.content.appendChild(notice(document, i18n.t("message.outsideHost"), "error"));
@@ -754,7 +1730,7 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
         title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.refresh"),
         onClick: () => void refreshContext(shell, i18n, logger, client)
       })
-    );
+  );
     regions.actions.appendChild(
       button(document, {
         label: i18n.t("action.createDemo"),
@@ -762,7 +1738,7 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
         title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.createDemo"),
         onClick: () => void createDemo(shell, i18n, logger, client)
       })
-    );
+  );
     return;
   }
 
@@ -811,7 +1787,7 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
         title: disabledReason ?? i18n.t("action.apply"),
         onClick: () => void tool.apply(shell, i18n, logger, client)
       })
-    );
+  );
     // Só ferramentas que leem dados do projeto ganham Atualizar. Um botão que
     // não faz nada nas outras cinco seria pior que a ausência dele.
     if (tool.load) {
@@ -826,7 +1802,7 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
             : i18n.t(tool.loadLabelKey ?? "action.refreshPreview"),
           onClick: () => void tool.load?.()
         })
-      );
+  );
     }
     regions.actions.appendChild(
       button(document, {
@@ -841,7 +1817,7 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
           shell.rerender();
         }
       })
-    );
+  );
     regions.actions.appendChild(
       button(document, {
         label: i18n.t("action.backToTools"),
@@ -855,7 +1831,7 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
           shell.rerender();
         }
       })
-    );
+  );
     return;
   }
 
@@ -871,7 +1847,7 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
           : i18n.t("action.runSystemCheck"),
         onClick: () => void runSystemCheck(shell, i18n, logger, client)
       })
-    );
+  );
     regions.actions.appendChild(
       button(document, {
         label: i18n.t("action.verifyBridge"),
@@ -881,7 +1857,7 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
           : i18n.t("action.verifyBridge"),
         onClick: () => void verifyBridge(shell, i18n, logger, client)
       })
-    );
+  );
     return;
   }
 
@@ -1309,7 +2285,7 @@ function renderSmooth(regions: RenderRegions, i18n: I18n): void {
           shell.rerender();
         }
       })
-    );
+  );
   }
 }
 
@@ -1393,7 +2369,7 @@ function renderLoopOut(regions: RenderRegions, i18n: I18n): void {
           shell.rerender();
         }
       })
-    );
+  );
   }
 
   if (!continueMode && draft.range === "duration") {
@@ -1417,7 +2393,7 @@ function renderLoopOut(regions: RenderRegions, i18n: I18n): void {
           shell.rerender();
         }
       })
-    );
+  );
   }
 
   regions.content.appendChild(sectionTitle(document, i18n.t("loopOut.section.safety")));
@@ -1471,6 +2447,26 @@ function renderSystem(regions: RenderRegions, i18n: I18n): void {
       )
     );
   }
+}
+
+function renderSettings(
+  regions: RenderRegions,
+  i18n: I18n,
+  motionPreference: ReducedMotionController
+): void {
+  regions.content.appendChild(sectionTitle(document, i18n.t("settings.interface.title")));
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "settings-reduce-motion",
+      label: i18n.t("settings.reduceMotion.label"),
+      description: i18n.t("settings.reduceMotion.description"),
+      checked: motionPreference.snapshot().internal,
+      onChange: (checked) => {
+        motionPreference.setInternal(checked);
+        regions.shell.rerender();
+      }
+    })
+  );
 }
 
 function renderDiagnostics(regions: RenderRegions, i18n: I18n, logger: MotionLogger): void {
@@ -1961,6 +2957,7 @@ async function refreshRenamePreview(): Promise<void> {
     sourceName: draft.sourceName,
     preview: true
   });
+  fiacao.logger.recordResponse("ae.layer.rename.preview", response);
 
   if (sequencia !== previewSequence) return;
 
@@ -1989,6 +2986,7 @@ async function refreshReversePreview(): Promise<void> {
       reverseTimingToo: draft.reverseTimingToo
     }
   );
+  fiacao.logger.recordResponse("ae.layer.reverse-order.preview", response);
 
   if (sequencia !== previewSequence) return;
 
@@ -2081,6 +3079,7 @@ async function refreshAnchorPreview(): Promise<void> {
     "ae.anchor.align.preview",
     anchorArgs(state.anchor, true)
   );
+  fiacao.logger.recordResponse("ae.anchor.align.preview", response);
   if (sequencia !== previewSequence) return;
 
   state.anchorPreview = response.ok && isAnchorPreviewData(response.data) ? response.data : null;
@@ -2153,7 +3152,7 @@ function renderAnchor(regions: RenderRegions, i18n: I18n): void {
             state.anchor.randomSeed = value;
           })
       })
-    );
+  );
   }
 
   regions.content.appendChild(sectionTitle(document, i18n.t("anchor.section.options")));
@@ -2191,7 +3190,7 @@ function renderAnchor(regions: RenderRegions, i18n: I18n): void {
             state.anchor.fixedTime = value;
           })
       })
-    );
+  );
   }
 
   regions.content.appendChild(
@@ -2388,6 +3387,7 @@ async function refreshCutKeysPreview(): Promise<void> {
     "ae.keys.cut.preview",
     cutKeysArgs(state.cutKeys, true)
   );
+  fiacao.logger.recordResponse("ae.keys.cut.preview", response);
   if (sequencia !== previewSequence) return;
 
   state.cutKeysPreview = response.ok && isCutKeysPreviewData(response.data) ? response.data : null;
@@ -2406,6 +3406,7 @@ async function refreshDelayPreview(): Promise<void> {
     "ae.keys.delay.preview",
     delayArgs(state.delay)
   );
+  fiacao.logger.recordResponse("ae.keys.delay.preview", response);
   if (sequencia !== previewSequence) return;
 
   state.delayPreview = response.ok && isDelayPreviewData(response.data) ? response.data : null;
@@ -2472,7 +3473,7 @@ function renderCutKeys(regions: RenderRegions, i18n: I18n): void {
               state.cutKeys[campo] = value;
             })
         })
-      );
+  );
     }
   }
 
@@ -2666,7 +3667,7 @@ function renderDelay(regions: RenderRegions, i18n: I18n): void {
             state.delay.randomSeed = value;
           })
       })
-    );
+  );
   }
   if (draft.order === "distance") {
     const origens: ReadonlyArray<{ campo: "originX" | "originY"; rotulo: MessageKey }> = [
@@ -2688,7 +3689,7 @@ function renderDelay(regions: RenderRegions, i18n: I18n): void {
               state.delay[campo] = value;
             })
         })
-      );
+  );
     }
   }
 
@@ -2827,7 +3828,7 @@ function renderRename(regions: RenderRegions, i18n: I18n): void {
             state.rename[campo] = value;
           })
       })
-    );
+  );
   }
 
   regions.content.appendChild(
@@ -2879,7 +3880,7 @@ function renderRename(regions: RenderRegions, i18n: I18n): void {
             state.rename.counterStart = value;
           })
       })
-    );
+  );
   }
 
   regions.content.appendChild(
@@ -3226,7 +4227,7 @@ function renderFlip(regions: RenderRegions, i18n: I18n): void {
           shell.rerender();
         }
       })
-    );
+  );
   }
 
   regions.content.appendChild(sectionTitle(document, i18n.t("flip.section.options")));
@@ -3405,7 +4406,7 @@ function renderCreateNull(regions: RenderRegions, i18n: I18n): void {
           shell.rerender();
         }
       })
-    );
+  );
   }
 
   regions.content.appendChild(
@@ -3595,7 +4596,7 @@ function renderParent(regions: RenderRegions, i18n: I18n): void {
             shell.rerender();
           }
         })
-      );
+  );
     }
 
     regions.content.appendChild(
@@ -3613,7 +4614,7 @@ function renderParent(regions: RenderRegions, i18n: I18n): void {
           shell.rerender();
         }
       })
-    );
+  );
   }
 
   regions.content.appendChild(sectionTitle(document, i18n.t("parent.section.options")));
@@ -4212,4 +5213,3111 @@ if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => start());
 } else {
   start();
+}
+
+
+
+
+function easeDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.easeNoActiveComp");
+  return null;
+}
+
+function renderEase(regions: RenderRegions, i18n: I18n): void {
+  // shell unused
+  const container = regions.content;
+
+  container.appendChild(checkboxField(document, {
+    id: "ease-apply-in",
+    label: i18n.t("ease.applyIn"),
+    checked: state.ease.applyIn,
+    onChange: (checked) => {
+      state.ease.applyIn = checked;
+    }
+  }));
+
+  container.appendChild(checkboxField(document, {
+    id: "ease-apply-out",
+    label: i18n.t("ease.applyOut"),
+    checked: state.ease.applyOut,
+    onChange: (checked) => {
+      state.ease.applyOut = checked;
+    }
+  }));
+
+  container.appendChild(bezierEditor(document, {
+    label: "",
+    outHandleLabel: "",
+    inHandleLabel: "",
+    x1: state.ease.x1,
+    y1: state.ease.y1,
+    x2: state.ease.x2,
+    y2: state.ease.y2,
+    onChange: (nx1, ny1, nx2, ny2) => {
+      state.ease.x1 = nx1;
+      state.ease.y1 = ny1;
+      state.ease.x2 = nx2;
+      state.ease.y2 = ny2;
+    }
+  }));
+
+  container.appendChild(hint(document, i18n.t("message.easeInstructions")));
+}
+
+async function applyEase(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  shell.setStatus(i18n.t("status.applyingEase") || "Aplicando curva...", "busy");
+  setBusy(shell, true, i18n.t("status.applyingEase"));
+
+  const response = await client.execute("ae.keys.ease.apply", {
+    x1: state.ease.x1,
+    y1: state.ease.y1,
+    x2: state.ease.x2,
+    y2: state.ease.y2,
+    applyIn: state.ease.applyIn,
+    applyOut: state.ease.applyOut
+  });
+  logger.recordResponse("ae.keys.ease.apply", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.easeApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function reverseKeysDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.reverseKeysNoActiveComp");
+  return null;
+}
+
+function renderReverseKeys(regions: RenderRegions, i18n: I18n): void {
+  // shell unused
+  regions.content.appendChild(hint(document, i18n.t("message.reverseKeysInstructions")));
+}
+
+async function applyReverseKeys(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  shell.setStatus(i18n.t("status.applyingReverseKeys") || "Revertendo chaves...", "busy");
+  setBusy(shell, true, i18n.t("status.applyingReverseKeys"));
+
+  const response = await client.execute("ae.keys.reverse", {});
+  logger.recordResponse("ae.keys.reverse", response);
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.reverseKeysApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function cloneKeysDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.cloneKeysNoActiveComp");
+  return null;
+}
+
+function renderCloneKeys(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  regions.content.appendChild(
+    selectField(document, {
+      id: "cloneKeys-mode",
+      label: i18n.t("cloneKeys.mode"),
+      value: state.cloneKeys.mode,
+      options: [
+        { value: "repeat", label: i18n.t("cloneKeys.mode.repeat") },
+        { value: "mirror", label: i18n.t("cloneKeys.mode.mirror") }
+      ],
+      onChange: (value) => {
+        state.cloneKeys.mode = value as CloneKeysMode;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.cloneKeysInstructions")));
+}
+
+async function applyCloneKeys(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  shell.setStatus(i18n.t("status.applyingCloneKeys") || "Clonando chaves...", "busy");
+  setBusy(shell, true, i18n.t("status.applyingCloneKeys"));
+
+  const response = await client.execute("ae.keys.clone", {
+    mode: state.cloneKeys.mode
+  });
+  logger.recordResponse("ae.keys.clone", response);
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.cloneKeysApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function timeControllerDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.timeControllerNoActiveComp");
+  return null;
+}
+
+function renderTimeController(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.timeController;
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "timeController-applyTo",
+      label: i18n.t("timeController.applyTo"),
+      value: t.applyTo,
+      options: [
+        { value: "layer", label: i18n.t("timeController.applyTo.layer") },
+        { value: "properties", label: i18n.t("timeController.applyTo.properties") }
+      ],
+      onChange: (value) => {
+        t.applyTo = value as TimeControllerApplyTo;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "timeController-speedPercent",
+      label: i18n.t("timeController.speedPercent"),
+      value: t.speedPercent,
+      min: 0,
+      max: 1000,
+      step: 1,
+      onCommit: (value) => {
+        t.speedPercent = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "timeController-offsetFrames",
+      label: i18n.t("timeController.offsetFrames"),
+      value: t.offsetFrames,
+      min: -99999,
+      max: 99999,
+      step: 1,
+      onCommit: (value) => {
+        t.offsetFrames = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "timeController-reverse",
+      label: i18n.t("timeController.reverse"),
+      checked: t.reverse,
+      onChange: (checked) => {
+        t.reverse = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "timeController-freeze",
+      label: i18n.t("timeController.freeze"),
+      checked: t.freeze,
+      onChange: (checked) => {
+        t.freeze = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  if (t.freeze) {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "timeController-freezeFrame",
+        label: i18n.t("timeController.freezeFrame"),
+        value: t.freezeFrame,
+        min: 0,
+        max: 99999,
+        step: 1,
+        onCommit: (value) => {
+          t.freezeFrame = value;
+          shell.rerender();
+        }
+      })
+  );
+  }
+}
+
+async function applyTimeController(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  shell.setStatus(i18n.t("status.applyingTimeController") || "Aplicando controlador de tempo...", "busy");
+  setBusy(shell, true, i18n.t("status.applyingTimeController"));
+
+  const response = await client.execute("ae.time.controller", {
+    applyTo: state.timeController.applyTo,
+    speedPercent: state.timeController.speedPercent,
+    offsetFrames: state.timeController.offsetFrames,
+    reverse: state.timeController.reverse,
+    freeze: state.timeController.freeze,
+    freezeFrame: state.timeController.freezeFrame
+  });
+  logger.recordResponse("ae.time.controller", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.timeControllerApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function animateKineticDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.animateKineticNoActiveComp");
+  return null;
+}
+
+function renderAnimateKinetic(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.animateKinetic;
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "animateKinetic-direction",
+      label: i18n.t("animateKinetic.direction"),
+      value: t.direction,
+      options: [
+        { value: "in", label: i18n.t("animateKinetic.direction.in") },
+        { value: "out", label: i18n.t("animateKinetic.direction.out") },
+        { value: "both", label: i18n.t("animateKinetic.direction.both") }
+      ],
+      onChange: (value) => {
+        t.direction = value as AnimateKineticDirection;
+        shell.rerender();
+      }
+    })
+  );
+
+  // Os limites são os do preflight do host, para o campo não aceitar o que o
+  // comando vai recusar.
+  for (const campo of [
+    {
+      id: "durationFrames",
+      key: "animateKinetic.durationFrames",
+      min: 1,
+      max: 1000,
+      step: 1,
+      unit: "animateKinetic.unit.frames"
+    },
+    { id: "overshoot", key: "animateKinetic.overshoot", min: 0, max: 10, step: 0.1, unit: null },
+    { id: "rotation", key: "animateKinetic.rotation", min: -36000, max: 36000, step: 1, unit: "animateKinetic.unit.degrees" },
+    { id: "scale", key: "animateKinetic.scale", min: -10000, max: 10000, step: 1, unit: "animateKinetic.unit.percent" },
+    { id: "opacity", key: "animateKinetic.opacity", min: 0, max: 100, step: 1, unit: "animateKinetic.unit.percent" },
+    {
+      id: "staggerFrames",
+      key: "animateKinetic.staggerFrames",
+      min: 0,
+      max: 1000,
+      step: 1,
+      unit: "animateKinetic.unit.frames"
+    }
+  ] as const) {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "animateKinetic-" + campo.id,
+        label: i18n.t(campo.key),
+        value: t[campo.id],
+        min: campo.min,
+        max: campo.max,
+        step: campo.step,
+        // `overshoot` é um fator adimensional. Com exactOptionalPropertyTypes,
+        // passar `undefined` não é o mesmo que omitir a chave.
+        ...(campo.unit ? { unit: i18n.t(campo.unit) } : {}),
+        onCommit: (value) => {
+          state.animateKinetic = { ...state.animateKinetic, [campo.id]: value };
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "animateKinetic-splitMode",
+      label: i18n.t("animateKinetic.splitMode"),
+      value: t.splitMode,
+      options: [
+        { value: "none", label: i18n.t("animateKinetic.split.none") },
+        { value: "chars", label: i18n.t("animateKinetic.split.chars") },
+        { value: "words", label: i18n.t("animateKinetic.split.words") },
+        { value: "lines", label: i18n.t("animateKinetic.split.lines") }
+      ],
+      onChange: (value) => {
+        t.splitMode = value as AnimateKineticSplit;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.animateKineticInstructions")));
+}
+
+
+async function applyAnimateKinetic(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  shell.setStatus(i18n.t("status.applyingAnimateKinetic"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingAnimateKinetic"));
+
+  const response = await client.execute("ae.animate.kinetic", {
+    direction: state.animateKinetic.direction,
+    durationFrames: state.animateKinetic.durationFrames,
+    overshoot: state.animateKinetic.overshoot,
+    rotation: state.animateKinetic.rotation,
+    scale: state.animateKinetic.scale,
+    opacity: state.animateKinetic.opacity,
+    staggerFrames: state.animateKinetic.staggerFrames,
+    splitMode: state.animateKinetic.splitMode
+  });
+  logger.recordResponse("ae.animate.kinetic", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.animateKineticApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+
+function inertialDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.inertialNoActiveComp");
+  return null;
+}
+
+function renderInertial(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.inertial;
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "inertial-amplitude",
+      label: i18n.t("inertial.amplitude"),
+      value: t.amplitude,
+      min: 0,
+      max: 1000,
+      step: 1,
+      unit: i18n.t("inertial.unit.percent"),
+      onCommit: (value) => {
+        t.amplitude = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "inertial-frequency",
+      label: i18n.t("inertial.frequency"),
+      value: t.frequency,
+      min: 0,
+      max: 60,
+      step: 0.1,
+      unit: i18n.t("inertial.unit.hertz"),
+      onCommit: (value) => {
+        t.frequency = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "inertial-decay",
+      label: i18n.t("inertial.decay"),
+      value: t.decay,
+      min: 0,
+      max: 100,
+      step: 0.1,
+      onCommit: (value) => {
+        t.decay = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "inertial-maxDurationFrames",
+      label: i18n.t("inertial.maxDuration"),
+      value: t.maxDurationFrames,
+      min: 1,
+      max: 10000,
+      step: 1,
+      unit: i18n.t("inertial.unit.frames"),
+      onCommit: (value) => {
+        t.maxDurationFrames = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "inertial-startMode",
+      label: i18n.t("inertial.startMode"),
+      value: t.startMode,
+      options: [
+        { value: "lastKey", label: i18n.t("inertial.startMode.lastKey") },
+        { value: "everyKey", label: i18n.t("inertial.startMode.everyKey") }
+      ],
+      onChange: (value) => {
+        t.startMode = value as InertialStartMode;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.inertialInstructions")));
+}
+
+async function applyInertial(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.inertialNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingInertial"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingInertial"));
+
+  const response = await client.execute("ae.animate.inertial", { ...state.inertial });
+  logger.recordResponse("ae.animate.inertial", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.inertialApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function jumpDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.jumpNoActiveComp");
+  return null;
+}
+
+function renderJump(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.jump;
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "jump-height",
+      label: i18n.t("jump.height"),
+      value: t.height,
+      min: 1,
+      max: 100000,
+      step: 1,
+      unit: i18n.t("jump.unit.px"),
+      onCommit: (value) => {
+        t.height = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "jump-durationFrames",
+      label: i18n.t("jump.durationFrames"),
+      value: t.durationFrames,
+      min: 4,
+      max: 10000,
+      step: 1,
+      unit: i18n.t("jump.unit.frames"),
+      onCommit: (value) => {
+        t.durationFrames = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "jump-direction",
+      label: i18n.t("jump.direction"),
+      value: t.direction,
+      options: [
+        { value: "up", label: i18n.t("jump.direction.up") },
+        { value: "down", label: i18n.t("jump.direction.down") },
+        { value: "left", label: i18n.t("jump.direction.left") },
+        { value: "right", label: i18n.t("jump.direction.right") }
+      ],
+      onChange: (value) => {
+        t.direction = value as JumpDirection;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "jump-squashStretch",
+      label: i18n.t("jump.squashStretch"),
+      value: t.squashStretch,
+      min: 0,
+      max: 90,
+      step: 1,
+      unit: i18n.t("jump.unit.percent"),
+      onCommit: (value) => {
+        t.squashStretch = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "jump-anticipationFrames",
+      label: i18n.t("jump.anticipation"),
+      value: t.anticipationFrames,
+      min: 0,
+      max: Math.max(0, t.durationFrames - 4),
+      step: 1,
+      unit: i18n.t("jump.unit.frames"),
+      onCommit: (value) => {
+        t.anticipationFrames = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "jump-staggerFrames",
+      label: i18n.t("jump.stagger"),
+      value: t.staggerFrames,
+      min: 0,
+      max: 10000,
+      step: 1,
+      unit: i18n.t("jump.unit.frames"),
+      onCommit: (value) => {
+        t.staggerFrames = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.jumpInstructions")));
+}
+
+async function applyJump(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.jumpNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingJump"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingJump"));
+
+  const response = await client.execute("ae.animate.jump", { ...state.jump });
+  logger.recordResponse("ae.animate.jump", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.jumpApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function copyKeysDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.copyKeysNoActiveComp");
+  return null;
+}
+
+function renderCopyKeys(regions: RenderRegions, i18n: I18n): void {
+  regions.content.appendChild(hint(document, i18n.t("message.copyKeysInstructions")));
+}
+
+async function applyCopyKeys(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.copyKeysNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.copyingKeys"), "busy");
+  setBusy(shell, true, i18n.t("status.copyingKeys"));
+
+  const response = await client.execute("ae.keys.copy", {});
+  logger.recordResponse("ae.keys.copy", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.copyKeysCopied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function renderPasteKeys(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.copyKeys;
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "pasteKeys-pasteTime",
+      label: i18n.t("copyKeys.pasteTime"),
+      value: t.pasteTime,
+      options: [
+        { value: "cti", label: i18n.t("copyKeys.pasteTime.cti") },
+        { value: "layerIn", label: i18n.t("copyKeys.pasteTime.layerIn") },
+        { value: "original", label: i18n.t("copyKeys.pasteTime.original") }
+      ],
+      onChange: (value) => {
+        t.pasteTime = value as PasteTimeMode;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "pasteKeys-mappingMode",
+      label: i18n.t("copyKeys.mappingMode"),
+      value: t.mappingMode,
+      options: [
+        { value: "matchName", label: i18n.t("copyKeys.mappingMode.matchName") },
+        { value: "order", label: i18n.t("copyKeys.mappingMode.order") }
+      ],
+      onChange: (value) => {
+        t.mappingMode = value as PasteMappingMode;
+        shell.rerender();
+      }
+    })
+  );
+
+  // Colar no tempo original ignora ancora, e entao a opcao de preservar
+  // intervalos nao descreve nada: mostrar um controle sem efeito e pior do que
+  // nao mostrar.
+  if (t.pasteTime !== "original") {
+    regions.content.appendChild(
+      checkboxField(document, {
+        id: "pasteKeys-relativeTiming",
+        label: i18n.t("copyKeys.relativeTiming"),
+        checked: t.relativeTiming,
+        onChange: (checked) => {
+          t.relativeTiming = checked;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "pasteKeys-includeTangents",
+      label: i18n.t("copyKeys.includeTangents"),
+      checked: t.includeTangents,
+      onChange: (checked) => {
+        t.includeTangents = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "pasteKeys-includeExpressions",
+      label: i18n.t("copyKeys.includeExpressions"),
+      checked: t.includeExpressions,
+      onChange: (checked) => {
+        t.includeExpressions = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.pasteKeysInstructions")));
+}
+
+async function applyPasteKeys(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.copyKeysNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.pastingKeys"), "busy");
+  setBusy(shell, true, i18n.t("status.pastingKeys"));
+
+  const response = await client.execute("ae.keys.paste", { ...state.copyKeys });
+  logger.recordResponse("ae.keys.paste", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.copyKeysPasted"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+
+function lookAtDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.lookAtNoActiveComp");
+  if (state.lookAt.targetLayerName.trim().length === 0) return i18n.t("message.lookAtNeedsTarget");
+  return null;
+}
+
+function renderLookAt(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.lookAt;
+
+  regions.content.appendChild(
+    textField(document, {
+      id: "lookAt-targetLayerName",
+      label: i18n.t("lookAt.target"),
+      value: t.targetLayerName,
+      maxLength: 200,
+      onCommit: (value) => {
+        t.targetLayerName = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  // Só os quatro eixos do plano XZ: os verticais exigiriam decompor a matriz de
+  // volta em ângulos de Euler, e o host os recusa. Oferecê-los aqui seria
+  // prometer uma falha.
+  regions.content.appendChild(
+    selectField(document, {
+      id: "lookAt-forwardAxis",
+      label: i18n.t("lookAt.forwardAxis"),
+      value: t.forwardAxis,
+      options: [
+        { value: "+z", label: i18n.t("lookAt.axis.zPos") },
+        { value: "-z", label: i18n.t("lookAt.axis.zNeg") },
+        { value: "+x", label: i18n.t("lookAt.axis.xPos") },
+        { value: "-x", label: i18n.t("lookAt.axis.xNeg") }
+      ],
+      onChange: (value) => {
+        t.forwardAxis = value as LookAtAxis;
+        shell.rerender();
+      }
+    })
+  );
+
+  for (const [eixo, chave] of [
+    ["x", "lookAt.constrain.x"],
+    ["y", "lookAt.constrain.y"],
+    ["z", "lookAt.constrain.z"]
+  ] as const) {
+    regions.content.appendChild(
+      checkboxField(document, {
+        id: `lookAt-constrain-${eixo}`,
+        label: i18n.t(chave),
+        checked: t.constrainAxes[eixo],
+        onChange: (checked) => {
+          t.constrainAxes = { ...t.constrainAxes, [eixo]: checked };
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(hint(document, i18n.t("message.lookAtInstructions")));
+}
+
+async function applyLookAt(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.lookAtNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingLookAt"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingLookAt"));
+
+  const response = await client.execute("ae.3d.look-at", {
+    targetLayerName: state.lookAt.targetLayerName,
+    forwardAxis: state.lookAt.forwardAxis,
+    upAxis: "+y",
+    offsetOrientation: [0, 0, 0],
+    constrainAxes: { ...state.lookAt.constrainAxes }
+  });
+  logger.recordResponse("ae.3d.look-at", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.lookAtApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function orbitDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.orbitNoActiveComp");
+  return null;
+}
+
+function renderOrbit(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.orbit;
+
+  for (const campo of [
+    { id: "radius", key: "orbit.radius", min: 1, max: 1000000, step: 1, unit: "orbit.unit.px" },
+    { id: "speed", key: "orbit.speed", min: -36000, max: 36000, step: 1, unit: "orbit.unit.degreesPerSecond" },
+    { id: "inclination", key: "orbit.inclination", min: -360, max: 360, step: 1, unit: "orbit.unit.degrees" },
+    { id: "phase", key: "orbit.phase", min: -36000, max: 36000, step: 1, unit: "orbit.unit.degrees" }
+  ] as const) {
+    regions.content.appendChild(
+      numberField(document, {
+        id: `orbit-${campo.id}`,
+        label: i18n.t(campo.key),
+        value: t[campo.id],
+        min: campo.min,
+        max: campo.max,
+        step: campo.step,
+        unit: i18n.t(campo.unit),
+        onCommit: (value) => {
+          state.orbit = { ...state.orbit, [campo.id]: value };
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "orbit-targetMode",
+      label: i18n.t("orbit.targetMode"),
+      value: t.targetMode,
+      options: [
+        { value: "newController", label: i18n.t("orbit.targetMode.new") },
+        { value: "reuseController", label: i18n.t("orbit.targetMode.reuse") }
+      ],
+      onChange: (value) => {
+        t.targetMode = value as OrbitTargetMode;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "orbit-faceTarget",
+      label: i18n.t("orbit.faceTarget"),
+      checked: t.faceTarget,
+      onChange: (checked) => {
+        t.faceTarget = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "orbit-bake",
+      label: i18n.t("orbit.bake"),
+      checked: t.bake,
+      onChange: (checked) => {
+        t.bake = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.orbitInstructions")));
+}
+
+async function applyOrbit(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.orbitNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingOrbit"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingOrbit"));
+
+  const response = await client.execute("ae.3d.orbit", { ...state.orbit });
+  logger.recordResponse("ae.3d.orbit", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.orbitApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+
+
+
+
+
+function breakShapeDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.breakShapeNoActiveComp");
+  return null;
+}
+
+function renderBreakShape(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.breakShape;
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "breakShape-namingMode",
+      label: i18n.t("breakShape.namingMode"),
+      value: t.namingMode,
+      options: [
+        { value: "groupName", label: i18n.t("breakShape.namingMode.groupName") },
+        { value: "indexed", label: i18n.t("breakShape.namingMode.indexed") }
+      ],
+      onChange: (value) => {
+        t.namingMode = value as BreakShapeNaming;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "breakShape-preserveAppearance",
+      label: i18n.t("breakShape.preserveAppearance"),
+      checked: t.preserveAppearance,
+      onChange: (checked) => {
+        t.preserveAppearance = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "breakShape-keepOriginal",
+      label: i18n.t("breakShape.keepOriginal"),
+      checked: t.keepOriginal,
+      onChange: (checked) => {
+        t.keepOriginal = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.breakShapeInstructions")));
+}
+
+async function applyBreakShape(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.breakShapeNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingBreakShape"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingBreakShape"));
+
+  // Cria uma camada por grupo e pode remover a original: o comando é declarado
+  // destrutivo e o dispatcher exige consentimento explícito.
+  const response = await client.execute<{ brokenLayers: number }>(
+    "ae.shape.break",
+    { recursive: false, keepOriginal: state.breakShape.keepOriginal, preserveAppearance: state.breakShape.preserveAppearance, namingMode: state.breakShape.namingMode },
+    { allowDestructive: true }
+  );
+  logger.recordResponse("ae.shape.break", response);
+
+  if (response.ok) {
+    // Grupos que não puderam ser achatados viram warning: dizer que houve
+    // ressalva é mais honesto do que um "pronto" liso.
+    shell.setStatus(
+      i18n.t("message.breakShapeApplied", { count: response.data?.brokenLayers ?? 0 }),
+      response.warnings.length > 0 ? "busy" : "ok"
+    );
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function effectorDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.effectorNoActiveComp");
+  const t = state.effector;
+  // Todas as intensidades em zero é um pedido vazio: o host recusa, e desabilitar
+  // aqui explica por quê antes de o usuário clicar.
+  if (t.positionAmount === 0 && t.scaleAmount === 0 && t.rotationAmount === 0 && t.opacityAmount === 0) {
+    return i18n.t("message.effectorNeedsAmount");
+  }
+  return null;
+}
+
+function renderEffector(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.effector;
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "effector-radius",
+      label: i18n.t("effector.radius"),
+      value: t.radius,
+      min: 1,
+      max: 1000000,
+      step: 10,
+      unit: i18n.t("effector.unit.px"),
+      onCommit: (value) => {
+        t.radius = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "effector-falloffCurve",
+      label: i18n.t("effector.falloffCurve"),
+      value: t.falloffCurve,
+      options: [
+        { value: "linear", label: i18n.t("effector.falloffCurve.linear") },
+        { value: "smoothstep", label: i18n.t("effector.falloffCurve.smoothstep") },
+        { value: "bezier", label: i18n.t("effector.falloffCurve.bezier") }
+      ],
+      onChange: (value) => {
+        t.falloffCurve = value as EffectorFalloff;
+        shell.rerender();
+      }
+    })
+  );
+
+  // O editor só aparece na curva customizada: nas outras duas a forma é fixa e
+  // desenhar nela não mudaria nada.
+  if (t.falloffCurve === "bezier") {
+    regions.content.appendChild(
+      bezierEditor(document, {
+        x1: t.curve.x1,
+        y1: t.curve.y1,
+        x2: t.curve.x2,
+        y2: t.curve.y2,
+        label: i18n.t("effector.curve"),
+        outHandleLabel: i18n.t("ease.curve.outHandle"),
+        inHandleLabel: i18n.t("ease.curve.inHandle"),
+        onChange: (x1, y1, x2, y2) => {
+          t.curve = { x1, y1, x2, y2 };
+        }
+      })
+    );
+  }
+
+  for (const campo of [
+    { id: "positionAmount", key: "effector.positionAmount", unit: "effector.unit.px" },
+    { id: "scaleAmount", key: "effector.scaleAmount", unit: "effector.unit.percent" },
+    { id: "rotationAmount", key: "effector.rotationAmount", unit: "effector.unit.degrees" },
+    { id: "opacityAmount", key: "effector.opacityAmount", unit: "effector.unit.percent" }
+  ] as const) {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "effector-" + campo.id,
+        label: i18n.t(campo.key),
+        value: t[campo.id],
+        min: -100000,
+        max: 100000,
+        step: 1,
+        unit: i18n.t(campo.unit),
+        onCommit: (value) => {
+          state.effector = { ...state.effector, [campo.id]: value };
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(hint(document, i18n.t("message.effectorInstructions")));
+}
+
+async function applyEffector(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.effectorNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingEffector"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingEffector"));
+
+  const response = await client.execute("ae.rig.effector", {
+    effectorType: "null",
+    radius: state.effector.radius,
+    falloffCurve: state.effector.falloffCurve,
+    curve: { ...state.effector.curve },
+    positionAmount: state.effector.positionAmount,
+    scaleAmount: state.effector.scaleAmount,
+    rotationAmount: state.effector.rotationAmount,
+    opacityAmount: state.effector.opacityAmount
+  });
+  logger.recordResponse("ae.rig.effector", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.effectorApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function cameraTransitionDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.cameraTransitionNoActiveComp");
+  return null;
+}
+
+function renderCameraTransition(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.cameraTransition;
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "cameraTransition-preset",
+      label: i18n.t("cameraTransition.preset"),
+      value: t.preset,
+      options: CAMERA_TRANSITION_PRESETS.map((preset) => ({
+        value: preset,
+        label: i18n.t(("cameraTransition.preset." + preset) as MessageKey)
+      })),
+      onChange: (value) => {
+        t.preset = value as CameraTransitionPreset;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "cameraTransition-amount",
+      label: i18n.t("cameraTransition.amount"),
+      value: t.amount,
+      min: -1000000,
+      max: 1000000,
+      step: 10,
+      // A unidade depende do preset: os que giram medem em graus, os demais em
+      // pixels. Rotular tudo de "px" mentiria em quatro dos onze.
+      unit: i18n.t(t.preset.startsWith("pan") || t.preset.startsWith("tilt")
+        ? "cameraTransition.unit.degrees"
+        : "cameraTransition.unit.px"),
+      onCommit: (value) => {
+        t.amount = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "cameraTransition-durationFrames",
+      label: i18n.t("cameraTransition.duration"),
+      value: t.durationFrames,
+      min: 1,
+      max: 10000,
+      step: 1,
+      unit: i18n.t("cameraTransition.unit.frames"),
+      onCommit: (value) => {
+        t.durationFrames = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  // O mesmo editor do CHMS-018: a curva desenhada aqui vira o ease dos dois
+  // keyframes da transição, pela mesma conversão.
+  regions.content.appendChild(
+    bezierEditor(document, {
+      x1: t.curve.x1,
+      y1: t.curve.y1,
+      x2: t.curve.x2,
+      y2: t.curve.y2,
+      label: i18n.t("cameraTransition.curve"),
+      outHandleLabel: i18n.t("ease.curve.outHandle"),
+      inHandleLabel: i18n.t("ease.curve.inHandle"),
+      onChange: (x1, y1, x2, y2) => {
+        t.curve = { x1, y1, x2, y2 };
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.cameraTransitionInstructions")));
+}
+
+async function applyCameraTransition(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.cameraTransitionNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingCameraTransition"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingCameraTransition"));
+
+  const response = await client.execute("ae.camera.transition", {
+    preset: state.cameraTransition.preset,
+    durationFrames: state.cameraTransition.durationFrames,
+    amount: state.cameraTransition.amount,
+    curve: { ...state.cameraTransition.curve },
+    // Vazio significa "a primeira câmera da composição", que é o caso comum.
+    cameraName: ""
+  });
+  logger.recordResponse("ae.camera.transition", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.cameraTransitionApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function cylinderDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.cylinderNoActiveComp");
+  return null;
+}
+
+function renderCylinder(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.cylinder;
+
+  for (const campo of [
+    { id: "radius", key: "cylinder.radius", min: 1, max: 1000000, step: 10, unit: "cylinder.unit.px" },
+    { id: "height", key: "cylinder.height", min: 0, max: 1000000, step: 10, unit: "cylinder.unit.px" },
+    { id: "count", key: "cylinder.count", min: 1, max: 500, step: 1, unit: null },
+    { id: "startAngle", key: "cylinder.startAngle", min: -3600, max: 3600, step: 1, unit: "cylinder.unit.degrees" },
+    { id: "arcDegrees", key: "cylinder.arcDegrees", min: 1, max: 3600, step: 1, unit: "cylinder.unit.degrees" }
+  ] as const) {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "cylinder-" + campo.id,
+        label: i18n.t(campo.key),
+        value: t[campo.id],
+        min: campo.min,
+        max: campo.max,
+        step: campo.step,
+        // `count` é adimensional. Com exactOptionalPropertyTypes, passar
+        // `unit: undefined` não é o mesmo que omitir a chave — então ela é
+        // adicionada só quando existe unidade.
+        ...(campo.unit ? { unit: i18n.t(campo.unit) } : {}),
+        onCommit: (value) => {
+          state.cylinder = { ...state.cylinder, [campo.id]: value };
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "cylinder-faceMode",
+      label: i18n.t("cylinder.faceMode"),
+      value: t.faceMode,
+      options: [
+        { value: "outward", label: i18n.t("cylinder.faceMode.outward") },
+        { value: "inward", label: i18n.t("cylinder.faceMode.inward") },
+        { value: "none", label: i18n.t("cylinder.faceMode.none") }
+      ],
+      onChange: (value) => {
+        t.faceMode = value as CylinderFaceMode;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "cylinder-createCamera",
+      label: i18n.t("cylinder.createCamera"),
+      checked: t.createCamera,
+      onChange: (checked) => {
+        t.createCamera = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.cylinderInstructions")));
+}
+
+async function applyCylinder(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.cylinderNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingCylinder"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingCylinder"));
+
+  // O comando pode duplicar camadas para preencher o arco, e por isso é
+  // declarado destrutivo.
+  const response = await client.execute("ae.3d.cylinder", { ...state.cylinder }, { allowDestructive: true });
+  logger.recordResponse("ae.3d.cylinder", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.cylinderApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function cubeDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.cubeNoActiveComp");
+  return null;
+}
+
+function renderCube(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.cube;
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "cube-size",
+      label: i18n.t("cube.size"),
+      value: t.size,
+      min: 1,
+      max: 100000,
+      step: 10,
+      unit: i18n.t("cube.unit.px"),
+      onCommit: (value) => {
+        t.size = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "cube-sourceMode",
+      label: i18n.t("cube.sourceMode"),
+      value: t.sourceMode,
+      options: [
+        { value: "duplicateOne", label: i18n.t("cube.sourceMode.duplicateOne") },
+        { value: "sixLayers", label: i18n.t("cube.sourceMode.sixLayers") }
+      ],
+      onChange: (value) => {
+        t.sourceMode = value as CubeSourceMode;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "cube-faceFit",
+      label: i18n.t("cube.faceFit"),
+      checked: t.faceFit,
+      onChange: (checked) => {
+        t.faceFit = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "cube-createCamera",
+      label: i18n.t("cube.createCamera"),
+      checked: t.createCamera,
+      onChange: (checked) => {
+        t.createCamera = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.cubeInstructions")));
+}
+
+async function applyCube(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.cubeNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingCube"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingCube"));
+
+  const response = await client.execute(
+    "ae.3d.cube",
+    {
+      size: state.cube.size,
+      sourceMode: state.cube.sourceMode,
+      faceFit: state.cube.faceFit,
+      createCamera: state.cube.createCamera,
+      // Girar o cubo é trabalho do controller na timeline, não do preset: o
+      // painel cria o rig alinhado e o usuário gira depois.
+      controllerOrientation: [0, 0, 0],
+      keepSources: true
+    },
+    { allowDestructive: true }
+  );
+  logger.recordResponse("ae.3d.cube", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.cubeApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function waveDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.waveNoActiveComp");
+  return null;
+}
+
+function renderWave(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.wave;
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "wave-mode",
+      label: i18n.t("wave.mode"),
+      value: t.mode,
+      options: [
+        { value: "transform", label: i18n.t("wave.mode.transform") },
+        { value: "effect", label: i18n.t("wave.mode.effect") }
+      ],
+      onChange: (value) => {
+        t.mode = value as WaveMode;
+        // Assar só existe no modo transform: manter a marca ligada ao trocar de
+        // modo mandaria ao host um pedido que ele recusa.
+        if (t.mode !== "transform") t.bake = false;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "wave-amplitude",
+      label: i18n.t("wave.amplitude"),
+      value: t.amplitude,
+      min: -100000,
+      max: 100000,
+      step: 1,
+      unit: i18n.t("wave.unit.px"),
+      onCommit: (value) => {
+        t.amplitude = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "wave-speed",
+      label: i18n.t("wave.speed"),
+      value: t.speed,
+      min: -1000,
+      max: 1000,
+      step: 0.1,
+      unit: i18n.t("wave.unit.hertz"),
+      onCommit: (value) => {
+        t.speed = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  // Comprimento de onda só descreve o efeito nativo; no modo transform a camada
+  // inteira se move e não há onda dentro dela.
+  if (t.mode === "effect") {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "wave-frequency",
+        label: i18n.t("wave.frequency"),
+        value: t.frequency,
+        min: 0,
+        max: 1000,
+        step: 1,
+        onCommit: (value) => {
+          t.frequency = value;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "wave-direction",
+      label: i18n.t("wave.direction"),
+      value: t.direction,
+      options: [
+        { value: "vertical", label: i18n.t("wave.direction.vertical") },
+        { value: "horizontal", label: i18n.t("wave.direction.horizontal") }
+      ],
+      onChange: (value) => {
+        t.direction = value as WaveDirection;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "wave-phase",
+      label: i18n.t("wave.phase"),
+      value: t.phase,
+      min: -36000,
+      max: 36000,
+      step: 1,
+      unit: i18n.t("wave.unit.degrees"),
+      onCommit: (value) => {
+        t.phase = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "wave-falloff",
+      label: i18n.t("wave.falloff"),
+      value: t.falloff,
+      min: 0,
+      max: 1,
+      step: 0.05,
+      onCommit: (value) => {
+        t.falloff = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  if (t.mode === "transform") {
+    regions.content.appendChild(
+      checkboxField(document, {
+        id: "wave-bake",
+        label: i18n.t("wave.bake"),
+        checked: t.bake,
+        onChange: (checked) => {
+          t.bake = checked;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(hint(document, i18n.t("message.waveInstructions")));
+}
+
+async function applyWave(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.waveNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingWave"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingWave"));
+
+  const response = await client.execute("ae.effect.wave", { ...state.wave });
+  logger.recordResponse("ae.effect.wave", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.waveApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function tileDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.tileNoActiveComp");
+  return null;
+}
+
+function renderTile(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.tile;
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "tile-mode",
+      label: i18n.t("tile.mode"),
+      value: t.mode,
+      options: [
+        { value: "effect", label: i18n.t("tile.mode.effect") },
+        { value: "grid", label: i18n.t("tile.mode.grid") }
+      ],
+      onChange: (value) => {
+        t.mode = value as TileMode;
+        shell.rerender();
+      }
+    })
+  );
+
+  if (t.mode === "effect") {
+    for (const [campo, chave] of [
+      ["outputWidth", "tile.outputWidth"],
+      ["outputHeight", "tile.outputHeight"]
+    ] as const) {
+      regions.content.appendChild(
+        numberField(document, {
+          id: "tile-" + campo,
+          label: i18n.t(chave),
+          value: t[campo],
+          min: 1,
+          max: 10000,
+          step: 10,
+          unit: i18n.t("tile.unit.percent"),
+          onCommit: (value) => {
+            state.tile = { ...state.tile, [campo]: value };
+            shell.rerender();
+          }
+        })
+      );
+    }
+
+    regions.content.appendChild(
+      checkboxField(document, {
+        id: "tile-mirrorEdges",
+        label: i18n.t("tile.mirrorEdges"),
+        checked: t.mirrorEdges,
+        onChange: (checked) => {
+          t.mirrorEdges = checked;
+          shell.rerender();
+        }
+      })
+    );
+  } else {
+    for (const [campo, chave, maximo] of [
+      ["gridRows", "tile.gridRows", 100],
+      ["gridColumns", "tile.gridColumns", 100]
+    ] as const) {
+      regions.content.appendChild(
+        numberField(document, {
+          id: "tile-" + campo,
+          label: i18n.t(chave),
+          value: t[campo],
+          min: 1,
+          max: maximo,
+          step: 1,
+          onCommit: (value) => {
+            state.tile = { ...state.tile, [campo]: value };
+            shell.rerender();
+          }
+        })
+      );
+    }
+
+    regions.content.appendChild(
+      numberField(document, {
+        id: "tile-spacing",
+        label: i18n.t("tile.spacing"),
+        value: t.spacing,
+        min: 0,
+        max: 100000,
+        step: 10,
+        unit: i18n.t("tile.unit.px"),
+        onCommit: (value) => {
+          t.spacing = value;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(hint(document, i18n.t("message.tileInstructions")));
+}
+
+async function applyTile(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.tileNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingTile"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingTile"));
+
+  // O modo grade cria dezenas de camadas, e o comando é declarado destrutivo.
+  const response = await client.execute("ae.effect.tile", { ...state.tile }, { allowDestructive: true });
+  logger.recordResponse("ae.effect.tile", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.tileApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function glitchDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.glitchNoActiveComp");
+  return null;
+}
+
+function renderGlitch(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.glitch;
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "glitch-mode",
+      label: i18n.t("glitch.mode"),
+      value: t.mode,
+      options: [
+        { value: "continuous", label: i18n.t("glitch.mode.continuous") },
+        { value: "oneShot", label: i18n.t("glitch.mode.oneShot") }
+      ],
+      onChange: (value) => {
+        t.mode = value as GlitchMode;
+        shell.rerender();
+      }
+    })
+  );
+
+  for (const [campo, chave, minimo, maximo, passo] of [
+    ["intensity", "glitch.intensity", 0, 1, 0.05],
+    ["frequency", "glitch.frequency", 0, 120, 1],
+    ["rgbSplit", "glitch.rgbSplit", 0, 200, 1],
+    ["displacement", "glitch.displacement", 0, 2000, 5]
+  ] as const) {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "glitch-" + campo,
+        label: i18n.t(chave),
+        value: t[campo],
+        min: minimo,
+        max: maximo,
+        step: passo,
+        onCommit: (value) => {
+          state.glitch = { ...state.glitch, [campo]: value };
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "glitch-seed",
+      label: i18n.t("glitch.seed"),
+      value: t.seed,
+      min: 0,
+      max: 1000000,
+      step: 1,
+      onCommit: (value) => {
+        t.seed = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  // Duração só descreve o estalo; no modo contínuo o rig cobre a composição.
+  if (t.mode === "oneShot") {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "glitch-durationFrames",
+        label: i18n.t("glitch.durationFrames"),
+        value: t.durationFrames,
+        min: 1,
+        max: 10000,
+        step: 1,
+        unit: i18n.t("glitch.unit.frames"),
+        onCommit: (value) => {
+          t.durationFrames = value;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(hint(document, i18n.t("message.glitchInstructions")));
+}
+
+async function applyGlitch(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.glitchNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingGlitch"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingGlitch"));
+
+  const response = await client.execute<{ effectCount: number }>("ae.effect.glitch", {
+    ...state.glitch,
+    frameHold: false
+  });
+  logger.recordResponse("ae.effect.glitch", response);
+
+  if (response.ok) {
+    // Um efeito ausente na instalação vira warning e o glitch continua: dizer
+    // quantos entraram é mais honesto do que só "aplicado".
+    shell.setStatus(
+      i18n.t("message.glitchApplied", { count: response.data?.effectCount ?? 0 }),
+      response.warnings.length > 0 ? "busy" : "ok"
+    );
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function echoDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.echoNoActiveComp");
+  return null;
+}
+
+function renderEcho(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.echo;
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "echo-echoTime",
+      label: i18n.t("echo.echoTime"),
+      value: t.echoTime,
+      min: -10,
+      max: 10,
+      step: 0.01,
+      unit: i18n.t("echo.unit.seconds"),
+      onCommit: (value) => {
+        t.echoTime = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "echo-numberOfEchoes",
+      label: i18n.t("echo.numberOfEchoes"),
+      value: t.numberOfEchoes,
+      min: 1,
+      max: 100,
+      step: 1,
+      onCommit: (value) => {
+        t.numberOfEchoes = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "echo-startingIntensity",
+      label: i18n.t("echo.startingIntensity"),
+      value: t.startingIntensity,
+      min: 0,
+      max: 1,
+      step: 0.05,
+      onCommit: (value) => {
+        t.startingIntensity = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "echo-decay",
+      label: i18n.t("echo.decay"),
+      value: t.decay,
+      min: 0,
+      max: 1,
+      step: 0.05,
+      onCommit: (value) => {
+        t.decay = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "echo-operator",
+      label: i18n.t("echo.operator"),
+      value: t.operator,
+      options: [
+        { value: "add", label: i18n.t("echo.operator.add") },
+        { value: "maximum", label: i18n.t("echo.operator.maximum") },
+        { value: "minimum", label: i18n.t("echo.operator.minimum") },
+        { value: "screen", label: i18n.t("echo.operator.screen") },
+        { value: "compositeInBack", label: i18n.t("echo.operator.compositeInBack") },
+        { value: "compositeInFront", label: i18n.t("echo.operator.compositeInFront") },
+        { value: "blend", label: i18n.t("echo.operator.blend") }
+      ],
+      onChange: (value) => {
+        t.operator = value as EchoOperator;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "echo-animate",
+      label: i18n.t("echo.animate"),
+      checked: t.animate,
+      onChange: (checked) => {
+        t.animate = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.echoInstructions")));
+}
+
+async function applyEcho(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.echoNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingEcho"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingEcho"));
+
+  const response = await client.execute("ae.effect.echo", { ...state.echo });
+  logger.recordResponse("ae.effect.echo", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.echoApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+
+
+/**
+ * Cada branch mantém o ID literal ao lado do payload exato. Além de impedir
+ * chave extra no preflight estrito, isto deixa o gate de alcançabilidade provar
+ * que as quatro operações realmente atravessam o client.
+ */
+async function executeParallaxFull(
+  client: Client,
+  t: ParallaxFullDraft
+): Promise<{ command: string; response: CommandResponse }> {
+  if (t.operation === "autoFocus") {
+    return {
+      command: "ae.parallax.auto-focus",
+      response: await client.execute("ae.parallax.auto-focus", {
+        targetLayerName: t.targetLayerName,
+        focusOffset: t.focusOffset,
+        enableDepthOfField: t.enableDepthOfField
+      })
+    };
+  }
+  if (t.operation === "zoom") {
+    return {
+      command: "ae.parallax.zoom",
+      response: await client.execute("ae.parallax.zoom", {
+        zoomLevel: t.zoomLevel,
+        durationFrames: t.zoomDurationFrames
+      })
+    };
+  }
+  if (t.operation === "wiggle") {
+    return {
+      command: "ae.parallax.wiggle",
+      response: await client.execute("ae.parallax.wiggle", {
+        frequency: t.frequency,
+        amplitude: t.amplitude,
+        seed: t.seed
+      })
+    };
+  }
+  return {
+    command: "ae.parallax.bake",
+    response: await client.execute("ae.parallax.bake", { stepFrames: t.stepFrames })
+  };
+}
+
+function parallaxFullDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.parallaxFullNoActiveComp");
+  // O foco precisa de um alvo nomeado, e o host recusa nome vazio. Dizer isso
+  // aqui evita a ida ao host só para voltar com erro.
+  if (state.parallaxFull.operation === "autoFocus" && state.parallaxFull.targetLayerName.trim() === "") {
+    return i18n.t("message.parallaxFullNeedsTarget");
+  }
+  return null;
+}
+
+function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.parallaxFull;
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "parallaxFull-operation",
+      label: i18n.t("parallaxFull.operation"),
+      value: t.operation,
+      options: [
+        { value: "autoFocus", label: i18n.t("parallaxFull.op.autoFocus") },
+        { value: "zoom", label: i18n.t("parallaxFull.op.zoom") },
+        { value: "wiggle", label: i18n.t("parallaxFull.op.wiggle") },
+        { value: "bake", label: i18n.t("parallaxFull.op.bake") }
+      ],
+      onChange: (value) => {
+        t.operation = value as ParallaxFullOperation;
+        shell.rerender();
+      }
+    })
+  );
+
+  if (t.operation === "autoFocus") {
+    regions.content.appendChild(
+      textField(document, {
+        id: "parallaxFull-targetLayerName",
+        label: i18n.t("parallaxFull.targetLayerName"),
+        value: t.targetLayerName,
+        // O mesmo teto do preflight do host, e o mesmo do Look At.
+        maxLength: 80,
+        onCommit: (value) => {
+          t.targetLayerName = value;
+          shell.rerender();
+        }
+      })
+    );
+    regions.content.appendChild(
+      numberField(document, {
+        id: "parallaxFull-focusOffset",
+        label: i18n.t("parallaxFull.focusOffset"),
+        value: t.focusOffset,
+        min: -100000,
+        max: 100000,
+        step: 10,
+        unit: i18n.t("parallaxFull.unit.px"),
+        onCommit: (value) => {
+          t.focusOffset = value;
+          shell.rerender();
+        }
+      })
+    );
+    regions.content.appendChild(
+      checkboxField(document, {
+        id: "parallaxFull-enableDepthOfField",
+        label: i18n.t("parallaxFull.enableDepthOfField"),
+        checked: t.enableDepthOfField,
+        onChange: (checked) => {
+          t.enableDepthOfField = checked;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  if (t.operation === "zoom") {
+    for (const campo of [
+      { id: "zoomLevel", key: "parallaxFull.zoomLevel", min: 1, max: 1000000, step: 50, unit: "parallaxFull.unit.px" },
+      {
+        id: "zoomDurationFrames",
+        key: "parallaxFull.zoomDuration",
+        min: 1,
+        max: 100000,
+        step: 1,
+        unit: "parallaxFull.unit.frames"
+      }
+    ] as const) {
+      regions.content.appendChild(
+        numberField(document, {
+          id: "parallaxFull-" + campo.id,
+          label: i18n.t(campo.key),
+          value: t[campo.id],
+          min: campo.min,
+          max: campo.max,
+          step: campo.step,
+          unit: i18n.t(campo.unit),
+          onCommit: (value) => {
+            state.parallaxFull = { ...state.parallaxFull, [campo.id]: value };
+            shell.rerender();
+          }
+        })
+      );
+    }
+  }
+
+  if (t.operation === "wiggle") {
+    for (const campo of [
+      { id: "frequency", key: "parallaxFull.frequency", min: 0, max: 1000, step: 0.1, unit: "parallaxFull.unit.hertz" },
+      { id: "amplitude", key: "parallaxFull.amplitude", min: 0, max: 100000, step: 1, unit: "parallaxFull.unit.px" },
+      { id: "seed", key: "parallaxFull.seed", min: 0, max: 1000000, step: 1, unit: null }
+    ] as const) {
+      regions.content.appendChild(
+        numberField(document, {
+          id: "parallaxFull-" + campo.id,
+          label: i18n.t(campo.key),
+          value: t[campo.id],
+          min: campo.min,
+          max: campo.max,
+          step: campo.step,
+          // `seed` não tem unidade; com exactOptionalPropertyTypes, passar
+          // `undefined` não é o mesmo que omitir a chave.
+          ...(campo.unit ? { unit: i18n.t(campo.unit) } : {}),
+          onCommit: (value) => {
+            state.parallaxFull = { ...state.parallaxFull, [campo.id]: value };
+            shell.rerender();
+          }
+        })
+      );
+    }
+  }
+
+  if (t.operation === "bake") {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "parallaxFull-stepFrames",
+        label: i18n.t("parallaxFull.stepFrames"),
+        value: t.stepFrames,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: i18n.t("parallaxFull.unit.frames"),
+        onCommit: (value) => {
+          t.stepFrames = value;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    hint(document, i18n.t(("message.parallaxFull." + t.operation) as MessageKey))
+  );
+}
+
+async function applyParallaxFull(
+  shell: Shell,
+  i18n: I18n,
+  logger: MotionLogger,
+  client: Client
+): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.parallaxFullNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingParallaxFull"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingParallaxFull"));
+
+  const { command, response } = await executeParallaxFull(client, state.parallaxFull);
+  logger.recordResponse(command, response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.parallaxFullApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function parallaxDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.parallaxNoActiveComp");
+  // O host recusa nome vazio no preflight; dizer isso antes do clique evita a
+  // ida ao host so para voltar com erro.
+  if (state.parallax.controllerName.trim() === "") return i18n.t("message.parallaxNeedsName");
+  return null;
+}
+
+function renderParallax(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.parallax;
+
+  for (const campo of [
+    { id: "depthStep", key: "parallax.depthStep", min: 1, max: 100000, step: 10, unit: "parallax.unit.px" },
+    { id: "strength", key: "parallax.strength", min: 0, max: 10, step: 0.1, unit: "parallax.unit.factor" }
+  ] as const) {
+    regions.content.appendChild(
+      numberField(document, {
+        id: `parallax-${campo.id}`,
+        label: i18n.t(campo.key),
+        value: t[campo.id],
+        min: campo.min,
+        max: campo.max,
+        step: campo.step,
+        unit: i18n.t(campo.unit),
+        onCommit: (value) => {
+          state.parallax = { ...state.parallax, [campo.id]: value };
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "parallax-orderMode",
+      label: i18n.t("parallax.orderMode"),
+      value: t.orderMode,
+      options: [
+        { value: "selection", label: i18n.t("parallax.orderMode.selection") },
+        { value: "timeline", label: i18n.t("parallax.orderMode.timeline") }
+      ],
+      onChange: (value) => {
+        t.orderMode = value as ParallaxOrderMode;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    textField(document, {
+      id: "parallax-controllerName",
+      label: i18n.t("parallax.controllerName"),
+      value: t.controllerName,
+      // O mesmo teto que o preflight do host aplica, para o campo não aceitar
+      // o que o comando vai recusar.
+      maxLength: 120,
+      onCommit: (value) => {
+        t.controllerName = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "parallax-createCamera",
+      label: i18n.t("parallax.createCamera"),
+      checked: t.createCamera,
+      onChange: (checked) => {
+        t.createCamera = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "parallax-preserveFraming",
+      label: i18n.t("parallax.preserveFraming"),
+      checked: t.preserveFraming,
+      onChange: (checked) => {
+        t.preserveFraming = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.parallaxInstructions")));
+}
+
+async function applyParallax(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.parallaxNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingParallax"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingParallax"));
+
+  const response = await client.execute<{ layerCount: number; cameraDistance: number }>(
+    "ae.animate.parallax.quick",
+    { ...state.parallax }
+  );
+  logger.recordResponse("ae.animate.parallax.quick", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.parallaxApplied", { count: response.data?.layerCount ?? 0 }), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function fastEditDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.fastEditNoActiveComp");
+  return null;
+}
+
+function renderFastEdit(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.fastEdit;
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "fastEdit-operation",
+      label: i18n.t("fastEdit.operation"),
+      value: t.operation,
+      options: [
+        { value: "trimToWorkArea", label: i18n.t("fastEdit.op.trimToWorkArea") },
+        { value: "setDuration", label: i18n.t("fastEdit.op.setDuration") },
+        { value: "setFrameRate", label: i18n.t("fastEdit.op.setFrameRate") },
+        { value: "setResolution", label: i18n.t("fastEdit.op.setResolution") },
+        { value: "fitLayers", label: i18n.t("fastEdit.op.fitLayers") },
+        { value: "shiftLayersToZero", label: i18n.t("fastEdit.op.shiftLayersToZero") },
+        { value: "precompose", label: i18n.t("fastEdit.op.precompose") }
+      ],
+      onChange: (value) => {
+        t.operation = value as FastEditOperation;
+        shell.rerender();
+      }
+    })
+  );
+
+  // Cada operação mostra só os campos que ela usa: um campo visível que o host
+  // ignora promete um efeito que não vem.
+  if (t.operation === "setDuration") {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "fastEdit-duration",
+        label: i18n.t("fastEdit.duration"),
+        value: t.duration,
+        min: 0.001,
+        max: 10800,
+        step: 0.1,
+        unit: i18n.t("fastEdit.unit.seconds"),
+        onCommit: (value) => {
+          t.duration = value;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  if (t.operation === "setFrameRate") {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "fastEdit-frameRate",
+        label: i18n.t("fastEdit.frameRate"),
+        value: t.frameRate,
+        min: 1,
+        max: 999,
+        step: 1,
+        unit: i18n.t("fastEdit.unit.fps"),
+        onCommit: (value) => {
+          t.frameRate = value;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  if (t.operation === "setResolution") {
+    for (const [campo, chave] of [
+      ["width", "fastEdit.width"],
+      ["height", "fastEdit.height"]
+    ] as const) {
+      regions.content.appendChild(
+        numberField(document, {
+          id: `fastEdit-${campo}`,
+          label: i18n.t(chave),
+          value: t[campo],
+          min: 4,
+          max: 30000,
+          step: 1,
+          unit: i18n.t("fastEdit.unit.px"),
+          onCommit: (value) => {
+            state.fastEdit = { ...state.fastEdit, [campo]: value };
+            shell.rerender();
+          }
+        })
+      );
+    }
+  }
+
+  if (t.operation === "precompose") {
+    regions.content.appendChild(
+      textField(document, {
+        id: "fastEdit-precomposeName",
+        label: i18n.t("fastEdit.precomposeName"),
+        value: t.precomposeName,
+        maxLength: 200,
+        onCommit: (value) => {
+          t.precomposeName = value;
+          shell.rerender();
+        }
+      })
+    );
+    regions.content.appendChild(
+      checkboxField(document, {
+        id: "fastEdit-moveAllAttributes",
+        label: i18n.t("fastEdit.moveAllAttributes"),
+        checked: t.moveAllAttributes,
+        onChange: (checked) => {
+          t.moveAllAttributes = checked;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  if (state.fastEditSummary) {
+    regions.content.appendChild(hint(document, state.fastEditSummary));
+  }
+  regions.content.appendChild(hint(document, i18n.t("message.fastEditInstructions")));
+}
+
+/** Argumentos do Fast Edit: só os campos que a operação escolhida usa. */
+function fastEditArgs(draft: FastEditDraft): Record<string, unknown> {
+  const args: Record<string, unknown> = { operation: draft.operation };
+  if (draft.operation === "setDuration") args.duration = draft.duration;
+  if (draft.operation === "setFrameRate") args.frameRate = draft.frameRate;
+  if (draft.operation === "setResolution") {
+    args.width = draft.width;
+    args.height = draft.height;
+  }
+  if (draft.operation === "precompose") {
+    args.precomposeName = draft.precomposeName;
+    args.moveAllAttributes = draft.moveAllAttributes;
+  }
+  return args;
+}
+
+/**
+ * A prévia roda ao abrir a ferramenta e pelo botão Atualizar. É o "resumo antes
+ * de combinar mudanças" que a §pede, e ela existe como comando próprio porque o
+ * dispatcher recusa `dryRun` em comando que muta.
+ */
+async function refreshFastEditSummary(): Promise<void> {
+  const fiacao = wiringAtual;
+  if (!fiacao) return;
+
+  if (!state.context?.isComposition) {
+    state.fastEditSummary = null;
+    return;
+  }
+
+  // Mesma proteção das outras prévias: trocar de operação dispara uma carga
+  // nova, e a resposta antiga chegando depois sobrescreveria a atual.
+  const sequencia = previewSequence + 1;
+  previewSequence = sequencia;
+
+  const response = await fiacao.client.execute<Record<string, unknown>>(
+    "ae.comp.fast-edit.preview",
+    fastEditArgs(state.fastEdit)
+  );
+  if (sequencia !== previewSequence) return;
+
+  fiacao.logger.recordResponse("ae.comp.fast-edit.preview", response);
+
+  state.fastEditSummary =
+    response.ok && response.data
+      ? fiacao.i18n.t("fastEdit.summary", { resumo: describeFastEditSummary(response.data) })
+      : null;
+  state.previewError = response.ok ? null : describeFailure(fiacao.i18n, response);
+  fiacao.shell.rerender();
+}
+
+/** Resumo legível do que a operação vai fazer. */
+function describeFastEditSummary(data: Record<string, unknown>): string {
+  const partes: string[] = [];
+  for (const [chave, valor] of Object.entries(data)) {
+    if (chave === "operation") continue;
+    partes.push(`${chave}: ${String(valor)}`);
+  }
+  return partes.join(", ");
+}
+
+async function applyFastEdit(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.fastEditNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingFastEdit"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingFastEdit"));
+
+  // O comando é declarado destrutivo — reescreve a composição inteira — e o
+  // dispatcher exige consentimento explícito. A prévia mostrada acima é o que
+  // torna esse consentimento informado.
+  const response = await client.execute("ae.comp.fast-edit", fastEditArgs(state.fastEdit), {
+    allowDestructive: true
+  });
+  logger.recordResponse("ae.comp.fast-edit", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.fastEditApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+/**
+ * O shell fala `#rrggbb`; o host das formas quer `[r, g, b]` com cada canal
+ * entre 0 e 1. A conversão fica aqui, num par de funções, em vez de espalhada
+ * pelos pontos de uso.
+ */
+function hexParaCanais(hex: string): readonly [number, number, number] {
+  const normal = normalizeHexColor(hex) ?? "#000000";
+  const inteiro = Number.parseInt(normal.slice(1), 16);
+  return [((inteiro >> 16) & 255) / 255, ((inteiro >> 8) & 255) / 255, (inteiro & 255) / 255];
+}
+
+function canaisParaHex(canais: readonly [number, number, number]): string {
+  const parte = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(v * 255)))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${parte(canais[0])}${parte(canais[1])}${parte(canais[2])}`;
+}
+
+function shapeLibraryDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.shapeLibraryNoActiveComp");
+  return null;
+}
+
+function renderShapeLibrary(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.shapeLibrary;
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "shapeLibrary-shapeType",
+      label: i18n.t("shapeLibrary.shapeType"),
+      value: t.shapeType,
+      options: [
+        { value: "rectangle", label: i18n.t("shapeLibrary.type.rectangle") },
+        { value: "roundedRectangle", label: i18n.t("shapeLibrary.type.roundedRectangle") },
+        { value: "circle", label: i18n.t("shapeLibrary.type.circle") },
+        { value: "polygon", label: i18n.t("shapeLibrary.type.polygon") },
+        { value: "star", label: i18n.t("shapeLibrary.type.star") },
+        { value: "line", label: i18n.t("shapeLibrary.type.line") },
+        { value: "arrow", label: i18n.t("shapeLibrary.type.arrow") },
+        { value: "callout", label: i18n.t("shapeLibrary.type.callout") }
+      ],
+      onChange: (value) => {
+        t.shapeType = value as ShapeType;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "shapeLibrary-size",
+      label: i18n.t("shapeLibrary.size"),
+      value: t.size,
+      min: 1,
+      max: 100000,
+      step: 1,
+      unit: i18n.t("shapeLibrary.unit.px"),
+      onCommit: (value) => {
+        t.size = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  // Arredondamento so descreve alguma coisa no retangulo arredondado; nas outras
+  // formas o host o ignora, e mostrar o campo prometeria um efeito que nao vem.
+  if (t.shapeType === "roundedRectangle") {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "shapeLibrary-roundness",
+        label: i18n.t("shapeLibrary.roundness"),
+        value: t.roundness,
+        min: 0,
+        max: 100000,
+        step: 1,
+        unit: i18n.t("shapeLibrary.unit.px"),
+        onCommit: (value) => {
+          t.roundness = value;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  if (t.shapeType === "polygon" || t.shapeType === "star") {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "shapeLibrary-points",
+        label: i18n.t("shapeLibrary.points"),
+        value: t.points,
+        min: 3,
+        max: 1000,
+        step: 1,
+        onCommit: (value) => {
+          t.points = value;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "shapeLibrary-strokeWidth",
+      label: i18n.t("shapeLibrary.strokeWidth"),
+      value: t.strokeWidth,
+      min: 0,
+      max: 1000,
+      step: 1,
+      unit: i18n.t("shapeLibrary.unit.px"),
+      onCommit: (value) => {
+        t.strokeWidth = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  for (const campo of [
+    { id: "fillColor", key: "shapeLibrary.fillColor" },
+    { id: "strokeColor", key: "shapeLibrary.strokeColor" }
+  ] as const) {
+    regions.content.appendChild(
+      colorField(document, {
+        id: "shapeLibrary-" + campo.id,
+        label: i18n.t(campo.key),
+        value: canaisParaHex(t[campo.id]),
+        disabled: state.busy,
+        onCommit: (value) => {
+          state.shapeLibrary = { ...state.shapeLibrary, [campo.id]: hexParaCanais(value) };
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(hint(document, i18n.t("message.shapeLibraryInstructions")));
+}
+
+async function applyShapeLibrary(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.shapeLibraryNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingShapeLibrary"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingShapeLibrary"));
+
+  // A forma nasce no centro da composicao, que e o unico ponto que o painel
+  // conhece sem perguntar: o CTI da tempo, nao posicao.
+  const largura = state.context?.compWidth ?? 1920;
+  const altura = state.context?.compHeight ?? 1080;
+
+  const response = await client.execute("ae.shape.library", {
+    shapeType: state.shapeLibrary.shapeType,
+    size: state.shapeLibrary.size,
+    fillColor: [...state.shapeLibrary.fillColor],
+    strokeColor: [...state.shapeLibrary.strokeColor],
+    strokeWidth: state.shapeLibrary.strokeWidth,
+    roundness: state.shapeLibrary.roundness,
+    points: state.shapeLibrary.points,
+    position: [largura / 2, altura / 2]
+  });
+  logger.recordResponse("ae.shape.library", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.shapeLibraryApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function trimPathDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.trimPathNoActiveComp");
+  return null;
+}
+
+function renderTrimPath(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.trimPath;
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "trimPath-scope",
+      label: i18n.t("trimPath.scope"),
+      value: t.scope,
+      options: [
+        { value: "layer", label: i18n.t("trimPath.scope.layer") },
+        { value: "group", label: i18n.t("trimPath.scope.group") }
+      ],
+      onChange: (value) => {
+        t.scope = value as TrimPathScope;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "trimPath-start",
+      label: i18n.t("trimPath.start"),
+      value: t.start,
+      min: 0,
+      max: 100,
+      step: 1,
+      unit: i18n.t("trimPath.unit.percent"),
+      onCommit: (value) => {
+        t.start = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "trimPath-end",
+      label: i18n.t("trimPath.end"),
+      value: t.end,
+      min: 0,
+      max: 100,
+      step: 1,
+      unit: i18n.t("trimPath.unit.percent"),
+      onCommit: (value) => {
+        t.end = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "trimPath-offset",
+      label: i18n.t("trimPath.offset"),
+      value: t.offset,
+      min: -3600,
+      max: 3600,
+      step: 1,
+      unit: i18n.t("trimPath.unit.degrees"),
+      onCommit: (value) => {
+        t.offset = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "trimPath-animate",
+      label: i18n.t("trimPath.animate"),
+      checked: t.animate,
+      onChange: (checked) => {
+        t.animate = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  // Duracao e sentido so descrevem alguma coisa quando ha animacao: mostrar um
+  // controle sem efeito e pior do que nao mostrar.
+  if (t.animate) {
+    regions.content.appendChild(
+      numberField(document, {
+        id: "trimPath-durationFrames",
+        label: i18n.t("trimPath.durationFrames"),
+        value: t.durationFrames,
+        min: 1,
+        max: 10000,
+        step: 1,
+        unit: i18n.t("trimPath.unit.frames"),
+        onCommit: (value) => {
+          t.durationFrames = value;
+          shell.rerender();
+        }
+      })
+    );
+
+    regions.content.appendChild(
+      checkboxField(document, {
+        id: "trimPath-reverse",
+        label: i18n.t("trimPath.reverse"),
+        checked: t.reverse,
+        onChange: (checked) => {
+          t.reverse = checked;
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(hint(document, i18n.t("message.trimPathInstructions")));
+}
+
+async function applyTrimPath(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+
+  if (!state.context?.isComposition) {
+    state.lastError = i18n.t("message.trimPathNoActiveComp");
+    shell.setStatus(i18n.t("status.notCompleted"), "error");
+    shell.rerender();
+    return;
+  }
+
+  shell.setStatus(i18n.t("status.applyingTrimPath"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingTrimPath"));
+
+  const response = await client.execute("ae.shape.trim-path", { ...state.trimPath });
+  logger.recordResponse("ae.shape.trim-path", response);
+
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.trimPathApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function timeMarkerLoopDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.timeMarkerLoopNoActiveComp");
+  return null;
+}
+
+function renderTimeMarkerLoop(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const t = state.timeMarkerLoop;
+
+  // O host aceita nome de 1 a 80 caracteres, sem espaço nas pontas; o campo
+  // reflete o mesmo teto para não aceitar o que o comando vai recusar.
+  for (const campo of [
+    { id: "inMarkerName", key: "timeMarkerLoop.inMarkerName" },
+    { id: "outMarkerName", key: "timeMarkerLoop.outMarkerName" }
+  ] as const) {
+    regions.content.appendChild(
+      textField(document, {
+        id: "timeMarkerLoop-" + campo.id,
+        label: i18n.t(campo.key),
+        value: t[campo.id],
+        maxLength: 80,
+        onCommit: (value) => {
+          state.timeMarkerLoop = { ...state.timeMarkerLoop, [campo.id]: value };
+          shell.rerender();
+        }
+      })
+    );
+  }
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "timeMarkerLoop-loopType",
+      label: i18n.t("timeMarkerLoop.loopType"),
+      value: t.loopType,
+      options: [
+        { value: "cycle", label: i18n.t("timeMarkerLoop.loopType.cycle") },
+        { value: "pingpong", label: i18n.t("timeMarkerLoop.loopType.pingpong") }
+      ],
+      onChange: (value) => {
+        t.loopType = value as TimeMarkerLoopType;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "timeMarkerLoop-autoCreateMarkers",
+      label: i18n.t("timeMarkerLoop.autoCreateMarkers"),
+      checked: t.autoCreateMarkers,
+      onChange: (checked) => {
+        t.autoCreateMarkers = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    checkboxField(document, {
+      id: "timeMarkerLoop-clampToLayer",
+      label: i18n.t("timeMarkerLoop.clampToLayer"),
+      checked: t.clampToLayer,
+      onChange: (checked) => {
+        t.clampToLayer = checked;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.timeMarkerLoopInstructions")));
+}
+
+async function applyTimeMarkerLoop(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  shell.setStatus(i18n.t("status.applyingTimeMarkerLoop") || "Aplicando loop por marcadores...", "busy");
+  setBusy(shell, true, i18n.t("status.applyingTimeMarkerLoop"));
+
+  const response = await client.execute("ae.time.marker-loop", {
+    inMarkerName: state.timeMarkerLoop.inMarkerName,
+    outMarkerName: state.timeMarkerLoop.outMarkerName,
+    loopType: state.timeMarkerLoop.loopType,
+    autoCreateMarkers: state.timeMarkerLoop.autoCreateMarkers,
+    clampToLayer: state.timeMarkerLoop.clampToLayer
+  });
+  logger.recordResponse("ae.time.marker-loop", response);
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.timeMarkerLoopApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+
+function aiToVectorDisabledReason(): string | null { return null; }
+function renderAiToVector(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  regions.content.appendChild(checkboxField(document, { id: "field.aiToVector.keepOriginal", label: i18n.t("field.aiToVector.keepOriginal"), checked: state.aiToVector.keepOriginal, onChange: (val: boolean) => { state.aiToVector.keepOriginal = val; shell.rerender(); } }));
+  regions.content.appendChild(hint(document, i18n.t("message.aiToVectorInstructions")));
+}
+async function applyAiToVector(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  setBusy(shell, true, "Converting...");
+  const response = await client.execute("ae.vector.ai-to-vector", { keepOriginal: state.aiToVector.keepOriginal });
+  logger.recordResponse("ae.vector.ai-to-vector", response);
+  if (response.ok) { shell.setStatus(i18n.t("message.aiToVectorApplied"), "ok"); } else { reportFailure(shell, i18n, response); }
+  setBusy(shell, false);
+}
+
+function textToVectorDisabledReason(): string | null { return null; }
+function renderTextToVector(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  regions.content.appendChild(checkboxField(document, { id: "field.textToVector.keepOriginal", label: i18n.t("field.textToVector.keepOriginal"), checked: state.textToVector.keepOriginal, onChange: (val: boolean) => { state.textToVector.keepOriginal = val; shell.rerender(); } }));
+  regions.content.appendChild(hint(document, i18n.t("message.textToVectorInstructions")));
+}
+async function applyTextToVector(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  setBusy(shell, true, "Converting...");
+  const response = await client.execute("ae.vector.text-to-vector", { keepOriginal: state.textToVector.keepOriginal });
+  logger.recordResponse("ae.vector.text-to-vector", response);
+  if (response.ok) { shell.setStatus(i18n.t("message.textToVectorApplied"), "ok"); } else { reportFailure(shell, i18n, response); }
+  setBusy(shell, false);
+}
+
+function particlesDisabledReason(): string | null { return null; }
+function renderParticles(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  regions.content.appendChild(numberField(document, { id: "field.particles.birthRate", label: i18n.t("field.particles.birthRate"), value: state.particles.birthRate, min: 0.1, max: 10, step: 0.1, onCommit: (val: number) => { state.particles.birthRate = val; shell.rerender(); }}));
+  regions.content.appendChild(numberField(document, { id: "field.particles.longevity", label: i18n.t("field.particles.longevity"), value: state.particles.longevity, min: 0.1, max: 10, step: 0.1, onCommit: (val: number) => { state.particles.longevity = val; shell.rerender(); }}));
+  regions.content.appendChild(numberField(document, { id: "field.particles.velocity", label: i18n.t("field.particles.velocity"), value: state.particles.velocity, min: 0, max: 5, step: 0.1, onCommit: (val: number) => { state.particles.velocity = val; shell.rerender(); }}));
+  regions.content.appendChild(hint(document, i18n.t("message.particlesInstructions")));
+}
+async function applyParticles(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  setBusy(shell, true, "Creating particles...");
+  const response = await client.execute("ae.effect.particles", { birthRate: state.particles.birthRate, longevity: state.particles.longevity, velocity: state.particles.velocity });
+  logger.recordResponse("ae.effect.particles", response);
+  if (response.ok) { shell.setStatus(i18n.t("message.particlesApplied"), "ok"); } else { reportFailure(shell, i18n, response); }
+  setBusy(shell, false);
+}
+
+function textureDisabledReason(): string | null { return null; }
+function renderTexture(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  regions.content.appendChild(numberField(document, { id: "field.texture.opacity", label: i18n.t("field.texture.opacity"), value: state.texture.opacity, min: 0, max: 100, step: 1, onCommit: (val: number) => { state.texture.opacity = val; shell.rerender(); }}));
+  regions.content.appendChild(hint(document, i18n.t("message.textureInstructions")));
+}
+async function applyTexture(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  setBusy(shell, true, "Applying texture...");
+  const response = await client.execute("ae.asset.texture", { blendMode: state.texture.blendMode, opacity: state.texture.opacity });
+  logger.recordResponse("ae.asset.texture", response);
+  if (response.ok) { shell.setStatus(i18n.t("message.textureApplied"), "ok"); } else { reportFailure(shell, i18n, response); }
+  setBusy(shell, false);
+}
+
+function cleanDisabledReason(): string | null { return null; }
+function renderClean(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  regions.content.appendChild(checkboxField(document, { id: "field.clean.removeConfirmed", label: i18n.t("field.clean.removeConfirmed"), checked: state.clean.removeConfirmed, onChange: (val: boolean) => { state.clean.removeConfirmed = val; shell.rerender(); } }));
+  regions.content.appendChild(hint(document, i18n.t("message.cleanInstructions")));
+}
+async function applyClean(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  setBusy(shell, true, "Cleaning project...");
+  const response = await client.execute("ae.project.clean", { removeConfirmed: state.clean.removeConfirmed });
+  logger.recordResponse("ae.project.clean", response);
+  if (response.ok) { shell.setStatus(i18n.t("message.cleanApplied"), "ok"); } else { reportFailure(shell, i18n, response); }
+  setBusy(shell, false);
 }

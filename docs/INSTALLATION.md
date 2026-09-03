@@ -87,7 +87,7 @@ Se `project.transactionApi` aparecer como indisponível com um projeto aberto, o
 - O JSON exportado abre, contém `pluginVersion`, `host`, `hostVersion`, contagens e entradas redigidas, e **não** contém caminho nativo, nome de projeto, sequência, arquivo escolhido, credenciais ou payload criativo?
 - Cancelar o picker deixa a sessão utilizável e não cria arquivo parcial?
 
-As APIs e a permissão mínima foram verificadas na documentação oficial e registradas em [`research/premiere-uxp-host-environment-and-diagnostics-export.md`](research/premiere-uxp-host-environment-and-diagnostics-export.md). Isso sustenta a implementação; o resultado desta tabela continua `NOT RUN` até alguém executá-la no Premiere.
+As APIs e a permissão mínima foram verificadas na documentação oficial e registradas em [`research/premiere-uxp-host-environment-and-diagnostics-export.md`](research/premiere-uxp-host-environment-and-diagnostics-export.md). O contrato de `entrypoints.setup()` e o bug medido de `plugin.create` ausente estão em [`research/premiere-uxp-entrypoints-lifecycle.md`](research/premiere-uxp-entrypoints-lifecycle.md). Isso sustenta a implementação; o resultado desta tabela continua `NOT RUN` até alguém executá-la no Premiere.
 
 As sondas de MOGRT, transcript e caption tracks e seus fallbacks `unknown` estão em [`research/premiere-uxp-capability-probes.md`](research/premiere-uxp-capability-probes.md). No System Check, confirme os estados com e sem sequência ativa; ausência de sequência não autoriza mostrar `unsupported`.
 

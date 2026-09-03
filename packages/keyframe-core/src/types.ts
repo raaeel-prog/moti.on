@@ -179,3 +179,10 @@ export interface KeyframeRestorePlan {
   readonly timing: RestorePlanTiming;
   readonly steps: readonly RestoreStep[];
 }
+
+export interface CubicBezierCurve {
+  readonly x1: number; // 0..1
+  readonly y1: number; // pode exceder 0..1 para overshoot
+  readonly x2: number; // 0..1
+  readonly y2: number; // pode exceder 0..1
+}

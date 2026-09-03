@@ -62,3 +62,44 @@ export {
   type ToolTileOptions,
   type WidthClass
 } from "./shell.js";
+
+export { bezierEditor, type BezierEditorOptions } from "./bezier.js";
+
+export {
+  COMPONENT_STATES,
+  createActionButton,
+  createChipGroup,
+  createDrawer,
+  createPopover,
+  createQuickTile,
+  createQuickTileGrid,
+  createSliderField,
+  createToastRegion,
+  type ActionButtonController,
+  type ActionButtonOptions,
+  type ChipGroupController,
+  type ChipGroupOptions,
+  type ChipItem,
+  type ComponentScheduler,
+  type ComponentState,
+  type ComponentStateOptions,
+  type DisableableController,
+  type DisableableOptions,
+  type DrawerController,
+  type DrawerOptions,
+  type OverlayCloseReason,
+  type PopoverController,
+  type PopoverOptions,
+  type QuickTileController,
+  type QuickTileGridController,
+  type QuickTileGridOptions,
+  type QuickTileOptions,
+  type SliderFieldController,
+  type SliderFieldOptions,
+  type StatefulController,
+  type ToastAction,
+  type ToastHandle,
+  type ToastOptions,
+  type ToastRegionController,
+  type ToastRegionOptions
+} from "./components.js";

@@ -80,8 +80,140 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
   "undo.ae.keys.delay": {
     "en-US": "Moti.on: delay animation",
     "pt-BR": "Moti.on: atrasar anima\u00e7\u00e3o"
+  },
+  "undo.ae.keys.ease.apply": {
+    "en-US": "Moti.on: apply ease",
+    "pt-BR": "Moti.on: aplicar suavização"
+  },
+  "undo.ae.keys.reverse": {
+    "en-US": "Moti.on: reverse keyframes",
+    "pt-BR": "Moti.on: inverter keyframes"
+  },
+  "undo.ae.keys.clone": {
+    "en-US": "Moti.on: duplicate keyframes",
+    "pt-BR": "Moti.on: duplicar keyframes"
+  },
+  "undo.ae.time.controller": {
+    "en-US": "Moti.on: apply time controller",
+    "pt-BR": "Moti.on: aplicar controlador de tempo"
+  },
+  "undo.ae.animate.kinetic": {
+    "en-US": "Moti.on: apply kinetic animation",
+    "pt-BR": "Moti.on: aplicar animação kinetic"
+  },
+  "undo.ae.shape.break": {
+    "en-US": "Moti.on: break shape",
+    "pt-BR": "Moti.on: separar formas"
+  },
+  "undo.ae.rig.effector": {
+    "en-US": "Moti.on: apply effector",
+    "pt-BR": "Moti.on: aplicar effector"
+  },
+  "undo.ae.camera.transition": {
+    "en-US": "Moti.on: camera transition",
+    "pt-BR": "Moti.on: transição de câmera"
+  },
+  "undo.ae.3d.cylinder": {
+    "en-US": "Moti.on: build cylinder",
+    "pt-BR": "Moti.on: montar cilindro"
+  },
+  "undo.ae.3d.cube": {
+    "en-US": "Moti.on: build cube",
+    "pt-BR": "Moti.on: montar cubo"
+  },
+  "undo.ae.effect.wave": {
+    "en-US": "Moti.on: apply wave",
+    "pt-BR": "Moti.on: aplicar onda"
+  },
+  "undo.ae.effect.tile": {
+    "en-US": "Moti.on: tile layers",
+    "pt-BR": "Moti.on: repetir camadas"
+  },
+  "undo.ae.effect.glitch": {
+    "en-US": "Moti.on: apply glitch",
+    "pt-BR": "Moti.on: aplicar glitch"
+  },
+  "undo.ae.animate.parallaxQuick": {
+    "en-US": "Moti.on: create parallax rig",
+    "pt-BR": "Moti.on: criar rig de parallax"
+  },
+  "undo.ae.3d.lookAt": {
+    "en-US": "Moti.on: look at target",
+    "pt-BR": "Moti.on: encarar o alvo"
+  },
+  "undo.ae.3d.orbit": {
+    "en-US": "Moti.on: create orbit",
+    "pt-BR": "Moti.on: criar \u00f3rbita"
+  },
+  "undo.ae.effect.echo": {
+    "en-US": "Moti.on: apply echo",
+    "pt-BR": "Moti.on: aplicar eco"
+  },
+  "undo.ae.comp.fastEdit": {
+    "en-US": "Moti.on: edit composition",
+    "pt-BR": "Moti.on: editar composi\u00e7\u00e3o"
+  },
+  "undo.ae.shape.library": {
+    "en-US": "Moti.on: create shape",
+    "pt-BR": "Moti.on: criar forma"
+  },
+  "undo.ae.shape.trimPath": {
+    "en-US": "Moti.on: trim paths",
+    "pt-BR": "Moti.on: cortar tra\u00e7ados"
+  },
+  "undo.ae.animate.inertial": {
+    "en-US": "Moti.on: apply inertia",
+    "pt-BR": "Moti.on: aplicar in\u00e9rcia"
+  },
+  "undo.ae.animate.jump": {
+    "en-US": "Moti.on: create jump",
+    "pt-BR": "Moti.on: criar salto"
+  },
+  "undo.ae.keys.paste": {
+    "en-US": "Moti.on: paste keyframes",
+    "pt-BR": "Moti.on: colar keyframes"
+  },
+  "undo.ae.time.markerLoop": {
+    "en-US": "Moti.on: apply marker loop",
+    "pt-BR": "Moti.on: aplicar loop por marcadores"
+  },
+  "undo.ae.vector.aiToVector": {
+    "en-US": "Moti.on: convert vector layer",
+    "pt-BR": "Moti.on: converter camada de vetor"
+  },
+  "undo.ae.parallax.autoFocus": {
+    "en-US": "Moti.on: auto-focus parallax",
+    "pt-BR": "Moti.on: focar parallax"
+  },
+  "undo.ae.parallax.wiggle": {
+    "en-US": "Moti.on: wiggle parallax",
+    "pt-BR": "Moti.on: agitar parallax"
+  },
+  "undo.ae.parallax.zoom": {
+    "en-US": "Moti.on: zoom parallax",
+    "pt-BR": "Moti.on: zoom no parallax"
+  },
+  "undo.ae.parallax.bake": {
+    "en-US": "Moti.on: bake parallax",
+    "pt-BR": "Moti.on: bake parallax"
+  },
+  "undo.ae.vector.textToVector": {
+    "en-US": "Moti.on: apply text to vector",
+    "pt-BR": "Moti.on: aplicar texto para vetor"
+  },
+  "undo.ae.effect.particles": {
+    "en-US": "Moti.on: apply particles",
+    "pt-BR": "Moti.on: aplicar partículas"
+  },
+  "undo.ae.asset.texture": {
+    "en-US": "Moti.on: apply texture",
+    "pt-BR": "Moti.on: aplicar textura"
+  },
+  "undo.ae.project.clean": {
+    "en-US": "Moti.on: clean project",
+    "pt-BR": "Moti.on: limpar projeto"
   }
-};
+} as const;
 
 export function isSupportedLocale(value: unknown): value is SupportedLocale {
   return typeof value === "string" && (SUPPORTED_LOCALES as readonly string[]).includes(value);

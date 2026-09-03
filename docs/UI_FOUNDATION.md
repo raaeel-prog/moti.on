@@ -1,5 +1,12 @@
 # Fundação Visual — CrossHost Workstation
 
+> **Atualização normativa (2026-09-02):** `docs/ADDENDUM_A_QUICK_UX_SPEC.md`
+> substitui os detalhes de interação, acessibilidade, cor e movimento das
+> seções §22.3/§22.4 do MASTER. A fonte executável dos tokens agora é
+> `packages/ui-tokens/src/tokens.css`; `packages/ui-core/src/theme.css` mantém
+> uma cópia autocontida, verificada por teste de drift, para CEP e UXP. O
+> catálogo executável de A6.2 vive em `packages/ui-motion/`.
+
 ## Direção aprovada
 
 O painel deve parecer uma ferramenta nativa e discreta dentro do After Effects/Premiere. A referência é a eficiência de painéis como BadFX, Brazu e Premiere Composer, sem copiar identidade, assets ou layout proprietário.
@@ -16,35 +23,23 @@ A interface **não** deve parecer:
 
 ```css
 :root {
-  --ch-bg-base: #1D1D1D;
-  --ch-bg-panel: #202020;
-  --ch-bg-raised: #242424;
-  --ch-bg-hover: #292929;
-  --ch-bg-active: #2D2D2D;
+  /* A superfície-base Adobe permanece uma regra do projeto. */
+  --bg-host: #1D1D1D;
 
-  --ch-border-subtle: #333333;
-  --ch-border-strong: #454545;
-
-  --ch-text-primary: #E6E6E6;
-  --ch-text-secondary: #A8A8A8;
-  --ch-text-muted: #747474;
-
-  --ch-accent: #35C978;
-  --ch-accent-hover: #45D889;
-  --ch-focus: #6F9DFF;
-  --ch-danger: #D96B70;
-  --ch-warning: #D0A24A;
-
-  --ch-space-1: 4px;
-  --ch-space-2: 8px;
-  --ch-space-3: 12px;
-  --ch-space-4: 16px;
-
-  --ch-control-h: 29px;
-  --ch-radius-sm: 3px;
-  --ch-radius-md: 5px;
+  /* Superfícies e accent normativos do Addendum A. */
+  --bg-0: #0E1013;
+  --bg-1: #141619;
+  --bg-2: #1A1D21;
+  --bg-3: #22262B;
+  --bg-4: #2A2F35;
+  --accent: #7C8CFF;
 }
 ```
+
+Não copie este recorte para componentes. Consuma os tokens do pacote. Os
+valores AA corrigidos para texto terciário e danger estão documentados no
+próprio CSS e são validados por `npm.cmd run a11y:contrast` nos temas escuro e
+claro.
 
 ## Anatomia de uma tela de ferramenta
 
@@ -77,11 +72,23 @@ A tela deve priorizar uma ação principal. Preview, presets, layer stack e opç
 
 | Largura | Estrutura |
 |---:|---|
-| 280–359 px | uma coluna, navegação por ícones, avançado fechado |
-| 360–559 px | uma coluna padrão, labels completas |
-| 560+ px | divisão opcional apenas quando reduz navegação |
+| 280–339 px | Compact: barra inferior, grid de 2 colunas, Inspector em tela cheia |
+| 340–479 px | Default: rail de 48 px, grid de 3 colunas, Inspector sobreposto |
+| 480–719 px | Comfort: grid de 4 colunas, Inspector de 320 px |
+| 720+ px | Wide: grid e Inspector fixo de 360 px em duas colunas |
 
 Nunca use scroll horizontal. Em altura reduzida, apenas a região de conteúdo rola; a ação principal permanece acessível.
+
+## Movimento
+
+Componentes declaram o movimento por ID em `data-motion`; não reescrevem
+duração, easing ou keyframes localmente. Os 25 IDs normativos, o controller da
+preferência efetiva (`interno OR sistema`) e a folha distribuída aos dois hosts
+vivem em `packages/ui-motion/`. O toggle fica em **Settings → Interface**.
+
+Build/teste automatizado não prova comportamento no runtime Adobe. Movimento,
+persistência, escala, leitor de tela e orçamento de frames continuam sujeitos
+aos gates reais registrados em `docs/QA_MATRIX.md`.
 
 ## Hierarquia
 

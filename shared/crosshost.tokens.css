@@ -1,58 +1,117 @@
+/*
+ * Moti.on UI tokens — CHMS-UX-001 e fundacao de CHMS-UX-002.
+ *
+ * O bloco e duplicado deliberadamente em @motion/ui-core/theme.css porque CEP
+ * e UXP precisam receber uma folha autocontida. O teste de drift impede que as
+ * copias divirjam. `--bg-host` preserva a base #1D1D1D exigida pelo projeto;
+ * as demais superficies seguem o Addendum A.
+ *
+ * Ajustes AA documentados: --txt-3 e --danger foram deslocados minimamente
+ * onde os valores ilustrativos do addendum nao atingiam o proprio gate de
+ * contraste em superficies permitidas.
+ */
 :root {
   color-scheme: dark;
 
-  --ch-surface-canvas: #1d1d1d;
-  --ch-surface-panel: #202020;
-  --ch-surface-raised: #242424;
-  --ch-surface-control: #282828;
-  --ch-surface-hover: #2d2d2d;
-  --ch-surface-pressed: #171717;
+  --bg-host: #1d1d1d;
+  --bg-0: #0e1013;
+  --bg-1: #141619;
+  --bg-2: #1a1d21;
+  --bg-3: #22262b;
+  --bg-4: #2a2f35;
+  --line-hairline: #2c3137;
+  --line-strong: #707880;
+  --txt-1: #e9ecef;
+  --txt-2: #aab2bb;
+  --txt-3: #8e97a0;
 
-  --ch-border-subtle: #2a2a2a;
-  --ch-border-default: #343434;
-  --ch-border-strong: #464646;
-  --ch-border-focus: #73a7ff;
+  --accent: #7c8cff;
+  --accent-hover: #9aa6ff;
+  --accent-press: #6472f0;
+  --accent-on: #0e1013;
+  --accent-wash: rgba(124, 140, 255, 0.12);
+  --accent-glow: rgba(124, 140, 255, 0.28);
+  --ok: #43b77a;
+  --warn: #d9a441;
+  --danger: #f76750;
+  --info: #4cc2e0;
 
-  --ch-text-primary: #e7e7e7;
-  --ch-text-secondary: #a6a6a6;
-  --ch-text-muted: #747474;
-  --ch-text-disabled: #555555;
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s7: 32px;
+  --s8: 40px;
+  --r-chip: 2px;
+  --r-ctl: 6px;
+  --r-tile: 10px;
+  --r-pop: 14px;
+  --r-pill: 999px;
+  --e1: 0 1px 2px rgba(0, 0, 0, 0.24), 0 0 0 1px var(--line-hairline);
+  --e2: 0 8px 24px rgba(0, 0, 0, 0.36), 0 0 0 1px var(--line-hairline);
+  --e3: 0 16px 48px rgba(0, 0, 0, 0.48), 0 0 0 1px var(--line-hairline);
 
-  --ch-accent: #35c978;
-  --ch-accent-hover: #45d889;
-  --ch-accent-pressed: #26985d;
-  --ch-accent-soft: rgba(53, 201, 120, 0.12);
+  --dur-1: 90ms;
+  --dur-2: 140ms;
+  --dur-3: 200ms;
+  --dur-4: 280ms;
+  --dur-5: 420ms;
+  --dur-press: 60ms;
+  --dur-popover-out: 120ms;
+  --dur-drawer-out: 170ms;
+  --dur-ripple: 380ms;
+  --dur-live-pulse: 600ms;
+  --dur-live-reduced: 1200ms;
+  --dur-skeleton: 1200ms;
+  --dur-progress: 0ms;
+  --dur-progress-reduced: 200ms;
+  --dur-reduced: 1ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-std: cubic-bezier(0.2, 0, 0, 1);
+  --ease-pop: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --ease-linear: linear;
+  --ease-step-end: steps(1, end);
+  --stagger: 22ms;
+  --delay-none: 0ms;
+  --delay-tooltip: 600ms;
+  --delay-preview: 2000ms;
+  --delay-spinner: 180ms;
+  --delay-applied: 700ms;
 
-  --ch-danger: #e36a6a;
-  --ch-warning: #d8a54a;
-  --ch-info: #73a7ff;
-  --ch-success: #35c978;
+  --focus-ring: 2px solid var(--txt-1);
+  --focus-offset: 2px;
+}
 
-  --ch-space-1: 4px;
-  --ch-space-2: 8px;
-  --ch-space-3: 12px;
-  --ch-space-4: 16px;
-  --ch-space-5: 20px;
-  --ch-space-6: 24px;
+[data-theme="light"] {
+  color-scheme: light;
 
-  --ch-radius-control: 4px;
-  --ch-radius-panel: 6px;
-  --ch-radius-round: 999px;
+  --bg-host: #f7f8f9;
+  --bg-0: #ffffff;
+  --bg-1: #f7f8f9;
+  --bg-2: #f1f2f4;
+  --bg-3: #e7e9ec;
+  --bg-4: #ffffff;
+  --line-hairline: #dcdfe3;
+  --line-strong: #767e86;
+  --txt-1: #16181b;
+  --txt-2: #4e555c;
+  --txt-3: #626a72;
 
-  --ch-size-header: 32px;
-  --ch-size-control: 28px;
-  --ch-size-hit-target: 32px;
-  --ch-size-tool-tile: 40px;
-  --ch-size-icon: 18px;
+  --accent: #4a57d8;
+  --accent-hover: #3a46c4;
+  --accent-press: #2f3aac;
+  --accent-on: #ffffff;
+  --accent-wash: rgba(74, 87, 216, 0.1);
+  --accent-glow: rgba(74, 87, 216, 0.22);
+  --ok: #146c43;
+  --warn: #8a5a00;
+  --danger: #be382a;
+  --info: #0f6e8c;
 
-  --ch-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-  --ch-font-xs: 10px;
-  --ch-font-sm: 11px;
-  --ch-font-md: 12px;
-  --ch-font-lg: 13px;
-
-  --ch-motion-fast: 90ms;
-  --ch-motion-normal: 140ms;
-  --ch-motion-slow: 220ms;
-  --ch-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --e1: 0 1px 2px rgba(16, 24, 40, 0.06), 0 0 0 1px var(--line-hairline);
+  --e2: 0 8px 24px rgba(16, 24, 40, 0.1), 0 0 0 1px var(--line-hairline);
+  --e3: 0 16px 48px rgba(16, 24, 40, 0.14), 0 0 0 1px var(--line-hairline);
 }

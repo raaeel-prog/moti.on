@@ -11,6 +11,7 @@
     "@motion/command-registry": "0.1.0",
     "@motion/capability-matrix": "0.1.0",
     "@motion/logging": "0.1.0",
-    "@motion/ui-core": "0.1.0"
+    "@motion/ui-core": "0.1.0",
+    "@motion/ui-motion": "0.1.0"
   }
 }
