@@ -441,16 +441,53 @@ const ptBR = {
   "message.reverseKeysInstructions": "Selecione keyframes nas propriedades para invertê-los.",
   "message.reverseKeysNoActiveComp": "Abra ou ative uma composição antes de inverter as keys.",
   "message.reverseKeysApplied": "Keyframes invertidos. Um único Ctrl+Z desfaz a operação.",
+  "tool.reverseValues.name": "Inverter valores",
+  "tool.reverseValues.description":
+    "Troca os valores dos keyframes selecionados entre si, nos mesmos tempos — o ritmo da animação não muda, só o que acontece em cada instante.",
+  "message.reverseValuesInstructions": "Selecione dois ou mais keyframes numa propriedade para trocar os valores entre eles.",
+  "message.reverseValuesNoActiveComp": "Abra ou ative uma composição antes de inverter os valores.",
+  "message.reverseValuesApplied": "Valores dos keyframes invertidos. Um único Ctrl+Z desfaz a operação.",
   "tool.cloneKeys.name": "Clonar keys",
   "tool.cloneKeys.description": "Duplica os keyframes selecionados (repetindo ou espelhando) e os emenda ao fim.",
   "message.cloneKeysInstructions": "Selecione keyframes para cloná-los.",
   "message.cloneKeysNoActiveComp": "Abra ou ative uma composição antes de clonar as keys.",
   "message.cloneKeysApplied": "Keyframes clonados. Um único Ctrl+Z desfaz a operação.",
+  "tool.sendToEdge.name": "Enviar para a borda",
+  "tool.sendToEdge.description":
+    "Move o grupo de keyframes selecionado para o começo ou o fim da timeline, sem alterar o espaçamento entre eles.",
+  "sendToEdge.edge": "Destino",
+  "sendToEdge.edge.start": "Começo",
+  "sendToEdge.edge.end": "Final",
+  "sendToEdge.reference": "Medir contra",
+  "sendToEdge.reference.comp": "Composição",
+  "sendToEdge.reference.layer": "Camada",
+  "sendToEdge.reference.workArea": "Área de trabalho",
+  "message.sendToEdgeInstructions": "Selecione os keyframes que devem viajar juntos. O espaçamento entre eles é preservado.",
+  "message.sendToEdgeNoActiveComp": "Abra ou ative uma composição antes de enviar keyframes para a borda.",
+  "message.sendToEdgeApplied": "Keyframes enviados para a borda. Um único Ctrl+Z desfaz a operação.",
+  "status.applyingSendToEdge": "Enviando keyframes…",
+  "tool.neon.name": "Neon",
+  "tool.neon.description":
+    "Aplica aparência de neon na camada selecionada: núcleo, contorno e brilho, sem rasterizar o texto.",
+  "neon.coreColor": "Cor do núcleo",
+  "neon.glowColor": "Cor do brilho",
+  "neon.strokeWidth": "Espessura do contorno",
+  "neon.glowRadius": "Raio do brilho",
+  "neon.intensity": "Intensidade",
+  "message.neonInstructions": "Em camada de texto o núcleo e o contorno vão para o próprio texto, que continua editável. Camadas sem texto recebem só o brilho.",
+  "message.neonNoActiveComp": "Abra ou ative uma composição antes de aplicar o neon.",
+  "message.neonApplied": "Neon aplicado. Um único Ctrl+Z desfaz a operação.",
+  "status.applyingNeon": "Aplicando neon…",
+  "tools.search": "Buscar ferramenta",
+  "tools.search.placeholder": "Nome ou descrição",
+  "tools.search.count": "{count} de {total} ferramentas",
+  "tools.search.empty": "Nenhuma ferramenta corresponde a essa busca.",
   "cloneKeys.mode": "Modo",
   "cloneKeys.mode.repeat": "Repetir",
   "cloneKeys.mode.mirror": "Vaivém (espelhado)",
   "status.applyingEase": "Aplicando suavização…",
   "status.applyingReverseKeys": "Invertendo keyframes…",
+  "status.applyingReverseValues": "Trocando valores…",
   "status.applyingCloneKeys": "Clonando keyframes…",
   "pt-BR": "Português (BR)",
   "en-US": "English (US)",
@@ -908,6 +945,8 @@ export type MessageKey =
   | "tool.ease.description"
   | "tool.reverseKeys.name"
   | "tool.reverseKeys.description"
+  | "tool.reverseValues.name"
+  | "tool.reverseValues.description"
   | "tool.cloneKeys.name"
   | "tool.cloneKeys.description"
   | "tool.timeController.name"
@@ -927,7 +966,39 @@ export type MessageKey =
   | "message.reverseKeysInstructions"
   | "status.applyingReverseKeys"
   | "message.reverseKeysApplied"
+  | "message.reverseValuesNoActiveComp"
+  | "message.reverseValuesInstructions"
+  | "status.applyingReverseValues"
+  | "message.reverseValuesApplied"
   | "message.cloneKeysNoActiveComp"
+  | "tool.sendToEdge.name"
+  | "tool.sendToEdge.description"
+  | "sendToEdge.edge"
+  | "sendToEdge.edge.start"
+  | "sendToEdge.edge.end"
+  | "sendToEdge.reference"
+  | "sendToEdge.reference.comp"
+  | "sendToEdge.reference.layer"
+  | "sendToEdge.reference.workArea"
+  | "message.sendToEdgeInstructions"
+  | "message.sendToEdgeNoActiveComp"
+  | "message.sendToEdgeApplied"
+  | "status.applyingSendToEdge"
+  | "tool.neon.name"
+  | "tool.neon.description"
+  | "neon.coreColor"
+  | "neon.glowColor"
+  | "neon.strokeWidth"
+  | "neon.glowRadius"
+  | "neon.intensity"
+  | "message.neonInstructions"
+  | "message.neonNoActiveComp"
+  | "message.neonApplied"
+  | "status.applyingNeon"
+  | "tools.search"
+  | "tools.search.placeholder"
+  | "tools.search.count"
+  | "tools.search.empty"
   | "cloneKeys.mode"
   | "cloneKeys.mode.repeat"
   | "cloneKeys.mode.mirror"
@@ -1449,11 +1520,47 @@ const enUS: Record<MessageKey, string> = {
   "message.reverseKeysInstructions": "Select keyframes on properties to reverse them.",
   "message.reverseKeysNoActiveComp": "Open or activate a composition before reversing keys.",
   "message.reverseKeysApplied": "Keyframes reversed. A single Ctrl+Z undoes the operation.",
+  "tool.reverseValues.name": "Reverse Values",
+  "tool.reverseValues.description":
+    "Swaps the values of the selected keyframes with each other, at the same times — the animation's rhythm stays put, only what happens at each instant changes.",
+  "message.reverseValuesInstructions": "Select two or more keyframes on a property to swap the values between them.",
+  "message.reverseValuesNoActiveComp": "Open or activate a composition before reversing values.",
+  "message.reverseValuesApplied": "Keyframe values reversed. A single Ctrl+Z undoes the operation.",
   "tool.cloneKeys.name": "Clone Keys",
   "tool.cloneKeys.description": "Duplicates selected keyframes (as repeat or mirror) and appends them.",
   "message.cloneKeysInstructions": "Select keyframes to clone them.",
   "message.cloneKeysNoActiveComp": "Open or activate a composition before cloning keys.",
   "message.cloneKeysApplied": "Keyframes cloned. A single Ctrl+Z undoes the operation.",
+  "tool.sendToEdge.name": "Send to Edge",
+  "tool.sendToEdge.description":
+    "Moves the selected keyframe group to the start or the end of the timeline, leaving the spacing between keys untouched.",
+  "sendToEdge.edge": "Destination",
+  "sendToEdge.edge.start": "Start",
+  "sendToEdge.edge.end": "End",
+  "sendToEdge.reference": "Measure against",
+  "sendToEdge.reference.comp": "Composition",
+  "sendToEdge.reference.layer": "Layer",
+  "sendToEdge.reference.workArea": "Work area",
+  "message.sendToEdgeInstructions": "Select the keyframes that should travel together. The spacing between them is preserved.",
+  "message.sendToEdgeNoActiveComp": "Open or activate a composition before sending keyframes to an edge.",
+  "message.sendToEdgeApplied": "Keyframes sent to the edge. A single Ctrl+Z undoes the operation.",
+  "status.applyingSendToEdge": "Sending keyframes…",
+  "tool.neon.name": "Neon",
+  "tool.neon.description":
+    "Applies a neon look to the selected layer — core, stroke and glow — without rasterizing the text.",
+  "neon.coreColor": "Core colour",
+  "neon.glowColor": "Glow colour",
+  "neon.strokeWidth": "Stroke width",
+  "neon.glowRadius": "Glow radius",
+  "neon.intensity": "Intensity",
+  "message.neonInstructions": "On a text layer the core and stroke go onto the text itself, which stays editable. Layers without text get the glow only.",
+  "message.neonNoActiveComp": "Open or activate a composition before applying neon.",
+  "message.neonApplied": "Neon applied. A single Ctrl+Z undoes the operation.",
+  "status.applyingNeon": "Applying neon…",
+  "tools.search": "Search tools",
+  "tools.search.placeholder": "Name or description",
+  "tools.search.count": "{count} of {total} tools",
+  "tools.search.empty": "No tool matches that search.",
   "cloneKeys.mode": "Mode",
   "cloneKeys.mode.repeat": "Repeat",
   "cloneKeys.mode.mirror": "Ping-pong (Mirror)",
@@ -1490,6 +1597,7 @@ const enUS: Record<MessageKey, string> = {
   "status.applyingAnchor": "Aligning anchor…",
   "status.applyingEase": "Applying ease…",
   "status.applyingReverseKeys": "Reversing keys…",
+  "status.applyingReverseValues": "Swapping values…",
   "status.applyingCloneKeys": "Cloning keys…",
 
   "status.previewing": "Computing preview…",

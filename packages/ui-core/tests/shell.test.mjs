@@ -4,13 +4,17 @@ import assert from "node:assert/strict";
 import { createI18n } from "../dist/i18n.js";
 import {
   button,
+  syncToolGridRoving,
   toolGrid,
   toolTile,
   createShell,
   logLine,
   notice,
   propertyRow,
-  resolveWidthClass
+  resolveWidthClass,
+  COMPACT_MAX,
+  DEFAULT_MAX,
+  COMFORT_MAX
 } from "../dist/shell.js";
 
 import { createFakeDocument, createFakeWindow } from "./fake-dom.mjs";
@@ -57,14 +61,47 @@ function montar({ document: doc = createFakeDocument(), initialWidth = 360, onRe
   };
 }
 
-test("as quatro larguras de acoplamento da §22.3 caem nas classes certas", () => {
-  assert.equal(resolveWidthClass(280), "compact");
-  assert.equal(resolveWidthClass(359), "compact");
-  assert.equal(resolveWidthClass(360), "standard");
-  assert.equal(resolveWidthClass(480), "standard");
-  assert.equal(resolveWidthClass(559), "standard");
-  assert.equal(resolveWidthClass(560), "wide");
-  assert.equal(resolveWidthClass(720), "wide");
+test("as quatro faixas de acoplamento do Addendum A caem nas classes certas", () => {
+  // As fronteiras sao testadas nos dois lados de cada uma, porque foi
+  // exatamente ali que a versao anterior errava: ela punha 340 px em "compact"
+  // e 560 px em "wide". Um teste que so amostrasse o meio de cada faixa teria
+  // concordado com as fronteiras erradas.
+  assert.equal(resolveWidthClass(280), "compact", "minimo suportado");
+  assert.equal(resolveWidthClass(339), "compact", "ultimo pixel de Compact");
+
+  assert.equal(resolveWidthClass(340), "default", "primeiro pixel de Default");
+  assert.equal(resolveWidthClass(479), "default", "ultimo pixel de Default");
+
+  assert.equal(resolveWidthClass(480), "comfort", "primeiro pixel de Comfort");
+  assert.equal(resolveWidthClass(719), "comfort", "ultimo pixel de Comfort");
+
+  assert.equal(resolveWidthClass(720), "wide", "primeiro pixel de Wide");
+  assert.equal(resolveWidthClass(1200), "wide");
+});
+
+test("as fronteiras das faixas sao as do Addendum A, e nao numeros soltos no codigo", () => {
+  // Prende as constantes exportadas a tabela normativa: Compact 280–339,
+  // Default 340–479, Comfort 480–719, Wide 720+.
+  assert.equal(COMPACT_MAX, 339);
+  assert.equal(DEFAULT_MAX, 479);
+  assert.equal(COMFORT_MAX, 719);
+});
+
+test("a classe de largura vira modificador de CSS e atributo no shell", () => {
+  // O CSS estiliza por `.ch-shell--<classe>`; uma classe nova que nao chegasse
+  // ao DOM deixaria o painel com o layout da faixa anterior, sem erro nenhum.
+  const { shell, raiz } = montar();
+  for (const [largura, esperada] of [
+    [300, "compact"],
+    [400, "default"],
+    [600, "comfort"],
+    [900, "wide"]
+  ]) {
+    shell.setWidth(largura);
+    assert.equal(shell.widthClass(), esperada, `${largura} px`);
+    assert.equal(raiz.className, `ch-shell ch-shell--${esperada}`, `${largura} px`);
+    assert.equal(raiz.getAttribute("data-width-class"), esperada, `${largura} px`);
+  }
 });
 
 test("largura ausente cai no modo compacto, e nao no mais largo", () => {
@@ -239,7 +276,9 @@ test("observeWidth aplica a largura e devolve o cancelador do listener", () => {
 
   doc.documentElement.clientWidth = 600;
   janela.emit("resize");
-  assert.equal(shell.widthClass(), "wide");
+  // 600 px e Comfort no Addendum A; a versao anterior deste teste esperava
+  // "wide" porque o codigo comecava Wide em 560, e nao em 720.
+  assert.equal(shell.widthClass(), "comfort");
 
   cancelar();
   assert.equal(janela.listenerCount("resize"), 0, "o ciclo de vida precisa poder soltar o listener");
@@ -507,4 +546,93 @@ test("o redesenho nao rouba o foco de quem esta fora do conteudo", () => {
   shell.rerender();
 
   assert.equal(doc.activeElement, aba, "o foco na navegacao nao pertence ao conteudo");
+});
+
+/** Grade com N ladrilhos rotulados A, B, C... */
+function gradeDeFerramentas(doc, quantidade) {
+  const rotulos = Array.from({ length: quantidade }, (_, i) => String.fromCharCode(65 + i));
+  const grade = toolGrid(
+    doc,
+    rotulos.map((rotulo) => toolTile(doc, { id: "ease", label: rotulo, onSelect: () => {} }))
+  );
+  const tiles = Array.from(grade.children).map((celula) => celula.children[0]);
+  return { grade, tiles, rotulos };
+}
+
+const tabIndices = (tiles) => tiles.map((t) => t.getAttribute("tabindex"));
+
+test("a grade e uma unica parada de Tab, e nao uma por ferramenta", () => {
+  // Com 49 ferramentas, uma parada por ladrilho custaria 49 tabuladas para
+  // alcancar o que vem depois da grade.
+  const doc = createFakeDocument();
+  const { tiles } = gradeDeFerramentas(doc, 4);
+
+  assert.deepEqual(tabIndices(tiles), ["0", "-1", "-1", "-1"]);
+});
+
+test("setas andam na ordem de leitura e Home/End vao as pontas", () => {
+  const doc = createFakeDocument();
+  const { tiles } = gradeDeFerramentas(doc, 4);
+
+  tiles[0].keydown("ArrowRight");
+  assert.equal(doc.activeElement, tiles[1]);
+  assert.deepEqual(tabIndices(tiles), ["-1", "0", "-1", "-1"], "a ancora acompanha o foco");
+
+  tiles[1].keydown("ArrowLeft");
+  assert.equal(doc.activeElement, tiles[0]);
+
+  tiles[0].keydown("End");
+  assert.equal(doc.activeElement, tiles[3]);
+
+  tiles[3].keydown("Home");
+  assert.equal(doc.activeElement, tiles[0]);
+});
+
+test("as pontas nao dao a volta: a grade nao e um carrossel", () => {
+  const doc = createFakeDocument();
+  const { tiles } = gradeDeFerramentas(doc, 3);
+
+  tiles[0].keydown("ArrowLeft");
+  assert.equal(doc.activeElement, tiles[0], "esquerda no primeiro fica no primeiro");
+
+  tiles[2].focus();
+  tiles[2].keydown("ArrowRight");
+  assert.equal(doc.activeElement, tiles[2], "direita no ultimo fica no ultimo");
+});
+
+test("tecla alheia ao contrato nao e interceptada pela grade", () => {
+  const doc = createFakeDocument();
+  const { tiles } = gradeDeFerramentas(doc, 3);
+
+  const evento = tiles[0].keydown("ArrowDown");
+  // ArrowDown fica com o navegador de proposito: o numero de colunas e decidido
+  // pelo refluxo do CSS, e o DOM nao o conhece.
+  assert.notEqual(evento.defaultPrevented, true);
+  assert.equal(doc.activeElement, null);
+});
+
+test("o filtro nao pode tirar a grade da ordem de Tab", () => {
+  // O caso que so existe por causa da busca: esconder o ladrilho que carrega
+  // `tabindex="0"` deixaria todos os visiveis em `-1`, e o unico alcancavel
+  // escondido — a grade inteira sairia do Tab.
+  const doc = createFakeDocument();
+  const { grade, tiles } = gradeDeFerramentas(doc, 4);
+
+  grade.children[0].hidden = true;
+  grade.children[1].hidden = true;
+  syncToolGridRoving(grade);
+
+  assert.equal(tiles[2].getAttribute("tabindex"), "0", "a ancora foi para o primeiro visivel");
+  assert.equal(tiles[3].getAttribute("tabindex"), "-1");
+});
+
+test("as setas pulam o que o filtro escondeu", () => {
+  const doc = createFakeDocument();
+  const { grade, tiles } = gradeDeFerramentas(doc, 4);
+
+  grade.children[1].hidden = true;
+  syncToolGridRoving(grade);
+
+  tiles[0].keydown("ArrowRight");
+  assert.equal(doc.activeElement, tiles[2], "o ladrilho escondido nao pode receber foco");
 });

@@ -409,6 +409,7 @@ body,
 .ch-color,
 .ch-select,
 .ch-number,
+.ch-search,
 .ch-text {
   width: 100%;
   min-width: 0;
@@ -424,6 +425,7 @@ body,
   padding: 0 24px 0 7px;
 }
 
+.ch-search,
 .ch-text {
   padding: 0 7px;
 }
@@ -462,6 +464,7 @@ body,
 }
 
 .ch-color:focus,
+.ch-search:focus,
 .ch-text:focus,
 .ch-select:focus,
 .ch-number:focus,
@@ -471,6 +474,7 @@ body,
 }
 
 .ch-color[disabled],
+.ch-search[disabled],
 .ch-text[disabled],
 .ch-select[disabled],
 .ch-number[disabled],
@@ -600,7 +604,19 @@ body,
   text-overflow: ellipsis;
 }
 
-/* Em painel estreito a grade vira uma coluna, em vez de espremer dois ladrilhos. */
+/*
+ * Em painel estreito a grade vira uma coluna, em vez de espremer dois ladrilhos.
+ *
+ * O Addendum A pede 2 colunas em Compact, e a conta fecha: em 280 px o conteudo
+ * tem 264 px uteis, o que da dois ladrilhos de 128 px — e o rotulo truncado nao
+ * some, porque `toolTile` sempre escreve o nome completo em `title`.
+ *
+ * Continua em uma coluna de proposito. A linha do Addendum que pede 2 colunas
+ * descreve junto uma barra inferior de 44 px, um Inspector e um dock de
+ * recentes, nada disso presente neste shell: a contagem de colunas e parte da
+ * CHMS-UX-013, e nao um ajuste isolado de CSS. Trocar so este numero deixaria o
+ * painel mais apertado sem entregar o layout que justifica o aperto.
+ */
 .ch-shell--compact .ch-tool-grid__item {
   flex: 1 1 100%;
   max-width: none;
@@ -752,8 +768,11 @@ body,
 }
 
 /*
- * 280–359 px: navegacao por icone, respiro reduzido, botao em largura total.
- * O rotulo some, mas o `title` permanece — a §22.4 exige nome acessivel.
+ * Compact, 280–339 px: navegacao por icone, respiro reduzido, botao em largura
+ * total. O rotulo some, mas o `title` permanece — a §22.4 exige nome acessivel.
+ *
+ * A faixa ia ate 359 px enquanto as fronteiras do codigo estavam erradas; o
+ * Addendum A encerra Compact em 339.
  */
 .ch-shell--compact .ch-header,
 .ch-shell--compact .ch-view-title,
@@ -791,9 +810,16 @@ body,
 }
 
 /*
- * 560 px ou mais: largura de leitura limitada.
- * A §22.3 proibe esticar controle pela largura inteira do painel.
+ * Comfort (480–719 px) e Wide (720 px+): largura de leitura limitada.
+ * A §22.3 proibe esticar controle pela largura inteira do painel, e a regra
+ * passa a valer desde 480 px — antes ela so entrava em 560, porque era ali que
+ * a faixa "wide" errada comecava.
  */
+.ch-shell--comfort .ch-header,
+.ch-shell--comfort .ch-view-title,
+.ch-shell--comfort .ch-content,
+.ch-shell--comfort .ch-actions,
+.ch-shell--comfort .ch-status,
 .ch-shell--wide .ch-header,
 .ch-shell--wide .ch-view-title,
 .ch-shell--wide .ch-content,
@@ -802,10 +828,12 @@ body,
   max-width: 620px;
 }
 
+.ch-shell--comfort .ch-row__label,
 .ch-shell--wide .ch-row__label {
   flex: 0 0 32%;
 }
 
+.ch-shell--comfort .ch-field,
 .ch-shell--wide .ch-field {
   grid-template-columns: minmax(120px, 32%) minmax(0, 1fr);
 }

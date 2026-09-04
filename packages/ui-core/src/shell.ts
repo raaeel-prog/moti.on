@@ -15,14 +15,26 @@
 import type { I18n } from "./i18n.js";
 import type { MessageKey } from "./locales.js";
 
-/** Fronteiras da §22.3. 280 é a largura mínima de acoplamento suportada. */
-export const COMPACT_MAX = 359;
-export const STANDARD_MAX = 559;
+/**
+ * Fronteiras das quatro faixas de acoplamento do Addendum A, que supersede o
+ * §22.3 do MASTER: Compact 280–339, Default 340–479, Comfort 480–719, Wide 720+.
+ * 280 px é a largura mínima suportada.
+ *
+ * O código tinha três faixas com todas as fronteiras erradas (compact até 359,
+ * "standard" até 559, wide a partir de 560) e sem a faixa Comfort. Na prática
+ * isso significava que um painel em 340 px era tratado como compacto — barra
+ * inferior, rótulos de 50 %, botões de largura inteira — quando o Addendum já
+ * pede o rail lateral ali; e que a partir de 560 px ele entrava em Wide, que o
+ * Addendum reserva para 720 px.
+ */
+export const COMPACT_MAX = 339;
+export const DEFAULT_MAX = 479;
+export const COMFORT_MAX = 719;
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 let shellSequence = 0;
 
-export type WidthClass = "compact" | "standard" | "wide";
+export type WidthClass = "compact" | "default" | "comfort" | "wide";
 export type StatusState = "ok" | "error" | "busy";
 
 const ICON_PATHS: Record<string, string> = {
@@ -46,6 +58,16 @@ const ICON_PATHS: Record<string, string> = {
   settings: "M3 5h12M3 9h12M3 13h12M6 3.5v3M12 7.5v3M8 11.5v3",
   ease: "M3 13C6 13 8 5 15 5",
   reverseKeys: "M13.5 6.5l2.5-2.5-2.5-2.5M16 4H2.5M4.5 11.5L2 14l2.5 2.5M2 14h13.5",
+  // Duas setas verticais de troca sobre uma linha de tempo fixa: os tempos
+  // (o eixo horizontal) não se movem, só o que está em cada um deles.
+  // Deliberadamente diferente do ícone de reverseKeys (que move posição) e do
+  // de reverseOrder (setas laterais sobre linhas empilhadas).
+  reverseValues: "M5 2v9M3.5 4L5 2l1.5 2M3.5 9L5 11l1.5-2M11 2v9M9.5 4L11 2l1.5 2M9.5 9L11 11l1.5-2M2 14h13.5",
+  // Tres marcas de keyframe empurradas contra a barra da esquerda: o grupo
+  // inteiro encostando na borda, que e literalmente o que o comando faz.
+  sendToEdge: "M2 2v12M5 5.5l1.5 2.5L5 10.5 3.5 8zM9 5.5l1.5 2.5L9 10.5 7.5 8zM13 5.5l1.5 2.5L13 10.5 11.5 8zM4.5 8h9",
+  // Tubo de neon: um traco fechado com o halo insinuado por dois arcos soltos.
+  neon: "M5 11V6a3 3 0 0 1 6 0v5M2.5 4.5A6.5 6.5 0 0 1 2.5 11.5M13.5 4.5a6.5 6.5 0 0 1 0 7M6.5 13.5h3",
   cloneKeys: "M5.5 5.5v-3h10v10h-3M2.5 5.5h10v10h-10z",
   timeController: "M9 2.5a6.5 6.5 0 1 1 0 13a6.5 6.5 0 1 1 0-13zM9 5.5v4l2.5 2.5",
   animateKinetic: "M2.5 9h5l2.5-4 5 7-2.5-3z",
@@ -102,6 +124,9 @@ const ICON_FALLBACKS: Record<string, string> = {
   settings: "⚙",
   ease: "∫",
   reverseKeys: "⇆",
+  reverseValues: "⇕",
+  sendToEdge: "⇤",
+  neon: "✦",
   cloneKeys: "⧉",
   timeController: "⏱",
   animateKinetic: "K",
@@ -137,7 +162,10 @@ export function resolveWidthClass(width: number | undefined): WidthClass {
   if (!width || width <= COMPACT_MAX) {
     return "compact";
   }
-  return width <= STANDARD_MAX ? "standard" : "wide";
+  if (width <= DEFAULT_MAX) {
+    return "default";
+  }
+  return width <= COMFORT_MAX ? "comfort" : "wide";
 }
 
 export function createElement(
@@ -279,7 +307,51 @@ export function toolTile(doc: Document, options: ToolTileOptions): HTMLButtonEle
   return tile;
 }
 
-/** Grade de ferramentas. O número de colunas é decidido pelo CSS, por largura. */
+/** Ladrilhos visíveis da grade, na ordem de leitura. */
+function tileVisiveis(grid: HTMLElement): HTMLElement[] {
+  const encontrados: HTMLElement[] = [];
+  for (const celula of Array.from(grid.children) as HTMLElement[]) {
+    // O filtro esconde a celula, nao o ladrilho: pular aqui e o que mantem a
+    // ancora do roving e as setas restritas ao que o usuario esta vendo.
+    if (celula.hidden) continue;
+    const tile = celula.children[0] as HTMLElement | undefined;
+    if (tile) encontrados.push(tile);
+  }
+  return encontrados;
+}
+
+/**
+ * Recoloca a âncora do roving no primeiro ladrilho visível.
+ *
+ * Precisa ser chamado de novo sempre que a visibilidade dos ladrilhos mudar.
+ * Sem isso, um filtro que esconda o ladrilho que carrega `tabindex="0"` deixa a
+ * grade inteira fora da ordem de Tab: os visíveis todos com `-1`, e o único
+ * alcançável escondido.
+ */
+export function syncToolGridRoving(grid: HTMLElement): void {
+  const visiveis = tileVisiveis(grid);
+  for (const [indice, tile] of visiveis.entries()) {
+    tile.setAttribute("tabindex", indice === 0 ? "0" : "-1");
+  }
+}
+
+/**
+ * Grade de ferramentas. O número de colunas é decidido pelo CSS, por largura.
+ *
+ * ## Teclado
+ *
+ * A grade é **uma** parada de Tab, e não uma por ladrilho: com 49 ferramentas,
+ * chegar ao que vem depois dela custaria 49 tabuladas. Dentro dela, ←/→ andam
+ * na ordem de leitura e Home/End vão às pontas, sempre pulando o que o filtro
+ * escondeu.
+ *
+ * **↑/↓ não são tratados de propósito.** Isto é `role=list` num flex-wrap: o
+ * número de colunas é decidido pelo refluxo do CSS e o DOM não o conhece.
+ * Tratar ↑/↓ exigiria chutar a largura da linha, e um chute errado move o foco
+ * para um ladrilho que não é o de cima — pior que não mover. O grid de verdade,
+ * com contagem de colunas declarada e `role=grid`, é o `createQuickGrid` de
+ * `components.ts`.
+ */
 export function toolGrid(doc: Document, tiles: readonly HTMLElement[]): HTMLElement {
   const grid = createElement(doc, "div", "ch-tool-grid");
   grid.setAttribute("role", "list");
@@ -289,8 +361,33 @@ export function toolGrid(doc: Document, tiles: readonly HTMLElement[]): HTMLElem
     item.setAttribute("role", "listitem");
     item.appendChild(tile);
     grid.appendChild(item);
+
+    tile.addEventListener("keydown", (event) => {
+      const key = (event as KeyboardEvent).key;
+      const visiveis = tileVisiveis(grid);
+      const atual = visiveis.indexOf(tile);
+      if (atual < 0 || visiveis.length === 0) return;
+
+      let destino: number;
+      if (key === "ArrowRight") destino = Math.min(atual + 1, visiveis.length - 1);
+      else if (key === "ArrowLeft") destino = Math.max(atual - 1, 0);
+      else if (key === "Home") destino = 0;
+      else if (key === "End") destino = visiveis.length - 1;
+      else return;
+
+      event.preventDefault();
+      const alvo = visiveis[destino];
+      if (!alvo) return;
+      // A âncora acompanha o foco: sair da grade e voltar por Tab devolve o
+      // usuário ao ladrilho onde ele estava, e não ao primeiro.
+      for (const outro of visiveis) {
+        outro.setAttribute("tabindex", outro === alvo ? "0" : "-1");
+      }
+      alvo.focus();
+    });
   }
 
+  syncToolGridRoving(grid);
   return grid;
 }
 
@@ -549,6 +646,46 @@ export function textField(doc: Document, options: TextFieldOptions): HTMLElement
   applyFieldState(input, options);
 
   input.addEventListener("change", () => options.onCommit(input.value));
+  field.control.appendChild(input);
+  return field.root;
+}
+
+export interface SearchFieldOptions extends FieldBaseOptions {
+  value: string;
+  placeholder?: string;
+  /** Chamado a cada tecla. Só para filtro local — nunca para falar com o host. */
+  onInput(value: string): void;
+}
+
+/**
+ * Campo de busca que reage a cada tecla.
+ *
+ * É o oposto deliberado de `textField`, que confirma em `change` justamente
+ * porque seus consumidores disparam trabalho a cada confirmação. Filtrar uma
+ * lista já carregada não custa nada, e esperar o `change` faria o usuário
+ * digitar às cegas até sair do campo.
+ *
+ * Quem consome isto **não pode** redesenhar a tela dentro de `onInput`: o
+ * redesenho recria o input e o foco morre no meio da digitação. O filtro
+ * mexe na visibilidade dos itens já montados.
+ */
+export function searchField(doc: Document, options: SearchFieldOptions): HTMLElement {
+  const field = fieldRoot(doc, options);
+  const input = createElement(doc, "input", "ch-search") as HTMLInputElement;
+
+  // `type=search` some com o botão de limpar em runtime que não o suporta; o
+  // fallback para `text` mantém o campo digitável em vez de virar um input
+  // inerte de tipo desconhecido.
+  input.type = "search";
+  if (input.type !== "search") input.type = "text";
+
+  input.value = options.value;
+  input.setAttribute("spellcheck", "false");
+  input.setAttribute("autocomplete", "off");
+  if (options.placeholder) input.setAttribute("placeholder", options.placeholder);
+  applyFieldState(input, options);
+
+  input.addEventListener("input", () => options.onInput(input.value));
   field.control.appendChild(input);
   return field.root;
 }

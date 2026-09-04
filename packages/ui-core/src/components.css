@@ -1,0 +1,596 @@
+/*
+ * CHMS-UX-003 — kit compartilhado de componentes.
+ *
+ * Movimento vem exclusivamente dos IDs de @motion/ui-motion. Esta folha cuida
+ * de geometria, estados e contraste; nao declara keyframes nem uma segunda
+ * linguagem de duracoes.
+ */
+
+.ch-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ch-action,
+.ch-quick-tile,
+.ch-slider-field,
+.ch-chip-group,
+.ch-popover,
+.ch-drawer,
+.ch-toast {
+  position: relative;
+  color: var(--txt-1);
+  font-family: var(--ch-font-family);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.ch-component-state {
+  display: inline-flex;
+  min-height: 18px;
+  align-items: center;
+  color: var(--txt-2);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.ch-component-state[hidden],
+.ch-component-state[data-hidden="true"] {
+  display: none;
+}
+
+.ch-disabled-reason {
+  position: absolute;
+  z-index: 4;
+  left: 0;
+  top: calc(100% + var(--s1));
+  width: 264px;
+  max-width: calc(100vw - var(--s4));
+  padding: var(--s1) var(--s2);
+  color: var(--txt-1);
+  background: var(--bg-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-ctl);
+  box-shadow: var(--e1);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ch-disabled-reason[hidden],
+.ch-disabled-reason[data-hidden="true"] {
+  display: none;
+}
+
+.ch-action:hover > .ch-disabled-reason[data-hidden="false"],
+.ch-quick-tile:hover > .ch-disabled-reason[data-hidden="false"],
+.ch-slider-field:hover > .ch-disabled-reason[data-hidden="false"],
+.ch-chip-group:hover > .ch-disabled-reason[data-hidden="false"],
+.ch-action[data-disabled-explanation="open"] > .ch-disabled-reason[data-hidden="false"],
+.ch-quick-tile[data-disabled-explanation="open"] > .ch-disabled-reason[data-hidden="false"],
+.ch-slider-field[data-disabled-explanation="open"] > .ch-disabled-reason[data-hidden="false"],
+.ch-chip-group[data-disabled-explanation="open"] > .ch-disabled-reason[data-hidden="false"] {
+  opacity: 1;
+}
+
+.ch-action-button:focus,
+.ch-quick-tile__primary:focus,
+.ch-quick-tile__advanced:focus,
+.ch-slider-field__range:focus,
+.ch-slider-field__number:focus,
+.ch-chip:focus,
+.ch-popover:focus,
+.ch-drawer:focus,
+.ch-toast__action:focus,
+.ch-toast__dismiss:focus {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border: 1px solid var(--txt-1);
+}
+
+.ch-action-button[aria-disabled="true"],
+.ch-quick-tile__primary[aria-disabled="true"],
+.ch-quick-tile__advanced[aria-disabled="true"],
+.ch-slider-field__range[aria-disabled="true"],
+.ch-slider-field__number[aria-disabled="true"],
+.ch-chip[aria-disabled="true"],
+.ch-toast__action[aria-disabled="true"],
+.ch-toast__dismiss[aria-disabled="true"] {
+  color: var(--txt-3);
+  cursor: not-allowed;
+}
+
+.ch-action {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.ch-action > .ch-component-state {
+  margin-top: var(--s1);
+}
+
+.ch-action-button {
+  min-width: 32px;
+  min-height: 28px;
+  padding: var(--s1) var(--s3);
+  color: var(--txt-1);
+  background: var(--bg-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-ctl);
+  font-family: var(--ch-font-family);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.ch-action-button:hover {
+  background: var(--bg-4);
+}
+
+.ch-action-button:active {
+  background: var(--bg-2);
+}
+
+.ch-action-button--primary {
+  color: var(--accent-on);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.ch-action-button--primary:hover {
+  background: var(--accent-hover);
+}
+
+.ch-action-button--primary:active {
+  background: var(--accent-press);
+}
+
+.ch-action-button--danger {
+  color: var(--danger);
+  background: var(--bg-2);
+  border-color: var(--danger);
+}
+
+.ch-action-button--quiet {
+  background: transparent;
+  border-color: transparent;
+}
+
+.ch-quick-tile {
+  box-sizing: border-box;
+  min-width: 88px;
+  min-height: 72px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-hairline);
+  border-radius: var(--r-tile);
+}
+
+.ch-quick-tile__primary {
+  display: flex;
+  width: 100%;
+  min-height: 72px;
+  align-items: center;
+  padding: var(--s2);
+  padding-right: 36px;
+  color: var(--txt-1);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-tile);
+  cursor: pointer;
+}
+
+.ch-quick-tile__primary:hover {
+  color: var(--txt-1);
+}
+
+.ch-quick-tile__primary:active {
+  color: var(--accent-hover);
+}
+
+.ch-quick-tile__icon {
+  flex: 0 0 20px;
+  align-self: start;
+  margin-right: var(--s2);
+  color: var(--txt-2);
+  font-size: 18px;
+  line-height: 20px;
+}
+
+.ch-quick-tile__icon[data-feedback="loading"] {
+  font-size: 12px;
+  text-align: center;
+}
+
+.ch-quick-tile__icon[data-feedback="success"],
+.ch-quick-tile__icon[data-feedback="disabled"] {
+  font-size: 16px;
+  text-align: center;
+}
+
+.ch-quick-tile__copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ch-quick-tile__label {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ch-quick-tile__preset {
+  overflow: hidden;
+  color: var(--txt-2);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ch-quick-tile__advanced {
+  position: absolute;
+  top: var(--s1);
+  right: var(--s1);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--txt-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-ctl);
+  cursor: pointer;
+}
+
+.ch-quick-tile__advanced:hover {
+  color: var(--txt-1);
+  background: var(--bg-4);
+}
+
+.ch-quick-tile > .ch-component-state {
+  position: absolute;
+  right: var(--s2);
+  bottom: var(--s1);
+  max-width: calc(100% - var(--s4));
+}
+
+.ch-quick-tile[data-state="success"] > .ch-component-state {
+  color: var(--accent);
+}
+
+.ch-quick-grid {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ch-quick-grid__row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+}
+
+.ch-quick-grid__row + .ch-quick-grid__row {
+  margin-top: var(--s2);
+}
+
+.ch-quick-grid__cell {
+  flex: 1 1 0;
+  min-width: 88px;
+}
+
+.ch-quick-grid__cell + .ch-quick-grid__cell {
+  margin-left: var(--s2);
+}
+
+.ch-slider-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ch-slider-field__label {
+  align-self: flex-start;
+  color: var(--txt-1);
+  font-weight: 500;
+  cursor: default;
+}
+
+.ch-slider-field__description {
+  margin-top: var(--s1);
+  color: var(--txt-2);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.ch-slider-field__controls {
+  display: flex;
+  align-items: center;
+  margin-top: var(--s1);
+  min-width: 0;
+}
+
+.ch-slider-field__track {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 88px;
+  min-height: 32px;
+  align-items: center;
+}
+
+.ch-slider-field__track::before,
+.ch-slider-field__fill {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 6px;
+  border-radius: var(--r-pill);
+  content: "";
+}
+
+.ch-slider-field__track::before {
+  background: var(--bg-3);
+  border: 1px solid var(--line-strong);
+}
+
+.ch-slider-field__fill {
+  background: var(--accent);
+}
+
+.ch-slider-field__range {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 32px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.ch-slider-field__number {
+  box-sizing: border-box;
+  width: 64px;
+  margin-left: var(--s2);
+  min-height: 28px;
+  padding: var(--s1) var(--s2);
+  color: var(--txt-1);
+  background: var(--bg-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-ctl);
+  font-family: var(--ch-font-family);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.ch-slider-field__number[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.ch-slider-field__unit {
+  min-width: 20px;
+  margin-left: var(--s2);
+  color: var(--txt-2);
+  font-size: 11px;
+}
+
+.ch-chip-group {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.ch-chip {
+  flex: 0 0 auto;
+  min-width: 32px;
+  min-height: 28px;
+  margin-right: var(--s2);
+  padding: var(--s1) var(--s2);
+  color: var(--txt-2);
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-chip);
+  font-family: var(--ch-font-family);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.ch-chip:hover {
+  color: var(--txt-1);
+  background: var(--bg-3);
+}
+
+.ch-chip:active {
+  background: var(--bg-4);
+}
+
+.ch-chip[data-active="true"] {
+  color: var(--txt-1);
+  border-color: var(--accent);
+}
+
+.ch-popover {
+  z-index: 20;
+  box-sizing: border-box;
+  width: calc(100vw - var(--s4));
+  max-width: 320px;
+  max-height: calc(100vh - var(--s4));
+  padding: var(--s3);
+  overflow: auto;
+  color: var(--txt-1);
+  background: var(--bg-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pop);
+  box-shadow: var(--e2);
+}
+
+.ch-popover[hidden],
+.ch-popover[data-hidden="true"] {
+  display: none;
+}
+
+.ch-drawer {
+  z-index: 30;
+  box-sizing: border-box;
+  width: 88vw;
+  max-width: 360px;
+  height: 100%;
+  padding: var(--s3);
+  overflow: auto;
+  color: var(--txt-1);
+  background: var(--bg-4);
+  border-left: 1px solid var(--line-strong);
+  box-shadow: var(--e3);
+}
+
+.ch-drawer[hidden],
+.ch-drawer[data-hidden="true"],
+.ch-drawer-backdrop[hidden],
+.ch-drawer-backdrop[data-hidden="true"] {
+  display: none;
+}
+
+.ch-drawer-backdrop {
+  position: absolute;
+  z-index: 29;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--bg-0);
+}
+
+.ch-toast-region {
+  position: absolute;
+  z-index: 40;
+  right: var(--s3);
+  bottom: 52px;
+  left: var(--s3);
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.ch-toast + .ch-toast {
+  margin-top: var(--s2);
+}
+
+.ch-toast {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 360px;
+  margin-left: auto;
+  padding: var(--s3);
+  color: var(--txt-1);
+  background: var(--bg-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pop);
+  box-shadow: var(--e2);
+  pointer-events: auto;
+}
+
+.ch-toast__message {
+  font-weight: 600;
+}
+
+.ch-toast__detail {
+  margin-top: var(--s1);
+  color: var(--txt-2);
+}
+
+.ch-toast__actions {
+  display: flex;
+  align-items: center;
+  margin-top: var(--s2);
+}
+
+.ch-toast__action + .ch-toast__action {
+  margin-left: var(--s2);
+}
+
+.ch-toast__action,
+.ch-toast__dismiss {
+  min-width: 28px;
+  min-height: 28px;
+  color: var(--txt-1);
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-ctl);
+  cursor: pointer;
+}
+
+.ch-toast__action {
+  padding: var(--s1) var(--s2);
+}
+
+.ch-toast__dismiss {
+  margin-left: auto;
+  padding: 0;
+}
+
+.ch-toast__action:hover,
+.ch-toast__dismiss:hover {
+  background: var(--bg-3);
+}
+
+.ch-toast__action:active,
+.ch-toast__dismiss:active {
+  background: var(--bg-2);
+}
+
+/* Estados logicos: sempre acompanhados pelo texto de .ch-component-state. */
+[data-state="loading"] {
+  cursor: progress;
+}
+
+[data-state="empty"] > .ch-component-state,
+[data-state="unsupported"] > .ch-component-state {
+  color: var(--txt-3);
+}
+
+[data-state="success"] > .ch-component-state {
+  color: var(--ok);
+}
+
+[data-state="warning"] > .ch-component-state {
+  color: var(--warn);
+}
+
+[data-state="error"] > .ch-component-state {
+  color: var(--danger);
+}
+
+/* As animacoes e seus fallbacks reduzidos vivem em ui-motion/motion.css. */
+[data-motion~="tile-hover"],
+[data-motion~="tile-press"],
+[data-motion~="tile-advanced"],
+[data-motion~="slider-knob"],
+[data-motion~="slider-track"],
+[data-motion~="preset-chip"],
+[data-motion~="preview-enter"],
+[data-motion~="preview-exit"],
+[data-motion~="drawer-enter"],
+[data-motion~="drawer-exit"],
+[data-motion~="drawer-dimmer"],
+[data-motion~="toast-enter"],
+[data-motion~="toast-exit"] {
+  animation-play-state: running;
+}

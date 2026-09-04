@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { checkboxField, numberField, selectField } from "../dist/shell.js";
+import { checkboxField, numberField, searchField, selectField } from "../dist/shell.js";
 import { createFakeDocument } from "./fake-dom.mjs";
 
 test("selectField mantém label acessível e confirma somente opções declaradas pela view", () => {
@@ -81,4 +81,67 @@ test("checkboxField propaga estado e campo desabilitado explica o motivo", () =>
   input.checked = false;
   input.emit("change");
   assert.equal(checked, false);
+});
+
+test("searchField reage a cada tecla, e nao so ao change", () => {
+  // É o oposto deliberado de textField. Um campo de busca que só respondesse no
+  // `change` faria o usuário digitar às cegas até tirar o foco do campo.
+  const document = createFakeDocument();
+  const teclas = [];
+  const field = searchField(document, {
+    id: "tools-search",
+    label: "Buscar ferramenta",
+    value: "",
+    placeholder: "Nome ou descrição",
+    onInput: (value) => teclas.push(value)
+  });
+
+  const label = field.getElementsByTagName("label")[0];
+  const input = field.getElementsByTagName("input")[0];
+  assert.equal(label.htmlFor, "tools-search");
+  assert.equal(input.id, "tools-search");
+  assert.equal(input.getAttribute("placeholder"), "Nome ou descrição");
+  assert.equal(input.getAttribute("autocomplete"), "off");
+
+  input.value = "ne";
+  input.emit("input");
+  input.value = "neo";
+  input.emit("input");
+  assert.deepEqual(teclas, ["ne", "neo"]);
+
+  // `change` não pode disparar uma segunda vez: o consumidor filtraria duas
+  // vezes o mesmo texto ao sair do campo.
+  input.emit("change");
+  assert.deepEqual(teclas, ["ne", "neo"]);
+});
+
+test("searchField cai para type=text quando o runtime nao conhece type=search", () => {
+  // UXP não é um navegador completo; um input de tipo desconhecido vira um
+  // campo inerte, e um filtro que não aceita digitação é pior que nenhum.
+  const document = createFakeDocument();
+  const original = document.createElement;
+  document.createElement = (tag) => {
+    const node = original.call(document, tag);
+    if (tag === "input") {
+      Object.defineProperty(node, "type", {
+        get: () => node.__type ?? "text",
+        set: (v) => {
+          node.__type = v === "search" ? "text" : v;
+        },
+        configurable: true
+      });
+    }
+    return node;
+  };
+
+  const field = searchField(document, {
+    id: "busca",
+    label: "Buscar",
+    value: "",
+    onInput: () => {}
+  });
+  document.createElement = original;
+
+  const input = field.getElementsByTagName("input")[0];
+  assert.equal(input.type, "text");
 });

@@ -216,6 +216,7 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
     // "Smooth" e "Wiggle" acima.
     "tool.animateKinetic.name",
     "tool.glitch.name",
+  "tool.neon.name",
     "tool.parallax.name",
     // Simbolos de unidade.
     "timeController.unit.percent",
