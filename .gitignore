@@ -45,3 +45,18 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .tsbuildinfo/
+
+# Despejos de recuperacao de editor e de sessao de agente.
+#
+# A sessao que reconstruiu apps/after-effects-cep/client/src/main.ts deixou
+# copias parciais e transcricoes na raiz do repositorio. Nao sao fonte: o
+# arquivo reconstruido e o que vale, e o historico do git guarda o resto.
+main_recovered.ts
+head-main.ts
+main-middle.txt
+main_ts_history_*.txt
+step*.json
+walkthrough_*.json
+
+# Copias de seguranca deixadas por edicao manual.
+*.bak

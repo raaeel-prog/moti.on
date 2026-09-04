@@ -76,6 +76,7 @@ Do not return plain strings that require UI-side parsing.
 - Prefix managed expressions with metadata that identifies feature and schema version.
 - Preserve an existing user expression unless the user explicitly chooses Replace.
 - Support Apply, Adjust, Bake, and Remove as separate operations where applicable.
+- When mutating expressions, always save and restore the `expressionEnabled` property state explicitly during `try/catch` rollbacks. Relying only on the expression string restoration can cause UI ghost states in After Effects if the assignment fails.
 
 ## Keyframes
 

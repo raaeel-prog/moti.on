@@ -530,11 +530,17 @@ export interface RigMetadata {
 - Gerar expressões compatíveis com o engine detectado.
 - Não usar `eval()` em expressões.
 - Cada template recebe snapshot test e teste dentro do After Effects.
-- Inserir cabeçalho de versão:
+- Inserir cabeçalho de versão, com o id do comando que gerou a expressão:
 
 ```js
-// CHMS_EXPRESSION v1 | ae.animate.wiggle
+// MOTION_EXPRESSION v1 | ae.expression.wiggle
 ```
+
+  O prefixo vem de `EXPRESSION_HEADER` em `packages/contracts/src/rig-metadata.ts`
+  e não pode ser reescrito aqui: ele já está gravado nos projetos dos usuários, e
+  é por ele que o painel reconhece a própria expressão. O texto anterior desta
+  linha dizia `CHMS_EXPRESSION v1 | ae.animate.wiggle`, com o prefixo anterior ao
+  rebranding e um id que o host nunca registrou — ver a nota do §13.
 
 ---
 
@@ -543,8 +549,8 @@ export interface RigMetadata {
 | ID | Função | Host | Fase |
 |---|---|---|---|
 | `ae.animate.parallax.quick` | Parallax — Quick Rig | After Effects | P2 |
-| `ae.animate.wiggle` | Wiggle | After Effects | P1 |
-| `ae.animate.flicker` | Flicker | After Effects | P1 |
+| `ae.expression.wiggle` | Wiggle | After Effects | P1 |
+| `ae.expression.flicker` | Flicker | After Effects | P1 |
 | `ae.style.neon` | Neon | After Effects | P3 |
 | `ae.audio.beat` | Beat | After Effects | P5 |
 | `ae.text.box` | Text Box | After Effects | P1 |
@@ -582,6 +588,35 @@ export interface RigMetadata {
 | `ae.project.clean` | Clean | After Effects | P4 |
 | `ae.comp.fast-edit` | Fast Edit — Composition | After Effects | P2 |
 
+> **Wiggle e Flicker são `ae.expression.*`, e não `ae.animate.*`.** A tabela
+> acima já traz os ids corrigidos. O §13 original — e o Addendum A, que é
+> anexado sem alterações e travado por hash — catalogam `ae.animate.wiggle` e
+> `ae.animate.flicker`; o host registra `ae.expression.wiggle` e
+> `ae.expression.flicker` desde a primeira implementação, ao lado de
+> `ae.expression.loopout` e `ae.expression.smooth`.
+>
+> A divergência foi resolvida a favor do código, e não da spec, por um motivo
+> concreto: **o id do comando é gravado dentro do projeto do usuário**, no
+> cabeçalho `// MOTION_EXPRESSION v1 | <id>` que `expression-templates.jsx`
+> escreve em cada expressão gerenciada. É por esse cabeçalho que o painel
+> reconhece a própria expressão para oferecer Ajustar e Remover, e para detectar
+> conflito com expressão escrita pelo usuário. Renomear o comando faria o painel
+> deixar de reconhecer toda expressão já aplicada em todo projeto existente:
+> elas passariam a parecer expressão de terceiro, e o Remover pararia de
+> funcionar nelas. Um nome mais bonito não paga esse preço.
+>
+> **Esta tabela é só do After Effects.** Os três comandos do Premiere que já
+> existem — `pr.context.read`, `pr.capability.probe` e `pr.diagnostics.selfTest`
+> — não estão catalogados em lugar nenhum desta spec: o Premiere aparece como
+> arquitetura (§4.2, §22) e como limite de API (§20.3), nunca como catálogo de
+> comandos. A lacuna fica registrada aqui e em
+> `tests/catalogo-de-comandos.test.mjs`; fechá-la é escrever a seção que falta,
+> e não acrescentar linhas `pr.*` a uma tabela que se declara do After Effects.
+>
+> `tests/catalogo-de-comandos.test.mjs` prende esta tabela ao registro
+> executável nas duas direções, para a próxima divergência aparecer no CI em vez
+> de numa auditoria manual.
+
 ### `ae.animate.parallax.quick` — Parallax — Quick Rig
 
 - **Host:** After Effects
@@ -591,7 +626,7 @@ export interface RigMetadata {
 - **Implementação obrigatória:** Usar câmera e nulls nativos, compensação de escala pela distância à câmera, metadata de rig e expressões versionadas. Se já existir rig selecionado, entrar em modo Adjust em vez de duplicar.
 - **Critério de aceite:** Com três layers de tamanhos diferentes, o primeiro frame permanece visualmente equivalente e o movimento do controller produz profundidade distinta. Um Undo remove todo o rig.
 
-### `ae.animate.wiggle` — Wiggle
+### `ae.expression.wiggle` — Wiggle
 
 - **Host:** After Effects
 - **Pré-condição/seleção:** Propriedades numéricas/vetoriais selecionadas; fallback opcional para Position das layers selecionadas.
@@ -600,7 +635,7 @@ export interface RigMetadata {
 - **Implementação obrigatória:** Criar sliders/angle controls em controller opcional e expressão com `seedRandom`. Tratar dimensões separadas e rejeitar propriedades não interpoláveis. Preservar expressão existente conforme conflictMode.
 - **Critério de aceite:** Mesmos inputs e seed geram o mesmo movimento após reabrir o projeto; valores não excedem limites específicos da propriedade quando configurados.
 
-### `ae.animate.flicker` — Flicker
+### `ae.expression.flicker` — Flicker
 
 - **Host:** After Effects
 - **Pré-condição/seleção:** Layers ou propriedades Opacity/Exposure/Glow Intensity.
@@ -1121,6 +1156,32 @@ Desloca o grupo para que o primeiro key fique em `0`, no inPoint da layer ou no 
 #### Enviar ao final
 
 Desloca o grupo para que o último key fique no fim da composição, outPoint ou fim do work area.
+
+
+#### Onde cada operação da §15.5 vive
+
+| Operação da §15.5                    | Comando                                          |
+|--------------------------------------|--------------------------------------------------|
+| Duplicar                             | `ae.keys.clone` com `mode: "repeat"`             |
+| Inverter                             | `ae.keys.reverse`                                |
+| Duplicar + Inverter                  | `ae.keys.clone` com `mode: "mirror"`             |
+| Enviar ao começo                     | `ae.keys.send-to-edge` com `edge: "start"`       |
+| Enviar ao final                      | `ae.keys.send-to-edge` com `edge: "end"`         |
+| Duplicar + Inverter + Mover ao final  | **ausente** — ver abaixo                        |
+
+`ae.keys.send-to-edge` implementa as duas últimas linhas num comando só porque
+elas são a mesma conta com o sinal trocado, e o argumento `reference`
+(`comp` \| `layer` \| `workArea`) cobre as três âncoras que o texto da §15.5
+enumera. O grupo se move rígido, que é o "relative timing" da §15.6, e o comando
+recusa com `KEYFRAME_CONFLICT` — **antes** de escrever — quando o deslocamento
+cruzaria um keyframe não selecionado.
+
+A composição "Duplicar + Inverter + Mover para o final" continua ausente de
+propósito: ela é `ae.keys.clone` seguido de `ae.keys.send-to-edge`, e encadear
+os dois no host produziria **dois** grupos de Undo para um pedido só, o que o §8
+proíbe. Fazê-la direito exige um comando composto que abra um Undo e chame as
+duas rotinas internamente — trabalho que só vale depois que o painel tiver um
+lugar para operações compostas.
 
 ### 15.6 Dados preservados
 
@@ -2199,7 +2260,7 @@ Regras:
   "requestId": "uuid",
   "host": "after-effects",
   "hostVersion": "25.x",
-  "command": "ae.animate.wiggle",
+  "command": "ae.expression.wiggle",
   "durationMs": 42,
   "result": "success",
   "errorCode": null
@@ -2560,6 +2621,97 @@ GitHub-hosted runner não substitui QA Adobe. Usar runners próprios com instala
 - docs/support bundle;
 - full QA matrix.
 
+### Nota de integração — Paridade de suíte de animação (Keyframe Ops, Easing Lab, Motion Browser)
+
+> As duas subseções a seguir não são fases do roadmap acima. São notas: uma de
+> integração e uma de incidente, guardadas aqui por falta de lugar melhor até o
+> documento ganhar uma seção própria de registro técnico.
+
+O usuário forneceu, em 2026-09-03, um documento de spec ("CrossHost Studio
+Master Implementation Spec v2.0") cobrindo paridade funcional com suítes de
+animação de mercado — navegador de presets, engine de presets, sistema de
+texto animado, engine de transições, biblioteca do usuário, mais quatro
+ferramentas de produtividade (as que este spec chama de Easing Lab, Keyframe
+Ops, Anchor Mover, Timing Shifter) — e, além da paridade, um Motion Graph
+Engine, Physics Engine, Audio Reactive Engine e SDK/marketplace de presets.
+
+**Estado da integração:**
+
+- O documento colado chegou com a codificação corrompida (UTF-8 relido como
+  Windows-1252) em praticamente toda linha acentuada. Reconstruí-lo por
+  transcrição manual dentro de uma resposta é um trabalho mecânico de alto
+  risco de erro silencioso; a correção correta é reimportar o arquivo `.md`
+  original (não colado no chat) quando o documento precisar viver
+  arquivado neste repositório.
+- Antes de implementar qualquer peça do documento, uma auditoria mostrou que
+  parte do catálogo dele **já existe** neste repositório sob outro nome:
+  Easing Lab ≈ `ae.keys.ease.apply` (§15 deste documento), Anchor Mover ≈
+  `ae.anchor.align` (§14), o parallax avançado dele ≈ §16. Motion Browser,
+  Preset Engine, My Library e Inspector-como-biblioteca **não existem** — são
+  um paradigma novo (navegar/pré-visualizar/aplicar preset) que este produto
+  ainda não tem; o produto atual é "painel de ferramentas", uma tela por
+  comando.
+- Uma peça genuína e ausente do catálogo Keyframe Ops foi implementada como
+  prova de conceito da integração: **Reverse Values** (`ae.keys.reverse-values`),
+  que inverte os valores dos keyframes selecionados mantendo os tempos —
+  distinto de `ae.keys.reverse`, que já existia neste repositório mas
+  implementa a operação que o documento chama de Mirror (espelha os
+  tempos). Ver `apps/after-effects-cep/host/src/commands/keys-reverse-values.jsx`
+  e o teste correspondente.
+- Regra de arquitetura para qualquer trabalho futuro a partir daquele
+  documento: ele descreve um monorepo próprio (`packages/animation-core`,
+  `@crosshost/preset-sdk` etc.). **Não criar essa estrutura paralela.** Toda
+  peça nova entra na arquitetura já existente deste repositório — o Command
+  Bus dele é o dispatcher + `packages/command-registry` já existentes; o
+  Host Adapter dele é `apps/*/host` já existente; a UI dele é
+  `packages/ui-core` já existente.
+
+---
+
+### Nota de incidente — `//@` é diretiva de pré-processador, não comentário
+
+Sintoma, em 2026-09-03: o painel abria e **todo** comando devolvia
+`INTERNAL_ERROR`; o diagnóstico do host trazia
+`bootstrap-failed:Erro de sintaxe:L17983`. Os 60 comandos sumiam de uma vez,
+inclusive `ae.diagnostics.echo`.
+
+Causa: uma única linha em `commands/clean.jsx`:
+
+```js
+// @ts-ignore - FootageItem is a global in AE ExtendScript
+```
+
+O ExtendScript tem um **pré-processador que roda antes do parser de
+JavaScript**, e ele aceita as diretivas nas duas grafias: `#target aftereffects`
+e `//@target aftereffects`. Para esse pré-processador um comentário de linha
+iniciado por `@` não é comentário: é uma diretiva. `@ts-ignore` não existe, e
+uma diretiva desconhecida derruba o arquivo inteiro — e, como o build concatena
+os 60 fontes em um `index.jsx` só, derruba o `$.evalFile` do bootstrap e com ele
+a suíte inteira.
+
+Por que custou caro achar: **nenhuma ferramenta acusa isso.** `node --check`
+usa o parser do V8 e aceita ES2023. O acorn em `ecmaVersion: 3` — que é o
+dialeto certo — passou os 60 fontes e passou o bundle concatenado. O
+`toAsciiExtendScript` foi verificado byte a byte contra os fontes e é fiel. Um
+diff de formas sintáticas entre os 5 arquivos suspeitos e os 55 que carregavam
+não achou nada, porque **comentário não entra na AST**. A pista que fechou o
+caso foi textual: `// @` ocorria exatamente uma vez em toda a árvore do host, e
+essa ocorrência era exatamente a linha que o After Effects apontou.
+
+Regras que ficam:
+
+1. Nunca escrever comentário de linha começando por `@` em fonte do host —
+   `@ts-ignore`, `@ts-expect-error`, `@eslint-disable` inclusive.
+2. Quando o TypeScript reclamar de um global do After Effects, **declará-lo** em
+   `apps/after-effects-cep/host/types/extendscript.d.ts`. Foi o que
+   `// @ts-ignore` estava mascarando aqui: `FootageItem` não existia nos tipos.
+   Suprimir o erro escondeu a ausência de tipo e quebrou o host; declarar o tipo
+   resolve os dois.
+3. `scripts/check-extendscript.mjs` passou a recusar `//@` e qualquer linha
+   iniciada por `#`, com teste positivo e negativo em
+   `tests/extendscript-subset.test.mjs`. A regra roda sobre o texto cru, porque
+   o alvo é o comentário.
+
 ---
 
 ## 32. Backlog inicial para o agente
@@ -2879,6 +3031,7 @@ A primeira execução não deve tentar implementar todas as funções. Ela deve 
 10. lista objetiva de limitações verificadas.
 
 Somente depois iniciar as features P1.
+
 
 ---
 

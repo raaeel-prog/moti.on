@@ -6,11 +6,12 @@ Fase P0 (fundação) conforme `docs/MASTER_BUILD_SPEC.md` §39. Ainda não é re
 
 ### Estado de verificação deste worktree
 
-- `PASS` automatizado final: em **2026-08-25**, `npm.cmd run check` no branch `Codex`/worktree integrado concluiu lint, typecheck, build, validate, **326/326 testes** e skills validate.
+- `PASS` automatizado final: em **2026-09-04**, `npm run check` no branch `Codex`/worktree integrado concluiu lint, typecheck, build, validate, contraste, **981/981 testes** e skills validate.
 - `PASS` no After Effects real: build Moti.on carregado no **After Effects 26.3x87**, CEP **12.0.1**, Windows 11; estado ocioso correto da verificação de sistema, contexto, capability probe, round-trip Unicode, criação da composição de teste, rótulo localizado de Undo e Undo em um passo foram observados.
 - `FAIL` corrigido no After Effects real: o `<ScriptPath>` produziu modal de erro de sintaxe na linha 1. Depois de removê-lo e reinstalar o mesmo bundle, uma inicialização limpa abriu sem modal e o bootstrap oficial por `$.evalFile` passou.
 - `NOT RUN`: carregamento deste build no Premiere Pro, transação/Undo Premiere, exportação pelo picker UXP e matriz visual/acessível completa nos hosts.
 - `NOT RUN`: revisão visual no browser. Nenhuma captura ou interação de browser foi executada neste ciclo.
+- `NOT RUN`: CHMS-UX-007 (Live Controls no Premiere). O módulo está incompleto e vive no branch `wip/premiere-live-controls`, fora do `Codex`; ver a seção abaixo.
 
 O vocabulário acima é literal: `PASS` significa executado e aprovado, `FAIL` significa executado e reprovado, e `NOT RUN` significa que o item não foi executado no escopo declarado para o build atual. Pesquisa de API e teste com doubles não viram `PASS` de host.
 
@@ -33,11 +34,126 @@ Status: `IMPLEMENTED_NOT_HOST_VERIFIED`. Testes de contrato/contraste estão aut
 
 Status: `IMPLEMENTED_NOT_HOST_VERIFIED`. Build e contratos estão verdes; interação, persistência, visual, acessibilidade e performance dentro de AE/Premiere reais permanecem `NOT RUN`.
 
+### CHMS-UX-003 — kit compartilhado de componentes
+
+- `@motion/ui-core` agora exporta tile Quick/Advanced, botão, slider com campo numérico, chip group, popover, gaveta e região de toast, todos com o vocabulário completo de estados e validação de motivo quando indisponíveis.
+- O teclado cobre `Enter`, `Alt+Enter`, preview remapeável/desligável, roving focus por setas, `Home`/`End`, slider por passo/10 %/limites, `Esc`, retorno de foco e trap apenas na gaveta sobreposta. O tile atrasa o spinner por 180 ms, confirma por 700 ms e mantém estado aplicado/indisponível também por forma. Toast com ação permanece ao menos 8 s e erro recuperável pode ficar indefinido.
+- A auditoria oficial do Premiere UXP removeu CSS Grid e seletores não documentados em favor de Flexbox/`:focus`, adicionou `data-hidden`, foco explícito do label, assinatura booleana de `scrollIntoView` e timeout de encerramento que não depende de CSS animation.
+- Os testes focados passam em 37/37. `components.js` ficou com 98,90 % de linhas, 93,67 % de branches e 97,73 % de funções cobertas.
+
+Status: `IMPLEMENTED_NOT_HOST_VERIFIED`. Nenhuma tela de produto foi migrada para estas primitivas neste slice; render, DPI, leitor de tela e interação em AE/Premiere reais permanecem `NOT RUN`. No Premiere UXP, ARIA continua uma limitação documentada do runtime, não uma capacidade alegada pelo produto.
+
+### CHMS-UX-004 — QuickProfile, registry e preset v2
+
+- `@motion/contracts` agora publica `QuickProfile`, `QuickContext`,
+  `LiveControlBinding` e as opções `mode`, `emitLiveControls` e `targetRigId`.
+  O command client materializa os defaults Quick somente depois de validar e
+  congelar o pedido recebido.
+- `@motion/command-registry` aceita `quickProfile` no descriptor, valida e
+  congela perfis, indexa por comando/host e compara a sequência exata de
+  `paramId`/`order` que os adapters deverão criar. Nenhum perfil fictício foi
+  cadastrado antes dos presets, derivadores e assets das issues seguintes.
+- Presets v1 e v2 têm schemas Draft 2020-12 e validadores Ajv standalone. V2
+  exige preview completo e valida ids, ordens e faixas de Live Controls.
+- A migração v1→v2 preserva o payload declarativo, converte preview legado,
+  falha se faltam poster/loop e nunca herda checksum ou assinatura da versão
+  anterior. O teste de round-trip restaura integralmente a fixture v1.
+- Preset remoto exige verificador de assinatura injetado; uma string
+  `signature` isolada não é tratada como verificação. Campos de código
+  executável são recusados antes do callback criptográfico.
+- Os gates de envelope do AE/ExtendScript e Premiere/UXP aceitam as opções novas
+  com os mesmos tipos e falham fechados para modo, booleano ou rig id inválido.
+
+Status: `IMPLEMENTED_NOT_HOST_VERIFIED`. No checkpoint de UX-004, o check integrado passou com 924/924
+testes; o envelope ampliado ainda não foi observado em AE/Premiere reais. Perfis
+concretos, derivação contextual, writers de Live Controls e previews renderizados
+continuam nas issues UX-005, UX-006/007 e UX-011.
+
+### CHMS-UX-005 — derivador contextual de defaults Quick
+
+- `@motion/command-registry` agora publica um derivador puro que recebe apenas
+  `QuickContext` e opções explícitas; ele não consulta host, storage, relógio ou
+  estado global.
+- Fixtures cobrem 24/25/29,97/60 fps e 1080×1920/1920×1080/3840×2160. Tempo é
+  convertido no FPS real, pixels escalam pelo menor lado com base 1080 e a janela começa no
+  CTI sem ultrapassar o fim da composição ou a duração média da seleção.
+- O stagger padrão de dois frames encolhe para seleções densas. Tipo de layer,
+  presença de keyframes e estado 2D/3D derivam alvos, estratégia e eixos em
+  ordem estável.
+- O preset segue a cadeia projeto → global → fábrica, restrita ao catálogo
+  visível. Rigs existentes produzem intenção explícita de criar, ajustar um id
+  único ou pedir resolução de ambiguidade.
+- A fronteira copia e congela o resultado e recusa inputs hostis, accessors,
+  Symbols, arrays ambíguos, campos extras e valores inválidos antes de derivar.
+
+Status: `IMPLEMENTED_NOT_HOST_VERIFIED`. A suíte focada do derivador passa em
+13/13, com 95,31 % de linhas, 87,34 % de branches e 100 % de funções; o check
+integrado deste worktree passou com 941/941 testes. Perfis concretos,
+alimentação do contexto por host, writers e aplicação em AE/Premiere reais
+permanecem `NOT RUN`.
+
+### CHMS-UX-006 — Live Controls no After Effects
+
+- O host CEP ganhou `MotionLiveControls`, infraestrutura interna para criar,
+  ler, atualizar e religar Expression Controls nativos por `matchName`. Slider,
+  Angle, Color, Checkbox, Point e Dropdown são materializados na ordem do
+  `LiveControlBinding`; a propriedade interna é acessada sempre por `(1)`, sem
+  depender do idioma do After Effects.
+- Cada registro guarda nome customizado, `matchName` e índice. A leitura resolve
+  primeiro por nome + tipo e usa índice + tipo como fallback; reordenação apenas
+  atualiza o índice, enquanto rename exige Religar e nunca renomeia o efeito do
+  usuário silenciosamente.
+- Dropdown usa capability detection e o novo handle devolvido por
+  `setPropertyParameters()`. Onde a API não está disponível, o writer troca a
+  tentativa por Slider inteiro, documenta as opções no nome e emite
+  `DROPDOWN_FALLBACK`.
+- Adjust preserva keyframes e valores alterados manualmente, devolve
+  `userOverrides`, recria somente controles ausentes e mantém órfãos disponíveis
+  para Religar/Limpar. Sob falha, writer, updater e relink restauram o estado ou
+  sinalizam `ROLLBACK_FAILED`.
+- O planejador aplica os limites de 12 controles por layer e 24 por controller,
+  promovendo layer → controller → Control Room quando necessário. Nomes
+  colidentes recebem o sufixo curto do `rigId`; limites duros vivem na expressão,
+  não no Slider do host.
+
+Status: `IMPLEMENTED_NOT_HOST_VERIFIED`. Os 14 testes focados e o check integrado
+deste worktree passaram; o gate completo terminou com 966/966 testes. AE 25/26
+reais, hosts localizados, Undo de um comando consumidor e os orçamentos de 300 ms
+para criação/40 ms para leitura permanecem `NOT RUN`.
+
+### CHMS-UX-007 — Live Controls no Premiere: **não implementado**
+
+O módulo `apps/premiere-uxp/host/src/live-controls.ts` foi escrito até a
+validação de bindings e parou aí: `createPremiereLiveControls`, que a suíte de
+testes importa, nunca chegou a existir. No estado em que está, o arquivo reprova
+lint, typecheck e build.
+
+Para não deixar o `Codex` vermelho, o rascunho e a suíte que o acompanha vivem
+no branch `wip/premiere-live-controls`, e não nesta linha. O manifesto
+versionado que mapeia identidade lógica para matchName, ordem, índice e rótulo
+já está desenhado ali, porque `ComponentParam` não expõe `paramId`; falta o
+runtime que lê e escreve por esse mapa.
+
+Status: `NOT IMPLEMENTED`.
+
+### CHMS-UX-008 — grade de ferramentas e o filtro da busca
+
+`tileVisiveis` prometia os ladrilhos visíveis da grade e devolvia todos,
+ignorando a célula que o filtro tinha escondido. Como o roving focus e as setas
+liam essa lista, escondê-la pelo filtro podia deixar a âncora `tabindex="0"` num
+ladrilho invisível — e aí a grade inteira saía da ordem de Tab, com todos os
+visíveis em `-1` e o único alcançável escondido. As setas, pelo mesmo motivo,
+moviam o foco para o que o usuário tinha acabado de filtrar.
+
+Status: `IMPLEMENTED_NOT_HOST_VERIFIED`. Coberto por teste; o comportamento com
+leitor de tela dentro de AE/Premiere reais permanece `NOT RUN`.
+
 ### CHMS-003 — JSON Schemas e validadores standalone
 
 O aceite antes parcial de CHMS-003 foi concluído e entrou no check integrado:
 
-- quatro schemas v1 em JSON Schema Draft 2020-12: request, response, capabilities e rig metadata;
+- seis schemas em JSON Schema Draft 2020-12: request, response, capabilities,
+  rig metadata e presets v1/v2;
 - Ajv 8 somente em desenvolvimento, para validar os artefatos e gerar o módulo standalone;
 - runtime CSP-safe sem `eval`, `Function`, `require` ou import do Ajv;
 - guards públicos profundos que recusam ciclos, valores não JSON, protótipos inesperados, profundidade excessiva, campos extras e invariantes inválidas;

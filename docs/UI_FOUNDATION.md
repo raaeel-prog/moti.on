@@ -77,7 +77,39 @@ A tela deve priorizar uma ação principal. Preview, presets, layer stack e opç
 | 480–719 px | Comfort: grid de 4 colunas, Inspector de 320 px |
 | 720+ px | Wide: grid e Inspector fixo de 360 px em duas colunas |
 
+`resolveWidthClass` em `packages/ui-core/src/shell.ts` implementa exatamente
+essas quatro fronteiras, e `packages/ui-core/tests/shell.test.mjs` as prende nos
+dois lados de cada uma. Até 2026-09-04 o código tinha só três faixas, com todas
+as fronteiras erradas (Compact até 359, uma faixa "standard" até 559, Wide a
+partir de 560) e sem Comfort — na prática um painel em 340 px recebia o layout
+compacto, e a partir de 560 px já entrava no layout mais largo.
+
+**Ainda divergente:** o Addendum pede grid de 2 colunas em Compact e o código
+usa 1. A conta fecha (264 px úteis em 280 px dão dois ladrilhos de 128 px, e o
+nome completo sobrevive no `title`), mas a mesma linha do Addendum descreve
+barra inferior de 44 px, Inspector e dock de recentes, que este shell não tem.
+A contagem de colunas pertence à CHMS-UX-013, junto com o resto daquela linha.
+
 Nunca use scroll horizontal. Em altura reduzida, apenas a região de conteúdo rola; a ação principal permanece acessível.
+
+## Kit de componentes
+
+As primitivas normativas de CHMS-UX-003 vivem em
+`packages/ui-core/src/components.ts`, com geometria/estados em
+`packages/ui-core/src/components.css`: tile, botão, slider, chip, popover,
+gaveta e toast. Consumidores ligam callbacks de comando; o package não conhece
+host, filesystem, storage ou rede.
+
+O layout compartilhado usa Flexbox. O Premiere UXP 25.6 documenta que CSS Grid
+não está disponível e que `aria*`, `hidden`, tab order, `<label for>` e CSS
+animation têm limitações. Por isso, o kit combina estado visível com ARIA para
+CEP, `data-hidden`, foco explícito, marcadores que não dependem só de cor e
+timeouts que garantem o fechamento sem `animationend`. A decisão e os links
+oficiais estão em
+`docs/research/premiere-uxp-component-dom-capabilities.md`.
+
+Essas defesas são contratos automatizados, não prova visual de host. A matriz
+real permanece em `docs/QA_MATRIX.md`.
 
 ## Movimento
 
