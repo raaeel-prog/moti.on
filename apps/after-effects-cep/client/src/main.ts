@@ -28,6 +28,8 @@ import {
   sectionTitle,
   selectField,
   textField,
+  searchField,
+  syncToolGridRoving,
   toolGrid,
   toolTile,
   bezierEditor,
@@ -425,6 +427,46 @@ const DEFAULT_TIME_CONTROLLER: TimeControllerDraft = {
 
 type ReverseKeysDraft = Record<string, never>;
 const DEFAULT_REVERSE_KEYS: ReverseKeysDraft = {};
+
+/**
+ * `ae.keys.reverse` (rótulo "Espelhar keys" abaixo) já ocupa o verbo "reverse"
+ * no id do comando — ele move os TEMPOS (espelha em torno do ponto médio da
+ * seleção). Esta ferramenta é a operação distinta que o Keyframe Ops chama de
+ * Reverse de verdade: os tempos ficam parados e são os VALORES que trocam de
+ * lugar. As duas são fáceis de confundir, e por isso o nome e a descrição
+ * abaixo evitam a palavra "espelhar" e a palavra "reverter" apontando cada
+ * uma para o efeito que ela realmente produz.
+ */
+type ReverseValuesDraft = Record<string, never>;
+const DEFAULT_REVERSE_VALUES: ReverseValuesDraft = {};
+interface NeonDraft {
+  coreColor: string;
+  glowColor: string;
+  strokeWidth: number;
+  glowRadius: number;
+  intensity: number;
+}
+// Branco no núcleo e ciano no brilho: é o neon de referência, e deixa o efeito
+// visível já na primeira aplicação sem o usuário abrir dois seletores de cor.
+const DEFAULT_NEON: NeonDraft = {
+  coreColor: "#ffffff",
+  glowColor: "#33ccff",
+  strokeWidth: 4,
+  glowRadius: 40,
+  intensity: 2
+};
+
+type SendToEdgeEdge = "start" | "end";
+type SendToEdgeReference = "comp" | "layer" | "workArea";
+interface SendToEdgeDraft {
+  edge: SendToEdgeEdge;
+  reference: SendToEdgeReference;
+}
+// "comp" e o padrao porque e a unica referencia que existe em toda composicao:
+// work area pode cobrir a comp inteira e camada exige que a selecao pertenca a
+// uma so — nenhuma das duas e um ponto de partida seguro.
+const DEFAULT_SEND_TO_EDGE: SendToEdgeDraft = { edge: "start", reference: "comp" };
+
 type CloneKeysMode = "repeat" | "mirror";
 interface CloneKeysDraft { mode: CloneKeysMode; }
 const DEFAULT_CLONE_KEYS: CloneKeysDraft = { mode: "repeat" };
@@ -949,6 +991,9 @@ type ToolId =
   | "texture"
   | "clean"
   | "reverseKeys"
+  | "reverseValues"
+  | "sendToEdge"
+  | "neon"
   | "cloneKeys"
   | "timeController"
   | "animateKinetic"
@@ -1234,6 +1279,33 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: reverseKeysDisabledReason,
     apply: applyReverseKeys,
     reset: () => { state.reverseKeys = { ...DEFAULT_REVERSE_KEYS }; }
+  },
+  {
+    id: "reverseValues",
+    nameKey: "tool.reverseValues.name",
+    descriptionKey: "tool.reverseValues.description",
+    render: renderReverseValues,
+    disabledReason: reverseValuesDisabledReason,
+    apply: applyReverseValues,
+    reset: () => { state.reverseValues = { ...DEFAULT_REVERSE_VALUES }; }
+  },
+  {
+    id: "sendToEdge",
+    nameKey: "tool.sendToEdge.name",
+    descriptionKey: "tool.sendToEdge.description",
+    render: renderSendToEdge,
+    disabledReason: sendToEdgeDisabledReason,
+    apply: applySendToEdge,
+    reset: () => { state.sendToEdge = { ...DEFAULT_SEND_TO_EDGE }; }
+  },
+  {
+    id: "neon",
+    nameKey: "tool.neon.name",
+    descriptionKey: "tool.neon.description",
+    render: renderNeon,
+    disabledReason: neonDisabledReason,
+    apply: applyNeon,
+    reset: () => { state.neon = { ...DEFAULT_NEON }; }
   },
   {
     id: "cloneKeys",
@@ -1541,6 +1613,11 @@ const state: {
 
   ease: EaseDraft;
   reverseKeys: ReverseKeysDraft;
+  reverseValues: ReverseValuesDraft;
+  sendToEdge: SendToEdgeDraft;
+  neon: NeonDraft;
+  /** Filtro da grade de ferramentas; sobrevive ao redesenho. */
+  toolQuery: string;
   cloneKeys: CloneKeysDraft;
   timeController: TimeControllerDraft;
   animateKinetic: AnimateKineticDraft;
@@ -1599,6 +1676,10 @@ const state: {
   texture: { ...DEFAULT_TEXTURE },
   clean: { ...DEFAULT_CLEAN },
   reverseKeys: { ...DEFAULT_REVERSE_KEYS },
+  reverseValues: { ...DEFAULT_REVERSE_VALUES },
+  sendToEdge: { ...DEFAULT_SEND_TO_EDGE },
+  neon: { ...DEFAULT_NEON },
+  toolQuery: "",
   cloneKeys: { ...DEFAULT_CLONE_KEYS },
   timeController: { ...DEFAULT_TIME_CONTROLLER },
   animateKinetic: { ...DEFAULT_ANIMATE_KINETIC },
@@ -1695,6 +1776,104 @@ interface Wiring {
   motionPreference: ReducedMotionController;
 }
 
+/**
+ * Grade de ferramentas com busca.
+ *
+ * São 49 ferramentas numa lista só. Sem filtro, achar uma exige percorrer a
+ * grade inteira — em 280 px isso é uma coluna de 49 linhas.
+ *
+ * ## Por que o filtro não redesenha a tela
+ *
+ * O padrão do painel é `shell.rerender()`, que limpa e remonta o conteúdo.
+ * Chamá-lo a cada tecla recriaria o próprio campo de busca e o foco morreria no
+ * meio da digitação. Então o filtro mexe só na visibilidade dos ladrilhos já
+ * montados: sem remontagem, sem perda de foco, e sem custo por tecla.
+ *
+ * `state.toolQuery` sobrevive ao redesenho para o filtro continuar valendo
+ * quando a tela volta da ferramenta para a grade.
+ */
+function renderToolBrowser(regions: RenderRegions, i18n: I18n, shell: Shell): void {
+  const grade = toolGrid(
+    document,
+    TOOLS.map((item) =>
+      toolTile(document, {
+        id: item.id,
+        label: i18n.t(item.nameKey),
+        description: i18n.t(item.descriptionKey),
+        onSelect: () => {
+          state.activeTool = item.id;
+          state.lastError = null;
+          shell.rerender();
+          // Depois do rerender: a ferramenta já está desenhada quando a carga
+          // começa, então o estado ocupado aparece no lugar certo.
+          void item.load?.();
+        }
+      })
+    )
+  );
+
+  // As células vêm da própria `toolGrid`, e não de uma montagem paralela aqui:
+  // a classe e o `role=listitem` de cada célula pertencem à primitiva, e uma
+  // segunda cópia delas sairia de sincronia na primeira mudança.
+  const celulas = Array.from(grade.children) as HTMLElement[];
+  const itens = TOOLS.map((item, indice) => ({
+    celula: celulas[indice],
+    // Busca por nome e por descrição: quem procura "brilho" precisa achar o
+    // Neon mesmo sem saber que a ferramenta se chama Neon. O separador nulo
+    // impede que o fim de um nome e o começo da descrição formem um casamento
+    // que nenhum dos dois textos contém.
+    texto: `${i18n.t(item.nameKey)}\u0000${i18n.t(item.descriptionKey)}`.toLowerCase()
+  }));
+
+  const contagem = document.createElement("div");
+  contagem.className = "ch-field__description";
+  // `status` e não `alert`: a contagem muda a cada tecla e interromper o leitor
+  // de tela a cada letra tornaria o campo inutilizável.
+  contagem.setAttribute("role", "status");
+  contagem.setAttribute("aria-live", "polite");
+
+  const vazio = notice(document, i18n.t("tools.search.empty"));
+  vazio.hidden = true;
+
+  function aplicarFiltro(bruto: string): void {
+    const consulta = bruto.trim().toLowerCase();
+    let visiveis = 0;
+    for (const { celula, texto } of itens) {
+      if (!celula) continue;
+      const casa = consulta === "" || texto.indexOf(consulta) >= 0;
+      celula.hidden = !casa;
+      if (casa) visiveis += 1;
+    }
+    vazio.hidden = visiveis > 0;
+    // A âncora de teclado da grade precisa voltar para o primeiro ladrilho que
+    // ainda aparece: sem isto, filtrar até esconder o ladrilho que carrega
+    // `tabindex="0"` tira a grade inteira da ordem de Tab.
+    syncToolGridRoving(grade);
+    contagem.textContent =
+      consulta === ""
+        ? ""
+        : i18n.t("tools.search.count", { count: visiveis, total: itens.length });
+  }
+
+  regions.content.appendChild(
+    searchField(document, {
+      id: "tools-search",
+      label: i18n.t("tools.search"),
+      value: state.toolQuery,
+      placeholder: i18n.t("tools.search.placeholder"),
+      onInput: (value) => {
+        state.toolQuery = value;
+        aplicarFiltro(value);
+      }
+    })
+  );
+  regions.content.appendChild(contagem);
+  regions.content.appendChild(vazio);
+  regions.content.appendChild(grade);
+
+  aplicarFiltro(state.toolQuery);
+}
+
 function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): void {
   const { i18n, logger, adapter, motionPreference } = wiring;
 
@@ -1750,26 +1929,7 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
     // tarefas competindo.
     if (!tool) {
       regions.content.appendChild(notice(document, i18n.t("message.toolsInstructions")));
-      regions.content.appendChild(
-        toolGrid(
-          document,
-          TOOLS.map((item) =>
-            toolTile(document, {
-              id: item.id,
-              label: i18n.t(item.nameKey),
-              description: i18n.t(item.descriptionKey),
-              onSelect: () => {
-                state.activeTool = item.id;
-                state.lastError = null;
-                shell.rerender();
-                // Depois do rerender: a ferramenta já está desenhada quando a
-                // carga começa, então o estado ocupado aparece no lugar certo.
-                void item.load?.();
-              }
-            })
-          )
-        )
-      );
+      renderToolBrowser(regions, i18n, shell);
       return;
     }
 
@@ -5308,6 +5468,212 @@ async function applyReverseKeys(shell: Shell, i18n: I18n, logger: MotionLogger, 
   logger.recordResponse("ae.keys.reverse", response);
   if (response.ok) {
     shell.setStatus(i18n.t("message.reverseKeysApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function reverseValuesDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.reverseValuesNoActiveComp");
+  return null;
+}
+
+function renderReverseValues(regions: RenderRegions, i18n: I18n): void {
+  // shell unused
+  regions.content.appendChild(hint(document, i18n.t("message.reverseValuesInstructions")));
+}
+
+async function applyReverseValues(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  shell.setStatus(i18n.t("status.applyingReverseValues"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingReverseValues"));
+
+  const response = await client.execute("ae.keys.reverse-values", {});
+  logger.recordResponse("ae.keys.reverse-values", response);
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.reverseValuesApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function sendToEdgeDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.sendToEdgeNoActiveComp");
+  return null;
+}
+
+function renderSendToEdge(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.sendToEdge;
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "sendToEdge-edge",
+      label: i18n.t("sendToEdge.edge"),
+      value: draft.edge,
+      options: [
+        { value: "start", label: i18n.t("sendToEdge.edge.start") },
+        { value: "end", label: i18n.t("sendToEdge.edge.end") }
+      ],
+      onChange: (value) => {
+        draft.edge = value as SendToEdgeEdge;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    selectField(document, {
+      id: "sendToEdge-reference",
+      label: i18n.t("sendToEdge.reference"),
+      value: draft.reference,
+      options: [
+        { value: "comp", label: i18n.t("sendToEdge.reference.comp") },
+        { value: "layer", label: i18n.t("sendToEdge.reference.layer") },
+        { value: "workArea", label: i18n.t("sendToEdge.reference.workArea") }
+      ],
+      onChange: (value) => {
+        draft.reference = value as SendToEdgeReference;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.sendToEdgeInstructions")));
+}
+
+async function applySendToEdge(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  shell.setStatus(i18n.t("status.applyingSendToEdge"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingSendToEdge"));
+
+  const response = await client.execute("ae.keys.send-to-edge", {
+    edge: state.sendToEdge.edge,
+    reference: state.sendToEdge.reference
+  });
+  logger.recordResponse("ae.keys.send-to-edge", response);
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.sendToEdgeApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function neonDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.neonNoActiveComp");
+  return null;
+}
+
+function renderNeon(regions: RenderRegions, i18n: I18n): void {
+  const shell = regions.shell;
+  const draft = state.neon;
+
+  regions.content.appendChild(
+    colorField(document, {
+      id: "neon-core-color",
+      label: i18n.t("neon.coreColor"),
+      value: draft.coreColor,
+      disabled: state.busy,
+      onCommit: (value) => {
+        draft.coreColor = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    colorField(document, {
+      id: "neon-glow-color",
+      label: i18n.t("neon.glowColor"),
+      value: draft.glowColor,
+      disabled: state.busy,
+      onCommit: (value) => {
+        draft.glowColor = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "neon-stroke-width",
+      label: i18n.t("neon.strokeWidth"),
+      value: draft.strokeWidth,
+      // 0 a 1000 e a faixa que a referencia do TextDocument documenta; o host
+      // valida a mesma faixa, entao o painel nao inventa um teto mais apertado.
+      min: 0,
+      max: 1000,
+      step: 1,
+      disabled: state.busy,
+      onCommit: (value) => {
+        draft.strokeWidth = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "neon-glow-radius",
+      label: i18n.t("neon.glowRadius"),
+      value: draft.glowRadius,
+      min: 0,
+      max: 1000,
+      step: 1,
+      disabled: state.busy,
+      onCommit: (value) => {
+        draft.glowRadius = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "neon-intensity",
+      label: i18n.t("neon.intensity"),
+      value: draft.intensity,
+      min: 0,
+      max: 100,
+      step: 0.1,
+      disabled: state.busy,
+      onCommit: (value) => {
+        draft.intensity = value;
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(hint(document, i18n.t("message.neonInstructions")));
+}
+
+async function applyNeon(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  shell.setStatus(i18n.t("status.applyingNeon"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingNeon"));
+
+  const draft = state.neon;
+  const response = await client.execute("ae.style.neon", {
+    // O host so aceita "editable" e "glowOnly"; o painel manda sempre
+    // "editable", porque a camada sem texto ja cai sozinha no brilho apenas e
+    // devolve o aviso. Um seletor para isso ofereceria uma escolha que o
+    // proprio comando ja toma pelo tipo da camada.
+    mode: "editable",
+    coreColor: hexToChannels(draft.coreColor),
+    glowColor: hexToChannels(draft.glowColor),
+    strokeWidth: draft.strokeWidth,
+    glowRadius: draft.glowRadius,
+    intensity: draft.intensity
+  });
+  logger.recordResponse("ae.style.neon", response);
+  if (response.ok) {
+    shell.setStatus(i18n.t("message.neonApplied"), "ok");
   } else {
     reportFailure(shell, i18n, response);
   }

@@ -204,6 +204,36 @@ test("dryRun de comando read-only suportado executa sem Undo", async () => {
   assert.deepEqual(calls, []);
 });
 
+test("opções Quick e Advanced válidas atravessam o gate do AE", async () => {
+  let runs = 0;
+  const { scope, calls } = await loadDispatcher((s) => {
+    s.MotionRegistry.register("ae.context.read", {
+      preflight: () => null,
+      run: () => {
+        runs += 1;
+        return { changed: false, warnings: [], data: {} };
+      }
+    });
+  });
+
+  const response = JSON.parse(
+    scope.MotionAE.dispatch(
+      requestFor("ae.context.read", {
+        options: {
+          mode: "advanced",
+          emitLiveControls: false,
+          targetRigId: "rig-existing-1",
+          preserveSelection: true
+        }
+      })
+    )
+  );
+
+  assert.equal(response.ok, true);
+  assert.equal(runs, 1);
+  assert.deepEqual(calls, []);
+});
+
 test("envelopes críticos inválidos são recusados antes do handler", async () => {
   let invoked = 0;
   const { scope, calls } = await loadDispatcher((s) => {
@@ -229,7 +259,10 @@ test("envelopes críticos inválidos são recusados antes do handler", async () 
     { context: { host: "after-effects", hostVersion: "" } },
     { options: [] },
     { options: { dryRun: "yes" } },
-    { options: { dryrun: true } }
+    { options: { dryrun: true } },
+    { options: { mode: "instant" } },
+    { options: { emitLiveControls: "yes" } },
+    { options: { targetRigId: "" } }
   ];
 
   for (const overrides of invalid) {

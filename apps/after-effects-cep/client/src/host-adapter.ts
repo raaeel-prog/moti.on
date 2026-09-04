@@ -211,7 +211,7 @@ export function createAeHostAdapter(logger: {
         if (!loaded) {
           const isBootstrapFailed = raw.startsWith("bootstrap-failed");
           logger.warn(
-            "O host ExtendScript não pôde ser carregado. Reinstale a extensão e reabra o painel.",
+            "O host ExtendScript não pôde ser carregado: " + (isBootstrapFailed ? raw : "desconhecido"),
             {
               resultado:
                 raw === CEP_EVAL_FAILURE
