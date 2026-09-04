@@ -186,11 +186,19 @@
    */
   function validateEnvelope(request) {
     var options;
-    var optionNames = ["dryRun", "allowDestructive", "preserveSelection"];
+    var booleanOptionNames = [
+      "dryRun",
+      "allowDestructive",
+      "preserveSelection",
+      "emitLiveControls"
+    ];
     var allowedOptions = {
       dryRun: true,
       allowDestructive: true,
-      preserveSelection: true
+      preserveSelection: true,
+      mode: true,
+      emitLiveControls: true,
+      targetRigId: true
     };
     var i;
     var key;
@@ -225,8 +233,8 @@
         return makeError(ERROR.INTERNAL_ERROR, "options precisa ser um objeto.", null);
       }
       options = request.options;
-      for (i = 0; i < optionNames.length; i += 1) {
-        key = optionNames[i] || "";
+      for (i = 0; i < booleanOptionNames.length; i += 1) {
+        key = booleanOptionNames[i] || "";
         if (
           Object.prototype.hasOwnProperty.call(options, key) &&
           typeof options[key] !== "boolean"
@@ -237,6 +245,27 @@
             { option: key }
           );
         }
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(options, "mode") &&
+        options.mode !== "quick" &&
+        options.mode !== "advanced"
+      ) {
+        return makeError(
+          ERROR.INTERNAL_ERROR,
+          "A opção mode precisa ser quick ou advanced.",
+          { option: "mode" }
+        );
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(options, "targetRigId") &&
+        !isNonEmptyString(options.targetRigId)
+      ) {
+        return makeError(
+          ERROR.INTERNAL_ERROR,
+          "A opção targetRigId precisa ser uma string não vazia.",
+          { option: "targetRigId" }
+        );
       }
       for (key in options) {
         if (

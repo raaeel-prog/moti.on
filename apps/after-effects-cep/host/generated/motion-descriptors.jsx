@@ -337,6 +337,45 @@
         "pt-BR": "Moti.on: inverter keyframes"
       }
     },
+    "ae.keys.reverse-values": {
+      id: "ae.keys.reverse-values",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.keys.reverse-values",
+      undoLabels: {
+        "en-US": "Moti.on: reverse keyframe values",
+        "pt-BR": "Moti.on: inverter valores dos keyframes"
+      }
+    },
+    "ae.keys.send-to-edge": {
+      id: "ae.keys.send-to-edge",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.keys.send-to-edge",
+      undoLabels: {
+        "en-US": "Moti.on: send keyframes to edge",
+        "pt-BR": "Moti.on: enviar keyframes para a borda"
+      }
+    },
+    "ae.style.neon": {
+      id: "ae.style.neon",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.style.neon",
+      undoLabels: {
+        "en-US": "Moti.on: apply neon style",
+        "pt-BR": "Moti.on: aplicar estilo neon"
+      }
+    },
     "ae.keys.clone": {
       id: "ae.keys.clone",
       requirements: ["hasProject", "hasActiveComp"],
