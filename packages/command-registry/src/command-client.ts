@@ -118,6 +118,17 @@ interface PendingEntry {
   abandoned: boolean;
 }
 
+function optionsWithQuickDefaults(options: CommandOptions | undefined): CommandOptions {
+  const mode = options?.mode ?? "quick";
+  return {
+    ...options,
+    mode,
+    ...(mode === "quick" && options?.emitLiveControls === undefined
+      ? { emitLiveControls: true }
+      : {})
+  };
+}
+
 export interface CommandClient {
   execute<TData = unknown>(
     command: string,
@@ -229,7 +240,29 @@ export function createCommandClient(config: CommandClientOptions): CommandClient
         ) as CommandResponse<TData>
       );
     }
-    const serializedRequest = JSON.stringify(requestValidation.value);
+    // Só aplicamos defaults depois do primeiro gate. Assim getters, Proxies e
+    // protótipos hostis em `options` são recusados antes de qualquer leitura
+    // feita pela normalização.
+    const normalizedValidation = validateCommandRequest({
+      ...requestValidation.value,
+      options: optionsWithQuickDefaults(requestValidation.value.options)
+    });
+    if (!normalizedValidation.valid) {
+      return Promise.resolve(
+        failureResponse(
+          requestId,
+          "INTERNAL_ERROR",
+          "Não foi possível materializar os defaults do pedido.",
+          startedAt,
+          now() - startedMs,
+          {
+            command,
+            issues: normalizedValidation.issues.map(({ path, code }) => ({ path, code }))
+          }
+        ) as CommandResponse<TData>
+      );
+    }
+    const serializedRequest = JSON.stringify(normalizedValidation.value);
 
     return new Promise<CommandResponse<TData>>((resolve) => {
       const entry: PendingEntry = {

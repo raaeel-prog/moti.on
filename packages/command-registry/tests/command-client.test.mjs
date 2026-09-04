@@ -92,6 +92,27 @@ test("o pedido enviado carrega protocolVersion, requestId, comando e contexto", 
   assert.equal(response.data.hostVersion, "25.0");
 });
 
+test("o cliente materializa defaults Quick e preserva opções Advanced explícitas", async () => {
+  const quick = createHarness();
+  const quickPromise = quick.client.execute("ae.context.read");
+  const quickRequest = quick.lastRequest();
+
+  assert.deepEqual(quickRequest.options, { mode: "quick", emitLiveControls: true });
+  quick.reply(successFor(quickRequest.requestId));
+  await quickPromise;
+
+  const advanced = createHarness();
+  const advancedPromise = advanced.client.execute("ae.context.read", {}, {
+    mode: "advanced",
+    targetRigId: "rig-1"
+  });
+  const advancedRequest = advanced.lastRequest();
+
+  assert.deepEqual(advancedRequest.options, { mode: "advanced", targetRigId: "rig-1" });
+  advanced.reply(successFor(advancedRequest.requestId));
+  await advancedPromise;
+});
+
 test("resposta com requestId desconhecido e descartada, nao entregue", async () => {
   // Acontece de verdade: um evalScript que estourou o timeout ainda chama o
   // callback depois. Entregar essa resposta ao pedido atual mostraria ao usuario
@@ -360,6 +381,9 @@ test("sucesso sem mudanca e opt-in e somente para comando mutante idempotente", 
       // atraso por índice. Reportar falha aí puniria um pedido bem formado.
       "ae.keys.delay",
       "ae.keys.ease.apply",
+      // Se o grupo selecionado ja encosta na borda pedida, o estado solicitado
+      // ja foi alcancado e o host pode responder sucesso sem reescrever keys.
+      "ae.keys.send-to-edge",
       // Reaplicar a mesma inercia numa propriedade que ja a tem: o usuario
       // ajusta amplitude, volta ao valor anterior e reaplica.
       "ae.animate.inertial",

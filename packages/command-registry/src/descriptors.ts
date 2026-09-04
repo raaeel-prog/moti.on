@@ -15,7 +15,7 @@
  * implementação, é um botão que nunca funciona ou um comando que a UI nunca
  * oferece. O teste de contrato compara os dois conjuntos.
  */
-import type { CapabilityRequirement, HostId } from "@motion/contracts";
+import type { CapabilityRequirement, HostId, QuickProfile } from "@motion/contracts";
 
 export interface CommandDescriptor {
   id: string;
@@ -62,6 +62,9 @@ export interface CommandDescriptor {
    * mensagem de timeout precisa dizer isso.
    */
   timeoutMs: number;
+
+  /** Perfil de aplicação em um clique. Destrutivos nunca podem registrar um. */
+  quickProfile?: QuickProfile;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -410,6 +413,55 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.ae.keys.reverse",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    // Espelha os VALORES nos mesmos tempos (CROSSHOST_STUDIO_MASTER_IMPLEMENTATION_SPEC_v2.md
+    // §15.2.3) — diferente de ae.keys.reverse, que move os tempos (§15.2.2, Mirror).
+    id: "ae.keys.reverse-values",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.keys.reverse-values",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    // Envia o grupo selecionado para a borda da timeline (secao 15.5,
+    // "Enviar ao comeco" e "Enviar ao final"): as duas operacoes da spec sao
+    // a mesma conta com o sinal trocado, escolhida por `edge`.
+    id: "ae.keys.send-to-edge",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    // Pedir a borda onde o grupo ja esta e um pedido satisfeito de antemao, e
+    // nao uma falha. Selecao vazia, que seria o no-op perigoso, o preflight
+    // recusa com NO_SELECTION antes de chegar aqui.
+    allowsNoopSuccess: true,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.keys.send-to-edge",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    // Neon do §13. Nao e destrutivo: escreve fill/stroke do texto e adiciona um
+    // efeito gerenciado, tudo reversivel pelo Undo do dispatcher.
+    id: "ae.style.neon",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    // Reaplicar o mesmo neon na mesma camada reescreve os mesmos valores; o
+    // comando sempre relata `changed` quando ha camada selecionada, entao o
+    // no-op silencioso nao surge — e a selecao vazia o preflight ja recusa.
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.style.neon",
     timeoutMs: DEFAULT_TIMEOUT_MS
   },
   {

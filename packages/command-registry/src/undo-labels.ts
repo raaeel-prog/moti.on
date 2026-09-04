@@ -89,6 +89,18 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
     "en-US": "Moti.on: reverse keyframes",
     "pt-BR": "Moti.on: inverter keyframes"
   },
+  "undo.ae.keys.reverse-values": {
+    "en-US": "Moti.on: reverse keyframe values",
+    "pt-BR": "Moti.on: inverter valores dos keyframes"
+  },
+  "undo.ae.style.neon": {
+    "en-US": "Moti.on: apply neon style",
+    "pt-BR": "Moti.on: aplicar estilo neon"
+  },
+  "undo.ae.keys.send-to-edge": {
+    "en-US": "Moti.on: send keyframes to edge",
+    "pt-BR": "Moti.on: enviar keyframes para a borda"
+  },
   "undo.ae.keys.clone": {
     "en-US": "Moti.on: duplicate keyframes",
     "pt-BR": "Moti.on: duplicar keyframes"
