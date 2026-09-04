@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "$comment": "Tokens puros, sem DOM e sem APIs de host. O CSS e consumido pelos dois shells; o modulo TypeScript serve a tooling e testes.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020"],
+    "types": [],
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "../../.tsbuildinfo/ui-tokens.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

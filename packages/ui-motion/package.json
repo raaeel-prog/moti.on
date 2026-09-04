@@ -1,0 +1,17 @@
+{
+  "name": "@motion/ui-motion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Catálogo normativo de movimento da interface Moti.on e preferência compartilhada de movimento reduzido.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./motion.css": "./src/motion.css"
+  },
+  "dependencies": {
+    "@motion/ui-tokens": "0.1.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,546 @@
+/*
+ * CHMS-UX-002 — catálogo A6.2.
+ *
+ * API pública: componentes declaram um ou mais IDs em `data-motion`. Estados
+ * usam atributos (`data-open`, `data-closing`, `data-active`, `data-dragging`)
+ * para que CEP e UXP compartilhem a mesma folha sem depender de framework.
+ * Durações e easings vivem em @motion/ui-tokens; nunca neste arquivo.
+ */
+
+[data-motion-active="true"] {
+  will-change: transform, opacity;
+}
+
+/* 01 — tile hover. `.ch-tool` mantém o shell existente coberto. */
+.ch-tool,
+[data-motion~="tile-hover"] {
+  contain: layout paint;
+  transition: transform var(--dur-1) var(--ease-std),
+    background-color var(--dur-1) var(--ease-std);
+}
+
+@media (hover: hover) {
+  .ch-tool:hover,
+  [data-motion~="tile-hover"]:hover {
+    transform: translateY(-1px);
+    background-color: var(--bg-3);
+  }
+}
+
+/* 02 — tile press. */
+.ch-tool:active,
+[data-motion~="tile-press"]:active {
+  transform: scale(0.975);
+  transition: transform var(--dur-press) var(--ease-in);
+}
+
+/* 03 — affordance avançada do tile. */
+[data-motion~="tile-advanced"] {
+  opacity: 0;
+  transform: translateX(-2px);
+  transition: opacity var(--dur-1) var(--ease-out),
+    transform var(--dur-1) var(--ease-out);
+}
+
+:is(:hover, :focus-within) > [data-motion~="tile-advanced"],
+[data-motion~="tile-advanced"]:focus-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* 04 — tooltip após hover-intent governado pelo componente. */
+[data-motion~="tooltip-enter"] {
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition: opacity var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-out);
+  transition-delay: var(--delay-tooltip);
+}
+
+[data-motion~="tooltip-enter"][data-open="true"] {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* 05/06 — cartão de prévia. */
+[data-motion~="preview-enter"] {
+  transform-origin: var(--origin-x, 50%) var(--origin-y, 100%);
+}
+
+[data-motion~="preview-enter"][data-open="true"] {
+  animation: motion-preview-in var(--dur-3) var(--ease-pop) both;
+}
+
+[data-motion~="preview-exit"][data-closing="true"] {
+  animation: motion-preview-out var(--dur-popover-out) var(--ease-in) both;
+}
+
+@keyframes motion-preview-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes motion-preview-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.97); }
+}
+
+/* 07/08 — gaveta Inspector. */
+[data-motion~="drawer-enter"][data-open="true"] {
+  animation: motion-drawer-in var(--dur-4) var(--ease-out) both;
+}
+
+[data-motion~="drawer-exit"][data-closing="true"] {
+  animation: motion-drawer-out var(--dur-drawer-out) var(--ease-in) both;
+}
+
+@keyframes motion-drawer-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes motion-drawer-out {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(12px); }
+}
+
+/* 09 — dimming sem mudança de layout. */
+[data-motion~="drawer-dimmer"] {
+  opacity: 0;
+  transition: opacity var(--dur-drawer-out) var(--ease-std);
+}
+
+[data-motion~="drawer-dimmer"][data-open="true"] {
+  opacity: 0.4;
+  transition-duration: var(--dur-4);
+}
+
+/* 10 — até seis blocos na gaveta. */
+[data-motion~="drawer-stagger"] > * {
+  animation: motion-rise var(--dur-2) var(--ease-out) both;
+}
+
+[data-motion~="drawer-stagger"] > :nth-child(1) { animation-delay: calc(var(--stagger) * 0); }
+[data-motion~="drawer-stagger"] > :nth-child(2) { animation-delay: calc(var(--stagger) * 1); }
+[data-motion~="drawer-stagger"] > :nth-child(3) { animation-delay: calc(var(--stagger) * 2); }
+[data-motion~="drawer-stagger"] > :nth-child(4) { animation-delay: calc(var(--stagger) * 3); }
+[data-motion~="drawer-stagger"] > :nth-child(5) { animation-delay: calc(var(--stagger) * 4); }
+[data-motion~="drawer-stagger"] > :nth-child(n + 6) { animation-delay: calc(var(--stagger) * 5); }
+
+@keyframes motion-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 11 — o componente fornece o delta FLIP pelas custom properties. */
+[data-motion~="tab-indicator"] {
+  transform: translateX(var(--motion-flip-x, 0)) scaleX(var(--motion-flip-scale, 1));
+  transform-origin: left center;
+  transition: transform var(--dur-3) var(--ease-std);
+}
+
+/* 12 — conteúdo de aba. */
+[data-motion~="view-enter"][data-active="true"] {
+  animation: motion-view-in var(--dur-2) var(--ease-out) both;
+}
+
+@keyframes motion-view-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 13/14 — toast. */
+[data-motion~="toast-enter"][data-open="true"] {
+  animation: motion-toast-in var(--dur-3) var(--ease-pop) both;
+}
+
+[data-motion~="toast-exit"][data-closing="true"] {
+  animation: motion-toast-out var(--dur-2) var(--ease-in) both;
+}
+
+@keyframes motion-toast-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes motion-toast-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(8px); }
+}
+
+/* 15 — confirmação desenhada. */
+[data-motion~="confirmation-check"] {
+  stroke-dasharray: var(--motion-check-length, 24);
+  stroke-dashoffset: var(--motion-check-length, 24);
+}
+
+[data-motion~="confirmation-check"][data-active="true"] {
+  animation: motion-check-in var(--dur-5) var(--ease-out) both;
+}
+
+@keyframes motion-check-in {
+  to { stroke-dashoffset: 0; }
+}
+
+/* 16 — ripple criado pelo tile e removido ao terminar. */
+[data-motion~="tile-ripple"] {
+  background-color: var(--accent-wash);
+  border-radius: var(--r-pill);
+  pointer-events: none;
+}
+
+[data-motion~="tile-ripple"][data-active="true"] {
+  animation: motion-ripple var(--dur-ripple) var(--ease-out) both;
+}
+
+@keyframes motion-ripple {
+  from { opacity: 0.18; transform: scale(0); }
+  to { opacity: 0; transform: scale(1); }
+}
+
+/* 17 — exceção de feedback: um ciclo de borda, nunca transição contínua. */
+[data-motion~="live-control-pulse"][data-active="true"] {
+  animation: motion-live-pulse var(--dur-live-pulse) var(--ease-std) both;
+}
+
+@keyframes motion-live-pulse {
+  0% { box-shadow: 0 0 0 0 var(--accent-glow); }
+  60% { box-shadow: 0 0 0 4px var(--accent-glow); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* 18/19 — slider. */
+[data-motion~="slider-knob"] {
+  transition: transform var(--dur-1) var(--ease-out);
+}
+
+[data-motion~="slider-knob"][data-dragging="true"] {
+  transform: scale(1.12);
+}
+
+[data-motion~="slider-track"] {
+  transform: scaleX(var(--motion-progress, 0));
+  transform-origin: left center;
+  transition: transform var(--dur-1) var(--ease-std);
+}
+
+[data-motion~="slider-track"][data-dragging="true"] {
+  transition-duration: var(--dur-progress);
+}
+
+/* 20 — skeleton: o pseudo-elemento se move; o layout permanece estável. */
+[data-motion~="asset-skeleton"] {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg-2);
+}
+
+[data-motion~="asset-skeleton"]::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(90deg, transparent, var(--bg-3), transparent);
+  transform: translateX(-100%);
+  animation: motion-skeleton var(--dur-skeleton) var(--ease-linear) infinite;
+}
+
+@keyframes motion-skeleton {
+  to { transform: translateX(100%); }
+}
+
+/* 21 — progresso determinístico informado pelo chamador. */
+[data-motion~="progress-bar"] {
+  transform: scaleX(var(--motion-progress, 0));
+  transform-origin: left center;
+  transition: transform var(--dur-progress) var(--ease-linear);
+}
+
+/* 22 — chip de preset. */
+[data-motion~="preset-chip"] {
+  transition: background-color var(--dur-1) var(--ease-pop),
+    transform var(--dur-1) var(--ease-pop);
+}
+
+[data-motion~="preset-chip"][data-active="true"] {
+  background-color: var(--accent-wash);
+  animation: motion-chip-select var(--dur-1) var(--ease-pop) both;
+}
+
+@keyframes motion-chip-select {
+  from { transform: scale(0.96); }
+  to { transform: scale(1); }
+}
+
+/* 23 — command palette. */
+[data-motion~="command-palette"][data-open="true"] {
+  animation: motion-palette-in var(--dur-3) var(--ease-out) both;
+}
+
+@keyframes motion-palette-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 24 — context strip mantém sua altura; apenas a superfície muda. */
+[data-motion~="context-alert"] {
+  transition: background-color var(--dur-2) var(--ease-std);
+}
+
+/* 25 — estado vazio, com no máximo dois blocos. */
+[data-motion~="empty-state"] > * {
+  animation: motion-empty-in var(--dur-3) var(--ease-out) both;
+}
+
+[data-motion~="empty-state"] > :nth-child(2) {
+  animation-delay: var(--stagger);
+}
+
+@keyframes motion-empty-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes motion-reduced-opacity-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes motion-reduced-opacity-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes motion-live-pulse-reduced {
+  from { box-shadow: 0 0 0 1px var(--accent-glow); }
+  to { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes motion-skeleton-reduced {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.75; }
+}
+
+/* Toggle interno: preferência efetiva já é OR no controlador TypeScript. */
+[data-reduced-motion="true"] *,
+[data-reduced-motion="true"] *::before,
+[data-reduced-motion="true"] *::after {
+  animation-duration: var(--dur-reduced) !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: var(--dur-reduced) !important;
+  scroll-behavior: auto !important;
+}
+
+[data-reduced-motion="true"] .ch-tool:active,
+[data-reduced-motion="true"] [data-motion~="tile-press"]:active {
+  transform: scale(0.975);
+  transition-duration: var(--dur-press) !important;
+}
+
+[data-reduced-motion="true"] [data-motion~="progress-bar"] {
+  transition-duration: var(--dur-progress-reduced) !important;
+}
+
+[data-reduced-motion="true"] [data-motion~="tile-ripple"] {
+  display: none;
+}
+
+[data-reduced-motion="true"] [data-motion~="live-control-pulse"][data-active="true"] {
+  animation: motion-live-pulse-reduced var(--dur-live-reduced) var(--ease-step-end) both !important;
+}
+
+[data-reduced-motion="true"] [data-motion~="asset-skeleton"]::after {
+  animation: motion-skeleton-reduced var(--dur-skeleton) var(--ease-linear) infinite !important;
+  transform: none;
+}
+
+/* Fallback explícito dos demais itens de A6.2 para o toggle interno. */
+[data-reduced-motion="true"] .ch-tool:hover,
+[data-reduced-motion="true"] [data-motion~="tile-hover"]:hover,
+[data-reduced-motion="true"] [data-motion~="tile-advanced"],
+[data-reduced-motion="true"] [data-motion~="tooltip-enter"] {
+  transform: none;
+}
+
+[data-reduced-motion="true"] [data-motion~="preview-enter"][data-open="true"],
+[data-reduced-motion="true"] [data-motion~="view-enter"][data-active="true"],
+[data-reduced-motion="true"] [data-motion~="toast-enter"][data-open="true"],
+[data-reduced-motion="true"] [data-motion~="command-palette"][data-open="true"] {
+  animation-name: motion-reduced-opacity-in;
+}
+
+[data-reduced-motion="true"] [data-motion~="preview-exit"][data-closing="true"],
+[data-reduced-motion="true"] [data-motion~="drawer-exit"][data-closing="true"],
+[data-reduced-motion="true"] [data-motion~="toast-exit"][data-closing="true"] {
+  animation-name: motion-reduced-opacity-out;
+}
+
+[data-reduced-motion="true"] [data-motion~="drawer-enter"][data-open="true"] {
+  animation-name: motion-reduced-opacity-in;
+  animation-duration: var(--dur-popover-out) !important;
+}
+
+[data-reduced-motion="true"] [data-motion~="drawer-dimmer"] {
+  transition-duration: var(--dur-drawer-out) !important;
+}
+
+[data-reduced-motion="true"] [data-motion~="drawer-dimmer"][data-open="true"] {
+  transition-duration: var(--dur-4) !important;
+}
+
+[data-reduced-motion="true"] [data-motion~="drawer-stagger"] > * {
+  animation-name: motion-reduced-opacity-in;
+  animation-delay: var(--delay-none);
+}
+
+[data-reduced-motion="true"] [data-motion~="tab-indicator"] {
+  transition: none;
+}
+
+[data-reduced-motion="true"] [data-motion~="confirmation-check"][data-active="true"] {
+  animation: none;
+  stroke-dashoffset: 0;
+}
+
+[data-reduced-motion="true"] [data-motion~="slider-knob"] {
+  transition-duration: var(--dur-1) !important;
+}
+
+[data-reduced-motion="true"] [data-motion~="slider-track"] {
+  transition-duration: var(--dur-1) !important;
+}
+
+[data-reduced-motion="true"] [data-motion~="slider-track"][data-dragging="true"] {
+  transition-duration: var(--dur-progress) !important;
+}
+
+[data-reduced-motion="true"] [data-motion~="preset-chip"] {
+  transition-property: background-color;
+}
+
+[data-reduced-motion="true"] [data-motion~="preset-chip"][data-active="true"] {
+  animation: none;
+  transform: none;
+}
+
+[data-reduced-motion="true"] [data-motion~="context-alert"] {
+  transition-duration: var(--dur-2) !important;
+}
+
+[data-reduced-motion="true"] [data-motion~="empty-state"] > * {
+  animation-name: motion-reduced-opacity-in;
+  animation-delay: var(--delay-none);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: var(--dur-reduced) !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: var(--dur-reduced) !important;
+    scroll-behavior: auto !important;
+  }
+
+  .ch-tool:active,
+  [data-motion~="tile-press"]:active {
+    transform: scale(0.975);
+    transition-duration: var(--dur-press) !important;
+  }
+
+  [data-motion~="progress-bar"] {
+    transition-duration: var(--dur-progress-reduced) !important;
+  }
+
+  [data-motion~="tile-ripple"] {
+    display: none;
+  }
+
+  [data-motion~="live-control-pulse"][data-active="true"] {
+    animation: motion-live-pulse-reduced var(--dur-live-reduced) var(--ease-step-end) both !important;
+  }
+
+  [data-motion~="asset-skeleton"]::after {
+    animation: motion-skeleton-reduced var(--dur-skeleton) var(--ease-linear) infinite !important;
+    transform: none;
+  }
+}
+
+/* O mesmo contrato explícito quando a preferência vem do sistema. */
+@media (prefers-reduced-motion: reduce) {
+  .ch-tool:hover,
+  [data-motion~="tile-hover"]:hover,
+  [data-motion~="tile-advanced"],
+  [data-motion~="tooltip-enter"] {
+    transform: none;
+  }
+
+  [data-motion~="preview-enter"][data-open="true"],
+  [data-motion~="view-enter"][data-active="true"],
+  [data-motion~="toast-enter"][data-open="true"],
+  [data-motion~="command-palette"][data-open="true"] {
+    animation-name: motion-reduced-opacity-in;
+  }
+
+  [data-motion~="preview-exit"][data-closing="true"],
+  [data-motion~="drawer-exit"][data-closing="true"],
+  [data-motion~="toast-exit"][data-closing="true"] {
+    animation-name: motion-reduced-opacity-out;
+  }
+
+  [data-motion~="drawer-enter"][data-open="true"] {
+    animation-name: motion-reduced-opacity-in;
+    animation-duration: var(--dur-popover-out) !important;
+  }
+
+  [data-motion~="drawer-dimmer"] {
+    transition-duration: var(--dur-drawer-out) !important;
+  }
+
+  [data-motion~="drawer-dimmer"][data-open="true"] {
+    transition-duration: var(--dur-4) !important;
+  }
+
+  [data-motion~="drawer-stagger"] > * {
+    animation-name: motion-reduced-opacity-in;
+    animation-delay: var(--delay-none);
+  }
+
+  [data-motion~="tab-indicator"] {
+    transition: none;
+  }
+
+  [data-motion~="confirmation-check"][data-active="true"] {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+
+  [data-motion~="slider-knob"] {
+    transition-duration: var(--dur-1) !important;
+  }
+
+  [data-motion~="slider-track"] {
+    transition-duration: var(--dur-1) !important;
+  }
+
+  [data-motion~="slider-track"][data-dragging="true"] {
+    transition-duration: var(--dur-progress) !important;
+  }
+
+  [data-motion~="preset-chip"] {
+    transition-property: background-color;
+  }
+
+  [data-motion~="preset-chip"][data-active="true"] {
+    animation: none;
+    transform: none;
+  }
+
+  [data-motion~="context-alert"] {
+    transition-duration: var(--dur-2) !important;
+  }
+
+  [data-motion~="empty-state"] > * {
+    animation-name: motion-reduced-opacity-in;
+    animation-delay: var(--delay-none);
+  }
+}
