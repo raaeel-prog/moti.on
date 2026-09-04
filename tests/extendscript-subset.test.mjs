@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   BANNED_CONSTRUCTS,
   findBannedConstructs,
+  findCommentDirectives,
   scanRepository,
   stripCommentsAndStrings
 } from "../scripts/check-extendscript.mjs";
@@ -116,4 +117,40 @@ test("o host do After Effects respeita o subconjunto ExtendScript", async () => 
   const { scannedFiles, problems } = await scanRepository();
   assert.ok(scannedFiles > 0, "O scanner não encontrou nenhum arquivo .jsx para verificar.");
   assert.deepEqual(problems, []);
+});
+
+/**
+ * Regressao de um bug que custou caro: um unico `// @ts-ignore` em
+ * commands/clean.jsx impediu os 60 comandos de carregar. O pre-processador do
+ * ExtendScript roda antes do parser e le `//@` como diretiva — a mesma grafia
+ * alternativa de `#target`/`#include` — entao uma diretiva desconhecida derruba
+ * o `$.evalFile` do bootstrap inteiro com "erro de sintaxe" na linha do
+ * comentario. Nenhum parser de JavaScript acusa isso: para todos eles a linha e
+ * comentario. Este teste e o unico lugar do repositorio que sabe disso.
+ */
+test("comentario que comeca com @ e recusado", () => {
+  const findings = findCommentDirectives("var a = 1;\n// @ts-ignore mascara o erro\nvar b = 2;");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].line, 2);
+  assert.equal(findings[0].construct, "comment-directive");
+});
+
+test("`//@include` colado tambem e recusado", () => {
+  assert.equal(findCommentDirectives('//@include "outro.jsx"').length, 1);
+});
+
+test("diretiva de pre-processador por fonte e recusada", () => {
+  const findings = findCommentDirectives("#target aftereffects\nvar a = 1;");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].construct, "preprocessor-directive");
+});
+
+test("comentario, JSDoc e URL legitimos nao sao acusados", () => {
+  const legitimo = [
+    "// Remove itens nao usados do projeto.",
+    "/** @param {string} nome */",
+    'var u = "https://exemplo.com/a";',
+    'var v = "https://pessoa@exemplo.com/a";'
+  ].join("\n");
+  assert.deepEqual(findCommentDirectives(legitimo), []);
 });

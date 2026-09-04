@@ -240,6 +240,59 @@ export function findBannedConstructs(source) {
   return findings;
 }
 
+/**
+ * Diretivas de pre-processador escondidas em comentario.
+ *
+ * O ExtendScript tem um pre-processador que roda ANTES do parser de JavaScript,
+ * e ele aceita as diretivas nas duas grafias: `#target aftereffects` e
+ * `//@target aftereffects`. A consequencia e que um comentario de linha que
+ * comeca com `@` nao e comentario para o ExtendScript: e uma diretiva, e uma
+ * diretiva que ele nao conhece derruba o arquivo inteiro com "erro de sintaxe"
+ * na linha do comentario.
+ *
+ * Foi exatamente assim que um `// @ts-ignore` — inofensivo em qualquer outro
+ * arquivo do repositorio — impediu o host inteiro de carregar: `$.evalFile`
+ * falhava no bootstrap e os 60 comandos sumiam de uma vez. Nenhum parser de
+ * ES3, nenhum `node --check` e nenhum lint de JavaScript acusa isso, porque
+ * para todos eles a linha e so um comentario. Dai a regra viver aqui.
+ *
+ * A varredura roda sobre o texto cru, e nao sobre a fonte com comentarios
+ * removidos: o alvo E o comentario.
+ *
+ * @param {string} source
+ * @returns {{ line: number, construct: string, message: string }[]}
+ */
+export function findCommentDirectives(source) {
+  /** @type {{ line: number, construct: string, message: string }[]} */
+  const findings = [];
+
+  source.split("\n").forEach((lineText, index) => {
+    if (/(^|[^:\w$])\/\/\s*@/.test(lineText)) {
+      findings.push({
+        line: index + 1,
+        construct: "comment-directive",
+        message:
+          "comentario iniciado por `@`. O pre-processador do ExtendScript le " +
+          "`//@` como diretiva e derruba o arquivo com erro de sintaxe. " +
+          "Escreva o comentario sem o `@`, ou declare o tipo em " +
+          "host/types/extendscript.d.ts em vez de suprimir o erro."
+      });
+    }
+    if (/^\s*#/.test(lineText)) {
+      findings.push({
+        line: index + 1,
+        construct: "preprocessor-directive",
+        message:
+          "diretiva de pre-processador. Apenas o `#target` que o build injeta " +
+          "no topo do bundle e permitido; uma diretiva por fonte quebra a " +
+          "concatenacao."
+      });
+    }
+  });
+
+  return findings;
+}
+
 async function collectJsxFiles(directory) {
   /** @type {string[]} */
   const found = [];
@@ -266,7 +319,8 @@ export async function scanRepository() {
       scannedFiles += 1;
       const source = await readFile(file, "utf8");
       const relative = path.relative(root, file).split(path.sep).join("/");
-      for (const finding of findBannedConstructs(source)) {
+      const achados = findBannedConstructs(source).concat(findCommentDirectives(source));
+      for (const finding of achados) {
         problems.push(`${relative}:${finding.line} — ${finding.message}`);
       }
     }

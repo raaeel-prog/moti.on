@@ -189,6 +189,10 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       // expõe dispatch nem contorna o registry — só captura, restaura e remove
       // keyframes preservando metadata.
       "MotionKeyframes",
+      // Writer/reader/updater comum de Expression Controls. Continua interno:
+      // comandos persistem seus registros em RigMetadata e o dispatcher segue
+      // como unica superficie publica e dono do Undo Group.
+      "MotionLiveControls",
       "MotionRegistry",
       // Bloco de metadata de rig no comentario da camada. Mesmo estatuto dos
       // outros modulos internos: sem superficie de dispatch. Existe separado

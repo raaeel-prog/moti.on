@@ -64,7 +64,21 @@ export default [
     },
     rules: {
       // Os scripts de build e o runner de testes se comunicam por stdout.
-      "no-console": "off"
+      "no-console": "off",
+      // `const { preview: _preview, ...resto } = objeto` e a unica forma de
+      // remover uma chave sem mutar o original, e os testes de contrato vivem
+      // disso: eles montam um preset valido e tiram um campo para provar que a
+      // validacao fecha. O binding descartado e exigido pela sintaxe, nao e
+      // descuido — o prefixo `_` e o que declara a intencao.
+      "no-unused-vars": [
+        "error",
+        {
+          varsIgnorePattern: "^_",
+          argsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+          caughtErrors: "none"
+        }
+      ]
     }
   },
 
