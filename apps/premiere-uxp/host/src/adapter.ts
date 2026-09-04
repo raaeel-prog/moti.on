@@ -106,7 +106,17 @@ function isCommandOutcome(value: unknown): value is CommandOutcome {
   );
 }
 
-const ALLOWED_OPTION_NAMES = new Set(["dryRun", "allowDestructive", "preserveSelection"]);
+const BOOLEAN_OPTION_NAMES = new Set([
+  "dryRun",
+  "allowDestructive",
+  "preserveSelection",
+  "emitLiveControls"
+]);
+const ALLOWED_OPTION_NAMES = new Set([
+  ...BOOLEAN_OPTION_NAMES,
+  "mode",
+  "targetRigId"
+]);
 
 /** Valida o envelope antes de qualquer leitura do projeto. */
 function validateEnvelope(request: unknown): CommandFailure | null {
@@ -152,8 +162,18 @@ function validateEnvelope(request: unknown): CommandFailure | null {
     if (!ALLOWED_OPTION_NAMES.has(name)) {
       return fail("INTERNAL_ERROR", "Opção desconhecida no envelope.", { option: name });
     }
-    if (typeof value !== "boolean") {
+    if (BOOLEAN_OPTION_NAMES.has(name) && typeof value !== "boolean") {
       return fail("INTERNAL_ERROR", `A opção ${name} precisa ser booleana.`, { option: name });
+    }
+    if (name === "mode" && value !== "quick" && value !== "advanced") {
+      return fail("INTERNAL_ERROR", "A opção mode precisa ser quick ou advanced.", {
+        option: name
+      });
+    }
+    if (name === "targetRigId" && !isNonEmptyString(value)) {
+      return fail("INTERNAL_ERROR", "A opção targetRigId precisa ser uma string não vazia.", {
+        option: name
+      });
     }
   }
 

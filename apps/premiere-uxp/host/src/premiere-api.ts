@@ -22,6 +22,73 @@ export interface PremiereAction {
   readonly __premiereAction?: unique symbol;
 }
 
+/** Tempo opaco do host. Os campos somente-leitura bastam para diagnóstico. */
+export interface PremiereTickTime {
+  readonly seconds: number;
+  readonly ticks: string;
+}
+
+/** Valor de cor documentado por `ComponentParam` desde o Premiere 25.6. */
+export interface PremiereColor {
+  red: number;
+  green: number;
+  blue: number;
+  alpha: number;
+}
+
+export interface PremiereColorFactory {
+  (red?: number, green?: number, blue?: number, alpha?: number): PremiereColor;
+  new (red?: number, green?: number, blue?: number, alpha?: number): PremiereColor;
+}
+
+export type PremiereComponentValue = number | string | boolean | PremiereColor;
+
+export interface PremiereKeyframe {
+  value: { value: PremiereComponentValue };
+  position: PremiereTickTime;
+}
+
+/**
+ * Parâmetro exposto por um componente ou MOGRT.
+ *
+ * A API pública não fornece `paramId`: só `displayName` e o índice definido pelo
+ * componente. O mapeamento estável da suíte vive no manifesto do MOGRT e é
+ * validado por `live-controls.ts` antes de qualquer leitura ou escrita.
+ */
+export interface PremiereComponentParam {
+  readonly displayName: string;
+  getValueAtTime(time: PremiereTickTime): Promise<PremiereComponentValue>;
+  createKeyframe(value: PremiereComponentValue): PremiereKeyframe;
+  createSetValueAction(keyframe: PremiereKeyframe, safeForPlayback?: boolean): PremiereAction;
+  createAddKeyframeAction(keyframe: PremiereKeyframe): PremiereAction;
+  isTimeVarying(): boolean;
+}
+
+export interface PremiereComponent {
+  getParam(paramIndex?: number): PremiereComponentParam;
+  getParamCount(): number;
+  getMatchName(): Promise<string>;
+  getDisplayName(): Promise<string>;
+}
+
+export interface PremiereVideoComponentChain {
+  getComponentAtIndex(componentIndex: number): PremiereComponent;
+  getComponentCount(): number;
+}
+
+export interface PremiereVideoClipTrackItem {
+  getComponentChain(): Promise<PremiereVideoComponentChain>;
+}
+
+export interface PremiereTrackItemSelection {
+  addItem(trackItem: PremiereVideoClipTrackItem, skipDuplicateCheck?: boolean): boolean;
+  getTrackItems(): Promise<PremiereVideoClipTrackItem[]>;
+}
+
+export interface PremiereTrackItemSelectionFactory {
+  createEmptySelection(callback: (selection: PremiereTrackItemSelection) => void): boolean;
+}
+
 /**
  * Acumulador de ações de uma transação.
  *
@@ -67,6 +134,8 @@ export interface PremiereSequence {
   getAudioTrackCount(): Promise<number>;
   getCaptionTrackCount?: () => Promise<number>;
   getCaptionTrack?: (trackIndex: number) => Promise<unknown>;
+  getSelection?: () => Promise<PremiereTrackItemSelection>;
+  setSelection?: (selection: PremiereTrackItemSelection) => boolean;
 }
 
 export interface PremiereSequenceEditor {
@@ -95,5 +164,7 @@ export interface PremiereModule {
   SequenceEditor?: {
     getEditor?: (sequence: PremiereSequence) => PremiereSequenceEditor;
   };
+  Color?: PremiereColorFactory;
+  TrackItemSelection?: PremiereTrackItemSelectionFactory;
   Transcript?: PremiereTranscriptApi;
 }

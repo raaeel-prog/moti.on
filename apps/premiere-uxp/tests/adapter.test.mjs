@@ -222,7 +222,10 @@ test("args e options malformados falham fechados antes do projeto", async () => 
     { args: null },
     { args: [] },
     { options: { dryRun: "sim" } },
-    { options: { opcaoInventada: true } }
+    { options: { opcaoInventada: true } },
+    { options: { mode: "instant" } },
+    { options: { emitLiveControls: "sim" } },
+    { options: { targetRigId: "" } }
   ]) {
     const { adapter, premiere } = makeAdapter();
     const response = await adapter.dispatch(requestFor("pr.context.read", overrides));
@@ -230,6 +233,23 @@ test("args e options malformados falham fechados antes do projeto", async () => 
     assert.equal(response.error.code, "INTERNAL_ERROR");
     assert.deepEqual(premiere.calls, []);
   }
+});
+
+test("opções Quick e Advanced válidas atravessam o gate do Premiere", async () => {
+  const { adapter, premiere } = makeAdapter();
+  const response = await adapter.dispatch(
+    requestFor("pr.context.read", {
+      options: {
+        mode: "quick",
+        emitLiveControls: true,
+        targetRigId: "rig-existing-1",
+        preserveSelection: true
+      }
+    })
+  );
+
+  assert.equal(response.ok, true);
+  assert.ok(premiere.calls.length > 0);
 });
 
 test("dryRun nao declarado no descriptor e recusado antes do projeto", async () => {
