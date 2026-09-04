@@ -19,15 +19,48 @@ export {
   PROTOCOL_VERSION,
   isCommandResponse,
   type CommandContext,
+  type CommandMode,
   type CommandFailure,
   type CommandOptions,
   type CommandRequest,
+  type CommandRequestOptions,
   type CommandResponse,
   type CommandTiming,
   type CommandWarning,
   type HostId,
   type ProtocolVersion
 } from "./protocol.js";
+
+export {
+  QUICK_PROFILE_LOCALES,
+  type LiveControlBinding,
+  type LiveControlKind,
+  type LiveControlOption,
+  type LiveControlTarget,
+  type LiveControlUnit,
+  type QuickContext,
+  type QuickLocalizedText,
+  type QuickProfile,
+  type QuickProfileLocale,
+  type QuickSelectionKind
+} from "./quick-profile.js";
+
+export {
+  PRESET_SCHEMA_VERSION,
+  type PresetControl,
+  type PresetDefinition,
+  type PresetDefinitionV1,
+  type PresetDefinitionV2,
+  type PresetJsonPrimitive,
+  type PresetJsonValue,
+  type PresetPreviewV1,
+  type PresetPreviewV2,
+  type PresetQuickDefinition,
+  type PresetSignatureVerifier,
+  type PresetV1DowngradeOptions,
+  type PresetV2MigrationOptions,
+  type PresetV2MigrationPreview
+} from "./presets.js";
 
 export {
   type CapabilityFinding,
@@ -68,12 +101,19 @@ export {
 
 export {
   CONTRACT_SCHEMA_VERSION,
+  downgradePresetV2ToV1,
   isCommandRequest,
   isHostCapabilities,
+  isPresetDefinition,
+  isPresetDefinitionV1,
   isRigMetadata,
+  migratePresetV1ToV2,
   validateCommandRequest,
   validateCommandResponse,
   validateHostCapabilities,
+  validatePresetDefinition,
+  validatePresetDefinitionV1,
+  validateRemotePresetDefinition,
   validateRigMetadata,
   type ContractValidationIssue,
   type ContractValidationResult

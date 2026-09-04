@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moti.on/schemas/preset-definition.v2.schema.json",
+  "title": "Moti.on PresetDefinition v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "version",
+    "displayName",
+    "category",
+    "hosts",
+    "requirements",
+    "controls",
+    "operationPlan",
+    "preview",
+    "checksum"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "id": { "$ref": "#/$defs/nonEmptyString" },
+    "version": { "$ref": "#/$defs/nonEmptyString" },
+    "displayName": { "$ref": "#/$defs/localizedText" },
+    "category": { "$ref": "#/$defs/nonEmptyString" },
+    "hosts": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/hostId" }
+    },
+    "minHostVersion": { "$ref": "#/$defs/minHostVersion" },
+    "requirements": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/nonEmptyString" }
+    },
+    "controls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+      }
+    },
+    "operationPlan": { "$ref": "#/$defs/jsonValue" },
+    "quick": { "$ref": "#/$defs/quick" },
+    "preview": { "$ref": "#/$defs/preview" },
+    "checksum": { "$ref": "#/$defs/nonEmptyString" },
+    "signature": { "$ref": "#/$defs/nonEmptyString" }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "hostId": { "enum": ["after-effects", "premiere-pro"] },
+    "localizedText": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": { "$ref": "#/$defs/nonEmptyString" }
+    },
+    "quickLocalizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pt-BR", "en-US"],
+      "properties": {
+        "pt-BR": { "$ref": "#/$defs/nonEmptyString" },
+        "en-US": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "minHostVersion": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "after-effects": { "$ref": "#/$defs/nonEmptyString" },
+        "premiere-pro": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "liveControlOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "label"],
+      "properties": {
+        "value": { "type": "number" },
+        "label": { "$ref": "#/$defs/localizedText" }
+      }
+    },
+    "liveControlBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paramId", "label", "control", "target", "order", "help"],
+      "properties": {
+        "paramId": { "$ref": "#/$defs/nonEmptyString" },
+        "label": { "$ref": "#/$defs/quickLocalizedText" },
+        "control": {
+          "enum": ["slider", "angle", "color", "checkbox", "point", "dropdown"]
+        },
+        "target": { "enum": ["layer", "controller", "comp-controller"] },
+        "order": { "type": "integer", "minimum": 0 },
+        "unit": { "enum": ["px", "%", "°", "fps", "frames", "s", "x", "none"] },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "softMin": { "type": "number" },
+        "softMax": { "type": "number" },
+        "step": { "type": "number", "exclusiveMinimum": 0 },
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/liveControlOption" }
+        },
+        "help": { "$ref": "#/$defs/quickLocalizedText" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "control": { "const": "dropdown" } },
+            "required": ["control"]
+          },
+          "then": { "required": ["options"] }
+        }
+      ]
+    },
+    "quick": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["isDefault", "liveControls", "budgetMs", "oneLine", "needs", "creates"],
+      "properties": {
+        "isDefault": { "type": "boolean" },
+        "liveControls": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/liveControlBinding" }
+        },
+        "budgetMs": { "type": "number", "exclusiveMinimum": 0 },
+        "oneLine": { "$ref": "#/$defs/quickLocalizedText" },
+        "needs": { "$ref": "#/$defs/quickLocalizedText" },
+        "creates": { "$ref": "#/$defs/quickLocalizedText" }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["poster", "loop", "fixtureId", "renderedAt", "checksum"],
+      "properties": {
+        "poster": { "$ref": "#/$defs/nonEmptyString" },
+        "loop": { "$ref": "#/$defs/nonEmptyString" },
+        "fixtureId": { "$ref": "#/$defs/nonEmptyString" },
+        "renderedAt": { "$ref": "#/$defs/nonEmptyString" },
+        "checksum": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "jsonValue": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    }
+  }
+}

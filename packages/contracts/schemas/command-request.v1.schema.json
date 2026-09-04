@@ -31,7 +31,10 @@
       "properties": {
         "dryRun": { "type": "boolean" },
         "allowDestructive": { "type": "boolean" },
-        "preserveSelection": { "type": "boolean" }
+        "preserveSelection": { "type": "boolean" },
+        "mode": { "enum": ["quick", "advanced"] },
+        "emitLiveControls": { "type": "boolean" },
+        "targetRigId": { "type": "string", "minLength": 1, "pattern": "\\S" }
       }
     }
   },

@@ -10,6 +10,7 @@ import {
   CONTRACT_SCHEMA_VERSION,
   ERROR_CODES,
   ERROR_META,
+  PRESET_SCHEMA_VERSION,
   PROTOCOL_VERSION,
   isCommandRequest,
   isCommandResponse,
@@ -26,7 +27,9 @@ const schemaFiles = [
   "command-request.v1.schema.json",
   "command-response.v1.schema.json",
   "host-capabilities.v1.schema.json",
-  "rig-metadata.v1.schema.json"
+  "rig-metadata.v1.schema.json",
+  "preset-definition.v1.schema.json",
+  "preset-definition.v2.schema.json"
 ];
 
 async function readSchemas() {
@@ -122,7 +125,7 @@ function validRigMetadata() {
   };
 }
 
-test("os quatro schemas v1 são válidos, versionados e compilam no Ajv 2020", async () => {
+test("todos os schemas são válidos, versionados e compilam no Ajv 2020", async () => {
   const schemas = await readSchemas();
   const ajv = new Ajv2020({ strict: true, strictRequired: false, allErrors: true });
   const ids = new Set();
@@ -130,13 +133,14 @@ test("os quatro schemas v1 são válidos, versionados e compilam no Ajv 2020", a
   for (const schema of schemas) {
     assert.equal(ajv.validateSchema(schema), true, JSON.stringify(ajv.errors));
     assert.equal(schema.$schema, "https://json-schema.org/draft/2020-12/schema");
-    assert.match(schema.$id, /\.v1\.schema\.json$/);
+    assert.match(schema.$id, /\.v[12]\.schema\.json$/);
     assert.ok(!ids.has(schema.$id), `Schema id duplicado: ${schema.$id}`);
     ids.add(schema.$id);
     ajv.compile(schema);
   }
 
   assert.equal(CONTRACT_SCHEMA_VERSION, PROTOCOL_VERSION);
+  assert.equal(PRESET_SCHEMA_VERSION, 2);
 });
 
 test("o enum JSON de erros permanece sincronizado com a união TypeScript", async () => {

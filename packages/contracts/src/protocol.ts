@@ -20,6 +20,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
 export type HostId = "after-effects" | "premiere-pro";
+export type CommandMode = "quick" | "advanced";
 
 export interface CommandContext {
   host: HostId;
@@ -64,7 +65,16 @@ export interface CommandOptions {
    * e são a exceção.
    */
   preserveSelection?: boolean;
+  /** Caminho de interação. Ausente equivale a `quick`. */
+  mode?: CommandMode;
+  /** Ausente equivale a `true` em Quick; em Advanced permanece opcional. */
+  emitLiveControls?: boolean;
+  /** Identidade estável do rig que deve ser ajustado em vez de recriado. */
+  targetRigId?: string;
 }
+
+/** Nome normativo usado pelo Addendum A; preserva o alias público anterior. */
+export type CommandRequestOptions = CommandOptions;
 
 export interface CommandRequest<TArgs extends Record<string, unknown> = Record<string, unknown>> {
   protocolVersion: ProtocolVersion;
