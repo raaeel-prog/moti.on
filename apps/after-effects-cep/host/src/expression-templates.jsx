@@ -299,6 +299,46 @@
     return true;
   }
 
+  // -----------------------------------------------------------------------
+  // Wiggle — Live Controls (A2)
+  //
+  // A expressao le frequencia, amplitude e seed de controles deslizantes na
+  // camada, em vez de valores literais. Satisfaz A2.1: nenhum parametro
+  // exposto e literal.
+  // -----------------------------------------------------------------------
+
+  var WIGGLE_LIVE_FREQ = "CHMS \u00B7 Wiggle \u00B7 Frequ\u00EAncia";
+  var WIGGLE_LIVE_AMP  = "CHMS \u00B7 Wiggle \u00B7 Amplitude";
+  var WIGGLE_LIVE_SEED = "CHMS \u00B7 Wiggle \u00B7 Seed";
+
+  var WIGGLE_LIVE_BODY =
+    "var ctl = thisLayer;\n" +
+    'var f = ctl.effect("' + WIGGLE_LIVE_FREQ + '")(1);\n' +
+    'var a = ctl.effect("' + WIGGLE_LIVE_AMP  + '")(1);\n' +
+    'var s = Math.floor(ctl.effect("' + WIGGLE_LIVE_SEED + '")(1));\n' +
+    "seedRandom(s, true);\n" +
+    "wiggle(f, a);";
+
+  /**
+   * Gera expressao de Wiggle vinculada a controles deslizantes.
+   *
+   * Os tokens validam os DEFAULTS que serao escritos nos sliders, mas a
+   * expressao em si nao carrega valores literais — ela le dos efeitos.
+   *
+   * @returns {string}
+   */
+  function renderWiggleLive() {
+    return WIGGLE_HEADER + WIGGLE_LIVE_BODY;
+  }
+
+  /** @param {string} source @returns {boolean} */
+  function isManagedWiggleLive(source) {
+    if (typeof source !== "string") return false;
+    var normalized = source.replace(/\r\n?/g, "\n");
+    if (normalized.indexOf(WIGGLE_HEADER) !== 0) return false;
+    return normalized.substring(WIGGLE_HEADER.length) === WIGGLE_LIVE_BODY;
+  }
+
   /**
    * `random(min, max)` com dois numeros devolve um ESCALAR. Emiti-lo cru
    * quebraria qualquer propriedade que nao seja 1D. Multiplicar `value` carrega
@@ -1576,6 +1616,83 @@
     return body.substring(declarations[0].length) === PARALLAX_WIGGLE_TAIL;
   }
 
+  // -----------------------------------------------------------------------
+  // Beat Sync (ae.audio.beat)
+  //
+  // Dois modos: BPM (senoidal) e Audio Amplitude (leitura de camada do
+  // assistente nativo). Ambos usam Live Controls para intensidade.
+  // -----------------------------------------------------------------------
+
+  var BEAT_ID = "ae.audio.beat";
+  var BEAT_HEADER = MotionContracts.EXPRESSION_HEADER + BEAT_ID + "\n";
+
+  var BEAT_BPM_SLIDER    = "CHMS \u00B7 Beat \u00B7 BPM";
+  var BEAT_INT_SLIDER    = "CHMS \u00B7 Beat \u00B7 Intensidade";
+  var BEAT_SEED_SLIDER   = "CHMS \u00B7 Beat \u00B7 Seed";
+
+  /**
+   * BPM: oscilacao senoidal controlada por slider.
+   *
+   * O `linear()` mapeia a saida de `Math.abs(Math.sin(...))` (0-1) para a
+   * faixa util da propriedade. O caller fornece `restValue` (valor de
+   * repouso) e `peakOffset` (quanto o pico afasta do repouso).
+   *
+   * @param {{restValue: unknown, peakOffset: unknown}} tokens
+   * @returns {string}
+   */
+  function renderBeatBpm(tokens) {
+    if (!tokens) throw new Error("Tokens Beat BPM ausentes.");
+    if (!isFiniteNumber(tokens.restValue)) throw new Error("Valor de repouso invalido.");
+    if (!isFiniteNumber(tokens.peakOffset)) throw new Error("Offset de pico invalido.");
+
+    return (
+      BEAT_HEADER +
+      "var ctl = thisLayer;\n" +
+      'var bpm = ctl.effect("' + BEAT_BPM_SLIDER + '")(1);\n' +
+      'var intensidade = ctl.effect("' + BEAT_INT_SLIDER + '")(1);\n' +
+      "var freq = bpm / 60;\n" +
+      "var onda = Math.abs(Math.sin(time * freq * Math.PI));\n" +
+      "var repouso = " + canonicalNumber(/** @type {number} */ (tokens.restValue)) + ";\n" +
+      "var pico = " + canonicalNumber(/** @type {number} */ (tokens.peakOffset)) + ";\n" +
+      "repouso + onda * pico * (intensidade / 100);"
+    );
+  }
+
+  /**
+   * Audio Amplitude: le da camada "Audio Amplitude" gerada pelo assistente
+   * nativo do After Effects.
+   *
+   * @param {{channelEffect: unknown, restValue: unknown, peakOffset: unknown}} tokens
+   * @returns {string}
+   */
+  function renderBeatAmplitude(tokens) {
+    if (!tokens) throw new Error("Tokens Beat Amplitude ausentes.");
+    if (typeof tokens.channelEffect !== "string" || tokens.channelEffect === "") {
+      throw new Error("Nome do efeito de canal invalido.");
+    }
+    if (!isFiniteNumber(tokens.restValue)) throw new Error("Valor de repouso invalido.");
+    if (!isFiniteNumber(tokens.peakOffset)) throw new Error("Offset de pico invalido.");
+
+    return (
+      BEAT_HEADER +
+      "var ctl = thisLayer;\n" +
+      'var intensidade = ctl.effect("' + BEAT_INT_SLIDER + '")(1);\n' +
+      'var src = thisComp.layer("Audio Amplitude");\n' +
+      'var amp = src.effect(' + expressionStringLiteral(/** @type {string} */ (tokens.channelEffect)) + ')(1);\n' +
+      "var normalizado = linear(amp, 0, 50, 0, 1);\n" +
+      "var repouso = " + canonicalNumber(/** @type {number} */ (tokens.restValue)) + ";\n" +
+      "var pico = " + canonicalNumber(/** @type {number} */ (tokens.peakOffset)) + ";\n" +
+      "repouso + normalizado * pico * (intensidade / 100);"
+    );
+  }
+
+  /** @param {string} source @returns {boolean} */
+  function isManagedBeat(source) {
+    if (typeof source !== "string") return false;
+    var normalized = source.replace(/\r\n?/g, "\n");
+    return normalized.indexOf(BEAT_HEADER) === 0;
+  }
+
   global.MotionExpressions = {
     renderParallaxFocus: renderParallaxFocus,
     isManagedParallaxFocus: isManagedParallaxFocus,
@@ -1616,6 +1733,21 @@
     renderGlitchDisplacement: renderGlitchDisplacement,
     isManagedGlitchDisplacement: isManagedGlitchDisplacement,
     renderEffector: renderEffector,
-    isManagedEffector: isManagedEffector
+    isManagedEffector: isManagedEffector,
+    renderWiggleLive: renderWiggleLive,
+    isManagedWiggleLive: isManagedWiggleLive,
+    wiggleLiveSliderNames: {
+      frequency: WIGGLE_LIVE_FREQ,
+      amplitude: WIGGLE_LIVE_AMP,
+      seed: WIGGLE_LIVE_SEED
+    },
+    renderBeatBpm: renderBeatBpm,
+    renderBeatAmplitude: renderBeatAmplitude,
+    isManagedBeat: isManagedBeat,
+    beatSliderNames: {
+      bpm: BEAT_BPM_SLIDER,
+      intensidade: BEAT_INT_SLIDER,
+      seed: BEAT_SEED_SLIDER
+    }
   };
 }($.global));

@@ -272,6 +272,107 @@ declare const MotionEffects: {
   restore(anterior: { efeito: PropertyGroup; nome: string; valores: Array<Record<string, unknown>> }): void;
 };
 
+type MotionLiveControlKind = "slider" | "angle" | "color" | "checkbox" | "point" | "dropdown";
+type MotionLiveControlTarget = "layer" | "controller" | "comp-controller";
+type MotionLiveControlTargetKind = MotionLiveControlTarget | "camera-controller";
+
+interface MotionLiveControlBindingHost {
+  paramId: string;
+  label: Record<string, string>;
+  control: MotionLiveControlKind;
+  target: MotionLiveControlTarget;
+  order: number;
+  help: Record<string, string>;
+  unit?: "px" | "%" | "°" | "fps" | "frames" | "s" | "x" | "none";
+  min?: number;
+  max?: number;
+  softMin?: number;
+  softMax?: number;
+  step?: number;
+  options?: Array<{ value: number; label: Record<string, string> }>;
+}
+
+interface MotionLiveControlsConfig {
+  rigId: string;
+  tool: string;
+  locale: string;
+  targetKind: MotionLiveControlTargetKind;
+  bindings: MotionLiveControlBindingHost[];
+  values: Record<string, unknown>;
+}
+
+interface MotionLiveControlRecord extends Record<string, unknown> {
+  schemaVersion: 1;
+  paramId: string;
+  name: string;
+  matchName: string;
+  index: number;
+  control: MotionLiveControlKind;
+  actualControl: MotionLiveControlKind;
+  target: MotionLiveControlTarget;
+  order: number;
+  locale: string;
+  lastAppliedValue: unknown;
+  unit?: string;
+  min?: number;
+  max?: number;
+  optionValues?: number[];
+  fallback?: "dropdown-as-slider";
+}
+
+interface MotionLiveControlWarning extends Record<string, unknown> {
+  code: string;
+  message: string;
+}
+
+/** Infraestrutura interna de Expression Controls do CHMS-UX-006. */
+declare const MotionLiveControls: {
+  readonly MATCH_NAMES: Record<MotionLiveControlKind, string>;
+  readonly LAYER_LIMIT: 12;
+  readonly CONTROLLER_LIMIT: 24;
+  create(
+    layer: unknown,
+    config: MotionLiveControlsConfig
+  ): { records: MotionLiveControlRecord[]; warnings: MotionLiveControlWarning[] };
+  read(
+    layer: unknown,
+    records: MotionLiveControlRecord[]
+  ): {
+    values: Record<string, unknown>;
+    records: MotionLiveControlRecord[];
+    entries: Array<Record<string, unknown>>;
+    warnings: MotionLiveControlWarning[];
+    fingerprint: string;
+  };
+  update(
+    layer: unknown,
+    config: MotionLiveControlsConfig,
+    records: MotionLiveControlRecord[],
+    options?: { overwriteUserOverrides?: boolean }
+  ): {
+    records: MotionLiveControlRecord[];
+    orphanedRecords: MotionLiveControlRecord[];
+    warnings: MotionLiveControlWarning[];
+    userOverrides: Record<string, unknown>;
+    values: Record<string, unknown>;
+  };
+  relink(
+    layer: unknown,
+    record: MotionLiveControlRecord,
+    effectIndex: number,
+    expressionProperties: Property[],
+    renderer: (record: MotionLiveControlRecord) => string
+  ): { record: MotionLiveControlRecord; warnings: MotionLiveControlWarning[] };
+  expressionReference(record: MotionLiveControlRecord): string;
+  planPlacement(context: {
+    selectionCount?: number;
+    cameraRig?: boolean;
+    compRig?: boolean;
+    existingControlCount?: number;
+    requestedControlCount?: number;
+  }): { targetKind: MotionLiveControlTargetKind; warnings: MotionLiveControlWarning[] };
+};
+
 /** Bloco de metadata de rig no comentario da camada, compartilhado pelos rigs. */
 declare const MotionRigMeta: {
   write(comentario: unknown, bloco: string): string;

@@ -22,14 +22,39 @@ declare const $: {
 };
 
 declare class File {
+  constructor(path?: string);
   /** Nome do arquivo com extensao, sem o caminho. */
   readonly name: string;
   /** Caminho absoluto no formato nativo do sistema de arquivos. */
   readonly fsName: string;
+  /** `true` quando o caminho aponta para um arquivo que existe no disco agora. */
+  readonly exists: boolean;
 }
+
+/** Opcoes de importacao passadas a `app.project.importFile`. */
+declare class ImportOptions {
+  constructor(file: File);
+}
+
+/**
+ * Modos de mescla nativos do After Effects. Declarados so os membros que o
+ * host usa hoje — a enumeracao real do ExtendScript tem muitos mais.
+ */
+declare const BlendingMode: {
+  readonly OVERLAY: unknown;
+  readonly MULTIPLY: unknown;
+  readonly SCREEN: unknown;
+  readonly ADD: unknown;
+};
 
 declare class Item {
   readonly name: string;
+}
+
+declare class FootageItem extends Item {
+  /** Camadas que usam este item. Vazio = material nao usado no projeto. */
+  readonly usedIn: CompItem[];
+  remove(): void;
 }
 
 declare class CompItem extends Item {
@@ -176,6 +201,8 @@ declare class PropertyGroup {
 declare class Property {
   readonly name: string;
   readonly matchName: string;
+  /** `true` apenas na propriedade interna de um Dropdown Menu Control. */
+  readonly isDropdownEffect: boolean;
   readonly propertyIndex: number;
   readonly parentProperty: PropertyGroup | Layer | null;
   readonly propertyType: number;
@@ -196,6 +223,11 @@ declare class Property {
   setValueAtKey(index: number, value: unknown): void;
   value: unknown;
   setValue(value: unknown): void;
+  /**
+   * Define os itens de um Dropdown Menu Control e devolve um novo handle.
+   * O handle anterior fica invalido depois da chamada.
+   */
+  setPropertyParameters(items: string[]): Property;
   /**
    * Valor avaliado no tempo informado, ja com expressao aplicada quando
    * `preExpression` e false. E o que permite usar o motor de expressoes como
@@ -276,7 +308,16 @@ declare const KeyframeInterpolationType: {
 
 declare class TextDocument {
   fontSize: number;
+  /** Escrever aqui tambem liga `applyFill` nos caracteres afetados. */
   fillColor: [number, number, number];
+  applyFill: boolean;
+  /** Escrever aqui tambem liga `applyStroke` nos caracteres afetados. */
+  strokeColor: [number, number, number];
+  /** Espessura do contorno. A referencia documenta a faixa 0 a 1000. */
+  strokeWidth: number;
+  applyStroke: boolean;
+  /** `true` desenha o contorno por cima do preenchimento. */
+  strokeOverFill: boolean;
   justification: number;
 }
 
