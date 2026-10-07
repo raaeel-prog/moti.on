@@ -58,7 +58,7 @@
 
   /** @param {string} value @returns {string} */
   function expressionStringLiteral(value) {
-    if (!isBoundedMarkerName(value)) throw new Error("Nome de marker invalido.");
+    if (typeof value !== "string" || value.length === 0) throw new Error("String de expressao invalida.");
     var escaped = '"';
     var i;
     var code;
@@ -307,36 +307,73 @@
   // exposto e literal.
   // -----------------------------------------------------------------------
 
-  var WIGGLE_LIVE_FREQ = "CHMS \u00B7 Wiggle \u00B7 Frequ\u00EAncia";
-  var WIGGLE_LIVE_AMP  = "CHMS \u00B7 Wiggle \u00B7 Amplitude";
-  var WIGGLE_LIVE_SEED = "CHMS \u00B7 Wiggle \u00B7 Seed";
-
-  var WIGGLE_LIVE_BODY =
-    "var ctl = thisLayer;\n" +
-    'var f = ctl.effect("' + WIGGLE_LIVE_FREQ + '")(1);\n' +
-    'var a = ctl.effect("' + WIGGLE_LIVE_AMP  + '")(1);\n' +
-    'var s = Math.floor(ctl.effect("' + WIGGLE_LIVE_SEED + '")(1));\n' +
-    "seedRandom(s, true);\n" +
-    "wiggle(f, a);";
+  // O corpo termina sempre nestas duas linhas, quaisquer que sejam as
+  // referencias. E o que permite reconhecer a expressao como gerenciada sem
+  // depender do nome dos controles, que muda com o idioma.
+  var WIGGLE_LIVE_TAIL = "seedRandom(s, true);\nwiggle(f, a);";
 
   /**
-   * Gera expressao de Wiggle vinculada a controles deslizantes.
+   * Uma referencia de Live Control precisa ser texto nao vazio e sem quebra de
+   * linha: ela entra no meio de uma expressao, e uma quebra ali produziria
+   * codigo que o After Effects recusa sem dizer por que.
    *
-   * Os tokens validam os DEFAULTS que serao escritos nos sliders, mas a
-   * expressao em si nao carrega valores literais — ela le dos efeitos.
-   *
+   * @param {unknown} valor
+   * @param {string} campo
    * @returns {string}
    */
-  function renderWiggleLive() {
-    return WIGGLE_HEADER + WIGGLE_LIVE_BODY;
+  function referenciaViva(valor, campo) {
+    if (typeof valor !== "string" || valor === "" || /[\r\n]/.test(valor)) {
+      throw new Error("Referencia de Live Control invalida: " + campo + ".");
+    }
+    return valor;
   }
 
-  /** @param {string} source @returns {boolean} */
+  /**
+   * Expressao de Wiggle vinculada a Live Controls.
+   *
+   * As referencias vem prontas de `MotionLiveControls.expressionReference`, que
+   * as monta com o nome que o efeito REALMENTE recebeu, ja com os clamps de
+   * min/max. Cravar o nome aqui, como a versao anterior desta funcao fazia,
+   * quebrava fora do portugues: `live-controls.jsx` compoe o nome a partir do
+   * rotulo resolvido pelo locale, entao num After Effects em ingles o controle
+   * nasce "Frequency" e a expressao ia procurar "Frequencia".
+   *
+   * @param {{frequency: unknown, amplitude: unknown, seed: unknown}} refs
+   * @returns {string}
+   */
+  function renderWiggleLive(refs) {
+    if (!refs) throw new Error("Referencias de Live Controls ausentes.");
+    return (
+      WIGGLE_HEADER +
+      "var f = " + referenciaViva(refs.frequency, "frequency") + ";\n" +
+      "var a = " + referenciaViva(refs.amplitude, "amplitude") + ";\n" +
+      "var s = Math.floor(" + referenciaViva(refs.seed, "seed") + ");\n" +
+      WIGGLE_LIVE_TAIL
+    );
+  }
+
+  /**
+   * Reconhecimento estrutural: cabecalho gerenciado, as tres atribuicoes e o
+   * rabicho invariante. Nao compara o corpo inteiro porque o corpo carrega
+   * nomes de controle que dependem do idioma.
+   *
+   * @param {string} source
+   * @returns {boolean}
+   */
   function isManagedWiggleLive(source) {
     if (typeof source !== "string") return false;
     var normalized = source.replace(/\r\n?/g, "\n");
     if (normalized.indexOf(WIGGLE_HEADER) !== 0) return false;
-    return normalized.substring(WIGGLE_HEADER.length) === WIGGLE_LIVE_BODY;
+    var corpo = normalized.substring(WIGGLE_HEADER.length);
+    if (corpo.length < WIGGLE_LIVE_TAIL.length) return false;
+    if (corpo.indexOf(WIGGLE_LIVE_TAIL) !== corpo.length - WIGGLE_LIVE_TAIL.length) {
+      return false;
+    }
+    return (
+      corpo.indexOf("var f = ") === 0 &&
+      corpo.indexOf("\nvar a = ") > 0 &&
+      corpo.indexOf("\nvar s = Math.floor(") > 0
+    );
   }
 
   /**
@@ -645,6 +682,7 @@
       "  t = fFrame;\n" +
       "} else {\n" +
       "  t = ((t - thisLayer.inPoint) * spd * rev) + thisLayer.inPoint + offset;\n" +
+      "  if (rev < 0) t += Math.max(0, thisLayer.outPoint - thisLayer.inPoint - thisComp.frameDuration);\n" +
       "}\n" +
       "valueAtTime(t);";
   }
@@ -654,7 +692,7 @@
     if (typeof source !== "string") return false;
     var normalized = source.replace(/\r\n?/g, "\n");
     if (normalized.indexOf(TIME_CONTROLLER_HEADER) !== 0) return false;
-    return /^var fps = 1\.0 \/ thisComp\.frameDuration;\nvar offset = \((-?(?:0|[1-9][0-9]*))\) \/ fps;\nvar spd = \(((?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:e[+-]?[0-9]+)?)\) \/ 100\.0;\nvar rev = (-1|1);\nvar frozen = (true|false);\nvar fFrame = \((0|[1-9][0-9]*)\) \/ fps;\nvar t = time;\nif \(frozen\) \{\n {2}t = fFrame;\n\} else \{\n {2}t = \(\(t - thisLayer\.inPoint\) \* spd \* rev\) \+ thisLayer\.inPoint \+ offset;\n\}\nvalueAtTime\(t\);$/.test(normalized.substring(TIME_CONTROLLER_HEADER.length));
+    return /^var fps = 1\.0 \/ thisComp\.frameDuration;\nvar offset = \((-?(?:0|[1-9][0-9]*))\) \/ fps;\nvar spd = \(((?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:e[+-]?[0-9]+)?)\) \/ 100\.0;\nvar rev = (-1|1);\nvar frozen = (true|false);\nvar fFrame = \((0|[1-9][0-9]*)\) \/ fps;\nvar t = time;\nif \(frozen\) \{\n {2}t = fFrame;\n\} else \{\n {2}t = \(\(t - thisLayer\.inPoint\) \* spd \* rev\) \+ thisLayer\.inPoint \+ offset;\n(?: {2}if \(rev < 0\) t \+= Math\.max\(0, thisLayer\.outPoint - thisLayer\.inPoint - thisComp\.frameDuration\);\n)?\}\nvalueAtTime\(t\);$/.test(normalized.substring(TIME_CONTROLLER_HEADER.length));
   }
 
   var MARKER_LOOP_ID = "ae.time.marker-loop";
@@ -1041,36 +1079,97 @@
     "  return motionMul(motionRotX(e[0]), motionMul(motionRotY(e[1]), motionRotZ(e[2])));\n" +
     "}\n";
 
+
+  var LOOK_AT_2D_HEADER = MotionContracts.EXPRESSION_HEADER + "ae.2d.look-at" + "\n";
+  var LOOK_AT_LOCAL_TARGET = "try { alvoLayer = effect('Alvo (Moti.on)')('Layer'); } catch(e) {}\n";
+  var LOOK_AT_2D_BODY =
+    "var alvoLayer = null;\n" +
+    LOOK_AT_LOCAL_TARGET +
+    "if (alvoLayer != null && alvoLayer.index !== thisLayer.index) {\n" +
+    "  var alvoPos = alvoLayer.toWorld(alvoLayer.anchorPoint);\n" +
+    "  var minhaPos = hasParent ? parent.toWorld(position) : position;\n" +
+    "  var direcao = [alvoPos[0] - minhaPos[0], alvoPos[1] - minhaPos[1], (alvoPos.length > 2 ? alvoPos[2] : 0) - (minhaPos.length > 2 ? minhaPos[2] : 0)];\n" +
+    "  if (hasParent) direcao = parent.fromWorldVec(direcao);\n" +
+    "  if (Math.abs(direcao[0]) + Math.abs(direcao[1]) > 0.0001) {\n" +
+    "    value + radiansToDegrees(Math.atan2(direcao[1], direcao[0])) + correcaoEixo;\n" +
+    "  } else { value; }\n" +
+    "} else { value; }\n";
+
+  /** @param {any} tokens @returns {string} */
+  function renderLookAt2D(tokens) {
+    var correction = 90;
+    if (tokens.forwardAxis === "+x") correction = 0;
+    else if (tokens.forwardAxis === "-x") correction = 180;
+    else if (tokens.forwardAxis === "+y") correction = -90;
+    var offset = tokens.offsetOrientation ? tokens.offsetOrientation[2] : 0;
+    var body = tokens.constrainAxes && tokens.constrainAxes.z ? "value;\n" : LOOK_AT_2D_BODY;
+    var source = LOOK_AT_2D_HEADER + "var correcaoEixo = " + canonicalNumber(correction + offset) + ";\n" + body;
+    return tokens.controllerName ? connectLookAt(source, tokens.controllerName, tokens.effectName) : source;
+  }
+
+  /** @param {string} source @param {string} controllerName @param {string} effectName @returns {string} */
+  function connectLookAt(source, controllerName, effectName) {
+    return source.replace(LOOK_AT_LOCAL_TARGET,
+      "try { alvoLayer = thisComp.layer(" + expressionStringLiteral(controllerName) + ").effect(" +
+      expressionStringLiteral(effectName) + ")(1); } catch(e) {}\n");
+  }
+
+  /** Normalize only the generated controller reference; never accept arbitrary expression bodies.
+   * @param {string} source @returns {string} */
+  function normalizeLookAtReference(source) {
+    return source.replace(/try \{ alvoLayer = thisComp\.layer\("(?:[^"\\\r\n]|\\.)*"\)\.effect\("(?:[^"\\\r\n]|\\.)*"\)\(1\); \} catch\(e\) \{\}\n/, LOOK_AT_LOCAL_TARGET);
+  }
+
+  /** @param {string} source @returns {boolean} */
+  function isManagedLookAt2D(source) {
+    if (typeof source !== "string") return false;
+    var normalized = normalizeLookAtReference(source.replace(/\r\n?/g, "\n"));
+    if (normalized.indexOf(LOOK_AT_2D_HEADER) !== 0) return false;
+    var body = normalized.substring(LOOK_AT_2D_HEADER.length);
+    var declaration = /^var correcaoEixo = -?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?;\n/.exec(body);
+    if (!declaration) return false;
+    var tail = body.substring(declaration[0].length);
+    // Exact GM template is accepted for repair; an edited/user body is preserved.
+    var legacy = "var alvo = null;\ntry { alvo = effect('Alvo (Moti.on)')('Layer'); } catch(e) {}\n" +
+      "if (alvo != null && alvo.index !== thisLayer.index) {\n  var alvoPos = alvo.toComp(alvo.transform.anchorPoint);\n" +
+      "  var minhaPos = thisLayer.toComp(thisLayer.transform.anchorPoint);\n  var xDist = alvoPos[0] - minhaPos[0];\n" +
+      "  var yDist = alvoPos[1] - minhaPos[1];\n  var rads = Math.atan2(yDist, xDist);\n" +
+      "  var angulo = radiansToDegrees(rads);\n  value + angulo + correcaoEixo;\n} else {\n  value;\n}\n";
+    return tail === LOOK_AT_2D_BODY || tail === "value;\n" || tail === legacy;
+  }
   var LOOK_AT_BODY_TAIL =
     LOOK_AT_DECOMPOSE +
-    "var origem = thisLayer.toWorld([0, 0, 0]);\n" +
-    "var alvoMundo = alvo.toWorld([0, 0, 0]);\n" +
-    "var d = sub(alvoMundo, origem);\n" +
-    "var dist = Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);\n" +
-    "var resultado = value;\n" +
-    "if (dist > 0.0001) {\n" +
-    "  var base = lookAt(origem, alvoMundo);\n" +
-    "  var giro;\n" +
-    "  if (correcaoX === 0) {\n" +
-    "    giro = [base[0], base[1] + correcaoY, 0];\n" +
-    "  } else {\n" +
-    "    giro = motionEuler(motionMul(motionFromEuler([base[0], base[1], 0]), motionRotX(correcaoX)));\n" +
-    "  }\n" +
-    "  var rx = giro[0] + offX;\n" +
-    "  var ry = giro[1] + offY;\n" +
-    "  var rz = giro[2] + offZ;\n" +
-    "  if (travaX) rx = value[0];\n" +
-    "  if (travaY) ry = value[1];\n" +
-    "  if (travaZ) rz = value[2];\n" +
-    "  resultado = [rx, ry, rz];\n" +
-    "}\n" +
-    "resultado;";
+    "var alvoLayer = null;\n" +
+    LOOK_AT_LOCAL_TARGET +
+    "if (alvoLayer != null && alvoLayer.index !== thisLayer.index) {\n" +
+    "  var origem = hasParent ? parent.toWorld(position) : position;\n" +
+    "  var alvoMundo = alvoLayer.toWorld(alvoLayer.anchorPoint);\n" +
+    "  var d = sub(alvoMundo, origem);\n" +
+    "  var dist = Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);\n" +
+    "  if (dist > 0.0001) {\n" +
+    "    if (hasParent) d = parent.fromWorldVec(d);\n" +
+    "    var base = lookAt([0, 0, 0], d);\n" +
+    "    var giro;\n" +
+    "    if (correcaoX === 0) {\n" +
+    "      giro = [base[0], base[1] + correcaoY, 0];\n" +
+    "    } else {\n" +
+    "      giro = motionEuler(motionMul(motionFromEuler([base[0], base[1], 0]), motionRotX(correcaoX)));\n" +
+    "    }\n" +
+    "    var rx = giro[0] + offX;\n" +
+    "    var ry = giro[1] + offY;\n" +
+    "    var rz = giro[2] + offZ;\n" +
+    "    if (travaX) rx = value[0];\n" +
+    "    if (travaY) ry = value[1];\n" +
+    "    if (travaZ) rz = value[2];\n" +
+    "    [rx, ry, rz];\n" +
+    "  } else { value; }\n" +
+    "} else { value; }\n";
 
   var LOOK_AT_DECLARATIONS =
-    /^var alvo = thisComp\.layer\("(?:[^"\\\n]|\\.)*"\);\nvar correcaoY = (?:-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?);\nvar correcaoX = (?:-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?);\nvar offX = (?:-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?);\nvar offY = (?:-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?);\nvar offZ = (?:-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?);\nvar travaX = (?:true|false);\nvar travaY = (?:true|false);\nvar travaZ = (?:true|false);\n/;
+    /^var correcaoY = (?:-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?);\nvar correcaoX = (?:-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?);\nvar offX = (?:-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?);\nvar offY = (?:-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?);\nvar offZ = (?:-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?);\nvar travaX = (?:true|false);\nvar travaY = (?:true|false);\nvar travaZ = (?:true|false);\n/;
 
   /**
-   * @param {{targetLayerName: unknown, forwardAxis: unknown, offsetOrientation: unknown, constrainAxes: unknown}} tokens
+   * @param {{targetLayerName: unknown, forwardAxis: unknown, offsetOrientation: unknown, constrainAxes: unknown, controllerName?: string, effectName?: string}} tokens
    * @returns {string}
    */
   function renderLookAt(tokens) {
@@ -1093,9 +1192,9 @@
       throw new Error("Travas de eixo invalidas.");
     }
 
-    return (
+    var source = (
       LOOK_AT_HEADER +
-      "var alvo = thisComp.layer(" + expressionStringLiteral(/** @type {string} */ (tokens.targetLayerName)) + ");\n" +
+      
       "var correcaoY = " + canonicalNumber(/** @type {number} */ (LOOK_AT_EIXOS[tokens.forwardAxis])) + ";\n" +
       "var correcaoX = " +
         canonicalNumber(
@@ -1111,17 +1210,22 @@
       "var travaZ = " + (travas.z ? "true" : "false") + ";\n" +
       LOOK_AT_BODY_TAIL
     );
+    return tokens.controllerName ? connectLookAt(source, tokens.controllerName, tokens.effectName || "Moti.on Encarar") : source;
   }
 
   /** @param {string} source @returns {boolean} */
   function isManagedLookAt(source) {
     if (typeof source !== "string") return false;
-    var normalized = source.replace(/\r\n?/g, "\n");
+    var normalized = normalizeLookAtReference(source.replace(/\r\n?/g, "\n"));
     if (normalized.indexOf(LOOK_AT_HEADER) !== 0) return false;
     var body = normalized.substring(LOOK_AT_HEADER.length);
     var declarations = LOOK_AT_DECLARATIONS.exec(body);
     if (!declarations) return false;
-    return body.substring(declarations[0].length) === LOOK_AT_BODY_TAIL;
+    var tail = body.substring(declarations[0].length);
+    var legacy = LOOK_AT_BODY_TAIL.replace("var origem = hasParent ? parent.toWorld(position) : position;", "var origem = thisLayer.toWorld([0, 0, 0]);")
+      .replace("var alvoMundo = alvoLayer.toWorld(alvoLayer.anchorPoint);", "var alvoMundo = alvoLayer.toWorld([0, 0, 0]);")
+      .replace("    if (hasParent) d = parent.fromWorldVec(d);\n    var base = lookAt([0, 0, 0], d);", "    var base = lookAt(origem, alvoMundo);");
+    return tail === LOOK_AT_BODY_TAIL || tail === legacy;
   }
 
   /** @returns {ReadonlyArray<string>} */
@@ -1193,6 +1297,7 @@
   function isManagedOrbit(source) {
     if (typeof source !== "string") return false;
     var normalized = source.replace(/\r\n?/g, "\n");
+    if (isManagedOrbitLive(normalized)) return true;
     if (normalized.indexOf(ORBIT_HEADER) !== 0) return false;
     var body = normalized.substring(ORBIT_HEADER.length);
     var declarations = ORBIT_DECLARATIONS.exec(body);
@@ -1201,10 +1306,16 @@
   }
 
   /**
-   * Orientacao que encara o centro da orbita, que no espaco do pai e a origem.
-   * Sem tokens: a expressao inteira e constante.
+   * Orientation e local ao parent. Calcular lookAt com pontos de mundo e
+   * atribuir esse resultado local duplicava a rotacao do controller. Position
+   * ja esta no espaco local do parent; usar a origem nesse mesmo espaco.
    */
   var ORBIT_FACE_BODY =
+    "var origem = position;\n" +
+    "var centro = [0, 0, 0];\n" +
+    "var dist = length(sub(centro, origem));\n" +
+    "dist > 0.0001 ? lookAt(origem, centro) : value;";
+  var ORBIT_FACE_LEGACY_BODY =
     "var origem = thisLayer.toWorld([0, 0, 0]);\n" +
     "var centro = thisLayer.parent.toWorld([0, 0, 0]);\n" +
     "var d = sub(centro, origem);\n" +
@@ -1220,7 +1331,92 @@
   function isManagedOrbitFacing(source) {
     if (typeof source !== "string") return false;
     var normalized = source.replace(/\r\n?/g, "\n");
-    return normalized === ORBIT_HEADER + ORBIT_FACE_BODY;
+    return isManagedOrbitFacingLive(normalized) || normalized === ORBIT_HEADER + ORBIT_FACE_BODY ||
+      normalized === ORBIT_HEADER + ORBIT_FACE_LEGACY_BODY;
+  }
+
+  var ORBIT_LIVE_HEADER = "// MOTION_EXPRESSION v2 | ae.3d.orbit\n";
+  var ORBIT_LIVE_PARAMS = ["preset", "radius", "speed", "inclination", "azimuth", "bank", "phase", "spread", "faceTarget"];
+  var ORBIT_LIVE_BODY =
+    "var giro = degreesToRadians((time - inicio) * vel + fase);\n" +
+    "var px, py, pz;\n" +
+    "if (modo >= 7) {\n" +
+    "  var latitude = (1 - 2 * (ordem + 0.5) / total) * abertura / 100;\n" +
+    "  var aro = Math.sqrt(Math.max(0, 1 - latitude * latitude));\n" +
+    "  giro += degreesToRadians(ordem * 137.50776405003785);\n" +
+    "  px = raio * aro * Math.cos(giro); py = raio * latitude; pz = raio * aro * Math.sin(giro);\n" +
+    "} else {\n" +
+    "  giro += 2 * Math.PI * ordem / total;\n" +
+    "  px = raio * Math.cos(giro); py = raio * Math.sin(giro); pz = 0;\n" +
+    "}\n" +
+    "var poses = [[0,0,0],[70,0,0],[15,70,90],[50,-25,-30],[50,25,30],[0,70,0],[0,0,0],[-25,35,-15]];\n" +
+    "var pose = poses[modo - 1];\n" +
+    "var rx = degreesToRadians(pose[0] + inclinacao);\n" +
+    "var ry = degreesToRadians(pose[1] + azimute);\n" +
+    "var rz = degreesToRadians(pose[2] + banco);\n" +
+    "var y1 = py * Math.cos(rx) - pz * Math.sin(rx);\n" +
+    "var z1 = py * Math.sin(rx) + pz * Math.cos(rx);\n" +
+    "var x2 = px * Math.cos(ry) + z1 * Math.sin(ry);\n" +
+    "var z2 = -px * Math.sin(ry) + z1 * Math.cos(ry);\n" +
+    "var x3 = x2 * Math.cos(rz) - y1 * Math.sin(rz);\n" +
+    "var y3 = x2 * Math.sin(rz) + y1 * Math.cos(rz);\n" +
+    "var centro = parent.transform.anchorPoint;\n" +
+    "[centro[0] + x3, centro[1] + y3, centro[2] + z2];";
+  var ORBIT_LIVE_FACE_BODY =
+    "var origem = position;\n" +
+    "var centro = parent.transform.anchorPoint;\n" +
+    "var dist = length(sub(centro, origem));\n" +
+    "encarar > 0.5 && dist > 0.0001 ? lookAt(origem, centro) : value;";
+
+  /** Parent references survive controller rename/reorder. Only approved control records enter code.
+   * @param {any[]} controls @param {string} id @returns {string} */
+  function orbitReference(controls, id) {
+    for (var i = 0; i < controls.length; i += 1) {
+      var r = controls[i];
+      if (r.paramId === id) return "parent.effect(" + expressionStringLiteral(r.name) + ")(1)";
+    }
+    throw new Error("Controle Orbital ausente: " + id);
+  }
+  /** @param {{controls: any[], ordinal: number, count: number, startTime: number}} tokens @returns {string} */
+  function renderOrbitLive(tokens) {
+    if (!tokens || !isFiniteNumber(tokens.ordinal) || !isFiniteNumber(tokens.count) || !isFiniteNumber(tokens.startTime) ||
+        tokens.ordinal < 0 || tokens.count < 1 || Math.floor(tokens.count) !== tokens.count ||
+        Math.floor(tokens.ordinal) !== tokens.ordinal || tokens.ordinal >= tokens.count) throw new Error("Membros Orbital invalidos.");
+    var refs = [];
+    for (var i = 0; i < ORBIT_LIVE_PARAMS.length - 1; i += 1) refs.push(orbitReference(tokens.controls, /** @type {string} */ (ORBIT_LIVE_PARAMS[i])));
+    return ORBIT_LIVE_HEADER +
+      "var ordem = " + canonicalNumber(tokens.ordinal) + ";\nvar total = " + canonicalNumber(tokens.count) + ";\nvar inicio = " + canonicalNumber(tokens.startTime) + ";\n" +
+      "var modo = Math.max(1, Math.min(8, Math.round(" + refs[0] + ")));\n" +
+      "var raio = Math.max(1, Math.min(1000000, " + refs[1] + "));\n" +
+      "var vel = Math.max(-36000, Math.min(36000, " + refs[2] + "));\n" +
+      "var inclinacao = " + refs[3] + ";\nvar azimute = " + refs[4] + ";\nvar banco = " + refs[5] + ";\nvar fase = " + refs[6] + ";\n" +
+      "var abertura = Math.max(0, Math.min(100, " + refs[7] + "));\n" + ORBIT_LIVE_BODY;
+  }
+  /** @param {{controls: any[]}} tokens @returns {string} */
+  function renderOrbitFacingLive(tokens) {
+    return ORBIT_LIVE_HEADER + "var encarar = " + orbitReference(tokens.controls, "faceTarget") + ";\n" + ORBIT_LIVE_FACE_BODY;
+  }
+  /** Exact body plus a bounded declaration grammar; a header alone never claims a user edit.
+   * @param {string} source @returns {boolean} */
+  function isManagedOrbitLive(source) {
+    var number = "-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:e[+-]?[0-9]+)?";
+    var ref = 'parent\\.effect\\("(?:[^"\\\\\\r\\n]|\\\\(?:["\\\\bnfrt]|u[0-9a-fA-F]{4}))*"\\)\\(1\\)';
+    var declarations = new RegExp("^var ordem = [0-9]+;\\nvar total = [1-9][0-9]*;\\nvar inicio = " + number + ";\\n" +
+      "var modo = Math\\.max\\(1, Math\\.min\\(8, Math\\.round\\(" + ref + "\\)\\)\\);\\n" +
+      "var raio = Math\\.max\\(1, Math\\.min\\(1000000, " + ref + "\\)\\);\\n" +
+      "var vel = Math\\.max\\(-36000, Math\\.min\\(36000, " + ref + "\\)\\);\\n" +
+      "var inclinacao = " + ref + ";\\nvar azimute = " + ref + ";\\nvar banco = " + ref + ";\\nvar fase = " + ref + ";\\n" +
+      "var abertura = Math\\.max\\(0, Math\\.min\\(100, " + ref + "\\)\\);\\n");
+    if (source.indexOf(ORBIT_LIVE_HEADER) !== 0) return false;
+    var body = source.substring(ORBIT_LIVE_HEADER.length), match = declarations.exec(body);
+    return !!match && body.substring(match[0].length) === ORBIT_LIVE_BODY;
+  }
+  /** @param {string} source @returns {boolean} */
+  function isManagedOrbitFacingLive(source) {
+    var declaration = /^var encarar = parent\.effect\("(?:[^"\\\r\n]|\\(?:["\\bnfrt]|u[0-9a-fA-F]{4}))*"\)\(1\);\n/;
+    if (source.indexOf(ORBIT_LIVE_HEADER) !== 0) return false;
+    var body = source.substring(ORBIT_LIVE_HEADER.length), match = declaration.exec(body);
+    return !!match && body.substring(match[0].length) === ORBIT_LIVE_FACE_BODY;
   }
 
   var WAVE_ID = "ae.effect.wave";
@@ -1393,7 +1589,7 @@
    * proposito — Newton convergiria mais rapido mas diverge quando a derivada
    * chega perto de zero, que e justamente o caso de alca vertical.
    */
-  var EFFECTOR_PREFIXO =
+  var EFFECTOR_PREFIXO_LEGACY =
     "var ctrl = thisComp.layer(nomeCtrl);\n" +
     "var raio = ctrl.effect(nomeRaio)(1);\n" +
     "var quantia = ctrl.effect(nomeQuantia)(1);\n" +
@@ -1419,6 +1615,12 @@
     "  f = 3 * w * w * u * cy1 + 3 * w * u * u * cy2 + u * u * u;\n" +
     "}\n";
 
+  // AE may return a 2D vector for a 2D layer; normalize before reading Z.
+  var EFFECTOR_PREFIXO = EFFECTOR_PREFIXO_LEGACY.replace(
+    "var delta = sub(aqui, centro);\n",
+    "var delta = sub(aqui, centro);\nif (delta.length < 3) delta = [delta[0], delta[1], 0];\n"
+  );
+
   /**
    * Cada propriedade alvo tem um final proprio.
    *
@@ -1443,7 +1645,7 @@
   var EFFECTOR_CURVAS = { linear: 1, smoothstep: 2, bezier: 3 };
 
   /**
-   * @param {{controllerName: unknown, radiusEffectName: unknown, amountEffectName: unknown, falloffCurve: unknown, curve: unknown, target: unknown}} tokens
+   * @param {{controllerName: unknown, radiusEffectName: unknown, amountEffectName: unknown, amountPropertyIndex?: number, falloffCurve: unknown, curve: unknown, target: unknown}} tokens
    * @returns {string}
    */
   function renderEffector(tokens) {
@@ -1479,7 +1681,7 @@
       "var cy1 = " + canonicalNumber(/** @type {number} */ (curva.y1)) + ";\n" +
       "var cx2 = " + canonicalNumber(/** @type {number} */ (curva.x2)) + ";\n" +
       "var cy2 = " + canonicalNumber(/** @type {number} */ (curva.y2)) + ";\n" +
-      EFFECTOR_PREFIXO +
+      EFFECTOR_PREFIXO.replace("ctrl.effect(nomeQuantia)(1)", "ctrl.effect(nomeQuantia)(" + (tokens.amountPropertyIndex || 1) + ")") +
       /** @type {string} */ (EFFECTOR_TAILS[/** @type {string} */ (tokens.target)])
     );
   }
@@ -1492,9 +1694,10 @@
     var body = normalized.substring(EFFECTOR_HEADER.length);
     var declarations = EFFECTOR_DECLARATIONS.exec(body);
     if (!declarations) return false;
-    var resto = body.substring(declarations[0].length);
-    if (resto.indexOf(EFFECTOR_PREFIXO) !== 0) return false;
-    var cauda = resto.substring(EFFECTOR_PREFIXO.length);
+    var resto = body.substring(declarations[0].length).replace(/ctrl\.effect\(nomeQuantia\)\([2-5]\)/, "ctrl.effect(nomeQuantia)(1)");
+    var prefix = resto.indexOf(EFFECTOR_PREFIXO) === 0 ? EFFECTOR_PREFIXO : EFFECTOR_PREFIXO_LEGACY;
+    if (resto.indexOf(prefix) !== 0) return false;
+    var cauda = resto.substring(prefix.length);
     var alvo;
     for (alvo in EFFECTOR_TAILS) {
       if (Object.prototype.hasOwnProperty.call(EFFECTOR_TAILS, alvo) && cauda === EFFECTOR_TAILS[alvo]) return true;
@@ -1575,13 +1778,13 @@
     'var freq = ctrl.effect("' + PARALLAX_WIGGLE_FREQ + '")(1);\n' +
     'var amp = ctrl.effect("' + PARALLAX_WIGGLE_AMP + '")(1);\n' +
     "seedRandom(semente, false);\n" +
-    "wiggle(freq, amp);";
+    "var w = wiggle(Math.max(0, freq), Math.max(0, amp));\n[w[0], w[1], value[2]];";
 
   var PARALLAX_WIGGLE_DECLARATIONS =
     /^var ctrl = thisComp\.layer\("(?:[^"\\\n]|\\.)*"\);\nvar semente = (?:0|[1-9][0-9]*);\n/;
 
   /**
-   * @param {{controllerName: unknown, seed: unknown}} tokens
+   * @param {{controllerName: unknown, seed: unknown, groupName?: string}} tokens
    * @returns {string}
    */
   function renderParallaxWiggle(tokens) {
@@ -1601,7 +1804,7 @@
       expressionStringLiteral(/** @type {string} */ (tokens.controllerName)) +
       ");\n" +
       "var semente = " + canonicalNumber(/** @type {number} */ (tokens.seed)) + ";\n" +
-      PARALLAX_WIGGLE_TAIL
+      (tokens.groupName ? PARALLAX_WIGGLE_TAIL.replace('ctrl.effect("' + PARALLAX_WIGGLE_FREQ + '")(1)', 'ctrl.effect(' + expressionStringLiteral(tokens.groupName) + ')(1)').replace('ctrl.effect("' + PARALLAX_WIGGLE_AMP + '")(1)', 'ctrl.effect(' + expressionStringLiteral(tokens.groupName) + ')(2)') : PARALLAX_WIGGLE_TAIL)
     );
   }
 
@@ -1613,7 +1816,10 @@
     var body = normalized.substring(PARALLAX_WIGGLE_HEADER.length);
     var declarations = PARALLAX_WIGGLE_DECLARATIONS.exec(body);
     if (!declarations) return false;
-    return body.substring(declarations[0].length) === PARALLAX_WIGGLE_TAIL;
+    var tail = body.substring(declarations[0].length);
+    if (tail === PARALLAX_WIGGLE_TAIL) return true;
+    var grouped = /^var freq = ctrl\.effect\(("(?:[^"\\\n]|\\.)*")\)\(1\);\nvar amp = ctrl\.effect\(\1\)\(2\);\n/.exec(tail);
+    return !!grouped && tail.substring(grouped[0].length) === PARALLAX_WIGGLE_TAIL.substring(PARALLAX_WIGGLE_TAIL.indexOf("seedRandom"));
   }
 
   // -----------------------------------------------------------------------
@@ -1658,39 +1864,274 @@
     );
   }
 
+  // O rabicho invariante do Beat por amplitude.
+  var BEAT_AMP_TAIL = "(mod == 1) ? (base * bump) : wiggle(freq, shake);";
+  var BEAT_AMP_TAIL_LEGACY = "repouso + normalizado * pico * (intensidade / 100);";
+
   /**
-   * Audio Amplitude: le da camada "Audio Amplitude" gerada pelo assistente
-   * nativo do After Effects.
+   * Beat sincronizado com a camada de amplitude gerada pelo assistente nativo.
    *
-   * @param {{channelEffect: unknown, restValue: unknown, peakOffset: unknown}} tokens
+   * Suporta dois modos de movimento:
+   * 1. Bump: pulso/piscar escalar na propriedade via `base * bump`, onde
+   *    `bump` interpola de `bumpMin` a `bumpMax`. Para opacidade, 0% a 110%
+   *    pisca no ritmo da batida. Para escala, 100% a 120% pulsa no ritmo.
+   * 2. Shake: oscilação na batida via `wiggle(freq, shake)`, onde a amplitude
+   *    do shake é proporcional ao sinal da batida entre `beatMin` e `beatMax`.
+   *
+   * @param {{
+   *   layerName: unknown,
+   *   layerIndex?: unknown,
+   *   channelEffect: unknown,
+   *   channelIndex?: unknown
+   * }} tokens
+   * @param {{
+   *   beatMin: unknown,
+   *   beatMax: unknown,
+   *   mode: unknown,
+   *   bumpMin: unknown,
+   *   bumpMax: unknown,
+   *   shakeFreq: unknown,
+   *   shakeAmp: unknown
+   * }} refs
    * @returns {string}
    */
-  function renderBeatAmplitude(tokens) {
+  function renderBeatAmplitude(tokens, refs) {
     if (!tokens) throw new Error("Tokens Beat Amplitude ausentes.");
+    if (!refs) throw new Error("Referencias de Live Controls ausentes.");
+    if (typeof tokens.layerName !== "string" || tokens.layerName === "") {
+      throw new Error("Nome da camada de amplitude invalido.");
+    }
     if (typeof tokens.channelEffect !== "string" || tokens.channelEffect === "") {
       throw new Error("Nome do efeito de canal invalido.");
     }
-    if (!isFiniteNumber(tokens.restValue)) throw new Error("Valor de repouso invalido.");
-    if (!isFiniteNumber(tokens.peakOffset)) throw new Error("Offset de pico invalido.");
+
 
     return (
       BEAT_HEADER +
-      "var ctl = thisLayer;\n" +
-      'var intensidade = ctl.effect("' + BEAT_INT_SLIDER + '")(1);\n' +
-      'var src = thisComp.layer("Audio Amplitude");\n' +
-      'var amp = src.effect(' + expressionStringLiteral(/** @type {string} */ (tokens.channelEffect)) + ')(1);\n' +
-      "var normalizado = linear(amp, 0, 50, 0, 1);\n" +
-      "var repouso = " + canonicalNumber(/** @type {number} */ (tokens.restValue)) + ";\n" +
-      "var pico = " + canonicalNumber(/** @type {number} */ (tokens.peakOffset)) + ";\n" +
-      "repouso + normalizado * pico * (intensidade / 100);"
+      "var beatMin = " + referenciaViva(refs.beatMin, "beatMin") + ";\n" +
+      "var beatMax = " + referenciaViva(refs.beatMax, "beatMax") + ";\n" +
+      "var mod = Math.round(" + referenciaViva(refs.mode, "mode") + ");\n" +
+      "var bumpMin = " + referenciaViva(refs.bumpMin, "bumpMin") + ";\n" +
+      "var bumpMax = " + referenciaViva(refs.bumpMax, "bumpMax") + ";\n" +
+      "var freq = " + referenciaViva(refs.shakeFreq, "shakeFreq") + ";\n" +
+      "var amp = " + referenciaViva(refs.shakeAmp, "shakeAmp") + ";\n" +
+      "var src = thisComp.layer(" +
+      expressionStringLiteral(/** @type {string} */ (tokens.layerName)) +
+      ");\n" +
+      "var beat = src.effect(" +
+      expressionStringLiteral(/** @type {string} */ (tokens.channelEffect)) +
+      ")(1);\n" +
+      "var bMin = Math.min(beatMin, beatMax - 0.001);\n" +
+      "var bMax = Math.max(beatMax, bMin + 0.001);\n" +
+      "var bump = linear(beat, bMin, bMax, bumpMin, bumpMax) / 100;\n" +
+      "var shake = linear(beat, bMin, bMax, 0, amp);\n" +
+      "var base = (typeof value === \"number\" && value === 0) ? 100 : value;\n" +
+      BEAT_AMP_TAIL
     );
+  }
+
+  /** @param {string} source @returns {boolean} */
+  function isManagedBeatAmplitude(source) {
+    if (typeof source !== "string") return false;
+    var normalized = source.replace(/\r\n?/g, "\n");
+    if (normalized.indexOf(BEAT_HEADER) !== 0) return false;
+    var corpo = normalized.substring(BEAT_HEADER.length);
+    if (corpo.indexOf(BEAT_AMP_TAIL) === corpo.length - BEAT_AMP_TAIL.length) {
+      return corpo.indexOf("var beatMin = ") === 0 && corpo.indexOf("linear(beat") > 0;
+    }
+    if (corpo.indexOf(BEAT_AMP_TAIL_LEGACY) === corpo.length - BEAT_AMP_TAIL_LEGACY.length ||
+        corpo.indexOf("normalizado") > 0) {
+      return true;
+    }
+    return false;
   }
 
   /** @param {string} source @returns {boolean} */
   function isManagedBeat(source) {
     if (typeof source !== "string") return false;
     var normalized = source.replace(/\r\n?/g, "\n");
-    return normalized.indexOf(BEAT_HEADER) === 0;
+    return (
+      normalized.indexOf(BEAT_HEADER) === 0 ||
+      normalized.indexOf("// Moti.on expression: ae.audio.beat") === 0
+    );
+  }
+
+  // -----------------------------------------------------------------------
+  // Flicker e Inertial — Live Controls
+  //
+  // Mesma regra do Wiggle: as referencias vem de `expressionReference`, nunca
+  // um nome cravado. Ver `renderWiggleLive` para o porque.
+  // -----------------------------------------------------------------------
+
+  var FLICKER_LIVE_TAIL = "seedRandom(s);\nposterizeTime(r);\nvalue * random(mn, mx);";
+
+  /**
+   * Flicker lendo Live Controls.
+   *
+   * @param {{rate: unknown, minFactor: unknown, maxFactor: unknown, seed: unknown}} refs
+   * @returns {string}
+   */
+  function renderFlickerLive(refs) {
+    if (!refs) throw new Error("Referencias de Live Controls ausentes.");
+    return (
+      FLICKER_HEADER +
+      "var s = Math.floor(" + referenciaViva(refs.seed, "seed") + ");\n" +
+      "var r = " + referenciaViva(refs.rate, "rate") + ";\n" +
+      "var mn = " + referenciaViva(refs.minFactor, "minFactor") + ";\n" +
+      "var mx = " + referenciaViva(refs.maxFactor, "maxFactor") + ";\n" +
+      FLICKER_LIVE_TAIL
+    );
+  }
+
+  /** @param {string} source @returns {boolean} */
+  function isManagedFlickerLive(source) {
+    if (typeof source !== "string") return false;
+    var normalized = source.replace(/\r\n?/g, "\n");
+    if (normalized.indexOf(FLICKER_HEADER) !== 0) return false;
+    var corpo = normalized.substring(FLICKER_HEADER.length);
+    if (corpo.length < FLICKER_LIVE_TAIL.length) return false;
+    if (corpo.indexOf(FLICKER_LIVE_TAIL) !== corpo.length - FLICKER_LIVE_TAIL.length) {
+      return false;
+    }
+    return corpo.indexOf("var s = Math.floor(") === 0;
+  }
+
+  /**
+   * Inercia lendo Live Controls.
+   *
+   * `maxDurationFrames` e `startMode` continuam cravados de proposito: o
+   * primeiro e um teto de seguranca contra expressao que nunca converge, e o
+   * segundo muda a SEMANTICA da expressao, nao a intensidade dela. Slider serve
+   * para o que o usuario quer sentir mudando; estes dois, nao.
+   *
+   * @param {{amplitude: unknown, frequency: unknown, decay: unknown}} refs
+   * @param {{maxDurationFrames: unknown, startMode: unknown}} tokens
+   * @returns {string}
+   */
+  function renderInertialLive(refs, tokens) {
+    if (!refs) throw new Error("Referencias de Live Controls ausentes.");
+    if (!tokens) throw new Error("Tokens inerciais ausentes.");
+    if (
+      !isFiniteNumber(tokens.maxDurationFrames) ||
+      Math.floor(/** @type {number} */ (tokens.maxDurationFrames)) !== tokens.maxDurationFrames ||
+      /** @type {number} */ (tokens.maxDurationFrames) < 1 ||
+      /** @type {number} */ (tokens.maxDurationFrames) > 10000
+    ) {
+      throw new Error("Duracao maxima inercial invalida.");
+    }
+    if (tokens.startMode !== "everyKey" && tokens.startMode !== "lastKey") {
+      throw new Error("Modo de inicio inercial invalido.");
+    }
+
+    return (
+      INERTIAL_HEADER +
+      "var amp = " + referenciaViva(refs.amplitude, "amplitude") + ";\n" +
+      "var freq = " + referenciaViva(refs.frequency, "frequency") + ";\n" +
+      "var decay = " + referenciaViva(refs.decay, "decay") + ";\n" +
+      "var maxDurF = " + canonicalNumber(/** @type {number} */ (tokens.maxDurationFrames)) + ";\n" +
+      "var somenteUltima = " + (tokens.startMode === "lastKey" ? "true" : "false") + ";\n" +
+      INERTIAL_BODY_TAIL
+    );
+  }
+
+  /** @param {string} source @returns {boolean} */
+  function isManagedInertialLive(source) {
+    if (typeof source !== "string") return false;
+    var normalized = source.replace(/\r\n?/g, "\n");
+    if (normalized.indexOf(INERTIAL_HEADER) !== 0) return false;
+    var corpo = normalized.substring(INERTIAL_HEADER.length);
+    if (corpo.indexOf(INERTIAL_BODY_TAIL) !== corpo.length - INERTIAL_BODY_TAIL.length) {
+      return false;
+    }
+    // A marca de que e a versao viva: `amp` recebe uma chamada de efeito, e nao
+    // um numero.
+    return corpo.indexOf("var amp = ") === 0 && corpo.indexOf("effect(") > 0;
+  }
+
+  // -----------------------------------------------------------------------
+  // Smooth e LoopOut — Live Controls
+  // -----------------------------------------------------------------------
+
+  var SMOOTH_LIVE_TAIL = "smooth(largura, amostras, time);";
+
+  /**
+   * Smooth lendo Live Controls.
+   *
+   * `referenceTime` sai da equacao: a versao viva sempre suaviza em torno do
+   * tempo corrente (`time`), que e o uso normal. Um tempo de referencia fixo e
+   * escolha estrutural, nao intensidade — nao rende slider.
+   *
+   * @param {{widthSeconds: unknown, samples: unknown}} refs
+   * @returns {string}
+   */
+  function renderSmoothLive(refs) {
+    if (!refs) throw new Error("Referencias de Live Controls ausentes.");
+    return (
+      SMOOTH_HEADER +
+      "var largura = " + referenciaViva(refs.widthSeconds, "widthSeconds") + ";\n" +
+      "var amostras = Math.max(1, Math.round(" + referenciaViva(refs.samples, "samples") + "));\n" +
+      SMOOTH_LIVE_TAIL
+    );
+  }
+
+  /** @param {string} source @returns {boolean} */
+  function isManagedSmoothLive(source) {
+    if (typeof source !== "string") return false;
+    var normalized = source.replace(/\r\n?/g, "\n");
+    if (normalized.indexOf(SMOOTH_HEADER) !== 0) return false;
+    var corpo = normalized.substring(SMOOTH_HEADER.length);
+    if (corpo.indexOf(SMOOTH_LIVE_TAIL) !== corpo.length - SMOOTH_LIVE_TAIL.length) return false;
+    return corpo.indexOf("var largura = ") === 0;
+  }
+
+  /**
+   * Ordem dos tipos de loop no dropdown. A expressao indexa esta lista, entao a
+   * ordem aqui e a ordem das `options` do binding — as duas nao podem divergir,
+   * ou o usuario escolhe "vaivem" e recebe "ciclo".
+   */
+  var LOOPOUT_LIVE_TYPES = ["cycle", "pingpong", "offset", "continue"];
+
+  var LOOPOUT_LIVE_TAIL =
+    'tipo == "continue" ? loopOut("continue") : loopOut(tipo, voltas);';
+
+  /**
+   * LoopOut lendo Live Controls.
+   *
+   * O tipo entra como dropdown, e nao como texto cravado: trocar ciclo por
+   * vaivem e a mudanca que as pessoas mais fazem depois de aplicar, e sem isto
+   * ela exige reaplicar a ferramenta.
+   *
+   * O valor do dropdown chega 1-based do host; o `- 1` traduz para o indice do
+   * array, e o clamp impede que um valor fora da faixa produza `undefined`
+   * dentro da chamada de `loopOut`.
+   *
+   * @param {{type: unknown, numKeyframes: unknown}} refs
+   * @returns {string}
+   */
+  function renderLoopOutLive(refs) {
+    if (!refs) throw new Error("Referencias de Live Controls ausentes.");
+    var lista = '["' + LOOPOUT_LIVE_TYPES.join('", "') + '"]';
+    var ultimo = LOOPOUT_LIVE_TYPES.length - 1;
+    return (
+      HEADER +
+      "var tipos = " + lista + ";\n" +
+      "var escolha = Math.round(" + referenciaViva(refs.type, "type") + ") - 1;\n" +
+      "var tipo = tipos[Math.max(0, Math.min(" + ultimo + ", escolha))];\n" +
+      "var voltas = Math.max(0, Math.round(" +
+      referenciaViva(refs.numKeyframes, "numKeyframes") +
+      "));\n" +
+      LOOPOUT_LIVE_TAIL
+    );
+  }
+
+  /** @param {string} source @returns {boolean} */
+  function isManagedLoopOutLive(source) {
+    if (typeof source !== "string") return false;
+    var normalized = source.replace(/\r\n?/g, "\n");
+    if (normalized.indexOf(HEADER) !== 0) return false;
+    var corpo = normalized.substring(HEADER.length);
+    if (corpo.indexOf(LOOPOUT_LIVE_TAIL) !== corpo.length - LOOPOUT_LIVE_TAIL.length) return false;
+    return corpo.indexOf("var tipos = ") === 0;
   }
 
   global.MotionExpressions = {
@@ -1700,12 +2141,18 @@
     isManagedParallaxWiggle: isManagedParallaxWiggle,
     parallaxWiggleSliderNames: { frequency: PARALLAX_WIGGLE_FREQ, amplitude: PARALLAX_WIGGLE_AMP },
     renderLoopOut: renderLoopOut,
+    renderLoopOutLive: renderLoopOutLive,
+    isManagedLoopOutLive: isManagedLoopOutLive,
     isManagedLoopOut: isManagedLoopOut,
     renderSmooth: renderSmooth,
+    renderSmoothLive: renderSmoothLive,
+    isManagedSmoothLive: isManagedSmoothLive,
     isManagedSmooth: isManagedSmooth,
     renderWiggle: renderWiggle,
     isManagedWiggle: isManagedWiggle,
     renderFlicker: renderFlicker,
+    renderFlickerLive: renderFlickerLive,
+    isManagedFlickerLive: isManagedFlickerLive,
     isManagedFlicker: isManagedFlicker,
     renderTextBoxSize: renderTextBoxSize,
     isManagedTextBoxSize: isManagedTextBoxSize,
@@ -1720,13 +2167,20 @@
     renderKinetic: renderKinetic,
     isManagedKinetic: isManagedKinetic,
     renderInertial: renderInertial,
+    renderInertialLive: renderInertialLive,
+    isManagedInertialLive: isManagedInertialLive,
     isManagedInertial: isManagedInertial,
     renderLookAt: renderLookAt,
+    renderLookAt2D: renderLookAt2D,
     isManagedLookAt: isManagedLookAt,
+    isManagedLookAt2D: isManagedLookAt2D,
     lookAtSupportedAxes: lookAtSupportedAxes,
     renderOrbit: renderOrbit,
+    renderOrbitLive: renderOrbitLive,
+    isManagedOrbitLive: isManagedOrbitLive,
     isManagedOrbit: isManagedOrbit,
     renderOrbitFacing: renderOrbitFacing,
+    renderOrbitFacingLive: renderOrbitFacingLive,
     isManagedOrbitFacing: isManagedOrbitFacing,
     renderWave: renderWave,
     isManagedWave: isManagedWave,
@@ -1736,14 +2190,10 @@
     isManagedEffector: isManagedEffector,
     renderWiggleLive: renderWiggleLive,
     isManagedWiggleLive: isManagedWiggleLive,
-    wiggleLiveSliderNames: {
-      frequency: WIGGLE_LIVE_FREQ,
-      amplitude: WIGGLE_LIVE_AMP,
-      seed: WIGGLE_LIVE_SEED
-    },
     renderBeatBpm: renderBeatBpm,
     renderBeatAmplitude: renderBeatAmplitude,
     isManagedBeat: isManagedBeat,
+    isManagedBeatAmplitude: isManagedBeatAmplitude,
     beatSliderNames: {
       bpm: BEAT_BPM_SLIDER,
       intensidade: BEAT_INT_SLIDER,

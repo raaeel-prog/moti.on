@@ -12,6 +12,318 @@
   var DEFAULT_LOCALE = "en-US";
 
   var table = {
+    "ae.text.word-reveal.read": {
+      id: "ae.text.word-reveal.read",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
+    "ae.text.word-reveal": {
+      id: "ae.text.word-reveal",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.text.word-reveal",
+      undoLabels: {
+        "en-US": "Moti.on: word box reveal",
+        "pt-BR": "Moti.on: revelação com caixas"
+      }
+    },
+    "ae.text.variable-morph.read": {
+      id: "ae.text.variable-morph.read",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
+    "ae.text.variable-morph": {
+      id: "ae.text.variable-morph",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.text.variable-morph",
+      undoLabels: {
+        "en-US": "Moti.on: proximity font morph",
+        "pt-BR": "Moti.on: morph por proximidade"
+      }
+    },
+    "ae.text.style-swap": {
+      id: "ae.text.style-swap",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.text.style-swap",
+      undoLabels: {
+        "en-US": "Moti.on: text style swap",
+        "pt-BR": "Moti.on: troca de estilos"
+      }
+    },
+    "ae.text.vertical-pulse.read": {
+      id: "ae.text.vertical-pulse.read",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
+    "ae.text.vertical-pulse": {
+      id: "ae.text.vertical-pulse",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.text.vertical-pulse",
+      undoLabels: {
+        "en-US": "Moti.on: Pulse",
+        "pt-BR": "Moti.on: Pulso"
+      }
+    },
+    "ae.presets.camera-transition": {
+      id: "ae.presets.camera-transition",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.camera-transition",
+      undoLabels: {
+        "en-US": "Moti.on: create camera transition",
+        "pt-BR": "Moti.on: criar transição de câmera"
+      }
+    },
+    "ae.presets.apply": {
+      id: "ae.presets.apply",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.apply",
+      undoLabels: {
+        "en-US": "Moti.on: apply preset",
+        "pt-BR": "Moti.on: aplicar preset"
+      }
+    },
+    "ae.presets.remove": {
+      id: "ae.presets.remove",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.remove",
+      undoLabels: {
+        "en-US": "Moti.on: remove preset",
+        "pt-BR": "Moti.on: remover preset"
+      }
+    },
+    "ae.presets.bake": {
+      id: "ae.presets.bake",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.bake",
+      undoLabels: {
+        "en-US": "Moti.on: bake preset",
+        "pt-BR": "Moti.on: converter preset em keyframes"
+      }
+    },
+    "ae.presets.phase-apply": {
+      id: "ae.presets.phase-apply",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.phase-apply",
+      undoLabels: {
+        "en-US": "Moti.on: apply phase",
+        "pt-BR": "Moti.on: aplicar fase"
+      }
+    },
+    "ae.presets.phase-adjust": {
+      id: "ae.presets.phase-adjust",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.phase-adjust",
+      undoLabels: {
+        "en-US": "Moti.on: adjust phase",
+        "pt-BR": "Moti.on: ajustar fase"
+      }
+    },
+    "ae.presets.phase-action": {
+      id: "ae.presets.phase-action",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.phase-action",
+      undoLabels: {
+        "en-US": "Moti.on: edit phase",
+        "pt-BR": "Moti.on: editar fase"
+      }
+    },
+    "ae.presets.phase-timing": {
+      id: "ae.presets.phase-timing",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.phase-timing",
+      undoLabels: {
+        "en-US": "Moti.on: shift phase",
+        "pt-BR": "Moti.on: deslocar fase"
+      }
+    },
+    "ae.presets.color-adjust": {
+      id: "ae.presets.color-adjust",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.color-adjust",
+      undoLabels: {
+        "en-US": "Moti.on: adjust color",
+        "pt-BR": "Moti.on: ajustar cor"
+      }
+    },
+    "ae.presets.inspect": {
+      id: "ae.presets.inspect",
+      requirements: [],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
+    "ae.presets.adjust": {
+      id: "ae.presets.adjust",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.adjust",
+      undoLabels: {
+        "en-US": "Moti.on: adjust preset",
+        "pt-BR": "Moti.on: ajustar preset"
+      }
+    },
+    "ae.presets.timing": {
+      id: "ae.presets.timing",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.timing",
+      undoLabels: {
+        "en-US": "Moti.on: arrange animation markers",
+        "pt-BR": "Moti.on: organizar marcadores de animação"
+      }
+    },
+    "ae.presets.personal": {
+      id: "ae.presets.personal",
+      requirements: [],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
+    "ae.presets.personal-preview": {
+      id: "ae.presets.personal-preview",
+      requirements: [],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
+    "ae.presets.personal-apply": {
+      id: "ae.presets.personal-apply",
+      requirements: ["hasProject"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.personal-apply",
+      undoLabels: {
+        "en-US": "Moti.on: apply personal preset",
+        "pt-BR": "Moti.on: aplicar preset da biblioteca"
+      }
+    },
+    "ae.quick-tools.apply": {
+      id: "ae.quick-tools.apply",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.quickTools",
+      undoLabels: {
+        "en-US": "Moti.on: quick action",
+        "pt-BR": "Moti.on: ação rápida"
+      }
+    },
+    "ae.quick-tools.save-frame": {
+      id: "ae.quick-tools.save-frame",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
     "ae.context.read": {
       id: "ae.context.read",
       requirements: [],
@@ -88,6 +400,19 @@
       undoLabels: {
         "en-US": "Moti.on: apply Smooth",
         "pt-BR": "Moti.on: aplicar Smooth"
+      }
+    },
+    "ae.audio.beat": {
+      id: "ae.audio.beat",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.audio.beat",
+      undoLabels: {
+        "en-US": "Moti.on: sync to beat",
+        "pt-BR": "Moti.on: sincronizar com a batida"
       }
     },
     "ae.expression.wiggle": {
@@ -571,6 +896,32 @@
         "pt-BR": "Moti.on: montar cubo"
       }
     },
+    "ae.effect.gradient.read": {
+      id: "ae.effect.gradient.read",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
+    },
+    "ae.effect.gradient": {
+      id: "ae.effect.gradient",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.effect.gradient",
+      undoLabels: {
+        "en-US": "Moti.on: Gradients",
+        "pt-BR": "Moti.on: Gradientes"
+      }
+    },
     "ae.effect.wave": {
       id: "ae.effect.wave",
       requirements: ["hasProject", "hasActiveComp"],
@@ -610,6 +961,58 @@
         "pt-BR": "Moti.on: aplicar glitch"
       }
     },
+    "ae.parallax.create": {
+      id: "ae.parallax.create",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.animate.parallaxQuick",
+      undoLabels: {
+        "en-US": "Moti.on: create parallax rig",
+        "pt-BR": "Moti.on: criar rig de parallax"
+      }
+    },
+    "ae.parallax.adjust": {
+      id: "ae.parallax.adjust",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.animate.parallaxQuick",
+      undoLabels: {
+        "en-US": "Moti.on: create parallax rig",
+        "pt-BR": "Moti.on: criar rig de parallax"
+      }
+    },
+    "ae.parallax.move": {
+      id: "ae.parallax.move",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.animate.parallaxQuick",
+      undoLabels: {
+        "en-US": "Moti.on: create parallax rig",
+        "pt-BR": "Moti.on: criar rig de parallax"
+      }
+    },
+    "ae.parallax.remove": {
+      id: "ae.parallax.remove",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: true,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.animate.parallaxQuick",
+      undoLabels: {
+        "en-US": "Moti.on: create parallax rig",
+        "pt-BR": "Moti.on: criar rig de parallax"
+      }
+    },
     "ae.animate.parallax.quick": {
       id: "ae.animate.parallax.quick",
       requirements: ["hasProject", "hasActiveComp"],
@@ -641,7 +1044,7 @@
       requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
       destructive: false,
       mutates: true,
-      allowsNoopSuccess: false,
+      allowsNoopSuccess: true,
       supportsDryRun: false,
       undoLabelKey: "undo.ae.3d.orbit",
       undoLabels: {

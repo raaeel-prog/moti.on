@@ -309,3 +309,4 @@ test("rollback devolve o estado anterior quando o host recusa a expressao", asyn
   assert.equal(primeira.expression, "", "a propriedade escrita antes da falha precisa voltar");
   assert.equal(primeira.expressionEnabled, false);
 });
+

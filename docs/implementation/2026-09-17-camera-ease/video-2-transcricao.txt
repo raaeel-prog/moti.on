@@ -1,0 +1,9 @@
+[0000.0–0011.0] Chate. Também quero melhorar essa ferramenta aqui de ajuste de velocidade. Atualmente está muito simples, muito cara de ir a essa estrutura.
+[0011.0–0021.0] Queria que você desse sua melhorada nisso daqui. Isso aqui se pode manter, só manter mais minimalista, igual a barra de ferramentas.
+[0021.0–0027.0] Ele não precisa desse contorno aqui branco, deixa só as linhas assim mesmo selecionado o brancozinho assim.
+[0028.0–0034.0] Ajusta isso aqui para ficar mais visível, para ficar melhor de mexer.
+[0034.0–0049.0] Um exemplo é o do próprio Animation Composer aqui. Você pode ver que ele funciona desse jeito aqui.
+[0049.0–0060.0] Vou fazer um teste aqui com os Keyframes. Position. Aqui em dois segundos eu vou botar um escala.
+[0064.0–0074.0] Ele precisa adicionar esses tipos de Keyframes aqui de suavização. Seleciona os dois. Seleciona aqui já.
+[0074.0–0086.0] Esses suavizações que acontecem aqui. Esse estilo de Keyframe também. Selecionou. Aqui vou fazer outro movimento.
+[0086.0–0101.5] Quero ele menor, botei esse outro. Preciso melhorar essa ferramenta aqui para ficar mais profissional.

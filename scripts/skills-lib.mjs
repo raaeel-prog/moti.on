@@ -197,7 +197,7 @@ export async function validateSkillPack(root = process.cwd()) {
   }
   if (await exists(designFiles[0])) {
     const uiFoundation = await readFile(designFiles[0], 'utf8');
-    if (!uiFoundation.includes('#1D1D1D')) errors.push('UI foundation must preserve dashboard background #1D1D1D');
+    if (!uiFoundation.includes('#121212')) errors.push('UI foundation must preserve the approved Moti.on background #121212');
     for (const banned of ['glassmorphism', 'dashboard SaaS', 'gradiente decorativo']) {
       if (!uiFoundation.toLowerCase().includes(banned.toLowerCase())) warnings.push(`UI foundation may be missing anti-pattern: ${banned}`);
     }

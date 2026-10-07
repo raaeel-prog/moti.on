@@ -1,0 +1,12 @@
+[0001.0–0006.0] Charges. Agora precisamos melhorar o tema dessa parte de presets aqui.
+[0006.0–0011.0] Eu quero que você traga esse tema aqui do Animation Composer.
+[0011.0–0016.0] Exatamente esse tema. Dessa mesma função. Do mesmo jeito você vai fazer isso.
+[0016.0–0022.0] Esse mesmo projeto de tema aqui para o nosso tema. Para o nosso plugin.
+[0022.0–0029.0] Com essas pastas, os nomes separadinhos, bonitinhos, tudo do mesmo jeito que está aqui.
+[0029.0–0038.0] Em Abra Edit aqui. Um Abra Edit aqui que você edita o preset que foi aplicado na lei lá, tá?
+[0038.0–0043.0] Quero que você melhore também a aba de ferramentas. Abra de ferramentas aqui.
+[0043.0–0049.0] Pode passar por uma reestruturação. Mas assim, mantendo isso aqui que a gente tem.
+[0049.0–0053.0] Já esses atalhos aqui, rápido. Do nosso plugin, esses quadradinhos.
+[0053.0–0056.0] Mantém tudo isso aqui. Mantém esses aqui também.
+[0056.0–0060.0] Só dá uma renovada. Traz esse aspecto aqui do Animation Composer.
+[0060.0–0066.0] Esse tema aqui. Essas cores. Essa forma de desenhar o plugin aí.

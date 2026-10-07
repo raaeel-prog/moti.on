@@ -137,13 +137,70 @@
     return property instanceof Property ? property : null;
   }
 
-  /** @param {CompItem} comp @returns {Layer|null} */
-  function findController(comp) {
+  var GRID_TAG = "[MOTION_TILE_GRID_V1]";
+  var CELL_TAG = "[MOTION_TILE_CELL_V1]";
+
+  /** @param {any} layer @returns {boolean} */
+  function isController(layer) {
+    return !!layer && typeof layer.comment === "string" && layer.comment.indexOf(GRID_TAG) >= 0;
+  }
+
+  /** @param {any} layer @returns {number[]|null} */
+  function cellOf(layer) {
+    var text = String(layer.comment || "");
+    var at = text.indexOf(CELL_TAG);
+    if (at < 0) return null;
+    var match = /^(\d+),(\d+)/.exec(text.substring(at + CELL_TAG.length));
+    return match ? [Number(match[1]), Number(match[2])] : null;
+  }
+
+  /** @param {any} layer @param {number} row @param {number} column @returns {void} */
+  function tagCell(layer, row, column) {
+    var text = String(layer.comment || "").replace(/\n?\[MOTION_TILE_CELL_V1\]\d+,\d+/g, "");
+    layer.comment = text + (text ? "\n" : "") + CELL_TAG + row + "," + column;
+  }
+
+  /** @param {CompItem} comp @param {any[]} selected @returns {any[]} */
+  function gridPlans(comp, selected) {
+    var plans = [];
     var i;
-    for (i = 1; i <= comp.numLayers; i += 1) {
-      var camada = comp.layer(i);
-      if (camada && camada.name === NOME_CONTROLLER) return camada;
+    for (i = 0; i < selected.length; i += 1) {
+      var layer = selected[i];
+      var controller = isController(layer) ? layer : isController(layer.parent) ? layer.parent : null;
+      var duplicate = false;
+      var p;
+      for (p = 0; p < plans.length; p += 1) {
+        if (controller && (/** @type {any} */ (plans[p])).controller === controller) duplicate = true;
+      }
+      if (duplicate) continue;
+      var members = [];
+      var source = controller ? null : layer;
+      if (controller) {
+        var n;
+        for (n = 1; n <= comp.numLayers; n += 1) {
+          var member = comp.layer(n);
+          var cell = member && member.parent === controller ? cellOf(member) : null;
+          if (!cell) continue;
+          members.push({ layer: member, row: cell[0], column: cell[1] });
+          if (cell[0] === 0 && cell[1] === 0) {
+            if (source) throw new Error("A grade possui mais de uma origem.");
+            source = member;
+          }
+        }
+      }
+      if (!source) throw new Error("A origem da grade nao esta mais disponivel.");
+      plans.push({ controller: controller, source: source, members: members });
     }
+    return plans;
+  }
+
+  /** @param {any} layer @returns {MotionCommandFailure|null} */
+  function gridTargetError(layer) {
+    if (layer.locked || layer.threeDLayer || !MotionEffects.parade(layer) || typeof layer.duplicate !== "function") return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A grade requer camadas visuais 2D desbloqueadas.", null);
+    var pos = positionOf(layer);
+    if (!pos || (/** @type {any} */ (pos)).dimensionsSeparated) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A grade requer Position com dimensoes unidas.", null);
+    if (pos.expressionEnabled || pos.expression) return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A grade preserva a expressao existente; use uma camada sem expressao em Position.", null);
+    if (pos.numKeys > 0) return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "A grade requer Position sem keyframes; anime o controller depois de criar.", null);
     return null;
   }
 
@@ -159,7 +216,27 @@
     }
 
     var i;
+    if (args.mode === "grid") {
+      var plans;
+      try { plans = gridPlans(comp, selecionadas); }
+      catch (gridError) { return failure(MotionContracts.ERROR.TRACK_CONFLICT, "A grade esta incompleta; restaure sua camada original.", null); }
+      if (plans.length * Number(args.gridRows) * Number(args.gridColumns) > MAX_CELULAS) return failure(MotionContracts.ERROR.INVALID_PRESET, "O total de celulas selecionadas excede o limite da grade.", { max: MAX_CELULAS });
+      for (i = 0; i < plans.length; i += 1) {
+        var plan = plans[i];
+        if (plan.controller && plan.controller.locked) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie o controller da grade.", null);
+        if (!plan.controller && (plan.source.parent || cellOf(plan.source))) return failure(MotionContracts.ERROR.TRACK_CONFLICT, "A camada ja possui parentesco ou pertence a outra grade.", null);
+        var targetError = gridTargetError(plan.source);
+        if (targetError) return targetError;
+        var m;
+        for (m = 0; m < plan.members.length; m += 1) {
+          targetError = gridTargetError(plan.members[m].layer);
+          if (targetError) return targetError;
+        }
+      }
+      return null;
+    }
     for (i = 0; i < selecionadas.length; i += 1) {
+      if ((/** @type {any} */ (selecionadas[i])).locked) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie as camadas selecionadas.", { selectionIndex: i });
       if (args.mode === "effect") {
         var lista = MotionEffects.parade(selecionadas[i]);
         if (!lista) {
@@ -179,19 +256,16 @@
             selectionIndex: i
           });
         }
-        continue;
-      }
-
-      var camada = /** @type {any} */ (selecionadas[i]);
-      if (typeof camada.duplicate !== "function") {
-        return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camada nao pode ser duplicada.", {
-          selectionIndex: i
-        });
-      }
-      if (!positionOf(camada)) {
-        return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camada nao expoe Position.", {
-          selectionIndex: i
-        });
+        var managed = MotionEffects.findManaged(lista, MN.tile, NOME_EFEITO);
+        if (managed) {
+          var p;
+          for (p = 0; p < PARAMETROS.length; p += 1) {
+            var prop = managed.property(/** @type {string} */ (PARAMETROS[p]));
+            if (!prop) return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "Parametro de Motion Tile ausente.", { parameter: PARAMETROS[p] });
+            if (prop.expressionEnabled || prop.expression) return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "Motion Tile possui expressao; ajuste o efeito diretamente.", { parameter: PARAMETROS[p] });
+            if (prop.numKeys > 0) return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Motion Tile possui keyframes; ajuste o efeito diretamente.", { parameter: PARAMETROS[p] });
+          }
+        }
       }
     }
     return null;
@@ -213,7 +287,10 @@
     var criados = [];
     var anteriores = [];
     var camadasCriadas = [];
-    var controllerCriado = null;
+    var controllersCriados = [];
+    var layersAnteriores = [];
+    var removidas = 0;
+    var tempo = comp.time;
     var appliedCount = 0;
     var i;
 
@@ -256,45 +333,59 @@
       var colunas = /** @type {number} */ (args.gridColumns);
       var espaco = /** @type {number} */ (args.spacing);
 
-      var controller = findController(comp);
-      if (!controller) {
-        controller = comp.layers.addNull();
-        controllerCriado = controller;
-        controller.name = NOME_CONTROLLER;
-      }
-
-      for (i = 0; i < selecionadas.length; i += 1) {
-        var original = /** @type {any} */ (selecionadas[i]);
-        if (original === controller) continue;
-
-        var posOriginal = /** @type {Property} */ (positionOf(original));
-        var base = /** @type {number[]} */ (posOriginal.value);
-        original.parent = controller;
-
+      var plans = gridPlans(comp, selecionadas);
+      var obsolete = [];
+      for (i = 0; i < plans.length; i += 1) {
+        var plan = plans[i];
+        var original = plan.source;
+        var controller = plan.controller;
+        layersAnteriores.push({ layer: original, parent: original.parent, position: (/** @type {Property} */ (positionOf(original))).value, comment: original.comment });
+        if (!controller) {
+          controller = comp.layers.addNull();
+          controllersCriados.push(controller);
+          controller.name = NOME_CONTROLLER;
+          controller.comment = GRID_TAG;
+          // A neutral controller avoids the old half-comp offset after parenting.
+          (/** @type {Property} */ (positionOf(controller))).setValue([0, 0]);
+          original.parent = controller;
+          tagCell(original, 0, 0);
+        }
+        var base = /** @type {number[]} */ ((/** @type {Property} */ (positionOf(original))).value);
+        var m;
+        for (m = 0; m < plan.members.length; m += 1) {
+          var member = plan.members[m];
+          if (member.row >= linhas || member.column >= colunas) obsolete.push(member.layer);
+        }
         var linha;
         var coluna;
         for (linha = 0; linha < linhas; linha += 1) {
           for (coluna = 0; coluna < colunas; coluna += 1) {
-            // A celula (0,0) e a propria camada original: duplicar tambem ela
-            // deixaria duas camadas exatamente sobrepostas.
             if (linha === 0 && coluna === 0) continue;
-            var copia = original.duplicate();
-            camadasCriadas.push(copia);
-            copia.name = NOME_CONTROLLER + " " + (linha + 1) + "x" + (coluna + 1);
-            copia.parent = controller;
-            var posCopia = /** @type {Property} */ (positionOf(copia));
-            var novo = [
-              /** @type {number} */ (base[0]) + coluna * espaco,
-              /** @type {number} */ (base[1]) + linha * espaco
-            ];
-            if (base.length > 2) novo.push(/** @type {number} */ (base[2]));
-            posCopia.setValue(novo);
+            var copia = null;
+            for (m = 0; m < plan.members.length; m += 1) {
+              if (plan.members[m].row === linha && plan.members[m].column === coluna) copia = plan.members[m].layer;
+            }
+            if (copia) {
+              layersAnteriores.push({ layer: copia, parent: copia.parent, position: (/** @type {Property} */ (positionOf(copia))).value, comment: copia.comment });
+            } else {
+              copia = original.duplicate();
+              camadasCriadas.push(copia);
+              copia.name = NOME_CONTROLLER + " " + (linha + 1) + "x" + (coluna + 1);
+              copia.parent = controller;
+              tagCell(copia, linha, coluna);
+            }
+            (/** @type {Property} */ (positionOf(copia))).setValue([Number(base[0]) + coluna * espaco, Number(base[1]) + linha * espaco]);
             appliedCount += 1;
           }
         }
       }
+      // Only remove owned cells after every potentially failing write succeeded.
+      for (i = obsolete.length - 1; i >= 0; i -= 1) {
+        obsolete[i].remove();
+        removidas += 1;
+      }
     } catch (tileError) {
-      var rollbackFailed = false;
+      var rollbackFailed = removidas > 0;
       for (i = anteriores.length - 1; i >= 0; i -= 1) {
         try {
           var anterior = anteriores[i];
@@ -319,12 +410,17 @@
           rollbackFailed = true;
         }
       }
-      if (controllerCriado) {
+      for (i = layersAnteriores.length - 1; i >= 0; i -= 1) {
         try {
-          controllerCriado.remove();
-        } catch (removeControllerError) {
-          rollbackFailed = true;
-        }
+          var saved = /** @type {any} */ (layersAnteriores[i]);
+          saved.layer.parent = saved.parent;
+          (/** @type {Property} */ (positionOf(saved.layer))).setValue(saved.position);
+          saved.layer.comment = saved.comment;
+        } catch (restoreLayerError) { rollbackFailed = true; }
+      }
+      for (i = controllersCriados.length - 1; i >= 0; i -= 1) {
+        try { controllersCriados[i].remove(); }
+        catch (removeControllerError) { rollbackFailed = true; }
       }
       if (rollbackFailed) {
         var rollbackError = /** @type {Error & {motionCode?: string}} */ (
@@ -336,15 +432,22 @@
       var failErr = /** @type {Error & {motionCode?: string}} */ (new Error("Tile falhou."));
       failErr.motionCode = MotionContracts.ERROR.HOST_OPERATION_FAILED;
       throw failErr;
+    } finally {
+      for (i = 1; i <= comp.numLayers; i += 1) comp.layer(i).selected = false;
+      for (i = 0; i < selecionadas.length; i += 1) {
+        try { (/** @type {Layer} */ (selecionadas[i])).selected = true; } catch (selectionError) { /* Removed grid cells cannot remain selected. */ }
+      }
+      comp.time = tempo;
     }
 
     return {
-      changed: appliedCount > 0,
+      changed: appliedCount > 0 || controllersCriados.length > 0 || removidas > 0,
       warnings: [],
       data: {
         appliedCount: appliedCount,
         mode: modo,
-        controllerCreated: controllerCriado !== null
+        controllerCreated: controllersCriados.length > 0,
+        removedCount: removidas
       }
     };
   }

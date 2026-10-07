@@ -9,17 +9,18 @@ async function source(relativePath) {
 }
 
 test("os dois painéis inicializam, exibem e descartam a preferência compartilhada", async () => {
-  const [ae, premiere] = await Promise.all([
+  const [ae, premiere, settings] = await Promise.all([
     source("apps/after-effects-cep/client/src/main.ts"),
-    source("apps/premiere-uxp/client/src/main.ts")
+    source("apps/premiere-uxp/client/src/main.ts"),
+    source("apps/after-effects-cep/client/src/views/settings-view.ts")
   ]);
 
   for (const [host, contents] of [["AE", ae], ["Premiere", premiere]]) {
     assert.match(contents, /createBrowserReducedMotionController/, `${host} não inicializa preferência`);
     assert.match(contents, /id:\s*["']settings["']/, `${host} não expõe a view Settings`);
     assert.match(contents, /function renderSettings\(/, `${host} não separa Settings de Sistema`);
-    assert.match(contents, /settings\.reduceMotion\.label/, `${host} não exibe o toggle`);
-    assert.match(contents, /id:\s*["']settings-reduce-motion["']/, `${host} não usa id estável`);
+    assert.match(host === "AE" ? settings : contents, /settings\.reduceMotion\.label/, `${host} não exibe o toggle`);
+    assert.match(host === "AE" ? settings : contents, /id:\s*["']settings-reduce-motion["']/, `${host} não usa id estável`);
     assert.match(contents, /motionPreference\.dispose\(\)/, `${host} não remove listener`);
   }
 });

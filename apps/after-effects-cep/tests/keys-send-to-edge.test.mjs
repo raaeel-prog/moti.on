@@ -214,7 +214,7 @@ test("edge e reference invalidos sao recusados no preflight", async () => {
   assert.deepEqual(tempos(property), [0, 1], "preflight nao pode ter tocado no projeto");
 });
 
-test("ease, interpolacao e roving atravessam o deslocamento intactos", async () => {
+test("ease e interpolacao atravessam o deslocamento; opacidade nao usa roving", async () => {
   // Tres keys, e nao duas: roving so existe em key intermediaria — o After
   // Effects recusa roving na primeira e na ultima, e keyframe-operations.jsx
   // reproduz essa regra ao restaurar.
@@ -223,7 +223,9 @@ test("ease, interpolacao e roving atravessam o deslocamento intactos", async () 
     makeKey(3, 20, 21, 22),
     makeKey(5, 30, 31, 32)
   ]);
-  property.keys[1].roving = true;
+  // Opacity is non-spatial: roving is unavailable in the real host.
+  property.keyRoving = () => { throw new Error("Opacity has no roving"); };
+  property.setRovingAtKey = () => { throw new Error("Opacity has no roving"); };
   property.keys[0].temporalContinuous = true;
 
   const resposta = await envia(new FakeCompItem([property]), { edge: "start", reference: "comp" });
@@ -235,10 +237,10 @@ test("ease, interpolacao e roving atravessam o deslocamento intactos", async () 
   assert.equal(property.keys[2].outEase[0].influence, 31);
   assert.equal(property.keys[2].inEase[0].influence, 32);
   assert.equal(property.keys[0].temporalContinuous, true);
-  assert.equal(property.keys[1].roving, true);
+  assert.equal(property.keys[1].roving, false);
 });
 
-test("varias propriedades sao deslocadas na mesma operacao", async () => {
+test("varias propriedades preservam a fase na mesma operacao", async () => {
   const a = new FakeProperty("Opacity", [makeKey(4, 10, 1, 1), makeKey(5, 20, 2, 2)]);
   const b = new FakeProperty("Rotation", [makeKey(2, 30, 3, 3), makeKey(6, 40, 4, 4)]);
 
@@ -246,6 +248,7 @@ test("varias propriedades sao deslocadas na mesma operacao", async () => {
 
   assert.equal(resposta.ok, true, JSON.stringify(resposta));
   assert.equal(resposta.data.shifted, 2);
-  assert.deepEqual(tempos(a), [0, 1]);
+  assert.deepEqual(tempos(a), [2, 3]);
   assert.deepEqual(tempos(b), [0, 4]);
 });
+

@@ -371,7 +371,7 @@ test("segunda falha CEP de read-only encerra tipada sem sugerir Undo", async () 
   }
 });
 
-test("request acima do limite falha tipado sem chamar evalScript", async () => {
+test("request acima do limite falha tipado sem evalScript quando arquivo temporário está indisponível", async () => {
   const fake = installFakeCep((script, callback) => {
     if (script.startsWith(DISPATCH_PREFIX)) {
       callback(successFor(requestFromDispatch(script), { shouldNotRun: true }));
@@ -392,8 +392,9 @@ test("request acima do limite falha tipado sem chamar evalScript", async () => {
     assert.equal(response.ok, false);
     assert.equal(response.error?.code, "INTERNAL_ERROR");
     assert.equal(response.error?.action, "error.action.exportLogBundle");
-    assert.equal(response.error?.details?.reason, "INLINE_PAYLOAD_TOO_LARGE");
+    assert.equal(response.error?.details?.reason, "TEMP_TRANSPORT_FAILED");
     assert.equal(response.error?.details?.maxInlineChars, MAX_INLINE_CHARS);
+    assert.equal(response.error?.details?.mayHaveMutated, false);
     assert.equal(fake.scripts.length, 0, "payload já recusado não deve iniciar bootstrap nem despacho");
   } finally {
     fake.restore();
@@ -446,3 +447,23 @@ test("bootstrap que não instala dispatcher devolve falha tipada sem esperar tim
     globalThis.clearTimeout = originalClearTimeout;
   }
 });
+
+test("panel language overrides command context dynamically and can return to host language", async () => {
+  const contexts=[];
+  const fake=installFakeCep((script,callback)=>{
+    if(script.startsWith(DISPATCH_PREFIX)){
+      const request=requestFromDispatch(script);contexts.push(request.context);callback(successFor(request));
+    } else callback(readyValueFor(script));
+  });
+  try {
+    let locale="en-US";
+    const {logger}=createLogger();
+    const adapter=createAeHostAdapter(logger,()=>locale);
+    await adapter.client.execute("ae.context.read");
+    locale="pt-BR";await adapter.client.execute("ae.context.read");
+    locale=undefined;await adapter.client.execute("ae.context.read");
+    assert.deepEqual(contexts.map(c=>c.locale),["en-US","pt-BR","pt-BR"]);
+    assert.equal(adapter.uiLocale(),"pt-BR");
+  } finally {fake.restore();}
+});
+

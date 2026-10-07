@@ -5,6 +5,7 @@ import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { stripCommentsAndStrings } from "./check-extendscript.mjs";
+import { findWorkMarker } from "./work-markers.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDir, "..");
@@ -198,9 +199,9 @@ for (const [pattern, label] of [
 
 // Marcadores de trabalho inacabado. A secao 0.5 proibe TODO e mock silencioso;
 // se um chegou ao build, chegou ao usuario.
-for (const marker of ["TODO", "FIXME", "XXX"]) {
-  assert(!aeClientBundle.includes(marker), `Marcador ${marker} no bundle do cliente.`);
-  assert(!aeHostBundle.includes(marker), `Marcador ${marker} no host construído.`);
+for (const [bundle, label] of [[aeClientBundle, "bundle do cliente"], [aeHostBundle, "host construído"]]) {
+  const marker = findWorkMarker(bundle);
+  assert(marker === null, `Marcador ${marker} no ${label}.`);
 }
 
 // console no bundle. Ate o logger estruturado do CHMS-007, nenhum console pode

@@ -107,9 +107,15 @@
    */
   function cameraDoRig(comp) {
     var ativa = /** @type {any} */ (comp).activeCamera;
-    if (ativa && typeof CameraLayer !== "undefined" && ativa instanceof CameraLayer) {
-      return /** @type {CameraLayer} */ (ativa);
-    }
+    var controller = controllerDoRig(comp);
+    if (!controller || !ativa || !(ativa instanceof CameraLayer)) return null;
+    var text = controller.comment || "";
+    var begin = text.indexOf(MotionContracts.META_OPEN);
+    var end = text.indexOf(MotionContracts.META_CLOSE);
+    try {
+      var meta = /** @type {any} */ (MotionJson.parse(text.substring(begin + MotionContracts.META_OPEN.length, end)));
+      if ((meta.schemaVersion === 2 || meta.schemaVersion === 3) && meta.compId === /** @type {any} */ (comp).id && meta.cameraId === /** @type {any} */ (ativa).id && !/** @type {any} */ (ativa).locked) return ativa;
+    } catch (e) { return null; }
     return null;
   }
 
@@ -323,96 +329,25 @@
     return null;
   }
 
-  /**
-   * Le o slider gerenciado, criando-o se ainda nao existir.
-   *
-   * `addProperty` devolve um handle que expira; por isso o efeito e relido da
-   * lista pelo nome que acabamos de dar, como em `MotionEffects.add`.
-   *
-   * @param {Layer} controller
-   * @param {string} nome
-   * @param {number} valor
-   * @returns {{criado: boolean, anterior: number|null}}
-   */
-  function ajustarSlider(controller, nome, valor) {
-    var efeitos = /** @type {any} */ (controller).property("ADBE Effect Parade");
-    if (!efeitos) throw new Error("O controller nao aceita efeitos.");
-
-    var existente = efeitos.property(nome);
-    if (existente) {
-      var atual = existente.property(1);
-      var anterior = atual.value;
-      if (anterior !== valor) atual.setValue(valor);
-      return { criado: false, anterior: anterior };
-    }
-
-    var adicionado = efeitos.addProperty(MN.slider);
-    adicionado.name = nome;
-    var relido = efeitos.property(nome);
-    if (!relido) throw new Error("O slider nao ficou disponivel apos ser criado.");
-    relido.property(1).setValue(valor);
-    return { criado: true, anterior: null };
-  }
-
-  /** @param {Record<string, unknown>} args */
-  function runWiggle(args) {
+  var GROUP_BINDINGS = [{"paramId": "frequency", "label": {"pt-BR": "Frequência", "en-US": "Frequency"}, "control": "slider", "target": "controller", "order": 1, "min": 0, "max": 100, "unit": "none"}, {"paramId": "amplitude", "label": {"pt-BR": "Amplitude", "en-US": "Amplitude"}, "control": "slider", "target": "controller", "order": 2, "min": 0, "max": 100000, "unit": "px"}];
+  /** @param {Record<string, unknown>} args @param {any} context */
+  function runWiggle(args, context) {
     var comp = /** @type {CompItem} */ (app.project.activeItem);
     var controller = /** @type {Layer} */ (controllerDoRig(comp));
     var camera = /** @type {CameraLayer} */ (cameraDoRig(comp));
     var pos = /** @type {Property} */ (propriedade(camera, MN.transform, MN.position));
-
-    var nomes = MotionExpressions.parallaxWiggleSliderNames;
-    var expressaoAnterior = pos.expression;
-    var habilitadoAnterior = pos.expressionEnabled;
-    var sliders = [];
-
+    var previous = pos.expression, enabled = pos.expressionEnabled;
+    var staged = MotionGroupedControls.stage(controller, {tool: "Parallax", rigId: "parallax.wiggle", locale: MotionLivePreset.normalizarLocale(context ? context.locale : null), targetKind: "controller", bindings: GROUP_BINDINGS, values: args}, MotionExpressions.parallaxWiggleSliderNames);
     try {
-      sliders.push({
-        nome: nomes.frequency,
-        estado: ajustarSlider(controller, nomes.frequency, /** @type {number} */ (args.frequency))
-      });
-      sliders.push({
-        nome: nomes.amplitude,
-        estado: ajustarSlider(controller, nomes.amplitude, /** @type {number} */ (args.amplitude))
-      });
-
-      pos.expression = MotionExpressions.renderParallaxWiggle({
-        controllerName: controller.name,
-        seed: args.seed
-      });
-      if (erroDeExpressao(pos) !== "") {
-        throw new Error("After Effects recusou a expressao de wiggle.");
-      }
+      if (!staged.records[0]) throw new Error("O controle de Parallax não foi criado.");
+      pos.expression = MotionExpressions.renderParallaxWiggle({controllerName: controller.name, seed: args.seed, groupName: staged.records[0].name});
       pos.expressionEnabled = true;
-    } catch (e) {
-      desfazerSliders(controller, sliders);
-      pos.expression = expressaoAnterior;
-      pos.expressionEnabled = habilitadoAnterior;
-      throw e;
+      if (erroDeExpressao(pos) !== "") throw new Error("After Effects recusou a expressão de Parallax.");
+      staged.commit();
+    } catch (error) {
+      staged.rollback(); pos.expression = previous; pos.expressionEnabled = enabled; throw error;
     }
-
-    return { changed: true, warnings: [], data: { controllerName: controller.name } };
-  }
-
-  /**
-   * Devolve os sliders ao que eram: remove os que criamos, restaura o valor dos
-   * que ja existiam.
-   *
-   * @param {Layer} controller
-   * @param {Array<{nome: string, estado: {criado: boolean, anterior: number|null}}>} sliders
-   */
-  function desfazerSliders(controller, sliders) {
-    var efeitos = /** @type {any} */ (controller).property("ADBE Effect Parade");
-    if (!efeitos) return;
-    var i;
-    for (i = sliders.length - 1; i >= 0; i -= 1) {
-      var item = sliders[i];
-      if (!item) continue;
-      var efeito = efeitos.property(item.nome);
-      if (!efeito) continue;
-      if (item.estado.criado) efeito.remove();
-      else if (item.estado.anterior !== null) efeito.property(1).setValue(item.estado.anterior);
-    }
+    return {changed: true, warnings: [], data: {controllerName: controller.name}};
   }
 
   /* --------------------------------------------------------- 3. zoom */
@@ -442,6 +377,7 @@
     if (!zoom) {
       return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camera nao expoe Zoom.", null);
     }
+    if (zoom.numKeys > 0) return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Parallax: o Zoom ja tem keyframes. Preserve-os antes de aplicar.", null);
     if (zoom.expression !== "") {
       return failure(
         MotionContracts.ERROR.EXPRESSION_CONFLICT,
@@ -527,40 +463,17 @@
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Passo invalido.", { field: "stepFrames" });
     }
 
-    falha = compAtiva();
+    falha = exigeCamera();
     if (falha) return falha;
-
     var comp = /** @type {CompItem} */ (app.project.activeItem);
-    var selecionadas = comp.selectedLayers || [];
-    if (selecionadas.length === 0) {
-      return failure(MotionContracts.ERROR.NO_SELECTION, "Selecione as camadas a assar.", null);
+    var camera = cameraDoRig(comp);
+    var position = propriedade(camera, MN.transform, MN.position);
+    if (!camera || comp.selectedLayers.length !== 1 || comp.selectedLayers[0] !== camera || !position ||
+        !MotionExpressions.isManagedParallaxWiggle(position.expression) || !position.expressionEnabled || position.numKeys > 0) {
+      return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Parallax: selecione apenas a camera com Wiggle Moti.on e sem keyframes para assar.", null);
     }
-
-    // "Nada para assar" e validacao, e por isso vive aqui: o descriptor declara
-    // `allowsNoopSuccess: false`, entao devolver `changed: false` no `run` seria
-    // erro — e o grupo de Undo ja teria sido aberto para nada.
-    var i;
-    var p;
-    var encontrou = false;
-    for (i = 0; i < selecionadas.length && !encontrou; i += 1) {
-      var alvos = [
-        propriedade(selecionadas[i], MN.transform, MN.position),
-        propriedade(selecionadas[i], MN.transform, MN.scale)
-      ];
-      for (p = 0; p < alvos.length; p += 1) {
-        var prop = alvos[p];
-        if (prop && prop.expression !== "" && prop.expressionEnabled === true) {
-          encontrou = true;
-          break;
-        }
-      }
-    }
-    if (!encontrou) {
-      return failure(
-        MotionContracts.ERROR.INVALID_SELECTION_TYPE,
-        "Nenhuma propriedade sob expressao na selecao.",
-        null
-      );
+    if (comp.workAreaDuration / comp.frameDuration / /** @type {number} */ (args.stepFrames) > 10000) {
+      return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Parallax: reduza o intervalo de bake para ate 10000 amostras.", null);
     }
     return null;
   }
@@ -614,6 +527,7 @@
       var r;
       for (r = restaurar.length - 1; r >= 0; r -= 1) {
         var item2 = /** @type {{prop: Property, expression: string, expressionEnabled: boolean}} */ (restaurar[r]);
+        while (item2.prop.numKeys > 0) item2.prop.removeKey(item2.prop.numKeys);
         item2.prop.expression = item2.expression;
         item2.prop.expressionEnabled = item2.expressionEnabled;
       }

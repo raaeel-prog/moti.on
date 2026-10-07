@@ -17,6 +17,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..", "..", "..");
@@ -95,7 +96,27 @@ async function readContractConstants() {
     throw new Error("Não foi possível localizar PROTOCOL_VERSION em protocol.ts.");
   }
 
+  // Compile only in memory: this generator also runs before tsc creates dist.
+  // Importing the trusted source keeps recipes shared with the panel without a
+  // second hand-maintained host table or a fragile nested-literal parser.
+  const pulseModule = await build({
+    entryPoints: [path.join(repoRoot, "packages", "contracts", "src", "text-effects.ts")],
+    bundle: true, platform: "node", format: "esm", write: false, logLevel: "silent"
+  });
+  const compiledPulse = pulseModule.outputFiles[0];
+  if (!compiledPulse) throw new Error("Não foi possível compilar os presets de Pulso.");
+  const pulse = await import(`data:text/javascript;base64,${Buffer.from(compiledPulse.text).toString("base64")}`);
+  if (!pulse.PULSE_PRESETS || Object.keys(pulse.PULSE_PRESETS).join(",") !== "impact,electric,plasma,liquid,rupture")
+    throw new Error("PULSE_PRESETS está ausente ou diverge do catálogo de Pulso.");
+
+  const gradientModule = await build({
+    entryPoints: [path.join(repoRoot, "packages", "contracts", "src", "gradient.ts")],
+    bundle: true, platform: "node", format: "esm", write: false, logLevel: "silent"
+  });
+  const gradient = await import(`data:text/javascript;base64,${Buffer.from(gradientModule.outputFiles[0].text).toString("base64")}`);
+
   return {
+    gradient: { native: gradient.GRADIENT_NATIVE, scalars: gradient.GRADIENT_SCALARS, keys: gradient.GRADIENT_PARAMETER_KEYS, defaults: gradient.GRADIENT_DEFAULTS },
     protocolVersion: Number(versionMatch[1]),
     errorCodes,
     recoverable,
@@ -103,7 +124,8 @@ async function readContractConstants() {
     metaOpen: readString("META_OPEN"),
     metaClose: readString("META_CLOSE"),
     rigPrefix: readString("RIG_PREFIX"),
-    expressionHeader: readString("EXPRESSION_HEADER")
+    expressionHeader: readString("EXPRESSION_HEADER"),
+    pulsePresets: pulse.PULSE_PRESETS
   };
 }
 
@@ -133,7 +155,7 @@ export async function renderModule() {
   return `/**
  * ARQUIVO GERADO. NÃO EDITE À MÃO.
  *
- * Origem: packages/contracts/src/{errors,protocol,rig-metadata}.ts
+ * Origem: packages/contracts/src/{errors,protocol,rig-metadata,text-effects,gradient}.ts
  * Gerador: packages/contracts/scripts/gen-extendscript.mjs
  *
  * Regenere com \`npm run build\`. O teste de drift em
@@ -159,7 +181,9 @@ ${actionEntries}
     META_OPEN: ${quote(c.metaOpen)},
     META_CLOSE: ${quote(c.metaClose)},
     RIG_PREFIX: ${quote(c.rigPrefix)},
-    EXPRESSION_HEADER: ${quote(c.expressionHeader)}
+    EXPRESSION_HEADER: ${quote(c.expressionHeader)},
+    PULSE_PRESETS: ${JSON.stringify(c.pulsePresets, null, 2).replace(/\n/g, "\n    ")},
+    GRADIENT: ${JSON.stringify(c.gradient, null, 2).replace(/\n/g, "\n    ")}
   };
 }($.global));
 `;

@@ -1,0 +1,55 @@
+/* Approved compact controls. Geometry only; motion is owned by ui-motion. */
+.ch-field { display:flex; flex-wrap:wrap; align-items:center; min-height:34px; gap:4px 8px; padding:0; margin-bottom:8px; border-bottom:0; font-size:12px; }
+.ch-field__label { flex:1 1 108px; min-width:0; padding-right:0; line-height:1.4; }
+.ch-field__control { flex:0 1 auto; min-width:0; max-width:100%; gap:4px; }
+.ch-field__description,.ch-field__error { flex:1 0 100%; padding:2px 0; font-size:12px; line-height:1.4; }
+.ch-field__error { color:var(--ch-danger); }
+.ch-field [data-hidden="true"],.ch-select[data-hidden="true"] { display:none; }
+.ch-field .ch-select,.ch-field .ch-number,.ch-field .ch-text,.ch-field .ch-search,.ch-field .ch-color {
+  box-sizing:border-box; height:28px; min-height:28px; background:var(--surface-raised, var(--ch-surface-hover)); border:1px solid var(--border-control); border-radius:var(--radius-small); font-size:12px;
+}
+.ch-field .ch-select { width:auto; max-width:100%; }
+.ch-field .ch-number { flex:0 0 58px; width:58px; min-width:58px; padding:0 8px; text-align:right; }
+.ch-field .ch-text { width:180px; max-width:100%; }
+.ch-field .ch-color { width:48px; }
+.ch-field [aria-invalid="true"] { border-color:var(--ch-danger); }
+.ch-field__unit { margin-left:0; min-width:12px; font-size:12px; }
+.ch-number-scrub,.ch-select-trigger,.ch-search-trigger { display:flex; align-items:center; justify-content:center; flex:0 0 auto; box-sizing:border-box; height:28px; padding:0 8px; background:var(--surface-raised, var(--ch-surface-hover)); color:var(--ch-text-secondary); border:1px solid var(--border-muted); border-radius:var(--radius-small); font:inherit; cursor:pointer; }
+.ch-number-scrub { width:24px; padding:0; background:transparent; border-color:transparent; cursor:ew-resize; touch-action:none; user-select:none; }
+.ch-number-scrub:hover,.ch-number-scrub[data-dragging="true"] { background:var(--surface-raised, var(--ch-surface-hover)); color:var(--ch-text-primary); }
+.ch-number-scrub:focus,.ch-select-trigger:focus,.ch-search-trigger:focus { outline:var(--focus-ring); outline-offset:2px; }
+.ch-select-trigger { justify-content:space-between; gap:8px; min-width:72px; max-width:100%; color:var(--ch-text-primary); }
+.ch-select-trigger__value { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ch-select-trigger__chevron { flex:none; color:var(--ch-text-secondary); }
+.ch-select-menu { position:fixed; z-index:1200; overflow-y:auto; box-sizing:border-box; display:flex; flex-direction:column; gap:2px; padding:4px; background:var(--surface-raised, var(--ch-surface-hover)); color:var(--ch-text-primary); border:1px solid var(--border-muted); border-radius:var(--radius-medium); box-shadow:var(--e2); transform-origin:top left; }
+.ch-select-menu[data-side="above"] { transform-origin:bottom left; }
+.ch-select-menu__option { display:block; flex:0 0 auto; width:100%; min-height:28px; padding:5px 8px; border:0; border-radius:3px; background:transparent; color:inherit; font:inherit; font-size:12px; text-align:left; white-space:normal; cursor:pointer; }
+.ch-select-menu__option[aria-selected="true"] { background:var(--accent-wash); }
+.ch-select-menu__option[aria-selected="true"]::after { content:" ✓"; }
+.ch-select-menu__option:hover,.ch-select-menu__option:focus { background:var(--accent-wash); outline:1px solid var(--ch-text-secondary); outline-offset:-1px; }
+.ch-field--search { position:relative; }
+.ch-field--search .ch-field__label { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
+.ch-field--search .ch-field__control { flex:0 1 108px; overflow:hidden; }
+.ch-field--search[data-expanded="true"] .ch-field__control { flex-basis:100%; }
+.ch-search-trigger { gap:6px; }
+.ch-search-trigger svg { width:15px; height:15px; }
+.ch-field--search[data-expanded="true"] .ch-search-trigger__label { display:none; }
+.ch-field--search[data-expanded="true"] .ch-search { flex:1; width:100%; min-width:40px; }
+.ch-shell .ch-tool-tile > .ch-button { background-color:transparent; }
+.ch-shell[data-busy="true"] .ch-actions { opacity:0.75; }
+.ch-shell[data-layout="library"] .ch-nav__primary { position:relative; isolation:isolate; }
+.ch-nav__indicator { position:absolute; top:0; left:0; border-radius:var(--radius-small); background:var(--surface-raised, var(--ch-surface-hover)); box-shadow:inset 0 1px 0 var(--border-muted); pointer-events:none; z-index:-1; }
+.ch-nav__indicator[data-hidden="true"] { display:none; }
+.ch-shell[data-layout="library"] .ch-nav__primary[data-indicator="true"] .ch-nav__item.is-active { background:transparent; box-shadow:none; }
+.ch-shell[data-layout="library"] .ch-nav__overflow { background:var(--surface-raised, var(--ch-surface-hover)); transform-origin:top right; }
+.ch-shell[data-layout="library"] .ch-nav__overflow[data-hidden="true"],.ch-shell[data-layout="library"] .ch-nav__item[data-hidden="true"] { display:none; }
+.ch-shell .ch-notice { border-radius:var(--radius-small); padding:8px; font-size:12px; line-height:1.45; }
+.ch-shell--compact .ch-field { display:flex; }
+.ch-shell--comfort .ch-field,.ch-shell--wide .ch-field { max-width:600px; }
+/* Existing curve controls retain their graph and full parameter set. */
+.ch-ease-editor .ch-ease-values input { height:28px; padding:0 5px; background:var(--surface-raised, var(--ch-surface-hover)); font-size:12px; }
+.ch-ease-editor .ch-ease-values label { font-size:12px; }
+
+/* Word morph keeps its four motion controls visible and details in a disclosure. */
+.ch-tool-editor[data-tool="wordReveal"] .ch-tool-disclosure > summary { color:var(--ch-text-secondary); font-size:12px; padding:4px 0; cursor:pointer; }
+.ch-tool-editor[data-tool="wordReveal"] .ch-tool-disclosure[open] > summary { margin-bottom:8px; }

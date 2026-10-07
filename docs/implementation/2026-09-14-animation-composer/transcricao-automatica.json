@@ -1,0 +1,114 @@
+{
+  "language": "pt",
+  "duration": 160.5746875,
+  "segments": [
+    {
+      "start": 0.37,
+      "end": 13.37,
+      "text": "Chat. Seguinte. Eu queria adicionar agora no meu plugin nessa aba aqui de presets, tá? Você pode ver que tá bem bagunçado aqui, não tá nada legal aqui, tá? Até as curvas aqui.",
+      "avg_logprob": -0.2244612509077722
+    },
+    {
+      "start": 13.37,
+      "end": 20.37,
+      "text": "Primeiramente, essa bolinha, ela devia estar seguindo a linha aqui, tá? Não, rodando aqui embaixo. E nada aqui tá funcionando, tá?",
+      "avg_logprob": -0.2244612509077722
+    },
+    {
+      "start": 20.37,
+      "end": 31.37,
+      "text": "E o que eu queria trazer é isso. Tem essa pasta motion aqui do Animation Composer, né? Eu queria criar isso aqui, essas quatro passas aqui.",
+      "avg_logprob": -0.17985254106387286
+    },
+    {
+      "start": 31.37,
+      "end": 43.37,
+      "text": "Tem mais coisas aqui, ó. E são essas animações de textos com efeitos e essas animações de motion e efeitos, beleza?",
+      "avg_logprob": -0.17985254106387286
+    },
+    {
+      "start": 43.37,
+      "end": 53.37,
+      "text": "Eu queria trazer isso pro meu plugin, que são essas animações aqui, ó. Você clica, você também consegue escolher pra onde que ela vai ativar.",
+      "avg_logprob": -0.12002408082506298
+    },
+    {
+      "start": 53.37,
+      "end": 63.37,
+      "text": "Essa aqui é só fade-in, né? Mas, por exemplo, tem várias animações aqui, ó. Que essa daqui já é Easy Position, que aqui já tem os três traços que você aperta.",
+      "avg_logprob": -0.12002408082506298
+    },
+    {
+      "start": 63.37,
+      "end": 69.37,
+      "text": "E aqui você escolhe a direção que ele vai atuar, tá? Pra direita ou pra esquerda, tá?",
+      "avg_logprob": -0.12002408082506298
+    },
+    {
+      "start": 69.37,
+      "end": 76.37,
+      "text": "E aqui tem vários outros presets de animação, que eu queria adicionar a tudo. Isso aqui é o meu plugin, tá?",
+      "avg_logprob": -0.09898270137848393
+    },
+    {
+      "start": 76.37,
+      "end": 83.37,
+      "text": "Desce mesmo o jeitinho que tá aqui. Esses presets precisam ser funcional e tudo precisa funcionar perfeitamente.",
+      "avg_logprob": -0.09898270137848393
+    },
+    {
+      "start": 83.37,
+      "end": 95.09,
+      "text": "E também tem alguns presets 3D, tá? Você pode dar uma olhada aí em como que eles têm sua animação, tá?",
+      "avg_logprob": -0.09898270137848393
+    },
+    {
+      "start": 95.09,
+      "end": 104.09,
+      "text": "E também os presets de efeito, tá? Que são alguns efeitos aqui, ó. Blue com wave, esses outros efeitos aqui, tá?",
+      "avg_logprob": -0.13880211837363965
+    },
+    {
+      "start": 104.09,
+      "end": 113.37,
+      "text": "Esses efeitos aqui de extrude, esses efeitos aqui precisa entrar também de extrude aqui, ó, tá vendo?",
+      "avg_logprob": -0.13880211837363965
+    },
+    {
+      "start": 113.37,
+      "end": 124.37,
+      "text": "3D, esses aqui de sombras, esses aqui de wiggle position 1. Todos esses efeitos precisam entrar no nosso plugin, tá?",
+      "avg_logprob": -0.13880211837363965
+    },
+    {
+      "start": 124.37,
+      "end": 130.37,
+      "text": "Isso aqui principalmente. Aqui na aba presets, tá? E fica bem organizado igual tá aqui.",
+      "avg_logprob": -0.13587235652127314
+    },
+    {
+      "start": 130.37,
+      "end": 135.37,
+      "text": "Um preview de como vai ser a animação e tudo mais. E aqui são as animações de texto também, tá?",
+      "avg_logprob": -0.13587235652127314
+    },
+    {
+      "start": 135.37,
+      "end": 145.37,
+      "text": "Que eu queria adicionar tudo isso aqui, tá? Vários tipos de presets de animação, de várias formas diferentes, entendeu?",
+      "avg_logprob": -0.13587235652127314
+    },
+    {
+      "start": 145.37,
+      "end": 151.37,
+      "text": "Várias animações de texto, de linha, efeito de texto e tudo mais, beleza?",
+      "avg_logprob": -0.13587235652127314
+    },
+    {
+      "start": 151.37,
+      "end": 158.37,
+      "text": "Faz essa adição pra mim, cria todos esses presets pra gente ver como que fica.",
+      "avg_logprob": -0.15008570389314133
+    }
+  ]
+}

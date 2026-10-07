@@ -19,9 +19,13 @@
 /** Objeto raiz do ExtendScript. `$.global` e o escopo global. */
 declare const $: {
   global: Record<string, unknown>;
+  fileName: string;
 };
 
+declare class Folder { readonly fsName: string; readonly parent: Folder; }
+
 declare class File {
+  readonly parent: Folder;
   constructor(path?: string);
   /** Nome do arquivo com extensao, sem o caminho. */
   readonly name: string;
@@ -41,6 +45,7 @@ declare class ImportOptions {
  * host usa hoje — a enumeracao real do ExtendScript tem muitos mais.
  */
 declare const BlendingMode: {
+  readonly NORMAL: unknown;
   readonly OVERLAY: unknown;
   readonly MULTIPLY: unknown;
   readonly SCREEN: unknown;
@@ -48,6 +53,7 @@ declare const BlendingMode: {
 };
 
 declare class Item {
+  readonly id: number;
   readonly name: string;
 }
 
@@ -201,6 +207,8 @@ declare class PropertyGroup {
 declare class Property {
   readonly name: string;
   readonly matchName: string;
+  /** Selection state of the property in the active composition. */
+  selected: boolean;
   /** `true` apenas na propriedade interna de um Dropdown Menu Control. */
   readonly isDropdownEffect: boolean;
   readonly propertyIndex: number;
@@ -328,6 +336,8 @@ declare const ParagraphJustification: {
 };
 
 declare class Project {
+  readonly numItems: number;
+  item(index: number): Item;
   readonly file: File | null;
   readonly activeItem: Item | CompItem | null;
   readonly items: ItemCollection;
@@ -363,3 +373,7 @@ declare const app: {
   beginUndoGroup(name: string): void;
   endUndoGroup(): void;
 };
+
+declare const AutoOrientType: { NO_AUTO_ORIENT: number };
+
+declare class LightLayer extends Layer { enabled: boolean; }

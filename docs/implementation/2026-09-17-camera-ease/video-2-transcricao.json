@@ -1,0 +1,61 @@
+{
+  "source": "/Users/rael/Desktop/Gravação de Tela 2026-09-17 às 12.19.57.mov",
+  "language": "pt",
+  "duration": 106.4946875,
+  "segments": [
+    {
+      "start": 0.02,
+      "end": 11.02,
+      "text": "Chate. Também quero melhorar essa ferramenta aqui de ajuste de velocidade. Atualmente está muito simples, muito cara de ir a essa estrutura.",
+      "avg_logprob": -0.30858080498143736
+    },
+    {
+      "start": 11.02,
+      "end": 21.02,
+      "text": "Queria que você desse sua melhorada nisso daqui. Isso aqui se pode manter, só manter mais minimalista, igual a barra de ferramentas.",
+      "avg_logprob": -0.30858080498143736
+    },
+    {
+      "start": 21.02,
+      "end": 27.02,
+      "text": "Ele não precisa desse contorno aqui branco, deixa só as linhas assim mesmo selecionado o brancozinho assim.",
+      "avg_logprob": -0.30858080498143736
+    },
+    {
+      "start": 28.02,
+      "end": 34.02,
+      "text": "Ajusta isso aqui para ficar mais visível, para ficar melhor de mexer.",
+      "avg_logprob": -0.22553428676393297
+    },
+    {
+      "start": 34.02,
+      "end": 49.02,
+      "text": "Um exemplo é o do próprio Animation Composer aqui. Você pode ver que ele funciona desse jeito aqui.",
+      "avg_logprob": -0.22553428676393297
+    },
+    {
+      "start": 49.02,
+      "end": 60.02,
+      "text": "Vou fazer um teste aqui com os Keyframes. Position. Aqui em dois segundos eu vou botar um escala.",
+      "avg_logprob": -0.31135154962539674
+    },
+    {
+      "start": 64.02,
+      "end": 74.02,
+      "text": "Ele precisa adicionar esses tipos de Keyframes aqui de suavização. Seleciona os dois. Seleciona aqui já.",
+      "avg_logprob": -0.31135154962539674
+    },
+    {
+      "start": 74.02,
+      "end": 86.02,
+      "text": "Esses suavizações que acontecem aqui. Esse estilo de Keyframe também. Selecionou. Aqui vou fazer outro movimento.",
+      "avg_logprob": -0.2555580901317909
+    },
+    {
+      "start": 86.02,
+      "end": 101.47,
+      "text": "Quero ele menor, botei esse outro. Preciso melhorar essa ferramenta aqui para ficar mais profissional.",
+      "avg_logprob": -0.2555580901317909
+    }
+  ]
+}

@@ -15,11 +15,23 @@ function selectorBlock(css, selector) {
 
 function declarations(block) {
   return new Map(
-    [...block.matchAll(/--([a-z0-9-]+)\s*:\s*(#[0-9a-f]{6});/gi)].map((match) => [
+    [...block.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/--([a-z0-9-]+)\s*:\s*([^;]+);/gi)].map((match) => [
       match[1],
-      match[2].toUpperCase()
+      match[2].trim()
     ])
   );
+}
+
+export function themeDeclarations(css, theme = "dark") {
+  const tokens = declarations(selectorBlock(css, ":root"));
+  if (theme === "light") {
+    for (const [name, value] of declarations(selectorBlock(css, '[data-theme="light"]'))) {
+      tokens.set(name, value);
+    }
+  } else if (theme !== "dark") {
+    throw new Error(`Tema ${theme} desconhecido.`);
+  }
+  return tokens;
 }
 
 function luminance(hex) {
@@ -39,14 +51,18 @@ export function contrastRatio(foreground, background) {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-function token(tokens, name) {
+export function resolveColorToken(tokens, name, path = []) {
   const value = tokens.get(name);
   if (!value) throw new Error(`Token de cor --${name} ausente.`);
-  return value;
+  if (path.includes(name)) throw new Error(`Referencia circular de cor: ${[...path, name].join(" -> ")}.`);
+  if (/^#[0-9a-f]{6}$/i.test(value)) return value.toUpperCase();
+  const reference = value.match(/^var\(\s*--([a-z0-9-]+)\s*\)$/i);
+  if (reference) return resolveColorToken(tokens, reference[1], [...path, name]);
+  throw new Error(`Token de cor --${name} usa formato nao suportado: ${value}.`);
 }
 
 const TEXT_SURFACES = ["bg-host", "bg-2", "bg-3", "bg-4"];
-const TEXT_COLORS = ["txt-1", "txt-2", "txt-3", "ok", "warn", "danger", "info"];
+const TEXT_COLORS = ["txt-1", "txt-2", "txt-3", "ok", "warn", "danger", "info", "value-editable"];
 
 function auditTheme(name, tokens) {
   const checks = [];
@@ -62,20 +78,28 @@ function auditTheme(name, tokens) {
   for (const background of ["accent", "accent-hover", "accent-press"]) {
     checks.push({ name, foreground: "accent-on", background, target: 4.5 });
   }
+  // Audit the semantic API as well as the compatibility names used by older
+  // components. A rename must not silently remove colors from the audit.
+  for (const foreground of ["text-primary", "text-secondary", "text-muted"]) {
+    for (const background of ["bg-base", "bg-elevated"]) {
+      checks.push({ name, foreground, background, target: 4.5 });
+    }
+  }
+
+  for (const foreground of ["icon-keyframes", "icon-layers", "icon-animation", "icon-spatial", "icon-shapes", "icon-effects", "icon-project", "icon-utilities"]) {
+    for (const background of ["bg-host", "surface-raised", "bg-elevated", "surface-hover"]) checks.push({ name, foreground, background, target: 3 });
+  }
 
   return checks.map((check) => {
-    const ratio = contrastRatio(token(tokens, check.foreground), token(tokens, check.background));
+    const ratio = contrastRatio(resolveColorToken(tokens, check.foreground), resolveColorToken(tokens, check.background));
     return { ...check, ratio, ok: ratio >= check.target };
   });
 }
 
 export async function auditContrastTokens() {
   const css = await readFile(CSS_URL, "utf8");
-  const dark = declarations(selectorBlock(css, ":root"));
-  const light = new Map(dark);
-  for (const [key, value] of declarations(selectorBlock(css, '[data-theme="light"]'))) {
-    light.set(key, value);
-  }
+  const dark = themeDeclarations(css);
+  const light = themeDeclarations(css, "light");
   const checks = [...auditTheme("dark", dark), ...auditTheme("light", light)];
   return { checks, violations: checks.filter((check) => !check.ok) };
 }

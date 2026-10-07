@@ -266,7 +266,9 @@
     var inEase = [];
     var outEase = [];
     var i;
-    for (i = 0; i < dimensoes; i += 1) {
+    // Spatial properties take ONE speed/influence pair along the path. Their
+    // spatial tangents still have one component per coordinate.
+    for (i = 0; i < (espacial ? 1 : dimensoes); i += 1) {
       inEase.push({ speed: 0, influence: influenciaEntrada });
       outEase.push({ speed: 0, influence: influenciaSaida });
     }

@@ -12,8 +12,14 @@
  * A largura vem por JavaScript, não por `@media`. Media query mede a viewport; o
  * que importa num painel acoplado é a largura do painel.
  */
-import type { I18n } from "./i18n.js";
+import { closeOpenDropdown, mountDropdownView, validateDropdownOptions, type SelectFieldOptions } from "./elements/dropdown-view.js";
+import { registerMotiDropdown } from "./elements/moti-dropdown.js";
+export type { SelectFieldOptions, SelectFieldOption } from "./elements/dropdown-view.js";
+import { attachScrubbableNumber } from "./scrubbable-number.js";
+import { createI18n, type I18n } from "./i18n.js";
 import type { MessageKey } from "./locales.js";
+import { createIcon } from "./icons.js";
+export { createIcon } from "./icons.js";
 
 /**
  * Fronteiras das quatro faixas de acoplamento do Addendum A, que supersede o
@@ -31,141 +37,29 @@ export const COMPACT_MAX = 339;
 export const DEFAULT_MAX = 479;
 export const COMFORT_MAX = 719;
 
-const SVG_NS = "http://www.w3.org/2000/svg";
 let shellSequence = 0;
+
+function fieldEnglish(doc: Document): boolean {
+  return (doc.documentElement?.lang ?? "").toLowerCase().startsWith("en");
+}
+
+function fieldHidden(node: HTMLElement, hidden: boolean): void {
+  node.hidden = hidden;
+  node.setAttribute("data-hidden", String(hidden));
+}
+
 
 export type WidthClass = "compact" | "default" | "comfort" | "wide";
 export type StatusState = "ok" | "error" | "busy";
 
-const ICON_PATHS: Record<string, string> = {
-  context: "M3 4h12v3H3zM3 9h5v6H3zM10 9h5v6h-5z",
-  tools: "M3 3.5h4.5V8H3zM10.5 3.5H15V8h-4.5zM3 10h4.5v4.5H3zM10.5 10H15v4.5h-4.5z",
-  loopOut: "M5 5h7.5l-2-2M13 13H5.5l2 2M14 5a5 5 0 0 1 0 8M4 13a5 5 0 0 1 0-8",
-  smooth: "M2.5 12.5c3.5 0 4-7 6.5-7s3 7 6.5 7",
-  wiggle: "M2 9l2.5-4.5L7 13.5l2.5-9L12 13.5l2-4.5h2",
-  flicker: "M9 2l-3.5 7h3L7 16l5-7.5H9L11 2z",
-  textBox: "M2.5 5.5h13v7h-13zM5.5 8h5M5.5 10h3",
-  parent: "M7 2.5h4v3H7zM9 5.5v2.5M4 8h10M4 8v2.5M14 8v2.5M2.5 10.5h3v3h-3zM12.5 10.5h3v3h-3z",
-  createNull: "M5.5 5.5h7v7h-7zM9 2.5v3M9 12.5v3M2.5 9h3M12.5 9h3",
-  flip: "M9 2.5v13M3 5.5h3.5v7H3zM15 5.5h-3.5v7H15z",
-  rename: "M3 5.5h7M3 9h9M3 12.5h5M12 3.5l2.5 2.5-5 5-2.5.5.5-2.5z",
-  reverseOrder: "M3.5 4.5h11M3.5 9h11M3.5 13.5h11M12 2.5l2 2-2 2M6 15.5l-2-2 2-2",
-  cutKeys: "M9 2.5v13M5 6l-2.5 3 2.5 3M13 6l2.5 3-2.5 3",
-  delay: "M2.5 5h4M2.5 9h7M2.5 13h10M13 3.5l2.5 2.5-2.5 2.5",
-  anchor: "M9 3.5v11M3.5 9h11M9 6.5a2.5 2.5 0 1 1 0 5a2.5 2.5 0 1 1 0-5z",
-  system: "M9 2.5l6 3.5v5l-6 3.5-6-3.5v-5zM6.5 8v2M11.5 8v2",
-  diagnostics: "M3.5 4.5h11M3.5 9h11M3.5 13.5h7",
-  settings: "M3 5h12M3 9h12M3 13h12M6 3.5v3M12 7.5v3M8 11.5v3",
-  ease: "M3 13C6 13 8 5 15 5",
-  reverseKeys: "M13.5 6.5l2.5-2.5-2.5-2.5M16 4H2.5M4.5 11.5L2 14l2.5 2.5M2 14h13.5",
-  // Duas setas verticais de troca sobre uma linha de tempo fixa: os tempos
-  // (o eixo horizontal) não se movem, só o que está em cada um deles.
-  // Deliberadamente diferente do ícone de reverseKeys (que move posição) e do
-  // de reverseOrder (setas laterais sobre linhas empilhadas).
-  reverseValues: "M5 2v9M3.5 4L5 2l1.5 2M3.5 9L5 11l1.5-2M11 2v9M9.5 4L11 2l1.5 2M9.5 9L11 11l1.5-2M2 14h13.5",
-  // Tres marcas de keyframe empurradas contra a barra da esquerda: o grupo
-  // inteiro encostando na borda, que e literalmente o que o comando faz.
-  sendToEdge: "M2 2v12M5 5.5l1.5 2.5L5 10.5 3.5 8zM9 5.5l1.5 2.5L9 10.5 7.5 8zM13 5.5l1.5 2.5L13 10.5 11.5 8zM4.5 8h9",
-  // Tubo de neon: um traco fechado com o halo insinuado por dois arcos soltos.
-  neon: "M5 11V6a3 3 0 0 1 6 0v5M2.5 4.5A6.5 6.5 0 0 1 2.5 11.5M13.5 4.5a6.5 6.5 0 0 1 0 7M6.5 13.5h3",
-  cloneKeys: "M5.5 5.5v-3h10v10h-3M2.5 5.5h10v10h-10z",
-  timeController: "M9 2.5a6.5 6.5 0 1 1 0 13a6.5 6.5 0 1 1 0-13zM9 5.5v4l2.5 2.5",
-  animateKinetic: "M2.5 9h5l2.5-4 5 7-2.5-3z",
-  timeMarkerLoop: "M4.5 13.5v-9M13.5 13.5v-9M4.5 9h9l-2.5-2.5M13.5 9l-2.5 2.5",
-  inertial: "M2.5 12c2 0 2-6 4-6s2 4.5 3.5 4.5S12.5 8 15.5 8",
-  jump: "M2.5 14.5h13M4.5 12.5c1.5-7 7.5-7 9 0",
-  copyKeys: "M6.5 2.5h7v9h-7zM4.5 5.5h-2v10h7v-2",
-  pasteKeys: "M5.5 3.5h7v11h-7zM7.5 2h3v2.5h-3zM7 9.5h4M7 12h4",
-  trimPath: "M2.5 9h4M11.5 9h4M7 6.5l2 2.5-2 2.5M9 9h2.5",
-  shapeLibrary: "M2.5 2.5h7v7h-7zM12 9a3.5 3.5 0 1 1 0 7a3.5 3.5 0 1 1 0-7z",
-  parallax: "M2 4.5h5v9h-5zM8 6h4v6h-4zM13 7.5h3v3h-3z",
-  parallaxFull: "M2 4.5h5v9h-5zM8 6h4v6h-4zM13 7.5h3v3h-3zM2 16.5h14",
-  // Estes dois convertem para vetor, então desenham a forma com os pontos de
-  // ancoragem visíveis. Antes repetiam o ícone de Formas, e as três ferramentas
-  // ficavam indistinguíveis no dock estreito, onde o rótulo some.
-  aiToVector: "M9 5l5 8H4zM8 4h2v2H8zM3 12h2v2H3zM13 12h2v2h-2z",
-  textToVector: "M5.5 5.5h7M9 5.5v7M4.5 4.5h2v2h-2zM11.5 4.5h2v2h-2zM8 11.5h2v2H8z",
-  particles: "M3 3h2v2H3z M10 5h2v2H10z M6 10h2v2H6z M12 12h2v2H12z",
-  texture: "M2 2h14v14H2zM6 2v14M12 2v14M2 6h14M2 12h14",
-  clean: "M5 12l3 3 7-7",
-  lookAt: "M2 9c3-4 11-4 14 0c-3 4-11 4-14 0zM9 7a2 2 0 1 1 0 4a2 2 0 1 1 0-4z",
-  orbit: "M9 4.5a4.5 4.5 0 1 1 0 9a4.5 4.5 0 1 1 0-9zM1.5 9c0-1.5 3.4-2.5 7.5-2.5s7.5 1 7.5 2.5-3.4 2.5-7.5 2.5-7.5-1-7.5-2.5z",
-  breakShape: "M2.5 2.5h5v5h-5zM10.5 2.5h5v5h-5zM2.5 10.5h5v5h-5zM10.5 10.5h5v5h-5z",
-  effector: "M9 9a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3zM9 3.5a7 7 0 1 1 0 14a7 7 0 1 1 0-14zM9 6.5a4 4 0 1 1 0 8a4 4 0 1 1 0-8z",
-  cameraTransition: "M2.5 5.5h8v7h-8zM10.5 8l5-2.5v7l-5-2.5",
-  cylinder: "M9 2.5c3.6 0 6.5 1 6.5 2.2s-2.9 2.3-6.5 2.3-6.5-1-6.5-2.3S5.4 2.5 9 2.5zM2.5 4.7v8.6c0 1.2 2.9 2.2 6.5 2.2s6.5-1 6.5-2.2V4.7",
-  cube: "M9 2l6.5 3.5v7L9 16l-6.5-3.5v-7zM9 2v14M2.5 5.5L9 9l6.5-3.5",
-  wave: "M2 9c2-4 4-4 6 0s4 4 6 0M2 12.5c2-4 4-4 6 0s4 4 6 0",
-  tile: "M2.5 2.5h6v6h-6zM9.5 2.5h6v6h-6zM2.5 9.5h6v6h-6zM9.5 9.5h6v6h-6z",
-  glitch: "M2.5 5h7M5 8h9M2 11h6M8 14h6M11.5 5h4",
-  echo: "M3.5 5.5h4v7h-4zM8.5 6.5h3.5v5h-3.5zM13 7.5h2.5v3H13z",
-  fastEdit: "M2.5 3.5h13v11h-13zM2.5 6.5h13M6 3.5v11M12 9l-2.5 2.5L12 14"
-};
-
-/** Marcadores distintos para runtimes que nao implementam SVG inline. */
-const ICON_FALLBACKS: Record<string, string> = {
-  context: "C",
-  tools: "T",
-  loopOut: "L",
-  smooth: "~",
-  wiggle: "W",
-  flicker: "F",
-  textBox: "[]",
-  parent: "Y",
-  createNull: "+",
-  flip: "><",
-  rename: "Aa",
-  reverseOrder: "⇅",
-  cutKeys: "✂",
-  delay: "≫",
-  anchor: "⊕",
-  system: "S",
-  diagnostics: "!",
-  settings: "⚙",
-  ease: "∫",
-  reverseKeys: "⇆",
-  reverseValues: "⇕",
-  sendToEdge: "⇤",
-  neon: "✦",
-  cloneKeys: "⧉",
-  timeController: "⏱",
-  animateKinetic: "K",
-  timeMarkerLoop: "M",
-  inertial: "≈",
-  jump: "^",
-  copyKeys: "⎘",
-  pasteKeys: "V",
-  trimPath: "⌇",
-  shapeLibrary: "◻",
-  parallax: "▤",
-  parallaxFull: "▥",
-  aiToVector: "Ai",
-  textToVector: "Tx",
-  particles: "∴",
-  texture: "▩",
-  clean: "✓",
-  lookAt: "◉",
-  orbit: "◌",
-  breakShape: "⊟",
-  effector: "◎",
-  cameraTransition: "▷",
-  cylinder: "⌭",
-  cube: "⬢",
-  wave: "∿",
-  tile: "⊞",
-  glitch: "⌁",
-  echo: "≡",
-  fastEdit: "⌸"
-};
 
 export function resolveWidthClass(width: number | undefined): WidthClass {
   if (!width || width <= COMPACT_MAX) {
     return "compact";
   }
-  if (width <= DEFAULT_MAX) {
-    return "default";
-  }
-  return width <= COMFORT_MAX ? "comfort" : "wide";
+  if (width <= DEFAULT_MAX) return "default";
+  if (width <= COMFORT_MAX) return "comfort";
+  return "wide";
 }
 
 export function createElement(
@@ -190,49 +84,6 @@ export function clearNode(node: Node): void {
   }
 }
 
-/**
- * Ícone da navegação.
- *
- * SVG inline quando o runtime suporta, glifo textual quando não. O UXP não
- * garante `createElementNS`, e uma navegação sem marcador visual em modo
- * compacto — onde o rótulo está oculto — deixaria três botões idênticos.
- */
-function createIcon(doc: Document, name: string): Element {
-  const path = ICON_PATHS[name];
-
-  const fallback = (): HTMLElement => {
-    const glyph = createElement(doc, "span", "ch-nav__glyph", ICON_FALLBACKS[name] ?? "?");
-    glyph.setAttribute("aria-hidden", "true");
-    return glyph;
-  };
-
-  if (!path || typeof doc.createElementNS !== "function") {
-    return fallback();
-  }
-
-  try {
-    const svg = doc.createElementNS(SVG_NS, "svg");
-    svg.setAttribute("viewBox", "0 0 18 18");
-    svg.setAttribute("width", "16");
-    svg.setAttribute("height", "16");
-    // O ícone é decorativo: o nome acessível do botão vem do rótulo e do title.
-    svg.setAttribute("aria-hidden", "true");
-    svg.setAttribute("focusable", "false");
-
-    const shape = doc.createElementNS(SVG_NS, "path");
-    shape.setAttribute("d", path);
-    shape.setAttribute("fill", "none");
-    shape.setAttribute("stroke", "currentColor");
-    shape.setAttribute("stroke-width", "1.4");
-    shape.setAttribute("stroke-linejoin", "round");
-    shape.setAttribute("stroke-linecap", "round");
-
-    svg.appendChild(shape);
-    return svg;
-  } catch {
-    return fallback();
-  }
-}
 
 export type RowTone = "ok" | "off" | "unknown";
 
@@ -279,7 +130,28 @@ export interface ToolTileOptions {
   id: string;
   label: string;
   description?: string;
-  onSelect(): void;
+  /**
+   * Quando presente, o ladrilho fica desabilitado e o motivo vira o tooltip.
+   *
+   * O motivo, e nao um booleano: um ladrilho apagado sem explicacao faz o
+   * usuario procurar o que ele proprio fez de errado. A frase diz o que
+   * falta — uma composicao, uma propriedade selecionada.
+   */
+  disabledReason?: string;
+  /**
+   * Complemento do tooltip, ja traduzido — tipicamente o aviso de que Alt+clique
+   * abre os ajustes.
+   *
+   * Campo separado, e nao um texto colado na `description`, porque a descricao
+   * tambem alimenta a busca do navegador de ferramentas: concatenar faria toda
+   * ferramenta com preset casar com "alt" e "ajustes".
+   */
+  hint?: string;
+  /**
+   * `alt` distingue as duas intencoes sobre o mesmo ladrilho: clique aplica o
+   * preset direto, Alt+clique abre a tela para ajustar antes.
+   */
+  onSelect(intent: { alt: boolean }): void;
 }
 
 /**
@@ -296,14 +168,25 @@ export function toolTile(doc: Document, options: ToolTileOptions): HTMLButtonEle
   const tile = createElement(doc, "button", "ch-tool") as HTMLButtonElement;
   tile.setAttribute("type", "button");
   tile.setAttribute("data-motion", "tile-hover tile-press");
-  tile.title = options.description ?? options.label;
+  // O motivo de indisponibilidade substitui tudo: quando o ladrilho nao pode ser
+  // clicado, a dica de Alt+clique so competiria com a frase que diz o que falta.
+  const descricao = options.description ?? options.label;
+  tile.title =
+    options.disabledReason ?? (options.hint ? `${descricao} — ${options.hint}` : descricao);
+  if (options.disabledReason) {
+    tile.disabled = true;
+    tile.setAttribute("aria-disabled", "true");
+  }
 
   const glyph = createElement(doc, "span", "ch-tool__icon");
   glyph.appendChild(createIcon(doc, options.id));
   tile.appendChild(glyph);
   tile.appendChild(createElement(doc, "span", "ch-tool__label", options.label));
 
-  tile.addEventListener("click", options.onSelect);
+  tile.addEventListener("click", (event) => {
+    const mouse = event as MouseEvent | undefined;
+    options.onSelect({ alt: mouse?.altKey === true });
+  });
   return tile;
 }
 
@@ -399,17 +282,6 @@ interface FieldBaseOptions {
   disabledReason?: string;
 }
 
-export interface SelectFieldOption {
-  value: string;
-  label: string;
-}
-
-export interface SelectFieldOptions extends FieldBaseOptions {
-  value: string;
-  options: readonly SelectFieldOption[];
-  onChange(value: string): void;
-}
-
 export interface NumberFieldOptions extends FieldBaseOptions {
   value: number;
   min: number;
@@ -461,46 +333,139 @@ function applyFieldState(
   }
 }
 
-/** Campo select nativo, mantido pequeno para funcionar igualmente em CEP e UXP. */
+/** Compatible factory; native select and overlay gates remain independent. */
 export function selectField(doc: Document, options: SelectFieldOptions): HTMLElement {
-  const field = fieldRoot(doc, options);
-  const select = createElement(doc, "select", "ch-select") as HTMLSelectElement;
-  applyFieldState(select, options);
-
-  for (const item of options.options) {
-    const option = createElement(doc, "option", undefined, item.label) as HTMLOptionElement;
-    option.value = item.value;
-    option.selected = item.value === options.value;
-    select.appendChild(option);
+  validateDropdownOptions(options);
+  const Constructor = registerMotiDropdown(doc);
+  if (Constructor) {
+    let candidate: HTMLElement | undefined;
+    try { candidate = doc.createElement("moti-dropdown"); } catch { /* Partial registry: use DOM fallback. */ }
+    if (candidate instanceof Constructor) {
+      candidate.configure(options);
+      return candidate;
+    }
   }
-
-  select.value = options.value;
-  select.addEventListener("change", () => options.onChange(select.value));
-  field.control.appendChild(select);
-  return field.root;
+  const root = createElement(doc, "div");
+  mountDropdownView(root, options);
+  return root;
 }
 
-/** Campo numérico preciso; `input` atualiza o draft e `change` confirma o valor. */
+/** Invalid text is a visible draft; only validated commits reach consumers. */
 export function numberField(doc: Document, options: NumberFieldOptions): HTMLElement {
   const field = fieldRoot(doc, options);
+  field.root.className += " ch-field--number";
   const input = createElement(doc, "input", "ch-number") as HTMLInputElement;
-  input.type = "number";
+  // type=number erases unfinished decimal drafts in Chromium before validation.
+  input.type = "text";
+  input.setAttribute("inputmode", options.step < 1 ? "decimal" : "numeric");
+  input.setAttribute("role", "spinbutton");
+  input.setAttribute("aria-valuemin", String(options.min));
+  input.setAttribute("aria-valuemax", String(options.max));
   input.value = String(options.value);
   input.min = String(options.min);
   input.max = String(options.max);
   input.step = String(options.step);
   applyFieldState(input, options);
-
-  const read = (): number => Number(input.value);
-  if (options.onInput) {
-    input.addEventListener("input", () => options.onInput?.(read()));
+  input.setAttribute("data-focus-key", options.id);
+  const error = createElement(doc, "div", "ch-field__error");
+  error.id = `${options.id}-error`;
+  error.setAttribute("role", "alert");
+  fieldHidden(error, true);
+  field.root.appendChild(error);
+  const english = fieldEnglish(doc);
+  const rangeMessage = createI18n({ locale: doc.documentElement?.lang || "pt-BR" }).t(
+    options.step >= 1 ? "field.integerRange" : "field.numberRange", { min: options.min, max: options.max }
+  );
+  let committed = options.value;
+  const read = (): number | undefined => {
+    const text = input.value.trim().replace(",", ".");
+    const value = Number(text);
+    return text !== "" && Number.isFinite(value) && value >= options.min && value <= options.max
+      && (options.step < 1 || Number.isInteger(value)) ? value : undefined;
+  };
+  function validate(): number | undefined {
+    const value = read();
+    const invalid = value === undefined;
+    input.setAttribute("aria-invalid", String(invalid));
+    input.setAttribute("aria-describedby", [options.description ? `${options.id}-description` : "", invalid ? error.id : ""].filter(Boolean).join(" "));
+    field.root.setAttribute("data-invalid", String(invalid));
+    error.textContent = invalid ? rangeMessage : "";
+    fieldHidden(error, !invalid);
+    if (value !== undefined) input.setAttribute("aria-valuenow", String(value));
+    return value;
   }
-  input.addEventListener("change", () => options.onCommit(read()));
-
+  function commit(): void {
+    if (options.disabled) return;
+    const value = validate();
+    if (value === undefined || value === committed) return;
+    committed = value;
+    options.onCommit(value);
+  }
+  function preview(value: number): void {
+    const precision = Math.min(10, Math.max(0, (String(options.step).split(".")[1]?.length ?? 0) + 1));
+    const next = Math.max(options.min, Math.min(options.max, options.step >= 1 ? Math.round(value) : Number(value.toFixed(precision))));
+    input.value = String(next);
+    validate();
+    options.onInput?.(next);
+  }
+  const stepValue = (event: KeyboardEvent | PointerEvent): number => options.step * (event.shiftKey ? 10 : event.altKey && options.step < 1 ? 0.1 : 1);
+  function keyAdjust(event: KeyboardEvent): void {
+    if (options.disabled) return;
+    if (event.key === "Enter") { event.preventDefault(); commit(); return; }
+    if (event.key === "Escape") { input.value = String(committed); validate(); return; }
+    if (!["ArrowUp", "ArrowRight", "ArrowDown", "ArrowLeft"].includes(event.key)) return;
+    // Text caret remains native in the editable field; the handle owns ←/→.
+    if (event.currentTarget === input && (event.key === "ArrowLeft" || event.key === "ArrowRight")) return;
+    event.preventDefault();
+    const sign = event.key === "ArrowUp" || event.key === "ArrowRight" ? 1 : -1;
+    preview((read() ?? committed) + sign * stepValue(event));
+    commit();
+  }
+  input.addEventListener("input", () => { const value = validate(); if (value !== undefined && !options.disabled) options.onInput?.(value); });
+  input.addEventListener("change", commit);
+  // CEP supports native event dispatch; UXP keeps its established control path
+  // until the runtime exposes the same capability.
+  if(typeof doc.createEvent==="function"&&typeof input.dispatchEvent==="function"&&input.ownerDocument){
+    attachScrubbableNumber(input,{helpText:english?"Drag the number · Shift: fine · Alt/Option: fast · Click to type":"Arraste o número · Shift: precisão · Alt/Option: rápido · Clique para digitar"});
+  }else input.addEventListener("keydown", event => keyAdjust(event as KeyboardEvent));
+  const handle = createElement(doc, "button", "ch-number-scrub", "↔") as HTMLButtonElement;
+  handle.type = "button";
+  handle.disabled = options.disabled === true;
+  handle.setAttribute("data-focus-key", `${options.id}-scrub`);
+  handle.setAttribute("aria-label", english ? `Adjust ${options.label}` : `Ajustar ${options.label}`);
+  handle.title = english ? "Drag to adjust · Shift: 10× · Option/Alt: fine" : "Arraste para ajustar · Shift: 10× · Option/Alt: precisão";
+  handle.setAttribute("data-motion", "button-press");
+  handle.addEventListener("keydown", event => keyAdjust(event as KeyboardEvent));
+  let drag: { x: number; value: number; pointer: number; draft: string } | null = null;
+  handle.addEventListener("pointerdown", event => {
+    const pointer = event as PointerEvent;
+    if (options.disabled || pointer.button !== 0 || typeof handle.setPointerCapture !== "function") return;
+    event.preventDefault();
+    handle.focus();
+    drag = { x: pointer.clientX, value: read() ?? committed, pointer: pointer.pointerId, draft: input.value };
+    handle.setPointerCapture(pointer.pointerId);
+    handle.setAttribute("data-dragging", "true");
+  });
+  handle.addEventListener("pointermove", event => {
+    const pointer = event as PointerEvent;
+    if (drag && pointer.pointerId === drag.pointer) preview(drag.value + (pointer.clientX - drag.x) / 4 * stepValue(pointer));
+  });
+  const finish = (cancel: boolean): void => {
+    if (!drag) return;
+    const previous = drag;
+    drag = null;
+    handle.setAttribute("data-dragging", "false");
+    if (typeof handle.hasPointerCapture === "function" && handle.hasPointerCapture(previous.pointer)) handle.releasePointerCapture(previous.pointer);
+    if (cancel) { input.value = previous.draft; validate(); options.onInput?.(read() ?? committed); }
+    else commit();
+  };
+  handle.addEventListener("pointerup", () => finish(false));
+  handle.addEventListener("pointercancel", () => finish(true));
+  handle.addEventListener("lostpointercapture", () => finish(true));
+  field.control.appendChild(handle);
   field.control.appendChild(input);
-  if (options.unit) {
-    field.control.appendChild(createElement(doc, "span", "ch-field__unit", options.unit));
-  }
+  if (options.unit) field.control.appendChild(createElement(doc, "span", "ch-field__unit", options.unit));
+  validate();
   return field.root;
 }
 
@@ -653,6 +618,8 @@ export function textField(doc: Document, options: TextFieldOptions): HTMLElement
 export interface SearchFieldOptions extends FieldBaseOptions {
   value: string;
   placeholder?: string;
+  /** Defaults to a compact trigger; false preserves an always-visible field. */
+  expandable?: boolean;
   /** Chamado a cada tecla. Só para filtro local — nunca para falar com o host. */
   onInput(value: string): void;
 }
@@ -685,8 +652,42 @@ export function searchField(doc: Document, options: SearchFieldOptions): HTMLEle
   if (options.placeholder) input.setAttribute("placeholder", options.placeholder);
   applyFieldState(input, options);
 
-  input.addEventListener("input", () => options.onInput(input.value));
   field.control.appendChild(input);
+  if (options.expandable === false) {
+    input.addEventListener("input", () => options.onInput(input.value));
+    return field.root;
+  }
+  field.root.className += " ch-field--search";
+  field.control.setAttribute("data-motion", "field-expand");
+  const trigger = createElement(doc, "button", "ch-search-trigger") as HTMLButtonElement;
+  trigger.type = "button";
+  trigger.setAttribute("aria-label", options.label);
+  trigger.setAttribute("aria-controls", options.id);
+  trigger.title = options.disabledReason ?? options.label;
+  trigger.disabled = options.disabled === true;
+  trigger.appendChild(createIcon(doc, "search"));
+  trigger.appendChild(createElement(doc, "span", "ch-search-trigger__label", fieldEnglish(doc) ? "Search" : "Buscar"));
+  field.control.removeChild(input);
+  field.control.appendChild(trigger);
+  field.control.appendChild(input);
+  function expand(open: boolean, focus = false): void {
+    field.root.setAttribute("data-expanded", String(open));
+    trigger.setAttribute("aria-expanded", String(open));
+    fieldHidden(input, !open);
+    if (focus && open) input.focus();
+  }
+  trigger.addEventListener("click", () => { if (!options.disabled) expand(true, true); });
+  const label = field.root.getElementsByTagName("label")[0];
+  label?.addEventListener("click", () => { if (!options.disabled) expand(true, true); });
+  input.addEventListener("input", () => { expand(true); options.onInput(input.value); });
+  input.addEventListener("keydown", event => {
+    if ((event as KeyboardEvent).key !== "Escape") return;
+    event.preventDefault();
+    if (input.value === "") expand(false);
+    trigger.focus();
+  });
+  input.addEventListener("blur", () => { if (input.value === "") expand(false); });
+  expand(options.value !== "");
   return field.root;
 }
 
@@ -731,34 +732,57 @@ export function colorField(doc: Document, options: ColorFieldOptions): HTMLEleme
 
   input.value = options.value;
   applyFieldState(input, options);
-  input.addEventListener("change", () => {
+  let committed = options.value;
+  const error = createElement(doc, "div", "ch-field__error");
+  error.id = `${options.id}-error`;
+  error.setAttribute("role", "alert");
+  fieldHidden(error, true);
+  function validate(): string | null {
     const normalized = normalizeHexColor(input.value);
-    if (normalized === null) {
-      input.value = options.value;
-      return;
-    }
+    const invalid = normalized === null;
+    input.setAttribute("aria-invalid", String(invalid));
+    input.setAttribute("aria-describedby", [options.description ? `${options.id}-description` : "", invalid ? error.id : ""].filter(Boolean).join(" "));
+    error.textContent = invalid ? createI18n({ locale: doc.documentElement?.lang || "pt-BR" }).t("field.hexColor") : "";
+    fieldHidden(error, !invalid);
+    return normalized;
+  }
+  input.addEventListener("input", () => { if (!options.disabled) validate(); });
+  input.addEventListener("change", () => {
+    if (options.disabled) return;
+    const normalized = validate();
+    if (normalized === null) return;
     input.value = normalized;
+    if (normalized === committed) return;
+    committed = normalized;
     options.onCommit(normalized);
+  });
+  input.addEventListener("keydown", event => {
+    if ((event as KeyboardEvent).key !== "Escape" || options.disabled) return;
+    event.preventDefault();
+    input.value = committed;
+    validate();
   });
 
   field.control.appendChild(input);
+  field.root.appendChild(error);
   return field.root;
 }
 
 export function checkboxField(doc: Document, options: CheckboxFieldOptions): HTMLElement {
   const field = fieldRoot(doc, options);
+  field.root.className += " ch-field--checkbox";
   const input = createElement(doc, "input", "ch-checkbox") as HTMLInputElement;
   input.type = "checkbox";
   input.checked = options.checked;
   applyFieldState(input, options);
-  input.addEventListener("change", () => options.onChange(input.checked));
+  input.addEventListener("change", () => { if (!options.disabled) options.onChange(input.checked); });
   field.control.appendChild(input);
   return field.root;
 }
 
 interface ButtonBaseOptions {
   label: string;
-  variant?: "primary";
+  variant?: "primary" | "secondary" | "tertiary" | "ghost" | "destructive";
   title?: string;
   onClick?: () => void;
 }
@@ -779,16 +803,20 @@ export function button<Disabled extends boolean = false>(
   const node = createElement(doc, "button", className, options.label) as HTMLButtonElement;
 
   node.setAttribute("type", "button");
+  node.setAttribute("data-motion", "button-press");
   node.title = options.disabled
     ? options.disabledReason ?? options.title ?? options.label
     : options.title ?? options.label;
 
   if (options.disabled) {
     node.disabled = true;
-    node.setAttribute("aria-disabled", "true");
   }
   if (options.onClick) {
-    node.addEventListener("click", options.onClick);
+    node.addEventListener("click", () => {
+      // Native disabled is authoritative, including consumers that enable the
+      // button after inspection. Redundant ARIA would retain an obsolete state.
+      if (!node.disabled) options.onClick?.();
+    });
   }
 
   return node;
@@ -800,6 +828,7 @@ export function notice(doc: Document, message: string, tone?: NoticeTone): HTMLE
   const node = createElement(doc, "div", tone ? `ch-notice ch-notice--${tone}` : "ch-notice", message);
   // Erro interrompe o leitor de tela; aviso e informação esperam a pausa.
   node.setAttribute("role", tone === "error" ? "alert" : "status");
+  node.setAttribute("data-motion", "context-alert");
   return node;
 }
 
@@ -808,6 +837,10 @@ export function logLine(doc: Document, text: string, level?: "warn" | "error"): 
 }
 
 export interface ShellView {
+  /** Additional primary workspace in the library shell. */
+  primary?: boolean;
+  /** Routable from a settings/help action, excluded from the workspace navigation. */
+  utilityOnly?: boolean;
   id: string;
   labelKey: MessageKey;
   titleKey: MessageKey;
@@ -835,6 +868,10 @@ export interface Shell {
   activeView(): string;
   navigate(viewId: string): void;
   rerender(): void;
+  /** Update labels/context without rebuilding fields or discarding their drafts. */
+  refreshChrome(): void;
+  /** Visual operation state; the caller still owns command concurrency. */
+  setBusy(busy: boolean): void;
   setWidth(width: number): WidthClass;
   widthClass(): WidthClass;
   setStatus(message: string, state?: StatusState): void;
@@ -860,6 +897,9 @@ export interface ShellOptions {
   subtitleKey: MessageKey;
   views: ShellView[];
   initialWidth?: number;
+  layout?: "library";
+  toolContext?(): string | null;
+  onStatus?(message: string, state?: StatusState): void;
   onRender(viewId: string, regions: RenderRegions): void;
 }
 
@@ -872,19 +912,76 @@ export function createShell(options: ShellOptions): Shell {
   const buttons = new Map<string, HTMLElement>();
   let activeId = views[0]?.id ?? "";
   let widthClass: WidthClass | "" = "";
+  let renderedView = "";
 
   const shellNode = createElement(doc, "div", "ch-shell");
+  if (options.layout) shellNode.setAttribute("data-layout", options.layout);
 
   const header = createElement(doc, "header", "ch-header");
   header.appendChild(createElement(doc, "div", "ch-header__title", i18n.t("app.title")));
-  header.appendChild(createElement(doc, "div", "ch-header__subtitle", i18n.t(options.subtitleKey)));
+  const subtitle = createElement(doc, "div", "ch-header__subtitle", i18n.t(options.subtitleKey));
+  header.appendChild(subtitle);
   shellNode.appendChild(header);
 
   const nav = createElement(doc, "nav", "ch-nav");
-  nav.setAttribute("role", "tablist");
+  nav.setAttribute("role", options.layout === "library" ? "navigation" : "tablist");
   shellNode.appendChild(nav);
+  const libraryLayout = options.layout === "library";
+  const primaryNav = libraryLayout ? createElement(doc, "div", "ch-nav__primary") : nav;
+  const utilities = createElement(doc, "div", "ch-nav__utilities");
+  const overflow = createElement(doc, "div", "ch-nav__overflow");
+  overflow.id = `${instanceId}-utilities`;
+  fieldHidden(overflow, true);
+  overflow.setAttribute("data-motion", "surface-morph");
+  overflow.setAttribute("data-open", "false");
+  const more = createElement(doc, "button", "ch-nav__more");
+  more.setAttribute("type", "button");
+  more.setAttribute("aria-controls", overflow.id);
+  more.setAttribute("aria-expanded", "false");
+  more.appendChild(createIcon(doc, "more"));
+  if (libraryLayout) {
+    primaryNav.setAttribute("role", "tablist");
+    nav.appendChild(primaryNav);
+    nav.appendChild(utilities);
+    utilities.appendChild(more);
+    utilities.appendChild(overflow);
+  }
+  function closeOverflow(restoreFocus = false): void {
+    fieldHidden(overflow, true);
+    overflow.setAttribute("data-open", "false");
+    more.setAttribute("aria-expanded", "false");
+    if (restoreFocus) more.focus();
+  }
+  more.addEventListener("click", () => {
+    fieldHidden(overflow, !overflow.hidden);
+    overflow.setAttribute("data-open", String(!overflow.hidden));
+    more.setAttribute("aria-expanded", String(!overflow.hidden));
+    if (!overflow.hidden) (overflow.children[0] as HTMLElement | undefined)?.focus();
+  });
+  shellNode.addEventListener("keydown", event => {
+    if (libraryLayout && (event as KeyboardEvent).key === "Escape" && !overflow.hidden) {
+      event.preventDefault();
+      closeOverflow(true);
+    }
+  });
+  shellNode.addEventListener("click", event => {
+    if (!overflow.hidden && event.target !== more && !contem(more, event.target as Element) && !contem(overflow, event.target as Element)) closeOverflow();
+  });
+  utilities.addEventListener("focusout", event => {
+    const next = (event as FocusEvent).relatedTarget as Element | null;
+    if (!next || !contem(utilities, next)) closeOverflow();
+  });
 
+  const toolContextRow = createElement(doc, "div", "ch-tool-context");
+  const backToLibrary = button(doc, { label: "", onClick: () => { navigate("home"); buttons.get("home")?.focus(); } });
+  backToLibrary.className = "ch-context-back";
+  backToLibrary.appendChild(createIcon(doc, "back"));
+  const backLabel = createElement(doc, "span", "", ""); backToLibrary.appendChild(backLabel);
+  toolContextRow.appendChild(backToLibrary);
+  fieldHidden(toolContextRow, true);
+  if (libraryLayout) shellNode.appendChild(toolContextRow);
   const viewTitle = createElement(doc, "div", "ch-view-title", "");
+  viewTitle.id = `${instanceId}-view-title`;
   shellNode.appendChild(viewTitle);
 
   const content = createElement(doc, "div", "ch-content");
@@ -895,23 +992,42 @@ export function createShell(options: ShellOptions): Shell {
   const actions = createElement(doc, "div", "ch-actions");
   shellNode.appendChild(actions);
 
-  const status = createElement(doc, "div", "ch-status");
-  status.setAttribute("aria-live", "polite");
-  const statusDot = createElement(doc, "span", "ch-status__dot");
-  const statusText = createElement(doc, "span", "ch-status__text", i18n.t("status.initializing"));
-  status.appendChild(statusDot);
-  status.appendChild(statusText);
-  status.setAttribute("title", i18n.t("status.initializing"));
-  shellNode.appendChild(status);
+  // Status and verification info removed for premium layout.
   shellNode.setAttribute("aria-busy", "true");
+
+  const indicator = libraryLayout ? createElement(doc, "span", "ch-nav__indicator") : null;
+  if (indicator) {
+    indicator.setAttribute("aria-hidden", "true");
+    indicator.setAttribute("data-motion", "tab-indicator");
+    primaryNav.appendChild(indicator);
+  }
+  function updateIndicator(): void {
+    if (!indicator) return;
+    const active = buttons.get(libraryLayout && activeId === "tools" ? "home" : activeId);
+    if (!active || active.hidden || active.parentNode !== primaryNav || !active.offsetWidth || !indicator.style
+        || ![active.offsetHeight, active.offsetLeft, active.offsetTop].every(Number.isFinite)) {
+      fieldHidden(indicator, true);
+      primaryNav.setAttribute("data-indicator", "false");
+      return;
+    }
+    fieldHidden(indicator, false);
+    primaryNav.setAttribute("data-indicator", "true");
+    indicator.style.width = `${active.offsetWidth}px`;
+    indicator.style.height = `${active.offsetHeight}px`;
+    indicator.style.transform = `translate(${active.offsetLeft}px, ${active.offsetTop}px)`;
+  }
 
   function applyActiveState(): void {
     for (const [id, node] of buttons) {
-      const isActive = id === activeId;
+      const isActive = id === activeId || libraryLayout && id === "home" && activeId === "tools";
       node.className = isActive ? "ch-nav__item is-active" : "ch-nav__item";
-      node.setAttribute("aria-selected", isActive ? "true" : "false");
-      node.setAttribute("tabindex", isActive ? "0" : "-1");
+      if (node.getAttribute("role") === "tab") {
+        node.setAttribute("aria-selected", isActive ? "true" : "false");
+        const fallback = libraryLayout && id === "home" && activeId !== "tools" && !views.some(view => view.id === activeId && (view.primary || ["home", "presets"].includes(view.id)));
+        node.setAttribute("tabindex", isActive || fallback ? "0" : "-1");
+      } else node.setAttribute("aria-pressed", String(isActive));
     }
+    updateIndicator();
   }
 
   function currentView(): ShellView | undefined {
@@ -938,16 +1054,16 @@ export function createShell(options: ShellOptions): Shell {
     return false;
   }
 
-  function buscaPorChave(raiz: Element, chave: string): HTMLElement | null {
+  function buscaPorChave(raiz: Element, chave: string, atributo = "data-focus-key"): HTMLElement | null {
     for (let i = 0; i < raiz.children.length; i += 1) {
       const filho = raiz.children[i] as HTMLElement | undefined;
       if (!filho) {
         continue;
       }
-      if (filho.getAttribute("data-focus-key") === chave || filho.getAttribute("id") === chave) {
+      if (filho.getAttribute(atributo) === chave) {
         return filho;
       }
-      const achado = buscaPorChave(filho, chave);
+      const achado = buscaPorChave(filho, chave, atributo);
       if (achado) {
         return achado;
       }
@@ -955,41 +1071,84 @@ export function createShell(options: ShellOptions): Shell {
     return null;
   }
 
-  function render(): void {
+  function refreshChrome(): void {
+    shellNode.setAttribute("data-view", activeId);
     const view = currentView();
     if (!view) {
       return;
     }
 
+    subtitle.textContent = i18n.t(options.subtitleKey);
+    for (const entry of views) {
+      const node = buttons.get(entry.id);
+      if (!node) continue;
+      const toolName = libraryLayout && entry.id === "tools" ? options.toolContext?.() : null;
+      if (libraryLayout && entry.id === "tools") fieldHidden(node, !toolName);
+      const label = toolName ? i18n.t("library.adjustTool", { tool: toolName }) : i18n.t(entry.labelKey);
+      const text = node.getElementsByTagName("span")[0];
+      if (text) text.textContent = label;
+      node.setAttribute("title", label);
+      node.setAttribute("aria-label", label);
+    }
+    if (libraryLayout) {
+      more.setAttribute("aria-label", i18n.t("library.more"));
+      more.setAttribute("title", i18n.t("library.more"));
+      primaryNav.setAttribute("aria-label", i18n.t("library.navigation"));
+      backLabel.textContent = i18n.t(views.find(entry => entry.id === "home")!.labelKey);
+      fieldHidden(toolContextRow, activeId !== "tools" || !options.toolContext?.());
+    }
     viewTitle.textContent = i18n.t(view.titleKey);
     const activeTab = buttons.get(view.id);
     if (activeTab) {
-      content.setAttribute("aria-labelledby", activeTab.getAttribute("id") ?? "");
+      content.setAttribute("aria-labelledby", view.utilityOnly ? viewTitle.id : activeTab.getAttribute("id") ?? "");
     }
 
-    // Um campo confirma, a view redesenha, e a subárvore com o elemento focado
-    // vira lixo. Sem devolver o foco ao mesmo controle, cada confirmação joga o
-    // usuário de teclado para fora do painel — e andar pela grade 3×3 com as
-    // setas custaria um Tab de volta a cada tecla.
+    applyActiveState();
+    updateIndicator();
+  }
+
+  function render(): void {
+    closeOpenDropdown(doc);
+    refreshChrome();
+    const view = currentView();
+    if (!view) return;
+    // Campos e ações são recriados no redesenho. Preserve o controle equivalente
+    // na mesma região e view, sem transferir foco para outra tela na navegação.
     const ativo = doc.activeElement;
+    const regiaoFoco = ativo && renderedView === view.id
+      ? contem(content, ativo) ? content : contem(actions, ativo) ? actions : null
+      : null;
     const chaveFoco =
-      ativo && contem(content, ativo)
+      ativo && regiaoFoco
         ? (ativo.getAttribute("data-focus-key") ?? ativo.getAttribute("id"))
         : null;
 
     clearNode(content);
+    content.removeAttribute("data-browser");
     clearNode(actions);
-    options.onRender(view.id, { content, actions, shell });
+    let viewContent = content;
+    if (options.layout === "library") {
+      viewContent = createElement(doc, "div", "ch-view-body");
+      viewContent.setAttribute("data-motion", "view-enter");
+      viewContent.setAttribute("data-active", String(renderedView !== view.id));
+      content.appendChild(viewContent);
+    }
+    renderedView = view.id;
+    options.onRender(view.id, { content: viewContent, actions, shell });
 
-    if (chaveFoco) {
-      buscaPorChave(content, chaveFoco)?.focus();
+    if (chaveFoco && regiaoFoco && activeId === view.id) {
+      // A select's hidden native control may share its ID with the visible
+      // trigger's focus key. Prefer explicit keys across the whole subtree.
+      (buscaPorChave(regiaoFoco, chaveFoco) ?? buscaPorChave(regiaoFoco, chaveFoco, "id"))?.focus();
     }
   }
 
   function navigate(viewId: string): void {
+    if (!overflow.hidden) closeOverflow(true);
     if (!viewId || viewId === activeId || !buttons.has(viewId)) {
       return;
     }
+    closeOverflow();
     activeId = viewId;
     applyActiveState();
     render();
@@ -998,12 +1157,14 @@ export function createShell(options: ShellOptions): Shell {
   function setWidth(width: number): WidthClass {
     const next = resolveWidthClass(width);
     if (next === widthClass) {
+      updateIndicator();
       return next;
     }
 
     widthClass = next;
     shellNode.className = `ch-shell ch-shell--${next}`;
     shellNode.setAttribute("data-width-class", next);
+    updateIndicator();
     return next;
   }
 
@@ -1013,7 +1174,9 @@ export function createShell(options: ShellOptions): Shell {
     const tabId = `${instanceId}-tab-${index}`;
 
     item.setAttribute("type", "button");
-    item.setAttribute("role", "tab");
+    const isPrimary = !view.utilityOnly && (!libraryLayout || view.primary || ["home", "presets"].includes(view.id));
+    if (isPrimary) item.setAttribute("role", "tab");
+    item.setAttribute("data-view", view.id);
     item.setAttribute("id", tabId);
     item.setAttribute("aria-controls", panelId);
     item.appendChild(createIcon(doc, view.id));
@@ -1024,23 +1187,25 @@ export function createShell(options: ShellOptions): Shell {
     item.addEventListener("click", () => navigate(view.id));
     item.addEventListener("keydown", (event) => {
       const key = (event as KeyboardEvent).key;
-      const currentIndex = views.findIndex((candidate) => candidate.id === view.id);
+      if (!isPrimary) return;
+      const keyboardViews = libraryLayout ? views.filter(candidate => (candidate.primary || ["home", "presets"].includes(candidate.id)) && !buttons.get(candidate.id)?.hidden) : views;
+      const currentIndex = keyboardViews.findIndex((candidate) => candidate.id === view.id);
       let nextIndex: number;
 
       if (key === "ArrowRight") {
-        nextIndex = (currentIndex + 1) % views.length;
+        nextIndex = (currentIndex + 1) % keyboardViews.length;
       } else if (key === "ArrowLeft") {
-        nextIndex = (currentIndex - 1 + views.length) % views.length;
+        nextIndex = (currentIndex - 1 + keyboardViews.length) % keyboardViews.length;
       } else if (key === "Home") {
         nextIndex = 0;
       } else if (key === "End") {
-        nextIndex = views.length - 1;
+        nextIndex = keyboardViews.length - 1;
       } else {
         return;
       }
 
       event.preventDefault();
-      const nextView = views[nextIndex];
+      const nextView = keyboardViews[nextIndex];
       if (!nextView) {
         return;
       }
@@ -1049,8 +1214,24 @@ export function createShell(options: ShellOptions): Shell {
     });
 
     buttons.set(view.id, item);
-    nav.appendChild(item);
+    if (view.utilityOnly) {
+      fieldHidden(item, true);
+      continue;
+    }
+    if (!libraryLayout) nav.appendChild(item);
+    else if (isPrimary) primaryNav.appendChild(item);
+    else if (view.id === "tools") toolContextRow.appendChild(item);
+    else if (view.id === "settings") {
+      // Append before the overflow trigger without requiring insertBefore in UXP.
+      utilities.removeChild(more);
+      utilities.removeChild(overflow);
+      utilities.appendChild(item);
+      utilities.appendChild(more);
+      utilities.appendChild(overflow);
+    } else overflow.appendChild(item);
   }
+
+  if (libraryLayout) fieldHidden(more, !views.some(view => !view.utilityOnly && !view.primary && !["home", "presets", "tools", "settings"].includes(view.id)));
 
   const shell: Shell = {
     element: () => shellNode,
@@ -1059,6 +1240,12 @@ export function createShell(options: ShellOptions): Shell {
     activeView: () => activeId,
     navigate,
     rerender: render,
+    refreshChrome,
+    setBusy(busy) {
+      shellNode.setAttribute("aria-busy", String(busy));
+      shellNode.setAttribute("data-busy", String(busy));
+      actions.setAttribute("aria-busy", String(busy));
+    },
     setWidth,
     widthClass: () => (widthClass === "" ? resolveWidthClass(undefined) : widthClass),
 
@@ -1067,10 +1254,10 @@ export function createShell(options: ShellOptions): Shell {
     },
 
     setStatus(message, state) {
-      statusDot.className = state ? `ch-status__dot is-${state}` : "ch-status__dot";
-      statusText.textContent = message;
-      status.setAttribute("title", message);
-      shellNode.setAttribute("aria-busy", state === "busy" ? "true" : "false");
+      // The footer DOM has been removed to maintain a clean layout,
+      // but we still trigger busy states and callbacks for functional correctness.
+      shell.setBusy(state === "busy");
+      options.onStatus?.(message, state);
     },
 
     observeWidth(target) {

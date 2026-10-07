@@ -1,85 +1,91 @@
 (function () {
+  var staged = /** @type {any} */ (null);
+  var ALLOWED = { keepOriginal: true };
+  var MENU_NAMES = ["Create Shapes from Text", "Criar formas a partir do texto", "Criar formas a partir de texto"];
   /** @param {string} code @param {string} message @returns {MotionCommandFailure} */
-  function failure(code, message) {
-    return { code: code, message: message, recoverable: true, details: null };
+  function failure(code, message) { return { code: code, message: message, recoverable: true, details: null }; }
+  /** @param {any[]} list @param {any} value @returns {boolean} */
+  function contains(list, value) { for (var i = 0; i < list.length; i++) if (list[i] === value) return true; return false; }
+  /** @param {any} comp @returns {any[]} */
+  function allLayers(comp) { var result = []; for (var i = 1; i <= comp.numLayers; i++) result.push(comp.layer(i)); return result; }
+  /** @param {any} comp @param {any[]} before @returns {any[]} */
+  function addedLayers(comp, before) {
+    var result = [], now = allLayers(comp);
+    for (var i = 0; i < now.length; i++) if (!contains(before, now[i])) result.push(now[i]);
+    return result;
   }
-
-  function preflight() {
-    if (typeof app === "undefined" || !app.project) {
-      return failure(MotionContracts.ERROR.NO_ACTIVE_PROJECT, "Nenhum projeto aberto.");
+  /** @param {any} comp @param {any[]} selected @param {any[]} properties @param {number} time */
+  function restore(comp, selected, properties, time) {
+    for (var i = 1; i <= comp.numLayers; i++) comp.layer(i).selected = false;
+    for (i = 0; i < selected.length; i++) selected[i].selected = true;
+    for (i = 0; i < properties.length; i++) properties[i].selected = true;
+    comp.time = time;
+  }
+  /** @param {Record<string, unknown>} args @returns {MotionCommandFailure|null} */
+  function preflight(args) {
+    staged = null;
+    for (var key in args) if (Object.prototype.hasOwnProperty.call(args, key) && !Object.prototype.hasOwnProperty.call(ALLOWED, key)) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Parametro de conversao ainda nao suportado.");
     }
+    if (typeof args.keepOriginal !== "undefined" && typeof args.keepOriginal !== "boolean") return failure(MotionContracts.ERROR.INVALID_PRESET, "keepOriginal precisa ser booleano.");
+    if (typeof app === "undefined" || !app.project) return failure(MotionContracts.ERROR.NO_ACTIVE_PROJECT, "Nenhum projeto aberto.");
     var comp = app.project.activeItem;
-    if (!comp || !(comp instanceof CompItem)) {
-      return failure(MotionContracts.ERROR.NO_ACTIVE_COMP, "Nenhuma composicao ativa.");
+    if (!comp || !(comp instanceof CompItem)) return failure(MotionContracts.ERROR.NO_ACTIVE_COMP, "Nenhuma composicao ativa.");
+    var selected = comp.selectedLayers;
+    if (!selected || selected.length === 0) return failure(MotionContracts.ERROR.NO_SELECTION, "Selecione ao menos uma camada de texto.");
+    var targets = [];
+    for (var i = 0; i < selected.length; i++) {
+      var candidate = /** @type {any} */ (selected[i]);
+      if (!(candidate instanceof TextLayer) || (/** @type {any} */ (candidate)).locked) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Selecione somente camadas de texto desbloqueadas.");
+      targets.push(selected[i]);
     }
-    if (comp.selectedLayers.length === 0) {
-      return failure(MotionContracts.ERROR.NO_SELECTION, "Selecione ao menos uma camada de texto.");
+    var host = /** @type {any} */ (app);
+    if (typeof host.findMenuCommandId !== "function" || typeof host.executeCommand !== "function") {
+      return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "O host nao expoe o comando de outlines de texto.");
     }
+    var commandId = 0;
+    for (i = 0; i < MENU_NAMES.length && !commandId; i++) commandId = host.findMenuCommandId(MENU_NAMES[i]);
+    if (typeof commandId !== "number" || commandId <= 0 || Math.floor(commandId) !== commandId) {
+      return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "Create Shapes from Text nao foi localizado neste idioma do After Effects.");
+    }
+    staged = { project: app.project, comp: comp, targets: targets, commandId: commandId, keepOriginal: args.keepOriginal === true };
     return null;
   }
-
-  /**
-   * @param {Record<string, unknown>} args
-   * @returns {MotionCommandResult}
-   */
+  /** @param {Record<string, unknown>} args @returns {MotionCommandResult} */
   function run(args) {
-    var comp = /** @type {CompItem} */ (app.project.activeItem);
-    var selectedLayers = comp.selectedLayers;
-    if (!selectedLayers || selectedLayers.length === 0) {
-      return { changed: false, warnings: [], data: {} };
-    }
-
-    var keepOriginal = args.keepOriginal === true;
-
-    // Command ID 3781 is "Create Shapes from Text"
-    var cmdId = /** @type {any} */ (app).findMenuCommandId("Create Shapes from Text");
-    if (cmdId === 0) cmdId = /** @type {any} */ (app).findMenuCommandId("Criar formas a partir de texto");
-    if (cmdId === 0) cmdId = 3781;
-
-    var changed = false;
-    var warnings = [];
-
-    // Sem beginUndoGroup aqui: o dispatcher ja abre o grupo do comando, com o
-    // rotulo localizado do descriptor. O After Effects nao aninha grupos, entao
-    // um segundo par aqui fecharia o grupo de fora no meio do comando.
+    var plan = staged;
+    staged = null;
+    if (!plan || app.project !== plan.project || plan.comp !== plan.project.activeItem || plan.keepOriginal !== (args.keepOriginal === true)) throw new Error("Preflight de texto expirado.");
+    var comp = plan.comp, selected = comp.selectedLayers, properties = comp.selectedProperties || [], time = comp.time;
+    if (selected.length !== plan.targets.length) throw new Error("A selecao mudou durante a conversao.");
+    var i, j, target, before, created = [], oldEnabled = [], baseline = allLayers(comp);
+    for (i = 0; i < selected.length; i++) if (selected[i] !== plan.targets[i]) throw new Error("A selecao mudou durante a conversao.");
+    for (i = 0; i < plan.targets.length; i++) oldEnabled.push(plan.targets[i].enabled);
     try {
-      var originalSelection = [];
-      for (var s = 0; s < selectedLayers.length; s++) {
-        originalSelection.push(selectedLayers[s]);
+      for (i = 0; i < plan.targets.length; i++) {
+        target = plan.targets[i];
+        before = allLayers(comp);
+        for (j = 1; j <= comp.numLayers; j++) comp.layer(j).selected = false;
+        target.selected = true;
+        (/** @type {any} */ (app)).executeCommand(plan.commandId);
+        var added = addedLayers(comp, before);
+        if (added.length !== 1 || added[0].matchName !== "ADBE Vector Layer" || !contains(allLayers(comp), target)) {
+          throw new Error("O comando de menu nao criou exatamente uma shape layer; nenhuma conversao foi confirmada.");
+        }
+        created.push(added[0]);
+        target.enabled = plan.keepOriginal;
       }
-
-      for (var i = 0; i < originalSelection.length; i++) {
-        var layer = /** @type {any} */ (originalSelection[i]);
-        
-        if (!(layer instanceof TextLayer)) {
-          warnings.push(failure(MotionContracts.ERROR.HOST_OPERATION_FAILED, "Camada \"" + layer.name + "\" nao e de texto."));
-          continue;
-        }
-
-        for (var j = 1; j <= comp.numLayers; j++) {
-          comp.layer(j).selected = false;
-        }
-
-        layer.selected = true;
-        /** @type {any} */ (app).executeCommand(cmdId);
-
-        if (keepOriginal) {
-          /** @type {any} */ (layer).enabled = true;
-        }
-
-        changed = true;
-      }
-
-      return { changed: changed, warnings: warnings, data: {} };
-    } catch (e) {
-      var failErr = /** @type {Error & {motionCode?: string}} */ (new Error("Text to Vector falhou: " + (/** @type {any} */ (e)).toString()));
-      failErr.motionCode = MotionContracts.ERROR.HOST_OPERATION_FAILED;
-      throw failErr;
+      return { changed: true, warnings: [], data: { convertedCount: created.length } };
+    } catch (error) {
+      var rollback = addedLayers(comp, baseline), rollbackFailed = false;
+      for (i = rollback.length - 1; i >= 0; i--) try { rollback[i].remove(); } catch (ignored) { rollbackFailed = true; }
+      for (i = 0; i < plan.targets.length; i++) try { plan.targets[i].enabled = oldEnabled[i]; } catch (ignoredEnabled) { rollbackFailed = true; }
+      var failed = /** @type {Error & {motionCode?: string}} */ (new Error("Text to Vector falhou: " + String(error)));
+      failed.motionCode = rollbackFailed ? MotionContracts.ERROR.ROLLBACK_FAILED : MotionContracts.ERROR.HOST_OPERATION_FAILED;
+      throw failed;
+    } finally {
+      restore(comp, selected, properties, time);
     }
   }
-
-  MotionRegistry.register("ae.vector.text-to-vector", {
-    preflight: preflight,
-    run: run
-  });
+  MotionRegistry.register("ae.vector.text-to-vector", { preflight: preflight, run: run });
 })();

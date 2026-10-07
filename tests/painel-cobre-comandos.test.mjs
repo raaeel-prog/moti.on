@@ -22,7 +22,7 @@ const SEM_FERRAMENTA_PROPRIA = new Map([
 
 test("todo comando do After Effects e alcancavel pelo painel", async () => {
   const descriptors = await fonte("packages/command-registry/src/descriptors.ts");
-  const painel = await fonte("apps/after-effects-cep/client/src/main.ts");
+  const painel = (await Promise.all(["main.ts", "preset-workspace.ts", "preset-gallery.ts", "preset-phase-editor.ts", "preset-layer-sections.ts"].map(file=>fonte(`apps/after-effects-cep/client/src/${file}`)))).join("\n");
 
   // Este teste existe por um caso real: uma reescrita do painel removeu 19
   // ferramentas de uma vez. O host continuou registrando os comandos, os
@@ -66,6 +66,21 @@ test("toda excecao da allowlist tem motivo escrito e ainda existe", async () => 
   }
 });
 
+/**
+ * Funcoes que chamam o host sem registrar a resposta, de proposito.
+ *
+ * O guarda abaixo existe porque onze telas engoliam erro em silencio. Uma
+ * leitura de fundo e outra coisa: ela roda em laco, varias vezes por segundo de
+ * uso, e registrar cada tique afogaria no log justamente o erro que o usuario
+ * foi ali procurar. Entrar aqui exige motivo escrito.
+ */
+const SEM_REGISTRO_POR_SER_FUNDO = new Map([
+  [
+    "startContextWatch",
+    "Polling de contexto a cada 700 ms. Registrar cada leitura encheria a view de Diagnostico de ruido e esconderia a falha que importa; a leitura falha em silencio e o tique seguinte tenta de novo."
+  ]
+]);
+
 test("toda chamada de comando e registrada no log de diagnostico", async () => {
   // A view de Diagnostico se alimenta de `recordResponse`, e e justamente
   // quando algo falha que o usuario vai olhar ali. Onze chamadas nao
@@ -96,6 +111,8 @@ test("toda chamada de comando e registrada no log de diagnostico", async () => {
     const devolveParaQuemChama = /return \{\s*command:/.test(corpo);
     if (devolveParaQuemChama) continue;
 
+    if (SEM_REGISTRO_POR_SER_FUNDO.has(m[1])) continue;
+
     const registra = (corpo.match(/\.recordResponse\(/g) ?? []).length;
     if (registra < executa) semRegistro.push(`${m[1]}: ${executa} execute, ${registra} recordResponse`);
   }
@@ -116,4 +133,18 @@ test("toda ferramenta do painel aponta para um comando que existe", async () => 
   const desconhecidos = [...new Set(citados)].filter((id) => !declarados.has(id));
 
   assert.deepEqual(desconhecidos, [], "o painel executa comandos que nenhum descriptor declara");
+});
+
+test("toda excecao de registro em segundo plano tem motivo e ainda existe", async () => {
+  const painel = await fonte("apps/after-effects-cep/client/src/main.ts");
+  for (const [nome, motivo] of SEM_REGISTRO_POR_SER_FUNDO) {
+    assert.ok(
+      painel.includes(`function ${nome}(`),
+      `${nome} esta na allowlist mas nao existe mais no painel`
+    );
+    assert.ok(
+      typeof motivo === "string" && motivo.length > 40,
+      `${nome}: a justificativa e curta demais para explicar a decisao`
+    );
+  }
 });

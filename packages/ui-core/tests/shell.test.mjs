@@ -1,3 +1,4 @@
+import { afterEach } from 'node:test';
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -25,7 +26,7 @@ const VIEWS = [
   { id: "diagnostics", labelKey: "nav.diagnostics", titleKey: "view.diagnostics.title" }
 ];
 
-function montar({ document: doc = createFakeDocument(), initialWidth = 360, onRender } = {}) {
+function montar({ document: doc = createFakeDocument(), initialWidth = 360, onRender, onStatus } = {}) {
   const mount = doc.createElement("div");
   const renderizadas = [];
 
@@ -36,6 +37,7 @@ function montar({ document: doc = createFakeDocument(), initialWidth = 360, onRe
     subtitleKey: "app.subtitle.afterEffects",
     views: VIEWS,
     initialWidth,
+    onStatus,
     onRender:
       onRender ??
       ((viewId, regions) => {
@@ -139,7 +141,7 @@ test("monta cabecalho, navegacao, titulo, conteudo, acoes e status nessa ordem",
   assert.equal(mount.children.length, 1);
   assert.deepEqual(
     raiz.children.map((child) => child.className),
-    ["ch-header", "ch-nav", "ch-view-title", "ch-content", "ch-actions", "ch-status"]
+    ["ch-header", "ch-nav", "ch-view-title", "ch-content", "ch-actions"]
   );
 });
 
@@ -319,20 +321,21 @@ test("o icone usa SVG decorativo quando o runtime suporta", () => {
   assert.equal(icone.children[0].getAttribute("stroke"), "currentColor");
 });
 
-test("status atualiza texto e estado do indicador", () => {
-  const { shell, status } = montar();
+test("status atualiza aria-busy e notifica callback sem exibir rodape", () => {
+  let callbackMsg = "";
+  let callbackState = "";
+  const { shell } = montar({ onStatus: (msg, state) => { callbackMsg = msg; callbackState = state || ""; } });
 
+  assert.equal(shell.element().getElementsByTagName("div").some(node => node.className === "ch-status"), false);
   shell.setStatus("Conectado", "ok");
-
-  assert.equal(status.children[0].className, "ch-status__dot is-ok");
-  assert.equal(status.children[1].textContent, "Conectado");
-  assert.equal(status.getAttribute("title"), "Conectado");
-  assert.equal(status.getAttribute("aria-live"), "polite");
   assert.equal(shell.element().getAttribute("aria-busy"), "false");
+  assert.equal(callbackMsg, "Conectado");
+  assert.equal(callbackState, "ok");
 
   shell.setStatus("Atualizando contexto e capacidades", "busy");
-  assert.equal(status.getAttribute("title"), "Atualizando contexto e capacidades");
   assert.equal(shell.element().getAttribute("aria-busy"), "true");
+  assert.equal(callbackMsg, "Atualizando contexto e capacidades");
+  assert.equal(callbackState, "busy");
 });
 
 test("linha de propriedade expoe o valor inteiro no tooltip", () => {
@@ -363,13 +366,27 @@ test("botao desabilitado carrega o motivo no tooltip", () => {
 
   assert.equal(node.disabled, true);
   assert.equal(node.title, "Requer um projeto aberto.");
-  assert.equal(node.getAttribute("aria-disabled"), "true");
+  assert.equal(node.getAttribute("aria-disabled"), undefined, "native disabled cannot retain stale ARIA when enabled");
 });
 
 test("botao sem title explicito cai no proprio rotulo", () => {
   const doc = createFakeDocument();
 
   assert.equal(button(doc, { label: "Atualizar" }).title, "Atualizar");
+});
+
+test("botao habilitado depois da inspeção executa a ação uma vez", () => {
+  const doc = createFakeDocument();
+  let calls = 0;
+  const node = button(doc, { label: "Aplicar", variant: "primary", disabled: true,
+    disabledReason: "Ajuste um parâmetro", onClick: () => { calls += 1; } });
+  node.emit("click");
+  assert.equal(calls, 0);
+  node.disabled = false;
+  node.emit("click");
+  assert.equal(calls, 1);
+  assert.equal(node.getAttribute("aria-disabled"), undefined);
+  assert.match(node.className, /ch-button--primary/);
 });
 
 test("aviso de erro interrompe o leitor de tela; os demais esperam", () => {
@@ -536,6 +553,109 @@ test("o foco sobrevive ao redesenho, no controle equivalente do nodo novo", () =
   assert.notEqual(doc.activeElement, construidos[0], "o nodo velho foi descartado");
 });
 
+test("explicit focus key wins over a hidden select with the same ID after rerender", () => {
+  const doc = createFakeDocument(), triggers = [];
+  const { shell } = montar({ document: doc, onRender(_view, regions) {
+    const native = doc.createElement("select");
+    native.setAttribute("id", "settings-language");
+    native.hidden = true;
+    regions.content.appendChild(native);
+    const wrapper = doc.createElement("div"), trigger = doc.createElement("button");
+    trigger.setAttribute("data-focus-key", "settings-language");
+    wrapper.appendChild(trigger);
+    regions.content.appendChild(wrapper);
+    triggers.push(trigger);
+  } });
+  triggers[0].focus();
+  shell.rerender();
+  assert.equal(doc.activeElement, triggers[1]);
+});
+
+for (const atributo of ["id", "data-focus-key"]) {
+  test(`a ação mantém foco por ${atributo} depois de redesenhar o rodapé`, () => {
+    const doc = createFakeDocument();
+    const acoes = [];
+    montar({
+      document: doc,
+      onRender: (_viewId, regions) => {
+        // Uma chave igual no conteúdo não pode capturar o foco da ação.
+        const campo = doc.createElement("input");
+        campo.setAttribute("data-focus-key", "diagnostics-debug");
+        regions.content.appendChild(campo);
+        const barra = doc.createElement("div");
+        const acao = button(doc, {
+          label: "Alternar diagnóstico",
+          onClick: () => regions.shell.rerender()
+        });
+        acao.setAttribute(atributo, "diagnostics-debug");
+        acoes.push(acao);
+        barra.appendChild(acao);
+        regions.actions.appendChild(barra);
+      }
+    });
+
+    acoes[0].focus();
+    acoes[0].click();
+
+    assert.equal(acoes.length, 2, "a ação reconstruiu a view");
+    assert.equal(doc.activeElement, acoes[1], "o foco retorna à ação dentro da barra nova");
+  });
+}
+
+test("um campo removido não transfere o foco para uma ação com a mesma chave", () => {
+  const doc = createFakeDocument();
+  let renderCount = 0;
+  let campo;
+  let acao;
+  const { shell } = montar({
+    document: doc,
+    onRender: (_viewId, regions) => {
+      renderCount += 1;
+      if (renderCount === 1) {
+        campo = doc.createElement("input");
+        campo.setAttribute("data-focus-key", "shared-key");
+        regions.content.appendChild(campo);
+      }
+      acao = button(doc, { label: "Aplicar" });
+      acao.setAttribute("data-focus-key", "shared-key");
+      regions.actions.appendChild(acao);
+    }
+  });
+
+  campo.focus();
+  shell.rerender();
+
+  assert.notEqual(doc.activeElement, acao, "restauração nunca cruza regiões");
+});
+
+for (const regiao of ["content", "actions"]) {
+  test(`navegar não restaura uma chave de ${regiao} da view anterior`, () => {
+    const doc = createFakeDocument();
+    let anterior;
+    let destino;
+    const { shell } = montar({
+      document: doc,
+      onRender: (viewId, regions) => {
+        const controle = button(doc, { label: "Atualizar" });
+        controle.setAttribute("data-focus-key", "refresh");
+        regions[regiao].appendChild(controle);
+        if (viewId === "context") {
+          anterior = controle;
+        } else {
+          destino = button(doc, { label: "Primeira ação da nova view" });
+          regions.content.appendChild(destino);
+          destino.focus();
+        }
+      }
+    });
+
+    anterior.focus();
+    shell.navigate("system");
+
+    assert.equal(doc.activeElement, destino, "o foco escolhido pela nova view permanece");
+  });
+}
+
 test("o redesenho nao rouba o foco de quem esta fora do conteudo", () => {
   const doc = createFakeDocument();
   const { raiz, shell } = montar({ document: doc });
@@ -635,4 +755,148 @@ test("as setas pulam o que o filtro escondeu", () => {
 
   tiles[0].keydown("ArrowRight");
   assert.equal(doc.activeElement, tiles[2], "o ladrilho escondido nao pode receber foco");
+});
+
+test("language changes update existing navigation labels and accessible names", () => {
+  const doc=createFakeDocument(), mount=doc.createElement("div");
+  const i18n=createI18n({locale:"pt-BR"});
+  const shell=createShell({mount,document:doc,i18n,subtitleKey:"app.subtitle.afterEffects",views:VIEWS,onRender(){}});
+  shell.navigate("system");
+  const tab=mount.children[0].children[1].children[1];
+  const before=tab.getAttribute("aria-label");
+  i18n.setLocale("en-US");shell.rerender();
+  assert.equal(tab.getAttribute("aria-label"),i18n.t("nav.system"));
+  assert.notEqual(tab.getAttribute("aria-label"),before);
+  assert.equal(tab.getElementsByTagName("span")[0].textContent,i18n.t("nav.system"));
+  assert.equal(tab.getAttribute("title"),i18n.t("nav.system"));
+  assert.equal(shell.activeView(),"system");
+});
+
+function libraryFixture(extraViews = []) {
+  const doc = createFakeDocument();
+  const mount = doc.createElement('div');
+  const i18n = createI18n({locale: 'pt-BR'});
+  let tool = null;
+  const views = [
+    {id:'home', labelKey:'library.browse', titleKey:'view.home.title'},
+    ...extraViews,
+    {id:'presets', labelKey:'library.presets', titleKey:'library.presets'},
+    {id:'tools', labelKey:'library.edit', titleKey:'view.tools.title'},
+    ...VIEWS,
+    {id:'settings', labelKey:'nav.settings', titleKey:'view.settings.title'}
+  ];
+  const shell = createShell({mount,document:doc,i18n,subtitleKey:'app.subtitle.afterEffects',views,
+    layout:'library',toolContext:()=>tool,onRender(){}});
+  const nav = mount.children[0].children[1];
+  const byView = id => shell.element().getElementsByTagName('button').find(n => n.getAttribute('data-view') === id);
+  const primary = nav.children.find(n => n.className === 'ch-nav__primary');
+  const context = shell.element().children.find(n => n.className === 'ch-tool-context');
+  const back = context.getElementsByTagName('button').find(n => n.className === 'ch-context-back');
+  const more = nav.getElementsByTagName('button').find(n => n.className === 'ch-nav__more');
+  const overflow = more.parentNode.children.find(n => n.className === 'ch-nav__overflow');
+  return {doc,shell,i18n,nav,primary,context,back,byView,more,overflow,setTool(name){tool=name;shell.refreshChrome();}};
+}
+
+test('library keeps exactly two primary tabs and the editor outside their keyboard cycle', () => {
+  const f=libraryFixture();
+  const primaryIds=()=>f.primary.getElementsByTagName('button').map(n=>n.getAttribute('data-view'));
+  assert.deepEqual(primaryIds(),['home','presets']);
+  assert.equal(f.context.hidden,true);
+  f.byView('home').keydown('ArrowRight');
+  assert.equal(f.shell.activeView(),'presets');
+  f.byView('presets').keydown('ArrowRight');
+  assert.equal(f.shell.activeView(),'home');
+  f.setTool('Wiggle');
+  assert.equal(f.context.hidden,true,'a selected tool does not add an extra library row');
+  assert.deepEqual(primaryIds(),['home','presets']);
+  f.byView('presets').keydown('ArrowRight');
+  assert.equal(f.shell.activeView(),'home','editor is not a third primary tab');
+  assert.equal(f.byView('tools').getAttribute('role'),undefined);
+  assert.equal(f.byView('tools').parentNode,f.context);
+});
+
+test('editor context is localized, labels the panel and returns to the library', () => {
+  const f=libraryFixture();
+  f.setTool('Wiggle'); f.shell.navigate('tools');
+  assert.equal(f.context.hidden,false);
+  assert.equal(f.byView('tools').getAttribute('aria-label'),'Ajustar · Wiggle');
+  assert.equal(f.byView('home').getAttribute('aria-selected'),'true');
+  assert.equal(f.byView('home').getAttribute('tabindex'),'0');
+  assert.equal(f.byView('presets').getAttribute('aria-selected'),'false');
+  assert.equal(f.shell.contentElement().getAttribute('aria-labelledby'),f.byView('tools').getAttribute('id'));
+  assert.match(f.back.allText,/Ferramentas/);
+  f.i18n.setLocale('en-US'); f.shell.refreshChrome();
+  assert.equal(f.byView('tools').getAttribute('aria-label'),'Adjust · Wiggle');
+  assert.match(f.back.allText,/Tools/);
+  f.back.click();
+  assert.equal(f.shell.activeView(),'home');
+  assert.equal(f.context.hidden,true);
+  f.shell.navigate('presets');
+  assert.equal(f.context.hidden,true);
+});
+
+test('library utilities remain reachable and Escape restores focus to the overflow trigger', () => {
+  const f=libraryFixture();
+  assert.equal(f.overflow.hidden,true);
+  assert.deepEqual(f.overflow.children.map(n=>n.getAttribute('data-view')),['context','system','diagnostics']);
+  f.more.click();
+  assert.equal(f.overflow.hidden,false);
+  assert.equal(f.doc.activeElement,f.byView('context'));
+  f.shell.element().keydown('Escape');
+  assert.equal(f.overflow.hidden,true);
+  assert.equal(f.doc.activeElement,f.more);
+  f.more.click();f.byView('system').click();
+  assert.equal(f.shell.activeView(),'system');
+  assert.equal(f.overflow.hidden,true);
+  assert.equal(f.byView('home').getAttribute('tabindex'),'0');
+  f.byView('settings').click();
+  assert.equal(f.shell.activeView(),'settings');
+});
+
+
+test("refreshChrome preserves the content tree and its focused draft", () => {
+  const doc=createFakeDocument(),mount=doc.createElement("div"),i18n=createI18n({locale:"pt-BR"});
+  let renders=0;
+  const shell=createShell({mount,document:doc,i18n,subtitleKey:"app.subtitle.afterEffects",views:VIEWS,onRender(_id,{content}){
+    renders++; const input=doc.createElement("input"); input.value="draft"; content.appendChild(input);
+  }});
+  const input=shell.contentElement().children[0]; input.focus();
+  i18n.setLocale("en-US"); shell.refreshChrome();
+  assert.equal(renders,1);
+  assert.equal(shell.contentElement().children[0],input);
+  assert.equal(doc.activeElement,input);
+  assert.equal(input.value,"draft");
+});
+
+test("status routing and busy hooks preserve status semantics", () => {
+  const doc=createFakeDocument(),mount=doc.createElement("div"),states=[];
+  const shell=createShell({mount,document:doc,i18n:createI18n({locale:"pt-BR"}),subtitleKey:"app.subtitle.afterEffects",views:VIEWS,onRender(){},onStatus:(...args)=>states.push(args)});
+  shell.setStatus("Aplicando", "busy");
+  assert.equal(shell.element().getAttribute("data-busy"),"true");
+  shell.setStatus("Pronto", "ok");
+  assert.equal(shell.element().getAttribute("data-busy"),"false");
+  assert.deepEqual(states,[["Aplicando","busy"],["Pronto","ok"]]);
+  shell.setBusy(true);
+  assert.equal(shell.actionsElement().getAttribute("aria-busy"),"true");
+  assert.equal(states.length,2,"visual busy does not duplicate notifications");
+});
+
+afterEach(() => {
+  for (const name of ["HTMLElement", "customElements", "document", "window"]) delete globalThis[name];
+});
+
+
+test('additional primary workspaces join navigation and retain a single active keyboard tab', () => {
+  const f = libraryFixture([{id:'ease',primary:true,labelKey:'tool.ease.name',titleKey:'tool.ease.name'}]);
+  assert.deepEqual(f.primary.getElementsByTagName('button').map(n=>n.getAttribute('data-view')),['home','ease','presets']);
+  f.byView('home').keydown('ArrowRight');
+  assert.equal(f.shell.activeView(),'ease');
+  assert.equal(f.byView('ease').getAttribute('aria-selected'),'true');
+  assert.equal(f.byView('home').getAttribute('tabindex'),'-1');
+  assert.equal(f.byView('ease').getAttribute('tabindex'),'0');
+  assert.equal(f.context.hidden,true);
+  f.byView('ease').keydown('ArrowRight');
+  assert.equal(f.shell.activeView(),'presets');
+  f.byView('presets').keydown('ArrowLeft');
+  assert.equal(f.shell.activeView(),'ease');
 });

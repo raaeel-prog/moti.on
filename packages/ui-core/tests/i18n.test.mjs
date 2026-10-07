@@ -1,3 +1,4 @@
+import { afterEach } from 'node:test';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
@@ -119,6 +120,10 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
   // Copiar o portugues para o catalogo ingles e o jeito mais comum de "traduzir"
   // sem traduzir. Termos que sao iguais nos dois idiomas ficam de fora.
   const iguaisPorNatureza = new Set([
+    "library.presets",
+    // Preset e Plasma mantêm a mesma grafia em português e inglês.
+    "verticalPulse.preset",
+    "verticalPulse.preset.plasma",
     "app.title",
     "app.subtitle.afterEffects",
     "app.subtitle.premiere",
@@ -156,6 +161,10 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
     "orbit.unit.px",
     "orbit.unit.degrees",
     "orbit.unit.degreesPerSecond",
+    "orbit.unit.percent",
+    "orbit.preset.horizontal",
+    "orbit.preset.vertical",
+    "orbit.preset.diagonal",
     "echo.unit.seconds",
     "fastEdit.unit.seconds",
     "fastEdit.unit.fps",
@@ -217,10 +226,16 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
     "tool.animateKinetic.name",
     "tool.glitch.name",
   "tool.neon.name",
+  "tool.beat.name",
     "tool.parallax.name",
     // Simbolos de unidade.
     "timeController.unit.percent",
+    "lookAt.unit.degrees",
     "parallax.unit.factor",
+    // Preset is the established product label in both catalogs.
+    "proximityMorph.preset",
+    // Shared technical terms and the original Aurora preset name.
+    "gradient.preset", "gradient.option.linear", "gradient.option.radial", "gradient.option.angular", "gradient.preset.aurora",
     // "Normal" e a mesma palavra nos dois idiomas.
     "anchor.mode.normal",
     "context.compositionValue",
@@ -317,4 +332,8 @@ test("toda acao corretiva declarada em ERROR_META tem traducao", () => {
 
   assert.deepEqual(semTraducao, []);
   assert.ok(encontradas.size > 0, "o teste precisa ter encontrado alguma acao corretiva");
+});
+
+afterEach(() => {
+  for (const name of ["HTMLElement", "customElements", "document", "window"]) delete globalThis[name];
 });

@@ -1,0 +1,11 @@
+[0.0–10.0] Os processos de câmera, em transição, não são bem em presets, basicamente é o que funciona.
+[10.0–18.0] Vou adicionar o shake distorce da câmera, ele adiciona uma pré-comp que faz o efeito.
+[18.0–26.0] É isso. Ele precisa adicionar desse jeito na pré-comp, que aqui você controla onde vai ser o corte.
+[26.0–32.0] Eu quero que você faça desse jeito, exatamente desse jeito aqui, que é o Animation Composer.
+[32.0–36.0] Ele adiciona aqui, você pode ver que eu posso mudar aqui também a cor da distorção.
+[36.0–39.0] Tem uns parâmetros de colar e editar.
+[39.0–49.0] Beleza? É isso que você precisa fazer nos presets de câmera aqui, porque atualmente ele só está aplicando numa leia.
+[49.0–56.0] Eu dou um click, ele precisa fazer isso acontecer em cima das leias, das camadas, entendeu?
+[56.0–71.0] Por exemplo, com câmera aqui, tem que fazer ele funcionar do mesmo jeito com a câmera, entendeu?
+[71.0–82.0] Não só com... ele funcionar com os leias, com o shape leia selecionado, mas ele também adicionar as transições daquele jeito, igual do outro aqui, tá?
+[82.0–86.0] Igual que ele adiciona pré-comp.

@@ -548,12 +548,31 @@ export interface RigMetadata {
 
 | ID | Função | Host | Fase |
 |---|---|---|---|
+| `ae.presets.apply` | Aplicar uma receita própria da biblioteca ou ajustar a mesma receita gerenciada | After Effects | P1 |
+| `ae.presets.camera-transition` | Criar pré-comp de transição acima das camadas, com marcador CUT e controles editáveis | After Effects | P1 |
+| `ae.presets.inspect` | Ler preset e controles nativos da camada selecionada | After Effects | P1 |
+| `ae.presets.timing` | Alinhar, deslocar, escalonar ou definir duração da fase pelos marcadores In/Out Moti.on | After Effects | P1 |
+| `ae.presets.phase-apply` | Aplicar entrada e saída com receitas e controles independentes | After Effects | P1 |
+| `ae.presets.phase-adjust` | Ajustar uma fase preservando os controles e o timing da outra | After Effects | P1 |
+| `ae.presets.phase-action` | Remover ou restaurar uma fase inspecionada | After Effects | P1 |
+| `ae.presets.phase-timing` | Deslocar em frames o marcador próprio de uma fase | After Effects | P1 |
+| `ae.presets.color-adjust` | Ajustar cores estáticas inspecionadas preservando estilos e animações | After Effects | P1 |
+| `ae.presets.adjust` | Ajustar preset inspecionado com alvo e valores revalidados | After Effects | P1 |
+| `ae.presets.personal` | Adicionar, listar e remover referências de pastas locais com .ffx, imagens, áudio, vídeo e projetos .aep | After Effects | P1 |
+| `ae.presets.personal-preview` | Prévia local de imagem, áudio e vídeo por token de catálogo, sem importar no projeto | After Effects | P1 |
+| `ae.presets.personal-apply` | Aplicar .ffx à seleção, inserir mídia no tempo atual ou importar .aep no projeto corrente | After Effects | P1 |
+| `ae.presets.remove` | Remover o preset gerenciado da seleção | After Effects | P1 |
+| `ae.presets.bake` | Converter motion gerenciado em keyframes | After Effects | P1 |
 | `ae.animate.parallax.quick` | Parallax — Quick Rig | After Effects | P2 |
 | `ae.expression.wiggle` | Wiggle | After Effects | P1 |
 | `ae.expression.flicker` | Flicker | After Effects | P1 |
 | `ae.style.neon` | Neon | After Effects | P3 |
 | `ae.audio.beat` | Beat | After Effects | P5 |
 | `ae.text.box` | Text Box | After Effects | P1 |
+| `ae.text.word-reveal` | Morph vetorial de caixas para palavras, com controlador editável | After Effects | P2 |
+| `ae.text.variable-morph` | Morph por proximidade com contornos de fontes comuns ou eixos variáveis | After Effects / capabilities de contornos; eixos em 26+ | P2 |
+| `ae.text.style-swap` | Troca por caracteres ou palavras entre dois estilos | After Effects | P2 |
+| `ae.text.vertical-pulse` | Pulso — morph tipográfico de contornos nativos, matéria fluida e cinco presets, com origem editável | After Effects | P2 |
 | `ae.time.controller` | Time | After Effects | P2 |
 | `ae.animate.inertial` | Inertial | After Effects | P1 |
 | `ae.animate.jump` | Jump | After Effects | P1 |
@@ -577,6 +596,7 @@ export interface RigMetadata {
 | `ae.effect.echo` | Echo | After Effects | P2 |
 | `ae.3d.cylinder` | Cylinder | After Effects | P3 |
 | `ae.effect.glitch` | Glitch | After Effects | P3 |
+| `ae.effect.gradient` | Gradientes — cores, relevo, brilho e difusão com CPU/Metal | After Effects / macOS | P3 |
 | `ae.effect.particles` | Particles | After Effects | P4 |
 | `ae.asset.texture` | Texture | After Effects | P4 |
 | `ae.effect.wave` | Wave | After Effects | P3 |
@@ -662,6 +682,43 @@ export interface RigMetadata {
 - **Implementação obrigatória:** Usar o native audio analyzer. Não depender de `app.executeCommand` localizado. A análise ocorre fora do Undo; somente a escrita dos resultados entra em um Undo Group.
 - **Critério de aceite:** Fixture de áudio conhecida produz markers dentro de uma tolerância de um frame; cancelamento não altera o projeto.
 
+> **Implementado em 2026-09-05, por outro caminho que não o especificado.**
+>
+> A implementação obrigatória acima pede o native audio analyzer. Ele depende
+> do CHMS-036/037 e não existe. O comando entregue lê a camada de amplitude
+> que o próprio assistente do After Effects gera (Keyframe Assistant → Convert
+> Audio to Keyframes) e liga a propriedade nela.
+>
+> **Revisto em 2026-09-05, no mesmo dia: a proibição de `app.executeCommand`
+> deixou de ser respeitada, por decisão do dono do produto.**
+>
+> A versão anterior desta nota dizia que o comando não dispara o assistente, e
+> que o custo era "um passo manual do usuário, uma vez por composição". Na
+> prática esse passo é o que separa a ferramenta de ser útil: o pedido foi que
+> um clique no Beat converta o áudio sozinho.
+>
+> O comando agora dispara o assistente, sob as **mesmas quatro condições** que
+> este documento já impõe a `ae.vector.ai-to-vector` (§ "Illustrator to Vector"):
+> id resolvido por nome e validado em tempo de execução, seleção restaurada, e
+> bloqueio antes de alterar o projeto quando o comando não puder ser resolvido
+> com segurança. Acrescenta uma quinta, que aquele comando não tem: **verificação
+> por observação** de que o assistente realmente produziu a camada.
+>
+> Nenhum id numérico é cravado. Um id que mudou de versão não falha — executa
+> outro comando de menu qualquer dentro do projeto do usuário. Quando nenhum
+> nome resolve, o comando recusa com a frase que ensina o caminho manual, que é
+> exatamente o comportamento anterior. Ver
+> `docs/research/after-effects-convert-audio-to-keyframes.md`.
+>
+> A camada e os sliders são achados por **estrutura** (só efeitos
+> `ADBE Slider Control`), e os nomes reais são lidos do projeto em vez de
+> cravados — a referência que circula na internet usa os nomes em inglês e
+> quebraria num After Effects traduzido. Ver
+> `docs/research/after-effects-audio-amplitude.md`.
+>
+> A escolha entre este caminho e uma oscilação por BPM foi do dono do produto.
+> `renderBeatBpm` continua no repositório e pode virar ferramenta própria.
+
 ### `ae.text.box` — Text Box
 
 - **Host:** After Effects
@@ -670,6 +727,39 @@ export interface RigMetadata {
 - **Comportamento:** Cria caixa de shape responsiva atrás do texto e acompanha `sourceRectAtTime`.
 - **Implementação obrigatória:** Shape rectangle com Size/Position dirigidos por expressão, parent preservando transform e ordem logo abaixo do texto. Tratar baseline, multiline e texto vazio.
 - **Critério de aceite:** Alterar conteúdo, fontSize e alinhamento mantém padding visual. A caixa não salta ao primeiro caractere em animação de texto.
+
+### `ae.text.word-reveal` — Revelação com caixas
+
+- **Host:** After Effects com conversão nativa de texto em shapes e acesso ao estilo uniforme por caractere detectados por capability.
+- **Pré-condição/seleção:** Texto de ponto 2D, estático, horizontal da esquerda para a direita, com estilo uniforme e preenchimento sólido sem stroke, animadores, efeitos, máscaras ou matte. O editor do painel opera sobre uma seleção por vez e também reconhece o controlador ou uma palavra do rig selecionada.
+- **Inputs:** `action: apply|update|remove|bake`, `renderer: morph|legacy`, `durationFrames`, `staggerFrames`, `paddingX`, `paddingY`, `roundness`, `boxGap`, `fillColor`, `direction: bottom|top|left|right`, `smoothness`, `formationPercent`, `holdPercent`, `travelPercent`, `order: normal|reverse`, `automatic`, `progress`, `useSourceColor`, `textColor`. `revealPoint` permanece no transporte para compatibilidade legado e não cria controle inerte no morph v2.
+- **Comportamento:** Forma uma caixa arredondada por palavra e transforma sua geometria nos contornos nativos das letras, com origem inferior por padrão. O nulo concentra controles e progresso manual animável; a camada vetorial de cada palavra oferece overrides de cor. O texto original permanece editável e oculto, com suas transformações na hierarquia do rig; editar conteúdo/fonte exige Atualizar.
+- **Ciclo de vida e leitura:** Aplicar reutiliza o rig e preserva controles animados; Atualizar conserva o nulo v2, seus keyframes/easing/expressões e cores associadas a cada ocorrência da palavra. Remover restaura a visibilidade original. `ae.text.word-reveal.read` é leitura interna sem item próprio de catálogo e devolve versão, renderer, controles, contagem e estado baked. Rigs v1 continuam legíveis/removíveis; a migração para v2 ocorre por Atualizar e herda controles compatíveis.
+- **Implementação obrigatória:** Destinos obtidos por Create Shapes from Text em temporários, subdivisão exata de Bézier, winding/vazados preservados e endpoints vetoriais nativos. Referências sem pintura ficam fora do grupo Render. Metadata `[MOTION_WORD_REVEAL_V2]` com `schemaVersion: 2`, papéis controller/word e assinatura da estrutura protege a edição manual; conflitos, membros travados ou filhos externos bloqueiam operações destrutivas. Preservar seleção/CTI, rollback e um Undo por mutação.
+- **Limites e Bake:** Até 60 palavras, 2.000 caracteres e 12.000 vértices nativos; mapeamento ambíguo de glifos é recusado antes da troca do rig. Bake remove apenas expressões gerenciadas, amostra a cada quarto de quadro e comprime trechos constantes. O trecho é limitado a 3.600 quadros e 120.000 amostras estimadas por lote; expressões do usuário nos controles permanecem.
+- **Critério de aceite:** Caixa inicial contínua sem bordas internas, morph geométrico visível com vazados/acentos e destino equivalente ao texto nativo dentro da tolerância de rasterização. Atualizar mantém animação/cores de palavras repetidas; Remover, Bake, rollback, Undo e persistência são verificados no host real. Evidências e limites: [entrega de 04/10/2026](implementation/2026-10-04-word-box-morph.md).
+
+### `ae.text.variable-morph` — Morph por proximidade
+
+- **Host:** After Effects com conversão nativa de texto em shapes e leitura do estilo uniforme detectadas por capability. O motor de eixos requer After Effects 26+ e os eixos solicitados disponíveis na fonte; o motor de contornos aceita fontes comuns.
+- **Pré-condição/seleção:** Uma camada de texto de ponto 2D, estática, horizontal da esquerda para a direita, com estilo uniforme e preenchimento sólido sem stroke, outros animadores ou efeitos, máscaras, matte, solo ou guia. Hierarquia em 2D; uma ou mais linhas com quebras manuais. O painel também reconhece o nulo e o resultado vetorial gerenciados.
+- **Inputs:** `action: apply|update|remove|bake|sweep`, `renderer: auto|outline|variable`, `preset: soft-weight|strong-weight|thin|width|slant|magnify|wave|rubber`, `radius`, `strength`, `weight`, `contrast`, `italic`, `smoothness`, `scaleX`, `scaleY`, `skew`, `lift`, `sweepFrames`, `sweepDirection: left-to-right|right-to-left|top-to-bottom|bottom-to-top`. A omissão de `renderer` preserva o contrato do cliente legado. Os oito presets do painel são Peso suave, Peso marcante, Afinar, Largura, Inclinação, Lupa, Onda e Borracha.
+- **Comportamento:** O nulo influencia cada letra pela distância entre seu centro original e a posição do nulo em espaço de composição. Automático usa os eixos nativos quando existe peso variável e usa contornos nos demais casos. Em `outline`, os contornos compostos de cada glifo recebem Merge, Offset Paths e preenchimento, seguidos de escala, inclinação e elevação por grupo. Em `variable`, animadores nativos recebem os eixos disponíveis e as deformações por caractere. Contraste e Itálico exigem eixos reais; a aproximação usa Inclinação geométrica. O vetor mantém o espaçamento de repouso da origem; o motor variável preserva as opções nativas de espaçamento da camada.
+- **Escopo visual:** Espessura por aproximação é expansão/contração dos contornos da fonte selecionada; não promete reproduzir exatamente outro peso da família nem interpolar arquivos Regular/Bold separados. Vazados e acentos compartilham a influência do glifo, mas offsets extremos podem fechar vazados ou eliminar traços finos. Escalas fortes podem provocar sobreposição. A extração preserva contornos Bézier nativos e recusa mapeamentos ambíguos de ligaduras, caracteres combinados ou outras formas de composição.
+- **Ciclo de vida e leitura:** O texto original fica preservado e editável; `outline` oculta a origem e mostra um resultado vetorial filho. Aplicar ajusta o mesmo rig; Atualizar reconstrói a geometria e mantém o nulo, sua trajetória, controles e expressões personalizadas. Conteúdo, fonte, estilo ou layout alterado exige Atualizar, assim como trocar o motor ou reativar um rig baked. `ae.text.variable-morph.read` é leitura interna sem item próprio de catálogo e devolve versão, motor, controles, capabilities, contagem, estado baked, stale e controles animados protegidos. Rigs v1 permanecem legíveis; Atualizar migra controles compatíveis para v2. Remover restaura a visibilidade anterior da origem.
+- **Varredura e Bake:** Varredura opcional adiciona dois keyframes lineares à Posição do nulo a partir do CTI, em uma das quatro direções; recusa Posição já animada, com expressão ou dimensões separadas. Bake amostra por glifo a cada quarto de quadro na interseção da área de trabalho com a duração da origem, comprime trechos constantes e mantém o nulo como referência. Em contornos grava Offset e deformações; em eixos grava animadores por caractere, preservando a influência espacial individual. Até 3.600 quadros e 120.000 amostras totais por operação, incluindo refinamento e verificação.
+- **Implementação obrigatória:** Extração compartilhada `MotionTextGlyphOutlines` a partir de duplicata temporária, retirando animadores somente da duplicata e preservando seleção/CTI, origem e cleanup. `sourceIndex` usa offset UTF-16; `textIndex` usa índice seletor nativo de base 1, contando espaços e pares surrogate uma vez, sem contar CR/LF. Metadata `[Moti.on.proximity-morph.v2]` com `schemaVersion: 2`, IDs de origem/controlador/resultado, fingerprint e assinaturas da estrutura. Edição manual da estrutura, controles animados que seriam sobrescritos, membros travados ou conteúdo externo bloqueiam substituições. Preservar rollback e um Undo por mutação.
+- **Limites e evidência:** Até 128 caracteres contados sem quebras de linha e 12.000 vértices nativos, com limite adicional de 4.096 vértices por contorno na normalização. Check final PASS: 2.053/2.053, contra baseline 2.008/2.008. After Effects 26.5x89/macOS validou os dois motores, 32 presets, 12 comparações de pixels/live-Bake, nove cenários principais, nove adicionais, quatro guards, Undo, salvar/reabrir dez rigs ao vivo e dois baked, preservando keyframes/subquadros em 18 propriedades do vetor e 17 do variável. Atualizar Arial → Times e Inter Tight Regular 400 → Bold 700 preservou nulo/easing e reconstruiu a base dos eixos. A extração compartilhada preservou 52 renders da Revelação idênticos em RGBA. UI Chromium com CEP simulado PASS: 280/360/480/720 px em PT, 360 px em EN e 20 capturas; painel CEP instalado PASS: sete operações reais, cobrindo aplicação automática e remoção nos dois motores, varredura de 48 quadros, Bake e atualização com nulo e trajetória preservados. Instalação com backup e 43 hashes, projeto `.aep` e vídeo PASS; 180 quadros do vídeo decodificados e três instantes inspecionados. Bake de 128 glifos variáveis passou em dois quadros e recusou seis quadros pelo orçamento de 120.000 amostras; não aprova lotes longos. [Entrega e escopo de compatibilidade](implementation/2026-10-04-proximity-morph.md).
+- **Critério de aceite:** Verificar no host real o repouso equivalente ao texto nativo, influência contínua por glifo e ausência de erros de expressão, com vazados/acentos, múltiplas linhas e transformações da origem; validar Aplicar, Atualizar preservando o nulo, varredura, Remover, Bake equivalente antes/depois, rollback, Undo e salvar/reabrir. Registrar versões, fontes e limitações realmente verificadas.
+
+### `ae.text.vertical-pulse` — Pulso
+
+- **Host/seleção:** After Effects com paths por expressão, conversão nativa de texto em shapes e Glow detectados por capacidade. V4 aceita uma origem de texto de ponto 2D, estática, horizontal, LTR, uniforme e preenchida, sem stroke, efeitos, máscaras, animadores ou matte; até 128 caracteres e 12.000 vértices, com 4.096 por contorno. Montagens legadas conservam seu contrato próprio.
+- **Inputs:** `action: apply|update|bake|remove`, `renderer: morph|legacy`, `preset: impact|electric|plasma|liquid|rupture`, `fluidity`, e controles de duração, expansão, direção, propagação, força (`distortion`), brilho, semente e cor existentes. Omissão de renderer conserva o motor legado. `ae.text.vertical-pulse.read` fornece versão, motor, preset, controles, stale/baked, controles protegidos e contagens geométricas.
+- **Comportamento:** Pulso vertical repetido da mesma palavra, com núcleo vetorial legível e matéria tipográfica traseira deformada continuamente pelos próprios contornos. Um nulo concentra os controles; Glow está na matéria e arcos vetoriais limitados nos presets elétricos. Presets usam receitas únicas compartilhadas entre painel e host. Texto-fonte permanece editável e oculto; Atualizar recompõe núcleo e matéria após edição.
+- **Preservação:** Aplicar/Ajustar reutiliza o rig; Atualizar preserva controlador, início e controles animados. Migração V1/V2/V3→V4 é explícita e conserva valores compatíveis. Metadata versionada, fingerprints e assinaturas identificam ownership; substituições são preparadas antes de retirar a estrutura anterior. Remover restaura a origem. Undo único, rollback, seleção, CTI, transformações e comentários preservados.
+- **Bake:** Interseção da área de trabalho com a origem, amostragem a cada quarto de quadro, até 600 quadros, 120.000 avaliações de propriedades e 250.000 avaliações de vértices. Orçamento validado antes de converter; somente expressões próprias são substituídas. Operação permanece removível.
+- **Aceite:** Cinco presets distinguíveis, núcleo legível, vazados/acentos preservados, transições e repetição sem saltos; Apply/Read/Update/Bake/Remove, migração, falhas, Undo e salvar/reabrir verificados no host real. Evidência e versões suportadas registradas em `docs/implementation/2026-10-04-pulso-v4.md`.
 
 ### `ae.time.controller` — Time
 
@@ -755,11 +845,13 @@ export interface RigMetadata {
 ### `ae.3d.orbit` — Orbit
 
 - **Host:** After Effects
-- **Pré-condição/seleção:** Layers 3D ou conversíveis.
+- **Pré-condição/seleção:** Camadas visuais 3D ou conversíveis, ou o nulo de uma Órbita gerenciada. Validar conflitos de Position, Orientation, keyframes, expressão e parent antes de mutação; camadas 2D compatíveis são convertidas para 3D.
 - **Inputs mínimos:** `radius, speed, inclination, phase, targetMode, faceTarget, bake.`
-- **Comportamento:** Faz layers orbitarem um alvo 3D com controller comum.
-- **Implementação obrigatória:** Rig de null 3D e expressões de posição/orientação. Distribuição de fase opcional por índice.
-- **Critério de aceite:** Raio permanece constante em fixture sem parent e Bake mantém trajetória dentro de tolerância subpixel.
+- **Inputs opcionais:** `preset` (`frontal`, `horizontal`, `vertical`, `diagonal`, `reverseDiagonal`, `side`, `sphere`, `tiltedSphere`), `azimuth` e `bank` em graus (−360 a 360), `spread` (0 a 100) e `applyPreset` (booleano). Sem `preset`, preservar a convenção da órbita legada. No caminho com presets, `phase` é o deslocamento angular comum; o host distribui os membros automaticamente.
+- **Um clique:** O tile Órbita aplica imediatamente a órbita frontal; cada um dos oito presets também aplica ao clicar, sem confirmação adicional. O raio Quick é 25% do menor lado da comp, a velocidade inicial é 60°/s e as camadas mantêm sua orientação por padrão. Os demais parâmetros ficam disponíveis no avançado e no controlador do host.
+- **Comportamento:** Faz layers orbitarem o nulo 3D compartilhado `Órbita (Moti.on)`. Membros ou nulo selecionados reutilizam o rig; uma seleção independente cria outra órbita. Selecionar somente o nulo permite aplicar um preset a todos os membros. Repetir a aplicação preserva controles editados/animados; `applyPreset: true` identifica a troca explícita de preset, com preflight de conflitos.
+- **Implementação obrigatória:** Expressões de Position/Orientation leem os controles do parent. O nulo contém modo orbital, raio, velocidade, inclinação X, perspectiva Y, rotação Z, fase, distribuição esférica e encarar o centro. Esses controles permanecem editáveis e animáveis nos Controles de Efeito com o painel fechado. Metadata estável identifica nulo, membros e controles; criação/ajuste usam Undo único e rollback. Ver [pesquisa dos Live Controls da Órbita](research/after-effects-orbit-live-controls.md).
+- **Critério de aceite:** Um clique produz movimento visível; todos os oito modos funcionam; mover ou ajustar o nulo altera toda a órbita; reaplicar não duplica o rig nem apaga ajustes. Raio permanece constante em fixture sem parent e Bake mantém trajetória dentro de tolerância subpixel. Conflitos e controles animados são preservados; seleção e tempo permanecem intactos.
 
 ### `ae.3d.look-at` — Look At
 
@@ -874,8 +966,8 @@ export interface RigMetadata {
 - **Host:** After Effects
 - **Pré-condição/seleção:** Layers ou composição.
 - **Inputs mínimos:** `mode, intensity, frequency, rgbSplit, displacement, frameHold, seed, duration.`
-- **Comportamento:** Cria glitch contínuo ou one-shot usando apenas efeitos nativos e layers auxiliares marcadas.
-- **Implementação obrigatória:** Adjustment layer/precomp, displacement, channel separation e timing controlados. Resolver efeitos por matchName e fornecer fallback.
+- **Comportamento (decisão de 20/09/2026):** Glitch contínuo ou one-shot com algoritmo autoral C++ `CHMS Motion Core`, em solid de ajuste marcado. Intensidade, separação RGB, deslocamento em faixas, frequência e seed editáveis.
+- **Implementação obrigatória:** SDK de efeitos para pixels; CEP/ExtendScript para instanciação, timing, metadata e Undo. Detectar plugin ausente antes da mutação; ajustar a mesma instância preservando animação manual. Não trocar silenciosamente o algoritmo por efeitos empilhados. Primeira versão CPU Legacy Render em 8/16 bpc; `frameHold=true` recusado até implementação temporal. SmartFX/32 bpc/MFR/GPU exigem novas provas.
 - **Critério de aceite:** Desativar o controller zera o efeito e Clean remove o rig sem tocar outras adjustment layers.
 
 ### `ae.effect.particles` — Particles
@@ -969,6 +1061,34 @@ export interface RigMetadata {
 - **Critério de aceite:** Cada subcomando possui fixture; crop e shift preservam aparência no frame inicial.
 
 ---
+
+### 13.1 Biblioteca e edição de presets — contrato atual em 26/09/2026
+
+- O catálogo contém 165 receitas próprias de motion/texto; a galeria acrescenta seis curvas e onze movimentos de câmera, totalizando 182 entradas. A contagem é do Moti.on e não representa o catálogo instalado ou comercial do Animation Composer. Algumas receitas exigem o efeito nativo Moti.on; não prometer independência de plugins para todas.
+- Navegar e Editar permanecem acessíveis por abas. Entrada, Saída e Ambos são escolhas explícitas, compartilhadas pelo navegador, editor e colagem. Restaurar padrão altera o rascunho; Aplicar ajustes confirma a mutação no host. Uma aplicação bem-sucedida com camadas afetadas abre Editar e faz nova inspeção. Campos numéricos oferecem arraste horizontal, digitação, setas/Page, Shift fino, Alt/Option amplo, cancelamento e reset individual, respeitando limites e passos; percentuais aceitam decimais.
+- O navegador conserva o último preset selecionado, filtros e posição da lista durante a sessão. Após remoção integral confirmada ou remoção da última fase com inspeção nova em estado sem preset gerenciado, retorna a Navegar no mesmo contexto. Se outra fase permanecer, Editar continua aberto; falhas e remoções sem efeito não mudam a aba automaticamente. Mostrar na biblioteca/Revelar preserva a posição do mesmo item visível; para outro item ou um item oculto, remove somente filtros impeditivos e o traz à área visível. Eventos e callbacks de galerias descartadas não alteram a posição atual.
+- Recentes conserva a ordem exibida durante aplicar/editar/remover, sem impedir o registro de uso. Ao sair e entrar novamente no filtro, a ordem atualizada aparece. Pedidos de Revelar sobrevivem à remontagem antes da restauração do scroll; uma nova escolha explícita de preset ou filtro cancela o pedido anterior.
+- A suavização das transições pode seguir a receita ou usar smooth, cubic, silk, glide, overshoot, bounce, spring ou flicker. A prévia e a expressão usam a mesma função própria; spring oferece elasticidade ajustável, com controle nativo preservado no lifecycle.
+- Copiar preset aplicado guarda somente ID da receita e opções validadas no cache da sessão do painel. Colar usa `ae.presets.apply` na seleção atual, com fase escolhida pelo usuário. Não transfere identidade de camada, expressão arbitrária, projeto ou clipboard do sistema. A seção Variações salvas fornece persistência separada e explícita: até 100 receitas com nomes de 1 a 80 caracteres, ID de receita e opções validados; carregar prepara a cópia; Aplicar variação na seleção é uma ação explícita que usa o fluxo validado de colagem sem trocar a cópia da sessão. Excluir oferece desfazer durante a sessão. Falhas de armazenamento ficam visíveis, sem sucesso falso nem sobrescrita silenciosa de dados inválidos. Gerenciar permite renomear, duplicar e atualizar a partir de uma nova inspeção dos ajustes aplicados, preservando ID/nome ao atualizar. Backup JSON manual exporta/importa apenas configurações conhecidas: importação valida tudo antes de gravar, adiciona cópias nos conflitos, ignora repetidos exatos e não apaga itens existentes. Não há sincronização automática. Mostrar na biblioteca localiza a categoria/item e remove filtros impeditivos.
+- Transições de camada usam marcadores gerenciados `Moti.on In` (fim da entrada) e `Moti.on Out` (início da saída). Quando coincidem, usam `Moti.on In / Out`. Identidade e papel vivem nos parâmetros do marcador; nomes isolados não autorizam excluir cues do usuário. Arrastar os cues altera o timing. Duração nativa escala os intervalos; alterar a duração pelo painel redefine os intervalos. Colisões com cues do usuário são rejeitadas antes de mutar qualquer camada.
+- `ae.presets.timing` organiza cues próprios de uma fase (`in` ou `out`) em 1 a 50 camadas: `shift` desloca em frames, `align` alinha ao tempo exato do cursor e `stagger` escalona a partir dele na ordem da timeline, inversa ou aleatória determinística com semente de 0 a 9.999 (padrão 17). `duration` define a fase em 1 a 600 frames a partir do limite da própria camada, preservando a outra fase. Deslocamento/intervalo inteiro entre −600 e 600 frames; todos os destinos são validados antes da escrita. A ação conserva limites das camadas, keys de animação, expressões, payload dos markers, seleção e CTI. Recusa camadas travadas, ownership inconsistente, markers ausentes/duplicados/combinados, mais de 250 cues por camada, colisões, sobreposição e fases sem duração. Duração precisa estar sem expressão/keyframes e no valor original registrado pelos markers. Não move camadas completas ou in/out points e não opera markers de outros plugins.
+- A biblioteca pessoal referencia arquivos locais por tokens opacos emitidos pelo host. Presets `.ffx` aplicam na seleção; imagens, áudio e vídeo entram na composição no tempo atual; `.aep` importa no painel Projeto, sem substituir ou abrir outro projeto. Arquivos permanecem na origem e formatos são revalidados com as capacidades de importação do After Effects.
+- Os limites de scan são explícitos: até 20 raízes, 1.000 itens por leitura, profundidade 8, 5.000 entradas visitadas e orçamento de 1.500 ms. Catálogos truncados exibem orientação para registrar subpastas. Há prévia passiva local de imagens compatíveis com Chromium e reprodução de áudio/vídeo com controles nativos, navegação temporal, loop e ajuste de velocidade/tom da prévia. `ae.presets.personal-preview` revalida o token, a raiz aprovada, alias, formato e tamanho; URLs retornadas são exclusivamente `file:` e a política do painel permite apenas mídia/imagens locais, sem conexão remota. Vídeo/áudio dependem do codec do Chromium; PSD/EXR/TIFF e outros formatos não reproduzíveis continuam importáveis no AE. Não há MOGRT nem navegação das composições internas de um `.aep`. Alterar a reprodução não processa o arquivo nem muda a importação.
+- O editor aceita até 50 camadas com a mesma receita e controles estáticos compatíveis, inclusive com valores diferentes. Valores misturados aparecem como Vários. O ajuste envia a lista explícita de opções alteradas; cada camada conserva suas demais opções. A lista de alvos e fingerprints é revalidada e todas as opções/destinos são preparados antes da escrita; receitas diferentes, seleção alterada e transições de câmera em lote são recusadas. Copiar e salvar uma variação exigem valores uniformes, evitando exportar um representante ambíguo. Aplicar/colar segue seu preflight. Empilhar receitas diferentes, combinar uma receita de entrada com outra de saída e substituir arbitrariamente presets não fazem parte deste contrato.
+
+A evidência e os testes desta alteração estão em [entrega de 25/09/2026](implementation/2026-09-25-composer-parity/entrega.md). A primeira fatia tem check de 1.586 testes, Undo da aplicação e instalação comprovados. A organização de marcadores tem quatro cenários reais PASS anteriores à adição de ordem aleatória. A edição conjunta, interação numérica, fluxo após aplicar, ordem aleatória e gerenciamento/backup/revelação de variações foram implementados após a pausa e permanecem sem validação final; Undo específico, novo check integrado, recarregamento e QA final continuam pendentes, com testes adicionais adiados por orientação do usuário. A continuação foi compilada e copiada à instalação com backup, conforme `build-library-preview-implementation.log` e `install-library-preview-implementation.log`; isso não substitui testes funcionais. A contagem de receitas não concede paridade total.
+
+A correção iniciada em 01/10/2026 para a posição e seleção da biblioteca passou no check integrado com 1.857 testes. A evidência específica está em [preservação da posição](implementation/2026-10-01-preset-scroll.md); a validação funcional dessa correção no After Effects real permanece NOT RUN.
+
+### `ae.effect.gradient` — Gradientes
+
+- **Host:** After Effects no macOS, com o efeito próprio `Moti.on Gradient` v1 disponível. Premiere e Windows ficam fora desta primeira entrega.
+- **Seleção:** Camadas visuais editáveis; Aplicar aceita texto, shapes, sólidos e imagens. Criar fundo cria um sólido com dimensões, duração e pixel aspect da composição abaixo das camadas existentes.
+- **Contrato:** `GradientSettingsV1`, com oito slots permanentes (`enabled`, `color`, `position`), pelo menos dois ativos, modos linear/radial/angular, coordenadas normalizadas, escala/aspect/ângulo/ciclos/offset, profundidade por alpha e bulge, turbulência, brilho, difusão por foco, grain e loop periódico. `ae.effect.gradient.read` é leitura auxiliar sem entrada própria de catálogo. Atualizar envia somente `changedKeys` e valida o token da seleção/CTI.
+- **Persistência:** Parâmetros nativos animáveis, índices e disk IDs estáveis, metadata própria no comentário sem apagar texto do usuário, aplicação idempotente e remoção somente da instância gerenciada. Editar um parâmetro animado grava no CTI e conserva os outros keys; expressões do usuário são protegidas. Preflight de todo o lote e rollback, seleção/CTI preservados e Undo coerente.
+- **Render:** Cálculo float, CPU 8/16/32 bpc e Metal BGRA128 pelo SDK oficial; buffers por render e pipelines imutáveis para MFR. Alpha limita o preenchimento; difusão/brilho expandem o resultado para não cortar halos. Espaço do projeto por padrão, opção sRGB linear explícita. CPU/Metal compartilham matemática, seed e periodicidade.
+- **Interface:** Ferramenta na família Efeitos, editor Onyx com Cores aberta e seções recolhíveis Forma/Relevo/Luz/Animação; oito presets originais e biblioteca pessoal local. Gestos são enviados ao concluir, nunca a cada pixel de slider; sincronização com host somente com painel em foco.
+- **Aceite:** CPU/Metal, ROI/full-frame, downsample/pixel aspect, HDR/alpha, MFR, loop sem salto; aplicação múltipla, expressão/keyframes, Undo/Redo e salvar/reabrir. Evidência e limites em `docs/implementation/2026-10-05-gradientes.md`; somente versões realmente exercitadas são declaradas verificadas.
 
 ## 14. Alinhador de Anchor Point
 
@@ -1349,6 +1469,41 @@ camera.distort-shake
 camera.distort-rotation-shake
 ```
 
+> **Nenhuma das onze transições acima está implementada.** Descoberto por
+> auditoria em 2026-09-04.
+>
+> `ae.camera.transition` existe e registra onze presets, mas são **movimentos de
+> câmera** — push, truck, crane, pan, tilt, zoom — aplicados como keyframes na
+> câmera nativa. Os dois conjuntos têm onze itens por coincidência. O comentário
+> do comando afirmava que o critério de aceite do CHMS-024 estava cumprido; não
+> estava, e foi corrigido.
+>
+> O que falta, além dos nomes: o §17.3 pede solid ou adjustment layer conforme o
+> preset, camada criada com a duração exata da transição, efeitos resolvidos por
+> matchName, fallback de Lens Blur para Gaussian **com aviso visível**, e um
+> controller para os presets combinados. O comando atual não cria camada nenhuma
+> e não toca em efeito nenhum. Os inputs do §17.4 (`intensity`, `midpoint`,
+> `seed`, `motionBlur`, `applyToSelectionOrComp`) também não existem — ele aceita
+> `preset`, `durationFrames`, `amount` e `curve`.
+>
+> **A decisão sobre o que fazer com isto é de produto, e ainda não foi tomada.**
+> As duas saídas são legítimas e mutuamente exclusivas no id atual:
+>
+> 1. **Implementar o §17** como um segundo comando (`ae.camera.transition.fx`,
+>    por exemplo), preservando os movimentos de câmera, que são úteis e já
+>    funcionam. É o caminho que cumpre a spec sem descartar trabalho bom. Custa
+>    onze presets com efeitos nativos, e vai esbarrar no mesmo problema medido em
+>    `docs/research/after-effects-neon-glow-and-text-stroke.md`: matchName de
+>    **parâmetro** de efeito não tem fonte primária, então cada um exige guarda
+>    de varredura.
+> 2. **Reescrever o §17** para descrever os movimentos de câmera, e catalogar as
+>    transições de blur/fade/distort noutra seção, como escopo futuro. Mais
+>    barato e honesto sobre o produto que existe, mas descarta uma feature que a
+>    spec descreve em detalhe.
+>
+> Enquanto a decisão não é tomada, `tests/catalogo-de-comandos.test.mjs` prende
+> esta lista para a lacuna não voltar a ser invisível.
+
 ### 17.2 Contrato do preset
 
 ```ts
@@ -1412,6 +1567,26 @@ applyToSelectionOrComp
 - fallback controlado;
 - render sem missing effect;
 - um Undo.
+
+### 17.6 Transições de impacto (tremor)
+
+Dez transições de corte premium (`cameraSpec.impact`), implementadas em
+2026-10-06 no mesmo comando `ae.presets.camera-transition`: Punch de impacto,
+Impacto de luz, Onda de choque, Zoom com tremor, Tremor sísmico, Câmera na mão,
+Chicote lateral, Torção de impacto, Batida dupla e Impacto cinematográfico
+(ids `camera-impact-*`).
+
+- o golpe atinge o máximo exatamente no frame do marcador CUT e assenta como
+  mola amortecida; posição contínua, motion blur real pelo obturador do Transform;
+- complementos por receita: punch, zoom in/out, flash de exposição com glow,
+  onda (Wave Warp com bordas fixas) e desfoque, somente efeitos nativos do AE;
+- a cobertura de escala mantém os quatro cantos cobertos, e as bordas da
+  janela são idênticas ao original;
+- uma única função (`cameraImpactSample`) alimenta as expressões e a prévia;
+- controles editáveis no Effect Controls; o painel ajusta duração e intensidade.
+
+Evidências: `docs/research/after-effects-impact-shake-effects.md` e
+`docs/implementation/2026-10-06-impact-shake/entrega-e-validacao.md`.
 
 ---
 
@@ -2041,6 +2216,13 @@ Regras:
 
 ### 21.1 Responsabilidades
 
+O efeito de imagem `plugin/` é uma fronteira distinta do serviço companion:
+recebe buffers pelo SDK do After Effects e configurações por parâmetros nativos.
+Glitch inaugura essa fronteira (20/09/2026). Não hospedar jobs de áudio/ML dentro
+de `EffectMain`. Presets continuam dados declarativos e podem combinar efeitos
+C++ com animação editável do host. Ver arquitetura e migração em
+`docs/implementation/2026-09-20-native-core/arquitetura-e-migracao.md`.
+
 ```text
 audio decode/extraction
 resampling
@@ -2118,6 +2300,72 @@ Settings
 - status do native service;
 - update disponível;
 - atalhos.
+
+### 22.2.1 Migração incremental de componentes — 28/09/2026
+
+A primeira primitiva é `<moti-button>` em Light DOM. `createActionButton()`
+permanece como API compatível e registra o elemento sob demanda no documento
+recebido; preserva `element`, o botão nativo `button`, estados, teclado e
+explicações acessíveis. Se o runtime não oferece as capacidades necessárias,
+usa a mesma apresentação em um contêiner HTML nativo. Imports do package não
+exigem globals DOM nem registram elementos automaticamente.
+
+A detecção consulta o `defaultView` do documento, `HTMLElement`, `Event` e
+`customElements.define/get`. Não ativa flags Spectrum/CSS nem depende de
+Shadow DOM. `shell.button()` e os demais builders continuam na arquitetura
+existente até migrações próprias com paridade de comportamento comprovada.
+Não apagar `components.ts` enquanto houver consumidores desses contratos.
+[Decisão e capacidades](research/moti-button-web-components.md);
+[implementação e verificação](implementation/2026-09-28-web-components/entrega.md).
+
+A segunda etapa (29/09/2026) migra as ações das telas Sistema e Diagnóstico
+nos dois painéis. `createPanelActionBar()` compõe os botões, revalida o estado
+atual e descarta callbacks da view anterior. `createDiagnosticsView()` recebe
+snapshots e callbacks; as views de Sistema permanecem específicas de cada host.
+Executores, exportação e request-scope continuam nos apps. O shell preserva foco
+na região de origem durante redesenho e não transfere uma chave para outra tela.
+[Entrega da etapa 2](implementation/2026-09-28-web-components/etapa2-entrega.md).
+
+A terceira etapa (29/09/2026) introduz `<moti-toast>` em Light DOM.
+`createToastRegion()` conserva fila, deduplicação, timers, foco e descarte; apenas
+a apresentação de cada aviso passa pelo novo elemento ou fallback `<article>`.
+Os consumidores de `createFeedbackController()` no AE adotam o componente sem
+alterar comandos. Texto/rótulos podem mudar sem recriar ações; atributos inválidos
+bloqueiam interação até o contrato estar completo. Reconexão não descarta itens.
+[Entrega da etapa 3](implementation/2026-09-28-web-components/etapa3-entrega.md).
+
+A quarta etapa (29/09/2026) migra `selectField()` para `<moti-dropdown>` em
+Light DOM, com o mesmo contêiner, select nativo, IDs e callbacks usados pelos
+painéis. Registro e overlay têm detecções independentes; o fallback continua
+`div` com select nativo e, quando disponível, menu personalizado. `configure()`
+recebe opções/callback uma vez; value, label, description, disabled e
+disabledReason são reativos, sem reconstruir controles. O shell e os elementos
+compartilham um proprietário de menu por documento. Desconexão, redesenho e
+alteração inválida fecham o portal; referências antigas não confirmam valores.
+A restauração de foco prioriza a chave explícita do botão sobre o ID do select
+oculto. Não há parser declarativo de opções nesta etapa.
+[Entrega da etapa 4](implementation/2026-09-28-web-components/etapa4-entrega.md).
+
+A quinta etapa migra avisos e indicadores para `<moti-alert>` e `<moti-badge>`;
+a sexta migra `createSliderField()` para `<moti-slider>`; a sétima migra
+`createPopover()` e `createDrawer()` para `<moti-popover>` e `<moti-drawer>`.
+Todas mantêm as factories e controladores existentes, com apresentação em
+Light DOM compartilhada com os fallbacks nativos. As opções são validadas
+antes do registro e da montagem; controles desconectados não executam ações
+antigas, e overlays encerram timers e restauram o foco de origem. Os testes
+automatizados não substituem a validação nos hosts Adobe reais. Outros
+builders de `components.ts` permanecem para migração futura.
+[Entrega das etapas 5–7](implementation/2026-09-28-web-components/etapas5-7-entrega.md).
+
+A evolução visual de 03/10/2026 preserva essa arquitetura nos oito elementos
+`moti-*`. Botões de ação das ferramentas, seis ações da Suavização e ações de
+Presets passam pelas factories, mantendo controles especializados, comando
+com um clique e fallback. Tokens Onyx têm origem única e espelhos gerados no
+build; vetores têm catálogo tipado e gestos breves. A grade compacta permanece.
+Configurações agrupa Interface, Acessibilidade e Ajuda, com suporte técnico
+recolhido. A direção aprovada e as evidências estão em
+[Fundação Visual](UI_FOUNDATION.md) e
+[entrega Onyx](implementation/2026-10-03-onyx-components.md).
 
 ### 22.3 Padrões de interação
 
@@ -2646,11 +2894,11 @@ Engine, Physics Engine, Audio Reactive Engine e SDK/marketplace de presets.
 - Antes de implementar qualquer peça do documento, uma auditoria mostrou que
   parte do catálogo dele **já existe** neste repositório sob outro nome:
   Easing Lab ≈ `ae.keys.ease.apply` (§15 deste documento), Anchor Mover ≈
-  `ae.anchor.align` (§14), o parallax avançado dele ≈ §16. Motion Browser,
-  Preset Engine, My Library e Inspector-como-biblioteca **não existem** — são
-  um paradigma novo (navegar/pré-visualizar/aplicar preset) que este produto
-  ainda não tem; o produto atual é "painel de ferramentas", uma tela por
-  comando.
+  `ae.anchor.align` (§14), o parallax avançado dele ≈ §16. A ausência de
+  Motion Browser, Preset Engine e My Library era o estado daquela auditoria.
+  Desde setembro de 2026, a arquitetura existente também contém galeria de
+  presets, editor de receita aplicada e biblioteca pessoal. Isso não equivale
+  à implementação integral do documento externo nem de um produto de referência.
 - Uma peça genuína e ausente do catálogo Keyframe Ops foi implementada como
   prova de conceito da integração: **Reverse Values** (`ae.keys.reverse-values`),
   que inverte os valores dos keyframes selecionados mantendo os tempos —

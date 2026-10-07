@@ -59,7 +59,22 @@ export interface QuickContext {
   currentTimeSeconds: number;
   workAreaStart: number;
   workAreaDuration: number;
+  /**
+   * Propriedades selecionadas na timeline. É o número que as ferramentas de
+   * expressão contam, porque cada uma delas escreve numa propriedade.
+   */
   selectionCount: number;
+  /**
+   * Camadas selecionadas.
+   *
+   * Não é derivável de `selectionCount`. No After Effects, selecionar uma
+   * propriedade também seleciona a camada dona, mas selecionar uma camada não
+   * seleciona propriedade nenhuma — e esse é o caso mais comum de todos.
+   * As ferramentas de operação (Null, Espelhar, Inverter ordem) contam camadas;
+   * se lessem `selectionCount` veriam zero justamente quando o usuário acabou
+   * de clicar em duas camadas e espera que elas sejam parenteadas.
+   */
+  selectionLayerCount: number;
   selectionKinds: QuickSelectionKind[];
   selectionHasKeyframes: boolean;
   selectionHasExpressions: boolean;

@@ -63,3 +63,4 @@ test("o dispatcher continua sendo quem abre o grupo", async () => {
     "o dispatcher nao usa mais o rotulo localizado do descriptor"
   );
 });
+

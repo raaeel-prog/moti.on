@@ -36,10 +36,10 @@ function idsDeFerramenta() {
 
 /** Chaves de um dos dois mapas de icone do shell. */
 function chavesDeIcone(nomeDoMapa) {
-  const fonte = lerFonte("packages/ui-core/src/shell.ts");
-  const inicio = fonte.indexOf(`const ${nomeDoMapa}: Record<string, string> = {`);
+  const fonte = lerFonte("packages/ui-core/src/icons.ts");
+  const inicio = fonte.indexOf(`const ${nomeDoMapa}${nomeDoMapa === "ICON_PATHS" ? "" : ": Record<string, string>"} = {`);
   assert.ok(inicio >= 0, `${nomeDoMapa} nao encontrado`);
-  const fim = fonte.indexOf("\n};", inicio);
+  const fim = fonte.indexOf("\n}", inicio);
   assert.ok(fim > inicio, `fim de ${nomeDoMapa} nao encontrado`);
 
   const bloco = fonte.slice(inicio, fim);
@@ -62,10 +62,10 @@ test("toda ferramenta da grade tem desenho e glifo de icone", () => {
 
 /** Pares `chave: "valor"` de um dos dois mapas de icone. */
 function paresDeIcone(nomeDoMapa) {
-  const fonte = lerFonte("packages/ui-core/src/shell.ts");
-  const inicio = fonte.indexOf(`const ${nomeDoMapa}: Record<string, string> = {`);
+  const fonte = lerFonte("packages/ui-core/src/icons.ts");
+  const inicio = fonte.indexOf(`const ${nomeDoMapa}${nomeDoMapa === "ICON_PATHS" ? "" : ": Record<string, string>"} = {`);
   assert.ok(inicio >= 0, `${nomeDoMapa} nao encontrado`);
-  const fim = fonte.indexOf("\n};", inicio);
+  const fim = fonte.indexOf("\n}", inicio);
   const bloco = fonte.slice(inicio, fim);
   return [...bloco.matchAll(/^\s{2}([a-zA-Z]+): "([^"]+)"/gm)].map((m) => [m[1], m[2]]);
 }
@@ -124,3 +124,4 @@ test("o registro de ferramentas cobre os comandos P1 do master spec", async () =
   const faltando = p1.filter((id) => !registrados.includes(id));
   assert.deepEqual(faltando, [], `comando P1 sem descriptor: ${faltando.join(", ")}`);
 });
+

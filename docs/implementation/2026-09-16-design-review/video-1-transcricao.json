@@ -1,0 +1,79 @@
+{
+  "source": "/Users/rael/Desktop/Gravação de Tela 2026-09-16 às 21.03.51.mov",
+  "language": "pt",
+  "duration": 66.58,
+  "segments": [
+    {
+      "start": 1.04,
+      "end": 6.04,
+      "text": "Charges. Agora precisamos melhorar o tema dessa parte de presets aqui.",
+      "avg_logprob": -0.3108228349685669
+    },
+    {
+      "start": 6.04,
+      "end": 11.04,
+      "text": "Eu quero que você traga esse tema aqui do Animation Composer.",
+      "avg_logprob": -0.3108228349685669
+    },
+    {
+      "start": 11.04,
+      "end": 16.04,
+      "text": "Exatamente esse tema. Dessa mesma função. Do mesmo jeito você vai fazer isso.",
+      "avg_logprob": -0.3108228349685669
+    },
+    {
+      "start": 16.04,
+      "end": 22.04,
+      "text": "Esse mesmo projeto de tema aqui para o nosso tema. Para o nosso plugin.",
+      "avg_logprob": -0.3108228349685669
+    },
+    {
+      "start": 22.04,
+      "end": 29.04,
+      "text": "Com essas pastas, os nomes separadinhos, bonitinhos, tudo do mesmo jeito que está aqui.",
+      "avg_logprob": -0.3108228349685669
+    },
+    {
+      "start": 29.04,
+      "end": 38.04,
+      "text": "Em Abra Edit aqui. Um Abra Edit aqui que você edita o preset que foi aplicado na lei lá, tá?",
+      "avg_logprob": -0.22004799649380802
+    },
+    {
+      "start": 38.04,
+      "end": 43.04,
+      "text": "Quero que você melhore também a aba de ferramentas. Abra de ferramentas aqui.",
+      "avg_logprob": -0.22004799649380802
+    },
+    {
+      "start": 43.04,
+      "end": 49.04,
+      "text": "Pode passar por uma reestruturação. Mas assim, mantendo isso aqui que a gente tem.",
+      "avg_logprob": -0.22004799649380802
+    },
+    {
+      "start": 49.04,
+      "end": 53.04,
+      "text": "Já esses atalhos aqui, rápido. Do nosso plugin, esses quadradinhos.",
+      "avg_logprob": -0.22004799649380802
+    },
+    {
+      "start": 53.04,
+      "end": 56.04,
+      "text": "Mantém tudo isso aqui. Mantém esses aqui também.",
+      "avg_logprob": -0.22004799649380802
+    },
+    {
+      "start": 56.04,
+      "end": 60.04,
+      "text": "Só dá uma renovada. Traz esse aspecto aqui do Animation Composer.",
+      "avg_logprob": -0.1373622585565616
+    },
+    {
+      "start": 60.04,
+      "end": 66.04,
+      "text": "Esse tema aqui. Essas cores. Essa forma de desenhar o plugin aí.",
+      "avg_logprob": -0.1373622585565616
+    }
+  ]
+}

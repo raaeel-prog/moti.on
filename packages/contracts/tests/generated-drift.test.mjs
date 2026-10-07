@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import vm from "node:vm";
+import { PULSE_PRESETS } from "../dist/index.js";
 
 import { GENERATED_PATH, renderModule } from "../scripts/gen-extendscript.mjs";
 import {
@@ -33,6 +35,14 @@ test("o modulo gerado respeita o subconjunto ExtendScript", async () => {
   // origem seria dificil de rastrear.
   const source = await readFile(GENERATED_PATH, "utf8");
   assert.deepEqual(findBannedConstructs(source), []);
+});
+
+test("Pulse host recipes are generated from the same typed table as the panel", async () => {
+  const source = await readFile(GENERATED_PATH, "utf8");
+  const context = { $: { global: {} } };
+  vm.runInNewContext(source, context);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.$.global.MotionContracts.PULSE_PRESETS)),
+    JSON.parse(JSON.stringify(PULSE_PRESETS)));
 });
 
 test("o modulo gerado avisa que nao deve ser editado a mao", async () => {

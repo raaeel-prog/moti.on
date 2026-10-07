@@ -445,3 +445,4 @@ test("sem seleção e sem composição falham com códigos distintos", async () 
     "NO_ACTIVE_COMP"
   );
 });
+

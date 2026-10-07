@@ -194,3 +194,4 @@ test("o que o painel codifica, o host decodifica de volta ao valor original", ()
 
   assert.deepEqual(MotionJson.parse(asHostWouldSee), request);
 });
+

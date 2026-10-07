@@ -446,3 +446,4 @@ test("sem composição falha antes de qualquer criação", async () => {
   const { scope } = await fixture({ semComp: true });
   assert.equal(criar(scope).error.code, "NO_ACTIVE_COMP");
 });
+

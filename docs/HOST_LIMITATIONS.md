@@ -11,7 +11,82 @@ Há dois eixos independentes:
 
 Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma medição feita com extensão equivalente pode ser `PASS` ou `FAIL` para aquele experimento e continuar `NOT RUN` para o build atual.
 
-## Resumo do build atual
+## Pulso V4 — checkpoint 2026-10-05
+
+**Pulso / Pulse** conserva o comando `ae.text.vertical-pulse`, com presets Impacto, Elétrico, Plasma, Líquido e Ruptura, contornos vetoriais nativos, leitura do rig, Update, Bake e Remove. O check integrado passou em **2.088/2.088 testes**. Chromium passou em cinco grupos, com 16 capturas e transporte CEP simulado. No **After Effects 26.5x89/macOS 27.2.0**, passaram oito cenários principais numa bateria anterior (sem rerun integral final), 60/60 combinações visuais (300 PNGs), 60 comparações de início/fase final com diferença RGBA zero e 9/9 cenários de migração V1/V2/V3. **Undo/Redo nativo de Apply, Update e Bake: PASS**, com snapshots completos e cleanup aprovado.
+
+Falhas de criação, Update e migração com controles animados passaram em três cenários. A suite de falhas continua **INCOMPLETE**: dois testes de remoção parcial foram `SKIPPED`, pois o método `Layer.remove` não é substituível no DOM deste host. A instalação foi conferida em 43 arquivos por SHA-256; essa conferência não comprova operações pelo painel instalado.
+
+**Undo de Remove: FAIL na comparação integral inicial**, apenas pelo CTI de 0,5 s para 1,0666666667 s e pelas leituras de Glow/Fluidity no novo instante. IDs, rig, geometria, keys e expressões foram restaurados. A comparação posterior no mesmo CTI não prosseguiu porque a sessão QA estava inativa e retornou contexto vazio, sem alterar projeto alheio. Essa comparação e o Redo ficam `NOT RUN`; a captura inicial permanece. A observação não estabelece que o CTI seja universalmente não restaurável por Undo. [Relatório sem ajuste](../artifacts/pulse-v4-20261004/undo-matrix-remove-results.json).
+
+Undo após falha parcial de cleanup instrumentado: **NOT RUN** no host. Os 14 testes de lifecycle com doubles incluem a falha de cleanup de backups, sem comprovar o Undo nativo dessa falha.
+
+<!-- PULSO_PENDING_FINAL_VERIFICATION -->
+**Persistência live/baked: PASS**, com save/close/reopen real, IDs/controles/expressões/keys preservados e remoção após reabertura. **Demo e vídeo: PASS**, `.aep` editável com cinco presets e H.264 1920×1080/30 fps/4 s; render nativo e decodificação sequencial dos 120 quadros aprovados. **Interação pelo CEP instalado: NOT RUN**, biblioteca observada; ação seguinte sem janela disponível, sem reabertura do AE. Remove Redo, comparação posterior no mesmo CTI e Undo após falha de cleanup instrumentada permanecem `NOT RUN`. Somente AE 26.5x89/macOS 27.2.0 está aprovado pelo escopo executado; outros patches, Windows e Premiere permanecem `NOT RUN`. [Entrega e limites](implementation/2026-10-04-pulso-v4.md) · [registro de evidências](../artifacts/pulse-v4-20261004/verification.md).
+
+## Pulso vertical de texto — 2026-09-28
+
+O comando `ae.text.vertical-pulse` está implementado em **Ferramentas → Efeitos**. O check integrado passou com 1.702 testes. No After Effects 26.5x89/macOS 27.2.0, um projeto temporário vazio confirmou preflight, aplicação, avaliação das expressões, renderização, reajuste sem duplicação e remoção com restauração do original: seis cenários `PASS` pelo comando direto. Em uma verificação posterior **pela interface CEP real**, a ferramenta apareceu como primeiro cartão de Efeitos, abriu o editor e **Aplicar** criou três ecos com o original desativado. Um único Desfazer nativo removeu os ecos e restaurou o original: `PASS` para o Undo da aplicação pelo painel. Em nova aplicação, **Remover efeito** pelo painel também deixou somente o texto original: `PASS`. Após instalar o ajuste visual final, o painel real exibiu o nome do efeito somente no hover, na parte inferior do próprio quadrado, sem invadir os demais; clique/foco não foram repetidos nessa instalação. O relatório anterior mantém `NOT RUN` para o Undo de seu próprio roteiro automatizado; são execuções diferentes. Salvar/reabrir e outras versões do host continuam `NOT RUN`. [Detalhes e quadros](implementation/2026-09-28-vertical-text-pulse.md) · [relatório do painel](../artifacts/reference-effect/ae-panel-verification.json).
+
+## Paleta grafite — 2026-09-28
+
+A direção atual define `#1D1D1D` como fundo do tema escuro, `#262626` para
+superfícies elevadas e `#303030` para hover/seleção, com ação principal branca.
+Os dois painéis compartilham os tokens; o tema claro permanece disponível.
+O check integrado passou com 1.702/1.702 testes, incluindo 88 pares de
+contraste. A QA de navegador passou em 25/25 verificações, com 103
+capturas/métricas de layout e nenhum transbordamento nas 80 combinações de
+tamanho, tema e idioma inspecionadas. O navegador confirmou a base `#1D1D1D`.
+Após instalar o build atual e reiniciar o **After Effects 2026 26.5x89**,
+o painel Moti.on carregou conectado em tema escuro com aparência grafite; o
+SHA-256 de `styles/theme.css` instalado coincidiu com o arquivo do build.
+A cor de pixel no host não foi medida, e nenhum comando funcional foi repetido
+nesta rodada. O UPIA instalou o build atual no **Premiere Pro 2026 26.5.1**
+e Moti.on 0.1.0 aparece como `Enabled`: instalação `PASS`. O runtime do painel
+e a aparência desta paleta continuam `NOT RUN` no Premiere.
+Os detalhes e limites estão na [matriz de QA](QA_MATRIX.md). Os resultados de
+27/09 abaixo pertencem à paleta anterior e não validam esta revisão.
+
+## Redesign dos painéis — checkpoint 2026-09-27
+
+Na revisão de 27/09, o redesign usava `#212529` no tema escuro. O check integrado passou com
+1.695/1.695 testes e 88 pares de contraste. A matriz de navegador passou em
+24/24 verificações e 103 layouts/escalas, com componentes de apresentação reais
+alimentados por fixtures. Isso comprova renderização e interações de interface
+nesse ambiente, não a execução de comandos Adobe.
+
+No **After Effects 2026 26.5.0.89 em macOS**, o painel instalado abriu no app
+real. Foram observadas as telas Ferramentas, Presets Navegar e Editar em projeto
+sem composição, Configurações, ambos os temas e pt-BR/en-US. É um `PASS`
+parcial de carregamento, navegação e aparência no host. Não havia composição
+nem camadas selecionadas: Aplicar/Ajustar/Remover, Undo, integridade dos dados
+do projeto e comportamento com seleção desatualizada são `NOT RUN` no host
+para esta revisão. Após a correção de tradução, o After Effects foi reaberto
+e a tela Editar em inglês exibiu “Open a composition.” no painel real. Ao
+terminar a conferência, idioma “Seguir o After Effects” e tema Escuro foram
+restaurados. O build final foi reinstalado e o AE reiniciado; o painel voltou
+conectado em português e tema Escuro. Uma tentativa posterior de criar uma
+composição temporária foi interrompida por timeouts no controle do aplicativo;
+nenhum projeto foi salvo e nenhum comando do painel foi executado.
+
+No **Premiere Pro 2026 v26.5.1 (build 26.5.1.1) em macOS**, o UPIA informou
+`Installation Successful` para Moti.on 0.1.0, e a extensão aparece `Enabled`.
+UXPLogs confirmou o status enabled, mas não registrou `panel.started` nem
+`panel.shown`. Um diálogo Adobe de erro de cobrança/atualização de pagamento
+bloqueou a inicialização; a automação de interface expirou e não recuperou o
+estado. Nenhum projeto ou pagamento foi alterado. Assim, instalação é `PASS`,
+mas carregamento do painel UXP, aparência, idioma, temas, configurações e
+comandos continuam `NOT RUN` no host. O bloqueio não prova falha do plugin.
+Leitor de tela, filtros de daltonismo e escala ampliada nos hosts também
+continuam `NOT RUN`. Esses limites não são transferidos de checks ou versões
+anteriores. O registro e as capturas de navegador ficam na
+[entrega do redesign](../artifacts/product-ui-20260927/ENTREGA.md).
+
+As seções seguintes preservam registros históricos de outros builds e escopos.
+Referências à base `#1D1D1D` e ao “build atual” em checkpoints antigos não
+comprovam a revisão de 28/09, mesmo quando o valor da base coincide.
+
+## Resumo histórico do build anterior
 
 | Gate | Implementação | Execução neste build | Evidência disponível |
 |---|---|---|---|
@@ -41,7 +116,7 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | After Effects: Trim Paths (`ae.shape.trim-path`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Escopo por camada e por grupo, revelação animada no CTI e rollback cobertos por teste. Um Trim Paths do usuário é preservado: o comando recusa em vez de sobrescrever. **Heurística não medida**: o reconhecimento do operador gerenciado usa o `RIG_PREFIX` no nome, e não uma identidade real — renomear o operador faz o comando passar a recusar, que é o lado seguro (item 32) |
 | After Effects: Parallax Quick (`ae.animate.parallax.quick`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | O critério de enquadramento é **medido** em teste, não assumido: o tamanho aparente de três camadas de tamanhos diferentes é reconstruído antes e depois do rig e bate com erro abaixo de 1e-9, porque `(D + z) / D` desfaz exatamente o encolhimento da perspectiva. A participação no rig vem do parentesco, e não de id guardado — o After Effects não tem uuid de camada e a §11 proíbe usar nome. **Não medido no host**: se `camera.zoom` é de fato a distância ao plano `z = 0` em AE 26.3x87 (item 37) |
 | After Effects: Look At (`ae.3d.look-at`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Os seis eixos frontais funcionam. Os quatro do plano XZ saem de somar na componente Y; os dois verticais compõem `R_lookAt · Rx(±90)` e decompõem o resultado, agora que `MotionTransform` sabe decompor. **Não medido no host**: se `lookAt` de fato devolve `[rx, ry, 0]` em AE 26.3x87, que é a premissa de toda a derivação (item 33) |
-| After Effects: Orbit (`ae.3d.orbit`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Raio constante por construção, verificado numericamente em sete fases; bake grava exatamente os valores avaliados, então a tolerância subpixel sai por construção. As camadas são parenteadas ao controller, o que dispensa referência por nome ou índice na expressão. **Não medido no host**: se `valueAtTime(t, false)` devolve o valor com a expressão aplicada como a documentação diz (item 34) |
+| After Effects: Orbit (`ae.3d.orbit`) | `IMPLEMENTED_HOST_PARTIALLY_VERIFIED` | `PASS` automatizado / host `PASS` parcial — AE 26.5x89/macOS 27.2 arm64, 2026-10-03 | Um clique, oito presets e nove controles compartilhados no nulo. Host: raio constante nos oito modos, controles imediatos, reaplicação preservada e Bake com erro menor que 0,001 px; duas falhas intermediárias restauradas. Preview/clique após recarga e Undo nativo `NOT RUN` por bloqueio do Mac; persistência e outras versões/SO `NOT RUN`. [Evidência atual](implementation/2026-10-03-orbit-controller.md). |
 | After Effects: Echo (`ae.effect.echo`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Nunca apaga efeito preexistente, e um Echo do usuário é recusado em vez de sobrescrito. Valores anteriores capturados antes de escrever. **Não medido no host**: os `matchName` dos cinco parâmetros (`ADBE Echo-0001`..`-0005`) e a numeração do menu Operador (item 35) |
 | After Effects: Fast Edit (`ae.comp.fast-edit`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | As oito operações, cada uma com prévia própria — o dispatcher recusa `dryRun` em comando mutante, então o resumo vem de `ae.comp.fast-edit.preview`, que compartilha o mesmo planejador. `cropToSelectedBounds` mede a união dos quatro cantos de cada camada já passados pela matriz, e move as camadas junto com o enquadramento. Declarado destrutivo: exige `allowDestructive`. **Não medido no host**: `sourceRectAtTime` com camadas giradas e o comportamento de `precompose` (item 36) |
 | After Effects: Wave (`ae.effect.wave`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Amplitude zero devolve exatamente `value`, por construção da expressão. Sem o Wave Warp instalado o modo efeito **recusa** com `CAPABILITY_UNAVAILABLE` em vez de cair calado para transform, porque os dois modos dão resultados visuais diferentes. **Não medido no host**: os `matchName` dos cinco parâmetros do Wave Warp e o mapeamento de direção para graus (item 38) |
@@ -52,6 +127,8 @@ Uma pesquisa oficial pode sustentar uma API e continuar `NOT RUN` no host. Uma m
 | After Effects: Transições de câmera (`ae.camera.transition`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Os onze presets, todos com a câmera nativa — nenhum plug-in de terceiro, que é o "sem dependência externa" do critério. O teste tem a tabela dos onze escrita à mão, e não derivada do comando, e confere que cada um move a propriedade certa no sentido certo. A curva do editor Bézier vira o ease pela mesma conversão do `ae.keys.ease.apply`. **Não medido no host**: se `ADBE Camera Zoom` é o matchName do zoom e se orientação é o caminho certo para pan e tilt numa câmera de dois nós (item 43) |
 | After Effects: Effector (`ae.rig.effector`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | O critério central — fora do raio a propriedade volta **exatamente** ao valor base — é medido extraindo a fórmula de influência do próprio template e avaliando-a na borda e além dela. As três curvas de queda zeram em zero: linear e smoothstep por forma fechada, a Bézier customizada por bissecção de vinte passos, com precisão melhor que 1e-6. O controller nasce com cinco sliders em vez de valores assados, para o raio poder ser animado. **Não medido no host**: se `effect(nome)(1)` lê o Slider Control como a documentação diz, e se `toWorld` numa camada 2D devolve o vetor de três componentes que a expressão assume (item 44) |
 | After Effects: Break Shape (`ae.shape.break`) | `PARTIAL` | `PASS` para o escopo entregue | O critério de aceite é uma comparação visual dentro de 1 px, e ele reduz a uma propriedade numérica que **é medida**: três pontos do grupo caem na mesma posição da composição antes e depois de separar, com erro abaixo de 1e-9 px — não 1 px. A separação duplica a camada e apaga os outros grupos, então o conteúdo nunca é reconstruído. **Fora de escopo, com aviso em vez de silêncio**: grupo com cisalhamento, e combinação de escala não uniforme com rotação, que não cabem num transform de camada; nesses casos o transform do grupo fica aninhado e a aparência segue exata. **Não medido no host**: o render em si, e se `duplicate` copia o contents como o teste assume (item 45) |
+| After Effects: Beat (`ae.audio.beat`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | O comando dispara `Convert Audio to Keyframes` sozinho e depois **verifica por observação** que a camada de amplitude apareceu, em vez de confiar que o menu rodou — `executeCommand` não devolve nada. Nenhum id numérico é cravado: só ids resolvidos por `findMenuCommandId`, porque um id que mudou de versão executa outro comando de menu qualquer. A seleção original é restaurada num `finally`, e o rollback remove a camada de amplitude **somente** quando foi este comando que a criou. Oito mutações injetadas nessas guardas, todas detectadas. **Não medido no host**: (a) se `executeCommand` abre grupo de Undo próprio dentro do grupo do dispatcher — `ai-to-vector.jsx:43-45` e `docs/research/ai-to-vector.md:28` se contradizem e **ninguém mediu**; se abrir, Ctrl+Z de um passo pode desfazer só metade; (b) se os nomes de menu localizados estão corretos — o de pt-BR vem de página de ajuda da Adobe, não da referência de scripting, e nenhum outro idioma é coberto; (c) se `layer.hasAudio` distingue a música como o comando assume; (d) a ordem "esquerda, direita, ambos" dos sliders, que vem de material de comunidade — se alguma versão inverter, o resultado é o canal errado e não uma falha visível; (e) o falso positivo de `acharAmplitude`: uma camada que tenha **apenas** Slider Controls do próprio Moti.on é indistinguível de uma camada de amplitude. Ver `docs/research/after-effects-convert-audio-to-keyframes.md` |
+| After Effects: curva de velocidade (`ae.keys.ease.apply`) | `IMPLEMENTED_NOT_HOST_VERIFIED` | `PASS` automatizado / host `NOT RUN` | Corrigido em 2026-09-05 um defeito que derrubava a ferramenta em **Position**, a propriedade mais usada: a dimensionalidade do valor era deduzida do comprimento do ease, e numa propriedade espacial o ease tem um elemento enquanto o valor tem dois ou três — `Number([x, y, z])` é `NaN`, e o `NaN` chegava ao After Effects como velocidade. Agora a decisão vem do `propertyValueType`, e o segmento espacial usa o comprimento da corda, que é o que "velocidade ao longo do caminho" significa. Cinco mutações injetadas, todas detectadas. **Não medido no host**: (a) se o After Effects aceita a velocidade derivada da corda como equivalente visual ao que o Easy Ease nativo produz numa Position; (b) se `setInterpolationTypeAtKey` antes de `setTemporalEaseAtKey` é mesmo o que destrava um keyframe Hold — o teste reproduz a recusa, mas a recusa em si é suposição sobre o AE; (c) o comportamento em Mask Path, que passou a ser recusado sem escrita |
 | Premiere: painel, contexto e capabilities | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | **Instalado e habilitado** no Premiere 26.3.2 via UPIA, e a aba `Moti.on` aparece no workspace; o painel não chegou a ser instanciado (sem `panel.started` no log), então nada do runtime está verificado. O ajuste de `entrypoints.setup`/`plugin.create` está implementado e coberto por teste, mas ainda sem smoke no host. Ver `docs/research/premiere-uxp-plugin-installation.md` e `docs/research/premiere-uxp-entrypoints-lifecycle.md` |
 | Premiere: versão/locale do host | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | `require("uxp").host.version`/`.uiLocale` documentados para 25.6+ |
 | Premiere: transações/Undo | `IMPLEMENTED_NOT_HOST_VERIFIED` | `NOT RUN` | Ordem `lockedAccess` → `executeTransaction` coberta por doubles |
@@ -618,3 +695,27 @@ e só o host real responde:
 
 O que **não** depende de host, e por isso foi medido aqui: a câmera é encontrada
 por estrutura e não por nome, então renomear ou reordenar não quebra o comando.
+# Checkpoint macOS — 2026-09-10
+
+O [checkpoint atual](HANDOFF_MACOS_2026-09-10.md) registra instalação nos dois
+hosts, smoke parcial AE 26.3x87/macOS arm64 e bloqueio de inicialização do
+Premiere pela conta Adobe. Preferências, favoritos, recentes e nova grade
+foram compilados e instalados, mas ainda são `IMPLEMENTED_NOT_HOST_VERIFIED`.
+Não estender evidências históricas abaixo a esse novo layout.
+
+## Biblioteca de presets — setembro de 2026
+
+56 receitas próprias validadas no AE 26.5x89/macOS. Miniaturas de efeitos e 3D são ilustrativas. Um preset gerenciado por camada; conflitos de expressão são recusados. Bake somente em motion de até 1.800 frames, sem keys prévios nas propriedades controladas. Texto continua editável pelos animadores. A máscara da cortina é capturada na aplicação. Windows e versões anteriores ainda não foram verificados. Consulte `docs/implementation/2026-09-14-animation-composer/entrega-e-validacao.md`.
+
+## Revisão de ferramentas — 21/09/2026
+
+O build de revisão abriu o painel Moti.on conectado no After Effects 26.5.0.89, macOS 27.2 arm64, em projeto vazio. Ao acionar o botão nativo “Criar uma nova composição”, o After Effects encerrou antes da execução de qualquer comando Moti.on. O relatório `~/Library/Logs/DiagnosticReports/After Effects-2026-09-21-210830.ips` aponta a thread em `BEE_MakeUniqueName` → `CProject::DoNewComp` → `CPanoProjItem::OnboardingNewComp`. Isso caracteriza o ponto da falha, não sua causa: não há evidência suficiente para responsabilizar ou inocentar a extensão. O aplicativo reabriu, e criar composição pelo menu Composição funcionou duas vezes.
+
+Nessas composições descartáveis, Orbit (duas shapes, movimento ao mudar CTI), Cylinder (oito faces) e Cube (seis faces) montaram rigs visíveis e cada um foi revertido por um Undo. O primeiro teste do Cube falhou com uma shape do próprio Moti.on: o código usava `layer.width/height`, que nessa fonte são as dimensões da composição, e recusava a âncora central no conteúdo. Após passar a usar os bounds visíveis e reinstalar, o mesmo fluxo funcionou. As fontes originais foram preservadas. Look At também aplicou em câmera selecionada com alvo shape, eixo frontal `+Y` e offset X 45°: Orientation mostrou valores avaliados não nulos, sem erro de expressão visível, e Undo restaurou zero. Esses resultados são smoke parcial, não aprovação de Adjust, bake, persistência após salvar/reabrir, conflitos ou outras versões/SO. Vetores, Clean e Parallax continuam `NOT RUN` no AE real neste build.
+
+Partículas agora falha fechada com `CAPABILITY_UNAVAILABLE` porque os matchNames internos do CC Particle World não foram confirmados no AE real. O comando não é considerado funcional só porque um teste com double passou. Os subcomandos `ae.parallax.create-null` e `ae.parallax.set-focus` da §16 ainda não existem; a migração de identidade necessária para reparo e seleção segura está descrita em [`adr/0004-identidade-e-reparo-do-rig-parallax.md`](adr/0004-identidade-e-reparo-do-rig-parallax.md).
+
+
+## Efeitos de texto dos vídeos — 2026-09-24
+
+`ae.text.word-reveal`, `ae.text.variable-morph` e `ae.text.style-swap`: aplicação, ajuste sem duplicação, remoção, render e Desfazer nativo verificados no AE 26.5x89/macOS 27.2. Morph requer fonte variável e AE 26+. Eixos ausentes são recusados antes da mutação. Salvar/reabrir e outros hosts/OS permanecem NOT RUN nesta rodada. [Limites por ferramenta](implementation/2026-09-24-text-effects/usage.md) e [evidências](implementation/2026-09-24-text-effects/verification.md).

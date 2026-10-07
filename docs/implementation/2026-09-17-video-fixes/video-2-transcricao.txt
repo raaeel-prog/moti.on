@@ -1,0 +1,5 @@
+[0000.8–0004.0] Presets de Câmera.
+[0004.0–0011.5] Temos os presets de câmera aqui, mas eles são bem simples.
+[0011.5–0021.0] Eu queria estar melhorando essa aba aqui, principalmente em esses efeitos aqui, igual do Animation Composer também.
+[0021.0–0035.0] Efeito Black, isso aqui, essa girada aqui, essa rotação, shake distorce, simple zoom, essas transições de câmera aqui.
+[0035.0–0039.5] Eu queria que você fizesse também isso no plugin lá, do mesmo jeito que está aqui.

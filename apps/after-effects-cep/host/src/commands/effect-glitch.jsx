@@ -1,73 +1,35 @@
 /**
- * Glitch por adjustment layer (`ae.effect.glitch`, CHMS-027).
- *
- * ## Por que uma adjustment layer, e nao efeitos na camada
- *
- * O criterio de aceite pede que **desativar o controller zere o efeito** e que
- * **remover o rig nao toque outras adjustment layers**. As duas coisas saem da
- * mesma decisao: o glitch inteiro mora numa adjustment layer propria, marcada
- * com o prefixo do plugin. Desligar o olho dela zera o efeito sem desfazer nada;
- * remover o rig e remover aquela camada, e nenhuma outra.
- *
- * Se os efeitos fossem aplicados direto nas camadas selecionadas, "desativar"
- * exigiria mexer em cada efeito de cada camada, e "remover" teria que adivinhar
- * quais efeitos eram do plugin no meio dos do usuario.
- *
- * ## Composicao do glitch
- *
- * Tres efeitos nativos empilhados, cada um resolvido por matchName e cada um com
- * fallback proprio: se um nao existir, ele e pulado e o comando avisa em vez de
- * falhar — um glitch com dois dos tres ainda e um glitch.
+ * Glitch rendered by CHMS Motion Core. The native effect is the live control
+ * group: no duplicate sliders or expressions are needed to drive its pixels.
+ * Applying again adjusts static parameters on the same managed solid; manual
+ * keyframes/expressions remain editable. The dispatcher owns the Undo group.
  */
 (function () {
   var ALLOWED = {
-    mode: true,
-    intensity: true,
-    frequency: true,
-    rgbSplit: true,
-    displacement: true,
-    frameHold: true,
-    seed: true,
-    durationFrames: true
+    mode: true, intensity: true, frequency: true, rgbSplit: true,
+    displacement: true, frameHold: true, seed: true, durationFrames: true
   };
-
-  var MN = {
-    // Deslocamento horizontal em blocos.
-    transformEffect: "ADBE Geometry2",
-    transformPosition: "ADBE Geometry2-0004",
-    // Separacao de canais.
-    channelBlur: "ADBE Channel Blur",
-    redBlur: "ADBE Channel Blur-0001",
-    blueBlur: "ADBE Channel Blur-0003",
-    // Ruido, que da a textura.
-    noise: "ADBE Noise",
-    noiseAmount: "ADBE Noise-0001"
-  };
-
-  var NOME_CONTROLLER = MotionContracts.RIG_PREFIX + "GLITCH";
+  var PLUGIN = "CHMS Motion Core";
+  var CONTROLLER_NAME = MotionContracts.RIG_PREFIX + "GLITCH_CORE";
+  var EFFECT_NAME = MotionContracts.RIG_PREFIX + PLUGIN;
+  var RIG_TYPE = "glitchNative";
+  // Stable native parameter order; disk IDs 1 and 2 retain the original ABI.
+  var PARAMS = [
+    { field: "intensity", matchName: PLUGIN + "-0001", scale: 100, integer: true },
+    { field: "rgbSplit", matchName: PLUGIN + "-0002", scale: 1, integer: true },
+    { field: "frequency", matchName: PLUGIN + "-0003", scale: 1, integer: false },
+    { field: "displacement", matchName: PLUGIN + "-0004", scale: 1, integer: false },
+    { field: "seed", matchName: PLUGIN + "-0005", scale: 1, integer: true }
+  ];
 
   /** @param {string} code @param {string} message @param {unknown} details @returns {MotionCommandFailure} */
   function failure(code, message, details) {
-    return {
-      code: code,
-      message: message,
-      recoverable: true,
-      details: typeof details === "undefined" ? null : details
-    };
+    return { code: code, message: message, recoverable: true, details: details };
   }
-
-  /** @param {unknown} value @returns {boolean} */
-  function isFiniteNumber(value) {
-    return typeof value === "number" && isFinite(value);
+  /** @param {unknown} value @param {number} min @param {number} max @returns {boolean} */
+  function inRange(value, min, max) {
+    return typeof value === "number" && isFinite(value) && value >= min && value <= max;
   }
-
-  /** @param {unknown} value @param {number} minimo @param {number} maximo @returns {boolean} */
-  function isInRange(value, minimo, maximo) {
-    return (
-      isFiniteNumber(value) && /** @type {number} */ (value) >= minimo && /** @type {number} */ (value) <= maximo
-    );
-  }
-
   /** @param {Record<string, unknown>} args @returns {MotionCommandFailure|null} */
   function validateArgs(args) {
     var key;
@@ -82,237 +44,213 @@
       }
     }
     if (args.mode !== "continuous" && args.mode !== "oneShot") {
-      return failure(MotionContracts.ERROR.INVALID_PRESET, "Modo de glitch invalido.", { field: "mode" });
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Modo de Glitch invalido.", { field: "mode" });
     }
-    if (!isInRange(args.intensity, 0, 1)) {
-      return failure(MotionContracts.ERROR.INVALID_PRESET, "Intensidade invalida.", { field: "intensity" });
+    var ranges = [
+      { field: "intensity", min: 0, max: 1 },
+      { field: "frequency", min: 0, max: 120 },
+      { field: "rgbSplit", min: 0, max: 200 },
+      { field: "displacement", min: 0, max: 2000 },
+      { field: "seed", min: 0, max: 1000000 },
+      { field: "durationFrames", min: 1, max: 10000 }
+    ];
+    for (var i = 0; i < ranges.length; i += 1) {
+      var range = ranges[i];
+      if (!range || !inRange(args[range.field], range.min, range.max)) {
+        return failure(MotionContracts.ERROR.INVALID_PRESET, "Parametro Glitch fora da faixa permitida.", { field: range ? range.field : "" });
+      }
     }
-    if (!isInRange(args.frequency, 0, 120)) {
-      return failure(MotionContracts.ERROR.INVALID_PRESET, "Frequencia invalida.", { field: "frequency" });
-    }
-    if (!isInRange(args.rgbSplit, 0, 200)) {
-      return failure(MotionContracts.ERROR.INVALID_PRESET, "Separacao RGB invalida.", { field: "rgbSplit" });
-    }
-    if (!isInRange(args.displacement, 0, 2000)) {
-      return failure(MotionContracts.ERROR.INVALID_PRESET, "Deslocamento invalido.", { field: "displacement" });
+    if (Math.floor(/** @type {number} */ (args.seed)) !== args.seed || Math.floor(/** @type {number} */ (args.durationFrames)) !== args.durationFrames) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Semente e duracao precisam ser inteiras.", null);
     }
     if (typeof args.frameHold !== "boolean") {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "frameHold precisa ser booleano.", { field: "frameHold" });
     }
-    if (
-      !isFiniteNumber(args.seed) ||
-      Math.floor(/** @type {number} */ (args.seed)) !== args.seed ||
-      !isInRange(args.seed, 0, 1000000)
-    ) {
-      return failure(MotionContracts.ERROR.INVALID_PRESET, "Semente invalida.", { field: "seed" });
-    }
-    if (
-      !isFiniteNumber(args.durationFrames) ||
-      Math.floor(/** @type {number} */ (args.durationFrames)) !== args.durationFrames ||
-      !isInRange(args.durationFrames, 1, 10000)
-    ) {
-      return failure(MotionContracts.ERROR.INVALID_PRESET, "Duracao invalida.", { field: "durationFrames" });
+    if (args.frameHold) {
+      return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "Este motor ainda nao oferece retencao temporal de quadros.", { feature: "frameHold" });
     }
     return null;
   }
 
-  /**
-   * Adjustment layer do glitch, se ja existir.
-   *
-   * @param {CompItem} comp
-   * @returns {Layer|null}
-   */
-  function findController(comp) {
-    var i;
-    for (i = 1; i <= comp.numLayers; i += 1) {
-      var camada = comp.layer(i);
-      if (camada && camada.name === NOME_CONTROLLER) return camada;
+  /** @param {any} layer @returns {any} */
+  function engineOn(layer) {
+    var parade = MotionEffects.parade(layer);
+    if (!parade) return null;
+    var exact = MotionEffects.findManaged(parade, PLUGIN, EFFECT_NAME);
+    if (exact) return exact;
+    var candidate = null;
+    for (var i = 1; i <= parade.numProperties; i += 1) {
+      var effect = parade.property(i);
+      if (effect && effect.matchName === PLUGIN) {
+        if (candidate) return null;
+        candidate = effect;
+      }
     }
-    return null;
+    return candidate;
   }
 
+  /** @param {CompItem} comp @returns {{controller: any, error: MotionCommandFailure|null}} */
+  function locate(comp) {
+    var controller = null;
+    for (var i = 1; i <= comp.numLayers; i += 1) {
+      var layer = comp.layer(i);
+      var marked = MotionRigMeta.has(layer.comment, RIG_TYPE);
+      var parade = MotionEffects.parade(layer);
+      var legacy = layer.name === CONTROLLER_NAME && parade && MotionEffects.findManaged(parade, PLUGIN, EFFECT_NAME);
+      if (layer.name === MotionContracts.RIG_PREFIX + "GLITCH" && parade) {
+        var oldTypes = ["ADBE Geometry2", "ADBE Channel Blur", "ADBE Noise"];
+        for (var j = 0; j < oldTypes.length; j += 1) {
+          var oldType = oldTypes[j];
+          if (oldType && MotionEffects.findManaged(parade, oldType, MotionContracts.RIG_PREFIX + oldType)) {
+            return { controller: null, error: failure(MotionContracts.ERROR.TRACK_CONFLICT, "A composicao ainda possui o Glitch antigo de efeitos empilhados. Remova esse rig antigo e aplique novamente para usar o motor nativo.", { reason: "legacyEffectStack" }) };
+          }
+        }
+      }
+      if (!marked && !legacy) continue;
+      if (controller) return { controller: null, error: failure(MotionContracts.ERROR.TRACK_CONFLICT, "Ha mais de um rig Glitch nesta composicao.", { rigType: RIG_TYPE }) };
+      controller = layer;
+    }
+    if (controller && controller.nullLayer) {
+      return { controller: null, error: failure(MotionContracts.ERROR.TRACK_CONFLICT, "O Glitch antigo usa um null. Remova esse rig antigo e aplique novamente para criar a camada de ajuste correta.", { reason: "legacyNullController" }) };
+    }
+    if (controller && (/** @type {any} */ (controller).locked || !controller.adjustmentLayer)) {
+      return { controller: null, error: failure(MotionContracts.ERROR.TRACK_CONFLICT, "O controller Glitch esta bloqueado ou deixou de ser uma camada de ajuste.", { reason: "controllerChanged" }) };
+    }
+    if (controller && !engineOn(controller)) {
+      return { controller: null, error: failure(MotionContracts.ERROR.TRACK_CONFLICT, "O efeito gerenciado foi removido ou sua identidade ficou ambigua.", { effect: PLUGIN }) };
+    }
+    return { controller: controller, error: null };
+  }
+
+  /** Catalog probe is read-only, including compositions with no layers. @returns {boolean} */
+  function installed() {
+    var catalog = /** @type {any} */ (app).effects;
+    if (!catalog || typeof catalog.length !== "number") return false;
+    for (var i = 0; i < catalog.length; i += 1) {
+      if (catalog[i] && catalog[i].matchName === PLUGIN) return true;
+    }
+    return false;
+  }
+  /** @param {any} effect @returns {boolean} */
+  function compatible(effect) {
+    for (var i = 0; i < PARAMS.length; i += 1) {
+      var param = PARAMS[i];
+      if (!param || !effect.property(param.matchName)) return false;
+    }
+    return true;
+  }
   /** @param {Record<string, unknown>} args @returns {MotionCommandFailure|null} */
   function preflight(args) {
     var validation = validateArgs(args);
     if (validation) return validation;
-    var activeItem = app.project ? app.project.activeItem : null;
-    if (!activeItem || !(activeItem instanceof CompItem)) {
-      return failure(MotionContracts.ERROR.NO_ACTIVE_COMP, "Nenhuma composicao ativa.", null);
+    var comp = app.project ? app.project.activeItem : null;
+    if (!comp || !(comp instanceof CompItem)) return failure(MotionContracts.ERROR.NO_ACTIVE_COMP, "Nenhuma composicao ativa.", null);
+    if (args.mode === "oneShot" && (comp.time < 0 || comp.time >= comp.duration)) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Posicione o cursor dentro da composicao.", { field: "durationFrames" });
+    }
+    if (!installed()) {
+      return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "CHMS Motion Core nao foi carregado. Instale a versao atual do plugin e reinicie o After Effects.", { effect: PLUGIN });
+    }
+    var located = locate(comp);
+    if (located.error) return located.error;
+    if (located.controller && !compatible(engineOn(located.controller))) {
+      return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "A versao instalada de CHMS Motion Core nao expoe os controles exigidos. Atualize o plugin e reinicie o After Effects.", { effect: PLUGIN, parameterCount: PARAMS.length });
+    }
+    // A catalog entry alone is not sufficient when a layer can reject effects.
+    for (var i = 1; i <= comp.numLayers; i += 1) {
+      var parade = MotionEffects.parade(comp.layer(i));
+      if (!parade) continue;
+      try {
+        if (!parade.canAddProperty(PLUGIN)) return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "CHMS Motion Core nao esta disponivel para aplicacao.", { effect: PLUGIN });
+      } catch (probeError) {
+        return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "Nao foi possivel verificar CHMS Motion Core.", { effect: PLUGIN });
+      }
+      break;
     }
     return null;
   }
 
-  /**
-   * Aplica um efeito quando ele existe naquela instalacao.
-   *
-   * Devolve `null` quando o efeito nao esta disponivel, e quem chama transforma
-   * isso em warning. A §pede "fornecer fallback": um glitch com dois dos tres
-   * efeitos continua sendo um glitch, e recusar o comando inteiro por causa de
-   * um plug-in ausente seria pior do que entregar o que da.
-   *
-   * @param {PropertyGroup} lista
-   * @param {string} matchName
-   * @returns {PropertyGroup|null}
-   */
-  function tentarEfeito(lista, matchName) {
-    try {
-      if (lista.canAddProperty(matchName) !== true) return null;
-    } catch (probeError) {
-      return null;
-    }
-    return MotionEffects.add(lista, matchName, MotionContracts.RIG_PREFIX + matchName);
-  }
-
-  /**
-   * @param {Record<string, unknown>} args
-   * @returns {MotionCommandResult}
-   */
+  /** @param {Record<string, unknown>} args @returns {MotionCommandResult} */
   function run(args) {
     var comp = /** @type {CompItem} */ (app.project.activeItem);
-    var intensidade = /** @type {number} */ (args.intensity);
-    var duracao = /** @type {number} */ (args.durationFrames);
-
-    var warnings = [];
-    var controllerAnterior = findController(comp);
-    var controllerCriado = null;
-    var efeitosAplicados = 0;
-
+    var located = locate(comp);
+    if (located.error) throw new Error("O rig Glitch mudou depois do preflight.");
+    var controller = located.controller;
+    var created = false;
+    var source = /** @type {any} */ (null);
+    var previous = controller ? { comment: controller.comment, inPoint: controller.inPoint, outPoint: controller.outPoint } : null;
+    var touched = /** @type {Array<any>} */ ([]);
+    var selectedLayers = comp.selectedLayers;
+    var selectedProperties = comp.selectedProperties;
+    var warnings = /** @type {Array<{code: string, message: string, details: unknown}>} */ ([]);
+    var i;
     try {
-      var controller = controllerAnterior;
       if (!controller) {
-        controller = comp.layers.addNull();
-        controllerCriado = controller;
-        controller.name = NOME_CONTROLLER;
-        // Adjustment layer: o efeito atinge tudo que estiver abaixo dela, que e o
-        // que permite desligar o glitch inteiro pelo olho de uma camada so.
+        controller = /** @type {any} */ (comp.layers).addSolid([1, 1, 1], CONTROLLER_NAME, comp.width, comp.height, /** @type {any} */ (comp).pixelAspect, comp.duration);
+        created = true;
+        source = controller.source;
         controller.adjustmentLayer = true;
+        MotionEffects.add(/** @type {PropertyGroup} */ (MotionEffects.parade(controller)), PLUGIN, EFFECT_NAME);
       }
-
-      var lista = /** @type {PropertyGroup} */ (MotionEffects.parade(controller));
-
-      // Reaplicar limpa os efeitos gerenciados antes de recriar: assim o preset
-      // novo substitui o antigo em vez de empilhar. Nenhum efeito sem o prefixo
-      // e tocado, que e a metade "sem apagar efeitos preexistentes".
-      var i;
-      for (i = lista.numProperties; i >= 1; i -= 1) {
-        var existente = lista.property(i);
-        if (
-          existente &&
-          typeof existente.name === "string" &&
-          existente.name.indexOf(MotionContracts.RIG_PREFIX) === 0
-        ) {
-          existente.remove();
+      var effect = engineOn(controller);
+      if (!effect || !compatible(effect)) throw new Error("O motor nativo nao expoe o contrato Glitch esperado.");
+      for (i = 0; i < PARAMS.length; i += 1) {
+        var binding = PARAMS[i];
+        if (!binding) continue;
+        var property = effect.property(binding.matchName);
+        if (property.numKeys > 0 || property.expression) {
+          warnings.push({ code: "glitch.animatedParameterPreserved", message: "A animacao manual do parametro foi preservada.", details: { field: binding.field } });
+          continue;
         }
+        var value = /** @type {number} */ (args[binding.field]) * binding.scale;
+        if (binding.integer) value = Math.round(value);
+        touched.push({ property: property, value: property.value });
+        property.setValue(value);
       }
-
-      if (/** @type {number} */ (args.displacement) > 0) {
-        var deslocador = tentarEfeito(lista, MN.transformEffect);
-        if (deslocador) {
-          var posicao = /** @type {Property} */ (deslocador.property(MN.transformPosition));
-          if (posicao) {
-            // O deslocamento pisca no ritmo pedido: `posterizeTime` trava o
-            // sorteio por segundo, e `seedRandom` o torna reproduzivel.
-            posicao.expression = MotionExpressions.renderGlitchDisplacement({
-              amount: /** @type {number} */ (args.displacement) * intensidade,
-              frequency: /** @type {number} */ (args.frequency),
-              seed: /** @type {number} */ (args.seed)
-            });
-            if (typeof posicao.expressionError === "string" && posicao.expressionError !== "") {
-              throw new Error("After Effects recusou a expressao de deslocamento.");
-            }
-            posicao.expressionEnabled = true;
-          }
-          efeitosAplicados += 1;
-        } else {
-          warnings.push({
-            code: "glitch.effectUnavailable",
-            message: "O efeito de deslocamento nao esta disponivel nesta instalacao.",
-            details: { effect: MN.transformEffect }
-          });
-        }
-      }
-
-      if (/** @type {number} */ (args.rgbSplit) > 0) {
-        var canais = tentarEfeito(lista, MN.channelBlur);
-        if (canais) {
-          // Desfocar vermelho e azul em quantidades diferentes e o que separa os
-          // canais visualmente, sem precisar de tres cópias da camada.
-          MotionEffects.setStatic(
-            /** @type {Property} */ (canais.property(MN.redBlur)),
-            /** @type {number} */ (args.rgbSplit) * intensidade
-          );
-          MotionEffects.setStatic(
-            /** @type {Property} */ (canais.property(MN.blueBlur)),
-            /** @type {number} */ (args.rgbSplit) * intensidade * 0.6
-          );
-          efeitosAplicados += 1;
-        } else {
-          warnings.push({
-            code: "glitch.effectUnavailable",
-            message: "A separacao de canais nao esta disponivel nesta instalacao.",
-            details: { effect: MN.channelBlur }
-          });
-        }
-      }
-
-      if (intensidade > 0) {
-        var ruido = tentarEfeito(lista, MN.noise);
-        if (ruido) {
-          MotionEffects.setStatic(
-            /** @type {Property} */ (ruido.property(MN.noiseAmount)),
-            intensidade * 20
-          );
-          efeitosAplicados += 1;
-        } else {
-          warnings.push({
-            code: "glitch.effectUnavailable",
-            message: "O ruido nao esta disponivel nesta instalacao.",
-            details: { effect: MN.noise }
-          });
-        }
-      }
-
-      if (efeitosAplicados === 0) {
-        throw new Error("Nenhum dos efeitos do glitch esta disponivel.");
-      }
-
-      if (args.mode === "oneShot") {
-        // Um estalo dura o que o usuario pediu: fora dessa janela a camada some
-        // da linha do tempo em vez de ficar glitchando para sempre.
-        controller.inPoint = comp.time;
-        controller.outPoint = comp.time + duracao * comp.frameDuration;
-      }
-    } catch (glitchError) {
+      controller.inPoint = args.mode === "oneShot" ? comp.time : 0;
+      controller.outPoint = args.mode === "oneShot" ? Math.min(comp.duration, comp.time + /** @type {number} */ (args.durationFrames) * comp.frameDuration) : comp.duration;
+      controller.comment = MotionRigMeta.write(controller.comment, MotionJson.stringify({ schemaVersion: 1, rigType: RIG_TYPE, effect: PLUGIN, parameterSchema: 1 }));
+    } catch (error) {
       var rollbackFailed = false;
-      if (controllerCriado) {
+      if (created) {
         try {
-          controllerCriado.remove();
-        } catch (removeError) {
-          rollbackFailed = true;
+          controller.remove();
+          if (source && source.usedIn.length === 0) source.remove();
+        } catch (removeError) { rollbackFailed = true; }
+      } else {
+        for (i = touched.length - 1; i >= 0; i -= 1) {
+          try { touched[i].property.setValue(touched[i].value); } catch (restoreError) { rollbackFailed = true; }
+        }
+        if (controller && previous) {
+          try {
+            controller.inPoint = previous.inPoint;
+            controller.outPoint = previous.outPoint;
+            controller.comment = previous.comment;
+          } catch (restoreControllerError) { rollbackFailed = true; }
         }
       }
       if (rollbackFailed) {
-        var rollbackError = /** @type {Error & {motionCode?: string}} */ (
-          new Error("Glitch falhou e a camada criada nao pode ser removida.")
-        );
+        var rollbackError = /** @type {Error & {motionCode?: string}} */ (new Error("Glitch falhou e nao foi possivel restaurar todo o estado anterior."));
         rollbackError.motionCode = MotionContracts.ERROR.ROLLBACK_FAILED;
         throw rollbackError;
       }
-      var failErr = /** @type {Error & {motionCode?: string}} */ (new Error("Glitch falhou."));
-      failErr.motionCode = MotionContracts.ERROR.HOST_OPERATION_FAILED;
-      throw failErr;
-    }
-
-    return {
-      changed: true,
-      warnings: warnings,
-      data: {
-        effectCount: efeitosAplicados,
-        controllerCreated: controllerCriado !== null,
-        mode: args.mode
+      throw error;
+    } finally {
+      // addSolid changes selection. Restore the previous layers/properties,
+      // including on failure, without moving the current-time indicator.
+      if (created && controller) {
+        try { controller.selected = false; } catch (removedControllerError) { /* Removed during rollback. */ }
       }
-    };
+      for (i = 0; i < selectedLayers.length; i += 1) {
+        var selected = selectedLayers[i];
+        if (selected) selected.selected = true;
+      }
+      for (i = 0; i < selectedProperties.length; i += 1) {
+        var selectedProperty = selectedProperties[i];
+        if (selectedProperty) /** @type {any} */ (selectedProperty).selected = true;
+      }
+    }
+    return { changed: true, warnings: warnings, data: { effectCount: 1, controllerCreated: created, mode: args.mode, engine: PLUGIN } };
   }
-
   MotionRegistry.register("ae.effect.glitch", { preflight: preflight, run: run });
-})();
+}());

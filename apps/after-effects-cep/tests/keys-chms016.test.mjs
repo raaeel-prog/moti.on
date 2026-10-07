@@ -363,3 +363,4 @@ test("comandos de keys recusam campos extras antes de Undo", async () => {
   assert.equal(delay.error.code, "INVALID_PRESET");
   assert.equal(f.calls.length, 0);
 });
+

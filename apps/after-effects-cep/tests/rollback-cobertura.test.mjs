@@ -293,3 +293,4 @@ test("quando o proprio rollback falha, o codigo distingue os dois casos", async 
   // pede Ctrl+Z do usuário, o outro diz que nada mudou.
   assert.equal(resposta.error.code, "ROLLBACK_FAILED");
 });
+

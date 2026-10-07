@@ -1,0 +1,16 @@
+{
+  "name": "@motion/asset-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SDK de integração de providers de assets para a suite Moti.on",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"tests/*.test.mjs\""
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

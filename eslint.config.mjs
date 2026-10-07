@@ -26,8 +26,14 @@ export default [
       "packages/contracts/src/generated/**",
       "apps/*/dist/**",
       "node_modules/**",
+      // The independent Next site has its own ESLint config/toolchain. Keep
+      // its React rules out of the Adobe plugin's ESLint 10 invocation.
+      "apps/Site/**",
       "artifacts/**",
       "coverage/**",
+      // Native build tools and their bundled HTML/JS docs are third-party files.
+      "plugin/cmake-*/**",
+      "plugin/build*/**",
       // Codigo gerado. A checagem dele e feita por
       // packages/contracts/tests/generated-drift.test.mjs, que roda o mesmo
       // scanner de subconjunto ExtendScript usado nos fontes escritos a mao.
@@ -135,6 +141,16 @@ export default [
         MotionTransform: "readonly",
         MotionEffects: "readonly",
         MotionKeyframes: "readonly",
+        MotionLiveControls: "readonly",
+        MotionLivePreset: "readonly",
+        MotionGroupedControls: "readonly",
+        MotionLibraryCore: "readonly",
+        MotionLibraryCatalog: "readonly",
+        MotionPresetLibrary: "readonly",
+        MotionQuickEffects: "readonly",
+        LightLayer: "readonly",
+        AutoOrientType: "readonly",
+        MotionMenuCommand: "readonly",
         MotionRigMeta: "readonly",
         MotionUndo: "readonly",
         MotionRegistry: "readonly",

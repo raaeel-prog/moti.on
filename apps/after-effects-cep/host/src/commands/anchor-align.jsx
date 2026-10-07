@@ -206,6 +206,128 @@
     return null;
   }
 
+  /** @param {any} prop @param {number} time @param {any} fallback @returns {any} */
+  function atTime(prop, time, fallback) {
+    return prop ? (typeof prop.valueAtTime === "function" ? prop.valueAtTime(time, false) : prop.value) : fallback;
+  }
+
+  /** @param {any} a @param {any} b @returns {any} */
+  function unionRect(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    var left = Math.min(a.left, b.left), top = Math.min(a.top, b.top);
+    return { left: left, top: top, width: Math.max(a.left + a.width, b.left + b.width) - left,
+      height: Math.max(a.top + a.height, b.top + b.height) - top };
+  }
+
+  /** Limites exatos de uma Bezier cubica: extremos da derivada por eixo.
+   * @param {[number, number, number, number]} p @returns {[number, number]} */
+  function curveRange(p) {
+    var a = -p[0] + 3 * p[1] - 3 * p[2] + p[3];
+    var b = 2 * (p[0] - 2 * p[1] + p[2]), c = p[1] - p[0];
+    var roots = [], values = [p[0], p[3]], d = b * b - 4 * a * c, i;
+    if (Math.abs(a) < 1e-10) { if (Math.abs(b) > 1e-10) roots.push(-c / b); }
+    else if (d >= 0) { roots.push((-b + Math.sqrt(d)) / (2 * a)); roots.push((-b - Math.sqrt(d)) / (2 * a)); }
+    for (i = 0; i < roots.length; i += 1) {
+      var t = Number(roots[i]), u = 1 - t;
+      if (t > 0 && t < 1) values.push(u*u*u*p[0] + 3*u*u*t*p[1] + 3*u*t*t*p[2] + t*t*t*p[3]);
+    }
+    return [Math.min.apply(null, values), Math.max.apply(null, values)];
+  }
+
+  /** @param {any} shape @returns {any} */
+  function pathRect(shape) {
+    var v = shape.vertices, rect = null, i, axis;
+    if (!shape.closed || !v || !v.length) throw new Error("Mascara aberta sem limites fechados.");
+    for (i = 0; i < v.length; i += 1) {
+      var j = (i + 1) % v.length, ranges = /** @type {any[]} */ ([]);
+      for (axis = 0; axis < 2; axis += 1) ranges.push(curveRange([v[i][axis],
+        v[i][axis] + shape.outTangents[i][axis], v[j][axis] + shape.inTangents[j][axis], v[j][axis]]));
+      rect = unionRect(rect, {left:ranges[0][0], top:ranges[1][0],
+        width:ranges[0][1]-ranges[0][0], height:ranges[1][1]-ranges[1][0]});
+    }
+    return rect;
+  }
+
+  /** Bounds geometricos de mascaras aditivas. Nenhuma propriedade e alterada.
+   * @param {any} layer @param {any} rect @param {number} time @returns {any} */
+  function maskedRect(layer, rect, time) {
+    var masks = layer.property("ADBE Mask Parade"), bounds = null, i;
+    if (!masks || !masks.numProperties) return rect;
+    var modes = /** @type {any} */ ($.global).MaskMode;
+    if (!modes) throw new Error("Modos de mascara indisponiveis.");
+    for (i = 1; i <= masks.numProperties; i += 1) {
+      var mask = masks.property(i);
+      if (mask.maskMode === modes.NONE) continue;
+      if (mask.maskMode !== modes.ADD || mask.inverted || mask.rotoBezier) throw new Error("Limites visuais requerem mascaras aditivas Bezier sem inversao.");
+      var feather = atTime(mask.property("ADBE Mask Feather"), time, [0,0]);
+      var expansion = atTime(mask.property("ADBE Mask Offset"), time, 0);
+      if (feather[0] !== 0 || feather[1] !== 0 || expansion !== 0) throw new Error("Mascara com feather ou expansao requer analise de pixels.");
+      if (atTime(mask.property("ADBE Mask Opacity"), time, 100) <= 0) continue;
+      bounds = unionRect(bounds, pathRect(atTime(mask.property("ADBE Mask Shape"), time, null)));
+    }
+    if (!bounds) return rect;
+    var left = Math.max(rect.left, bounds.left), top = Math.max(rect.top, bounds.top);
+    return {left:left, top:top, width:Math.max(0, Math.min(rect.left+rect.width, bounds.left+bounds.width)-left),
+      height:Math.max(0, Math.min(rect.top+rect.height, bounds.top+bounds.height)-top)};
+  }
+
+  /** Le transforms internos no tempo correto, incluindo a cadeia de pais 2D.
+   * @param {any} layer @param {number[]} point @param {number} time @returns {number[]} */
+  function contentPoint(layer, point, time) {
+    var depth = 0;
+    while (layer) {
+      if (depth++ > 64 || layer.threeDLayer) throw new Error("Conteudo interno 3D requer limites projetados pela camera.");
+      if (typeof AutoOrientType !== "undefined" && layer.autoOrient !== undefined && layer.autoOrient !== AutoOrientType.NO_AUTO_ORIENT) throw new Error("Conteudo com orientacao automatica nao possui limites geometricos estaticos.");
+      var tr = layer.property(MN.transform);
+      var anchor = atTime(tr.property(MN.anchorPoint), time, [0,0]);
+      var posProp = tr.property(MN.position), pos = atTime(posProp, time, [0,0]);
+      if (posProp.dimensionsSeparated) pos = [atTime(posProp.getSeparationFollower(0),time,0), atTime(posProp.getSeparationFollower(1),time,0)];
+      var scale = atTime(tr.property(MN.scale), time, [100,100]);
+      var angle = atTime(tr.property(MN.rotation), time, 0) * Math.PI / 180;
+      var x = (Number(point[0])-anchor[0])*scale[0]/100, y = (Number(point[1])-anchor[1])*scale[1]/100;
+      point = [pos[0] + x*Math.cos(angle)-y*Math.sin(angle), pos[1] + x*Math.sin(angle)+y*Math.cos(angle)];
+      layer = layer.parent;
+    }
+    return point;
+  }
+
+  /** @param {any} layer @param {number} time @param {boolean} extents @param {number} depth @param {any} budget @returns {any} */
+  function visualRect(layer, time, extents, depth, budget) {
+    if (depth > 16 || ++budget.count > 2000) throw new Error("Pre-comp excede o limite de analise de conteudo.");
+    var source = layer.source, rect;
+    if (source instanceof CompItem) {
+      var sourceTime = layer.timeRemapEnabled ? atTime(layer.property("ADBE Time Remapping"), time, 0) :
+        (time - (layer.startTime || 0)) * 100 / (layer.stretch || 100);
+      var bounds = null, i, j, hasSolo = false;
+      for (i=1; i<=source.numLayers; i+=1) if (/** @type {any} */ (source.layer(i)).solo) hasSolo = true;
+      for (i=1; i<=source.numLayers; i+=1) {
+        var child = /** @type {any} */ (source.layer(i));
+        if (child.enabled === false || child.hasVideo === false || child.nullLayer || child.guideLayer ||
+            child.isTrackMatte || (hasSolo && !child.solo) || sourceTime < child.inPoint || sourceTime >= child.outPoint) continue;
+        if (child.adjustmentLayer || child.hasTrackMatte) throw new Error("Pre-comp com adjustment ou track matte requer analise de pixels.");
+        var tr = child.property(MN.transform);
+        if (!tr || !tr.property(MN.anchorPoint)) continue;
+        if (atTime(tr.property("ADBE Opacity"),sourceTime,100) <= 0) continue;
+        var r = visualRect(child, sourceTime, extents, depth+1, budget);
+        if (r.width <= 0 || r.height <= 0) continue;
+        var corners = [[r.left,r.top],[r.left+r.width,r.top],[r.left,r.top+r.height],[r.left+r.width,r.top+r.height]];
+        for (j=0;j<corners.length;j+=1) {
+          var p = contentPoint(child,/** @type {number[]} */ (corners[j]),sourceTime);
+          bounds = unionRect(bounds,{left:p[0],top:p[1],width:0,height:0});
+        }
+      }
+      rect = bounds || {left:0,top:0,width:source.width,height:source.height};
+      // Sem collapse, o quadro da pre-comp recorta o conteudo externo.
+      if (!layer.collapseTransformation) {
+        var x = Math.max(0,rect.left), y = Math.max(0,rect.top);
+        rect = {left:x,top:y,width:Math.max(0,Math.min(source.width,rect.left+rect.width)-x),height:Math.max(0,Math.min(source.height,rect.top+rect.height)-y)};
+      }
+    } else rect = layer.sourceRectAtTime(time, extents);
+    if (!rect || !isFinite(rect.left) || !isFinite(rect.top) || !isFinite(rect.width) || !isFinite(rect.height)) throw new Error("Limites invalidos.");
+    return maskedRect(layer, rect, time);
+  }
+
   /**
    * @param {Record<string, unknown>} args
    * @param {boolean} esperaPreview
@@ -239,21 +361,33 @@
     for (i = 0; i < selecionadas.length; i += 1) {
       var camada = /** @type {Layer} */ (selecionadas[i]);
       if (!camada) continue;
+      var flags = /** @type {any} */ (camada);
+      // Recolher transformacoes/rasterizar continuamente nao invalida R.S:
+      // conservar o transform local conserva tambem sua composicao com o
+      // conteudo da pre-comp. Cada camada usa seu proprio retangulo.
+      if (flags.locked === true) {
+        return { error: failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE,
+          "Desbloqueie a camada para alinhar a ancora.", { layerIndex: camada.index, layerName: camada.name }), itens: [] };
+      }
+      if (args.preserveVisualPosition === true && typeof AutoOrientType !== "undefined" &&
+          typeof flags.autoOrient !== "undefined" && flags.autoOrient !== AutoOrientType.NO_AUTO_ORIENT) {
+        return { error: failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE,
+          "Desative a orientacao automatica para preservar a aparencia ao mover a ancora.", { layerIndex: camada.index, layerName: camada.name }), itens: [] };
+      }
 
       var retangulo;
       try {
-        retangulo = camada.sourceRectAtTime(tempo, /** @type {boolean} */ (args.includeExtents));
+        retangulo = visualRect(flags, tempo, /** @type {boolean} */ (args.includeExtents), 0, {count:0});
       } catch (rectError) {
-        return {
-          error: failure(
-            MotionContracts.ERROR.INVALID_SELECTION_TYPE,
-            "Esta camada nao expoe um retangulo de origem.",
-            { layerIndex: camada.index }
-          ),
-          itens: []
-        };
+        return {error: failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE,
+          "Nao foi possivel medir o conteudo: " + String(rectError),
+          {layerIndex:camada.index, layerName:camada.name}), itens:[]};
       }
 
+      if (!retangulo || !isFinite(retangulo.left) || !isFinite(retangulo.top) ||
+          !isFinite(retangulo.width) || !isFinite(retangulo.height) || retangulo.width < 0 || retangulo.height < 0) {
+        return { error: failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Limites da camada invalidos.", { layerIndex: camada.index }), itens: [] };
+      }
       var ponto = /** @type {string} */ (args.gridPoint);
       if (args.mode === "reverse") {
         ponto = /** @type {string} */ (OPOSTO[ponto]);
@@ -270,10 +404,42 @@
       ];
 
       var grupo = camada.property(MN.transform);
+      if (!grupo || !grupo.property(MN.anchorPoint) || !grupo.property(MN.position)) {
+        return { error: failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Selecione uma camada com ancora e posicao.", { layerIndex: camada.index }), itens: [] };
+      }
       var propAncora = grupo.property(MN.anchorPoint);
       var propPosicao = grupo.property(MN.position);
       var propEscala = grupo.property(MN.scale);
       var propRotacao = grupo.property(MN.rotation);
+
+      var positionProperties = /** @type {any[]} */ ([propPosicao]);
+      var positionLeader = /** @type {any} */ (propPosicao);
+      if (positionLeader.dimensionsSeparated === true) {
+        positionProperties = [];
+        var dimension;
+        for (dimension = 0; dimension < (camada.threeDLayer ? 3 : 2); dimension += 1) {
+          if (typeof positionLeader.getSeparationFollower !== "function") {
+            return { error: failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Dimensoes separadas indisponiveis.", null), itens: [] };
+          }
+          positionProperties.push(positionLeader.getSeparationFollower(dimension));
+        }
+      }
+      var guarded = /** @type {any[]} */ ([propAncora]);
+      if (args.preserveVisualPosition === true) guarded = guarded.concat(positionProperties, [propEscala, propRotacao, grupo.property("ADBE Orientation"), grupo.property("ADBE Rotate X"), grupo.property("ADBE Rotate Y")]);
+      var guardedIndex;
+      for (guardedIndex = 0; guardedIndex < guarded.length; guardedIndex += 1) {
+        var guardedProperty = guarded[guardedIndex];
+        if (guardedProperty && typeof guardedProperty.expression === "string" && guardedProperty.expression !== "") {
+          return { error: failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A transformacao possui expressao; o conteudo foi preservado.", { layerIndex: camada.index }), itens: [] };
+        }
+      }
+      var linearProperties = [propEscala, propRotacao, grupo.property("ADBE Orientation"), grupo.property("ADBE Rotate X"), grupo.property("ADBE Rotate Y")];
+      for (guardedIndex = 0; guardedIndex < linearProperties.length; guardedIndex += 1) {
+        var linearProperty = linearProperties[guardedIndex];
+        if (args.preserveVisualPosition === true && linearProperty && linearProperty.numKeys > 0) {
+          return { error: failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Escala, orientacao ou rotacao animada: a compensacao mudaria ao longo do tempo.", { layerIndex: camada.index }), itens: [] };
+        }
+      }
 
       // Ancora animada nao tem um valor unico para mover: qual keyframe
       // deveria ir para o canto? Recusar e melhor que escolher um por conta.
@@ -288,25 +454,12 @@
         };
       }
 
-      // A compensacao e `R.S.(A' - A)`. Com escala ou rotacao animadas esse
-      // vetor muda a cada quadro, e um deslocamento constante da posicao
-      // acertaria um instante e erraria todos os outros — em silencio.
-      if (
-        args.preserveVisualPosition === true &&
-        (propEscala.numKeys > 0 || propRotacao.numKeys > 0)
-      ) {
-        return {
-          error: failure(
-            MotionContracts.ERROR.KEYFRAME_CONFLICT,
-            "Escala ou rotacao animada: a compensacao nao seria constante.",
-            { layerIndex: camada.index }
-          ),
-          itens: []
-        };
-      }
-
       var ancoraAtual = /** @type {number[]} */ (propAncora.value);
       var posicaoAtual = /** @type {number[]} */ (propPosicao.value);
+      if (positionLeader.dimensionsSeparated === true) {
+        posicaoAtual = [];
+        for (guardedIndex = 0; guardedIndex < positionProperties.length; guardedIndex += 1) posicaoAtual.push(Number(positionProperties[guardedIndex].value));
+      }
       var tresD = camada.threeDLayer === true;
       if (tresD) {
         // A ancora de uma camada 3D tem tres componentes, e escrever duas
@@ -320,6 +473,8 @@
         camada: camada,
         grupo: grupo,
         posicaoAnimada: propPosicao.numKeys > 0,
+        positionSnapshots: snapshotPositions(positionProperties),
+        separated: positionLeader.dimensionsSeparated === true,
         ponto: ponto,
         tresD: tresD,
         // `linearMatrix` le as propriedades da camada, e nao os valores
@@ -382,47 +537,45 @@
     return saida;
   }
 
-  /**
-   * Soma `sinal * delta` a cada keyframe da propriedade.
-   *
-   * Usado na ida com `sinal = 1` e no rollback com `-1`. Nenhum keyframe e
-   * criado, removido ou reordenado: so os valores andam em bloco, e por isso
-   * a volta e exata sem precisar de snapshot.
-   *
-   * @param {Property} propriedade @param {number[]} delta @param {number} sinal
-   * @returns {void}
-   */
-  function deslocaKeyframes(propriedade, delta, sinal) {
-    var k, c;
-    for (k = 1; k <= propriedade.numKeys; k += 1) {
-      var valor = /** @type {number[]} */ (propriedade.keyValue(k));
-      /** @type {number[]} */
-      var novo = [];
-      for (c = 0; c < valor.length; c += 1) {
-        var passo = c < delta.length ? /** @type {number} */ (delta[c]) : 0;
-        novo.push(/** @type {number} */ (valor[c]) + passo * sinal);
-      }
-      propriedade.setValueAtKey(k, novo);
+  /** @param {any[]} properties @returns {any[]} */
+  function snapshotPositions(properties) {
+    var snapshots = [], i, k;
+    for (i = 0; i < properties.length; i += 1) {
+      var property = properties[i], keys = [];
+      for (k = 1; k <= property.numKeys; k += 1) keys.push(property.keyValue(k));
+      snapshots.push({ property: property, value: property.value, keys: keys });
+    }
+    return snapshots;
+  }
+  /** @param {any} value @param {number[]} delta @param {number} component @param {boolean} separated @returns {any} */
+  function offset(value, delta, component, separated) {
+    if (separated) return Number(value) + Number(delta[component] || 0);
+    var result = [], i;
+    for (i = 0; i < value.length; i += 1) result.push(value[i] + (delta[i] || 0));
+    return result;
+  }
+  /** @param {any} item @param {boolean} restore */
+  function writePositions(item, restore) {
+    var snapshots = item.positionSnapshots, delta = deslocamento(item), i, k;
+    for (i = 0; i < snapshots.length; i += 1) {
+      var snapshot = snapshots[i];
+      if (snapshot.keys.length) {
+        for (k = 0; k < snapshot.keys.length; k += 1) snapshot.property.setValueAtKey(k + 1,
+          restore ? snapshot.keys[k] : offset(snapshot.keys[k], delta, i, item.separated));
+      } else snapshot.property.setValue(restore ? snapshot.value : offset(snapshot.value, delta, i, item.separated));
     }
   }
 
-  /**
-   * Posicao compensada: `posicao + R(t) . S . (A' - A)`.
-   *
-   * @param {Record<string, unknown>} item
-   * @returns {number[]}
-   */
-  function posicaoCompensada(item) {
-    var posicao = /** @type {number[]} */ (item.posicaoAntes);
-    var delta = deslocamento(item);
-    /** @type {number[]} */
-    var saida = [];
-    var c;
-    for (c = 0; c < posicao.length; c += 1) {
-      var passo = c < delta.length ? /** @type {number} */ (delta[c]) : 0;
-      saida.push(/** @type {number} */ (posicao[c]) + passo);
+  /** O host arredonda componentes ao gravar. Nao repetir deslocamentos abaixo
+   * dessa precisao, nem acumular erro ao clicar novamente no mesmo ponto.
+   * @param {number[]} a @param {number[]} b @returns {boolean} */
+  function sameAnchor(a, b) {
+    var i;
+    for (i = 0; i < 2; i += 1) {
+      var x = Number(a[i]), y = Number(b[i]);
+      if (Math.abs(x-y) > Math.max(0.0001, Math.abs(x)*0.0000001, Math.abs(y)*0.0000001)) return false;
     }
-    return saida;
+    return true;
   }
 
   /** @param {Array<Record<string, unknown>>} itens @returns {Record<string, unknown>} */
@@ -434,9 +587,7 @@
       var item = /** @type {Record<string, unknown>} */ (itens[i]);
       var antes = /** @type {number[]} */ (item.ancoraAntes);
       var depois = /** @type {number[]} */ (item.ancoraDepois);
-      var mudou =
-        /** @type {number} */ (antes[0]) !== /** @type {number} */ (depois[0]) ||
-        /** @type {number} */ (antes[1]) !== /** @type {number} */ (depois[1]);
+      var mudou = !sameAnchor(antes, depois);
       if (mudou) mudam += 1;
 
       alvos.push({
@@ -481,25 +632,11 @@
           var item = /** @type {Record<string, unknown>} */ (prepared.itens[i]);
           var antes = /** @type {number[]} */ (item.ancoraAntes);
           var depois = /** @type {number[]} */ (item.ancoraDepois);
-          if (antes[0] === depois[0] && antes[1] === depois[1]) continue;
+          if (sameAnchor(antes, depois)) continue;
 
           var grupo = /** @type {PropertyGroup} */ (item.grupo);
-          var propPosicao = grupo.property(MN.position);
-
           tocadas.push(item);
-
-          // Compensa ANTES de mover a ancora: a conta usa a ancora antiga.
-          if (preservar) {
-            if (item.posicaoAnimada === true) {
-              // `setValue` levanta erro com keyframes. O deslocamento e
-              // constante — escala e rotacao sao estaticas aqui, garantido no
-              // preflight —, entao somar o mesmo vetor em cada keyframe
-              // preserva a animacao inteira.
-              deslocaKeyframes(propPosicao, deslocamento(item), 1);
-            } else {
-              propPosicao.setValue(posicaoCompensada(item));
-            }
-          }
+          if (preservar) writePositions(item, false);
           grupo.property(MN.anchorPoint).setValue(depois);
           aplicadas += 1;
         }
@@ -510,16 +647,7 @@
             var desfazer = /** @type {Record<string, unknown>} */ (tocadas[i]);
             var g = /** @type {PropertyGroup} */ (desfazer.grupo);
             g.property(MN.anchorPoint).setValue(desfazer.ancoraAntes);
-            // Desfazer um deslocamento constante e subtrair o mesmo vetor.
-            // Nao precisa de snapshot: nenhum keyframe foi criado, removido
-            // ou reordenado — so os valores andaram em bloco.
-            if (desfazer.posicaoAnimada === true) {
-              if (preservar) {
-                deslocaKeyframes(g.property(MN.position), deslocamento(desfazer), -1);
-              }
-            } else {
-              g.property(MN.position).setValue(desfazer.posicaoAntes);
-            }
+            if (preservar) writePositions(desfazer, true);
           } catch (restoreError) {
             rollbackFalhou = true;
           }

@@ -18,7 +18,8 @@ test('visual foundation preserves the approved minimal workstation contract', as
     readFile('shared/product-ui-profile.json', 'utf8'),
   ]);
 
-  for (const text of [foundation, designSkill, profile]) assert.match(text, /#1D1D1D/i);
+  for (const text of [foundation, profile]) assert.match(text, /#121212/i);
+  assert.equal(JSON.parse(profile).accent, "#FFFFFF");
   assert.match(designSkill, /one active task at a time/i);
   assert.match(designSkill, /dashboard/i);
   assert.match(foundation, /glassmorphism/i);

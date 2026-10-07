@@ -2,11 +2,11 @@
 <ExtensionManifest
   Version="7.0"
   ExtensionBundleId="com.motion.plugin"
-  ExtensionBundleVersion="0.1.0"
+  ExtensionBundleVersion="0.2.0"
   ExtensionBundleName="Moti.on"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <ExtensionList>
-    <Extension Id="com.motion.plugin.ae.panel" Version="0.1.0" />
+    <Extension Id="com.motion.plugin.ae.panel" Version="0.2.0" />
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>

@@ -150,6 +150,10 @@ class FakeProperty {
     this.key(index).outInterpolation = outType;
   }
   setTemporalEaseAtKey(index, inEase, outEase) {
+    if ([PropertyValueType.TwoD_SPATIAL, PropertyValueType.ThreeD_SPATIAL].includes(this.propertyValueType)) {
+      assert.equal(inEase.length, 1, "AE spatial ease requires one element");
+      assert.equal(outEase.length, 1, "AE spatial ease requires one element");
+    }
     this.key(index).inEase = inEase.map((e) => new FakeKeyframeEase(e.speed, e.influence));
     this.key(index).outEase = outEase.map((e) => new FakeKeyframeEase(e.speed, e.influence));
   }
@@ -656,3 +660,4 @@ test("colar sem ter copiado recusa antes de abrir o Undo", async () => {
   assert.equal(resposta.error.code, "NO_SELECTION");
   assert.deepEqual(calls, []);
 });
+

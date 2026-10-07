@@ -11,9 +11,10 @@
  * expressão que já divergiu.
  */
 import test from "node:test";
+import vm from "node:vm";
 import assert from "node:assert/strict";
 
-import { loadHostModules } from "./host-harness.mjs";
+import { loadHostModules } from "./grouped-host-harness.mjs";
 
 const PropertyType = { PROPERTY: 1, INDEXED_GROUP: 2 };
 const PropertyValueType = { NO_VALUE: 0, OneD: 1, TwoD: 2, TwoD_SPATIAL: 3, ThreeD: 4 };
@@ -305,9 +306,11 @@ test("o controller nasce com sliders, e nao com valores assados", async () => {
   assert.ok(controller);
   // Cinco sliders: raio e as quatro intensidades. É o que deixa o usuário
   // ajustar e animar sem rodar o comando de novo.
-  assert.equal(controller.efeitos.numProperties, 5);
-  const raio = controller.efeitos.filhos.find((e) => e.name === "Raio");
-  assert.equal(raio.property("ADBE Slider Control-0001").value, 750);
+  assert.equal(controller.efeitos.numProperties, 1);
+  const group = controller.efeitos.filhos.find(e => e.name === "Moti.on · Effector");
+  assert.equal(group.numProperties, 5);
+  assert.equal(group.property(1).name, "Raio (px)");
+  assert.equal(group.property(1).value, 750);
   assert.deepEqual(calls, [["begin", "Moti.on: aplicar effector"], ["end"]]);
 });
 
@@ -318,7 +321,7 @@ test("a expressao le o slider, e nao um numero fixo", async () => {
   scope.MotionAE.dispatch(request({ ...baseArgs, radius: 750 }));
 
   const expr = camada.position.expression;
-  assert.ok(expr.includes('var nomeRaio = "Raio";'));
+  assert.equal(JSON.parse(expr.match(/var nomeRaio = ("[^";]+");/)[1]), "Moti.on · Effector");
   assert.ok(expr.includes("var raio = ctrl.effect(nomeRaio)(1);"));
   assert.ok(!expr.includes("750"), "o raio nao pode estar assado na expressao");
 });
@@ -383,3 +386,26 @@ test("reaplicar reaproveita o controller existente", async () => {
   assert.equal(segunda.data.controllerCreated, false);
   assert.equal(comp.numLayers, antes, "nenhum controller novo");
 });
+
+for (const dimensions of [2, 3]) {
+  test(`Effector evaluates a finite radial displacement with ${dimensions}D world coordinates`, async () => {
+    const layer = new FakeLayer();
+    const { scope } = await fixture(new FakeCompItem([layer]));
+    scope.MotionAE.dispatch(request(baseArgs));
+    const value = dimensions === 2 ? [100, 0] : [100, 0, 0];
+    const source = layer.position.expression;
+    const output = vm.runInNewContext(source, {
+      value,
+      thisComp: { layer: () => ({ toWorld: () => value.map(() => 0), effect: () => index => index === 1 ? 400 : 200 }) },
+      thisLayer: { toWorld: () => value },
+      sub: (a, b) => a.map((n, i) => n - b[i]),
+      mul: (a, n) => a.map(v => v * n),
+      add: (a, b) => a.map((v, i) => v + b[i])
+    });
+    assert.deepEqual(Array.from(output), dimensions === 2 ? [250, 0] : [250, 0, 0]);
+    assert.equal(scope.MotionExpressions.isManagedEffector(source), true);
+    const legacy = source.replace("if (delta.length < 3) delta = [delta[0], delta[1], 0];\n", "");
+    assert.equal(scope.MotionExpressions.isManagedEffector(legacy), true);
+  });
+}
+

@@ -26,7 +26,7 @@ This repository uses repo-local Agent Skills under `.agents/skills/`.
 
 ## Non-negotiable product rules
 
-- Keep the UI subtle, minimal and Adobe-native with base `#1D1D1D`.
+- Keep the UI subtle, minimal and Adobe-native with base `#121212` (Onyx approved 2026-10-03; see `docs/UI_FOUNDATION.md`).
 - Show one dominant task at a time; never create an all-in-one dashboard.
 - Use documented Adobe APIs plus runtime capability gates; never invent methods.
 - Keep AE CEP/ExtendScript and Premiere UXP host layers separate.
@@ -46,3 +46,11 @@ npm run check
 ```
 
 After editing product code, run the repository's full check plus task-specific host verification.
+
+## Assisting Another Agent (Pair Programming)
+
+When acting in a support role to another active agent:
+1. **Clear the Path**: Do not duplicate the other agent's immediate task. Instead, look ahead in `docs/MASTER_BUILD_SPEC.md` and pick up complex tasks that are not yet started (e.g., preparing UI scaffolding, optimizing shared modules, writing tests for completed parts).
+2. **Do Not Replace Tools**: Do not modify the build scripts, structural configurations, or tools the other agent relies on, unless specifically requested.
+3. **Respect the Briefing**: Always maintain the current architectural patterns, UI guidelines (e.g., current Onyx dark mode), and rules from `AGENTS.md`. 
+4. **State Awareness**: Check the current active branches, logs, or task lists to infer what the other agent is currently modifying before making changes.

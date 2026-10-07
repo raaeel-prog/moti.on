@@ -222,7 +222,7 @@
    * Estado de um Trim Paths, para poder devolve-lo ao que era.
    *
    * @param {PropertyGroup} trim
-   * @returns {{ trim: PropertyGroup, startSnapshot: MotionPropertySnapshot, endSnapshot: MotionPropertySnapshot, offsetValue: unknown, name: string }}
+   * @returns {{ trim: PropertyGroup, startSnapshot: MotionPropertySnapshot, endSnapshot: MotionPropertySnapshot, offsetSnapshot: MotionPropertySnapshot, name: string }}
    */
   function snapshotTrim(trim) {
     var start = /** @type {Property} */ (trim.property(MN.trimStart));
@@ -232,7 +232,7 @@
       trim: trim,
       startSnapshot: MotionKeyframes.captureProperty(start),
       endSnapshot: MotionKeyframes.captureProperty(end),
-      offsetValue: offset.value,
+      offsetSnapshot: MotionKeyframes.captureProperty(offset),
       name: trim.name
     };
   }
@@ -347,7 +347,7 @@
           MotionKeyframes.restoreProperty(anterior.startSnapshot, null);
           MotionKeyframes.restoreProperty(anterior.endSnapshot, null);
           var trimAnterior = anterior.trim;
-          setStatic(trimAnterior.property(MN.trimOffset), /** @type {number} */ (anterior.offsetValue));
+          MotionKeyframes.restoreProperty(anterior.offsetSnapshot, null);
           trimAnterior.name = anterior.name;
         } catch (restoreError) {
           rollbackFailed = true;

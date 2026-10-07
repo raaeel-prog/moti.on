@@ -190,7 +190,8 @@
       if (
         beforeExpression !== "" &&
         beforeExpression !== desired &&
-        !MotionExpressions.isManagedSmooth(beforeExpression)
+        !MotionExpressions.isManagedSmooth(beforeExpression) &&
+        !MotionExpressions.isManagedSmoothLive(beforeExpression)
       ) {
         return {
           error: failure(
@@ -222,14 +223,84 @@
     property.expressionEnabled = item.beforeEnabled === true;
   }
 
+
+  /** Os controles que o Smooth expoe no Effect Controls. */
+  var LIVE_BINDINGS = /** @type {MotionLiveControlBindingHost[]} */ ([
+    {
+      paramId: "widthSeconds",
+      label: { "pt-BR": "Largura", "en-US": "Width" },
+      help: {
+        "pt-BR": "Janela de suavização, em segundos.",
+        "en-US": "Smoothing window, in seconds."
+      },
+      control: "slider",
+      target: "layer",
+      order: 1,
+      min: 0,
+      max: 10
+    },
+    {
+      paramId: "samples",
+      label: { "pt-BR": "Amostras", "en-US": "Samples" },
+      help: {
+        "pt-BR": "Quantas leituras entram na média. Mais custa mais.",
+        "en-US": "How many readings feed the average. More costs more."
+      },
+      control: "slider",
+      target: "layer",
+      order: 2,
+      min: 1,
+      max: 100
+    }
+  ]);
   MotionRegistry.register("ae.expression.smooth", {
-    preflight: function (args) {
+    preflight: function (args, context, options) {
+      if (options && options.emitLiveControls === true) return validateArgs(args) || MotionQuickEffects.prepare("smooth", args, options).error;
       return prepare(args).error;
     },
 
-    run: function (args) {
+    /**
+     * @param {Record<string, unknown>} args
+     * @param {Record<string, unknown>} context
+     * @param {Record<string, unknown>} [options]
+     * @returns {MotionCommandResult}
+     */
+    run: function (args, context, options) {
+      if (options && options.emitLiveControls === true) return MotionQuickEffects.run("smooth", args, context, options);
       var prepared = prepare(args);
       if (prepared.error) throw new Error("Smooth ficou invalido depois do preflight.");
+
+      // Live Controls: controles na camada em vez de valores cravados.
+      var live = !!(options && options.emitLiveControls === true);
+      var preset = null;
+      var vivo;
+      if (live && prepared.items.length > 0) {
+        var propriedades = [];
+        for (vivo = 0; vivo < prepared.items.length; vivo += 1) {
+          var origem = prepared.items[vivo];
+          if (origem) propriedades.push(origem.property);
+        }
+        preset = MotionLivePreset.aplicar(propriedades, {
+          tool: "Smooth",
+          rigId: "ae.expression.smooth",
+          locale: context ? context.locale : null,
+          bindings: LIVE_BINDINGS,
+          values: {
+            widthSeconds: args.widthSeconds,
+            samples: args.samples
+          }
+        });
+        for (vivo = 0; vivo < prepared.items.length; vivo += 1) {
+          var alvoVivo = prepared.items[vivo];
+          var refs = preset.refsPorPropriedade[vivo];
+          if (!alvoVivo || !refs) continue;
+          alvoVivo.desired = MotionExpressions.renderSmoothLive(
+            /** @type {{widthSeconds: string, samples: string}} */ (refs)
+          );
+          alvoVivo.changed =
+            alvoVivo.beforeExpression !== alvoVivo.desired || alvoVivo.beforeEnabled !== true;
+        }
+      }
 
       var touched = [];
       var appliedCount = 0;
@@ -265,6 +336,8 @@
             rollbackFailed = true;
           }
         }
+        // Os controles criados saem junto: sliders orfaos sao pior que nada.
+        if (preset && !preset.desfazer()) rollbackFailed = true;
         if (rollbackFailed) {
           var rollbackError = /** @type {Error & {motionCode?: string}} */ (
             new Error("Rollback Smooth falhou.")
@@ -277,7 +350,7 @@
 
       return {
         changed: appliedCount > 0,
-        warnings: [],
+        warnings: preset ? preset.avisos : [],
         data: {
           appliedCount: appliedCount,
           unchangedCount: unchangedCount

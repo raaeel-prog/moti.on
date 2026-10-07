@@ -23,6 +23,37 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
+
+/** AE's ExtendScript evaluates unparenthesized nested ?: left-to-right.
+ * Measured in AE 26.5: true ? 1 : false ? 2 : 3 returns 2, unlike ECMAScript.
+ * Preserve the standard source semantics by grouping nested AST branches.
+ * This does not touch comments, strings or expressions evaluated by AE's JS engine.
+ */
+export function groupConditionalBranches(source, fileName = "host.jsx") {
+  const ast = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES5, true, ts.ScriptKind.JS);
+  const insertions = new Map();
+  function insert(at, character) {
+    insertions.set(at, (insertions.get(at) ?? "") + character);
+  }
+  function walk(node) {
+    if (ts.isConditionalExpression(node)) {
+      for (const branch of [node.condition, node.whenTrue, node.whenFalse]) {
+        if (ts.isConditionalExpression(branch)) {
+          insert(branch.getStart(ast), "(");
+          insert(branch.end, ")");
+        }
+      }
+    }
+    ts.forEachChild(node, walk);
+  }
+  walk(ast);
+  let output = source;
+  for (const [at, text] of [...insertions].sort((a, b) => b[0] - a[0])) {
+    output = output.slice(0, at) + text + output.slice(at);
+  }
+  return output;
+}
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDir, "..");
@@ -44,24 +75,45 @@ const hostSrc = path.join(root, "apps", "after-effects-cep", "host", "src");
 export const HOST_SOURCE_ORDER = [
   "../generated/motion-contracts.jsx",
   "../generated/motion-descriptors.jsx",
+  "../generated/control-presets.jsx",
   "json.jsx",
+  "../generated/motion-library.jsx",
   "undo.jsx",
   "registry.jsx",
   "expression-templates.jsx",
   "transform-math.jsx",
   "keyframe-operations.jsx",
   "effect-operations.jsx",
+  "grouped-controls.jsx",
   "live-controls.jsx",
+  "live-preset.jsx",
+  "quick-effects.jsx",
+  "menu-command.jsx",
   "rig-meta.jsx",
+  "commands/preset-camera-transition.jsx",
+  "commands/preset-library.jsx",
+  "commands/preset-phases.jsx",
+  "commands/preset-colors.jsx",
+  "commands/preset-timing.jsx",
+  "commands/personal-preset-library.jsx",
   "commands/context-read.jsx",
   "commands/capability-probe.jsx",
   "commands/diagnostics-echo.jsx",
   "commands/demo-create-composition.jsx",
   "commands/expression-loopout.jsx",
   "commands/expression-smooth.jsx",
+  "commands/audio-beat.jsx",
   "commands/expression-wiggle.jsx",
   "commands/expression-flicker.jsx",
   "commands/text-box.jsx",
+  "morph-geometry.jsx",
+  "text-glyph-outlines.jsx",
+  "commands/text-word-morph.jsx",
+  "commands/text-word-reveal.jsx",
+  "commands/text-variable-morph.jsx",
+  "commands/text-style-swap.jsx",
+  "commands/text-vertical-pulse.jsx",
+  "commands/text-pulse-morph.jsx",
   "commands/layer-list.jsx",
   "commands/layer-parent.jsx",
   "commands/layer-create-null.jsx",
@@ -95,9 +147,11 @@ export const HOST_SOURCE_ORDER = [
   "commands/three-d-orbit.jsx",
   "commands/effect-echo.jsx",
   "commands/effect-wave.jsx",
+  "commands/effect-gradient.jsx",
   "commands/effect-tile.jsx",
   "commands/effect-glitch.jsx",
   "commands/comp-fast-edit.jsx",
+  "commands/quick-tools.jsx",
   "commands/ai-to-vector.jsx",
   "commands/text-to-vector.jsx",
   "commands/particles.jsx",
@@ -393,7 +447,7 @@ export async function buildExtendScript(outputPath) {
       );
     }
 
-    chunks.push(toAsciiExtendScript(source, fileName));
+    chunks.push(toAsciiExtendScript(groupConditionalBranches(source, fileName), fileName));
   }
 
   // Um unico \n separa a diretiva do primeiro fonte, e os fontes ja terminam com

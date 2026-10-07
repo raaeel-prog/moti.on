@@ -526,3 +526,4 @@ test("o parser rejeita cabeçalho editado, id trocado e corpo adulterado", async
   assert.equal(scope.MotionExpressions.isManagedTextBoxSize(""), false);
   assert.equal(scope.MotionExpressions.isManagedTextBoxSize(null), false);
 });
+

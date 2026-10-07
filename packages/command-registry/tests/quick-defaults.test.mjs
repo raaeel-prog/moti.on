@@ -27,6 +27,7 @@ function context(overrides = {}) {
     workAreaStart: 0,
     workAreaDuration: 12,
     selectionCount: 3,
+    selectionLayerCount: 2,
     selectionKinds: ["av"],
     selectionHasKeyframes: false,
     selectionHasExpressions: false,
@@ -252,6 +253,8 @@ test("contextos e opções inválidos falham fechados antes da derivação", () 
     context({ currentTimeSeconds: 13 }),
     context({ workAreaStart: 11, workAreaDuration: 2 }),
     context({ selectionCount: 1.5 }),
+    context({ selectionLayerCount: -1 }),
+    context({ selectionLayerCount: 2.5 }),
     context({ selectionKinds: ["footage"] }),
     context({ existingRigIdsInSelection: [""] }),
     context({ lastUsedPresetId: "   " })

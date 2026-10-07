@@ -1,0 +1,14 @@
+{
+  "source": "/Users/rael/Desktop/Gravação de Tela 2026-09-14 às 20.15.43.mov",
+  "duration": 160.713084,
+  "streams": [
+    {
+      "type": "video",
+      "codec": "h264"
+    },
+    {
+      "type": "audio",
+      "codec": "aac"
+    }
+  ]
+}

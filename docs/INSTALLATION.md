@@ -14,6 +14,18 @@ Em **2026-08-25**, o gate final integrado concluiu `npm.cmd run check` com `PASS
 
 ## 1. Gerar os artefatos
 
+### Migração para Mac / Apple Silicon
+
+Use Node.js 24 (ou uma versão aceita por `package.json#engines`) e execute `npm ci` nesta máquina. Não reutilize `node_modules` copiado do Windows: executáveis e dependências nativas precisam ser instalados para macOS arm64.
+
+Neste Mac, o ambiente de desenvolvimento desta sessão está disponível com:
+
+```bash
+export PATH="$HOME/.local/share/motion-dev/bin:$PATH"
+```
+
+O build atual e os limites da validação estão em [HANDOFF_MACOS_2026-09-10.md](HANDOFF_MACOS_2026-09-10.md). A suíte completa abaixo é o gate de integração/release; durante desenvolvimento incremental, respeitar a orientação do responsável sobre o escopo de verificação.
+
 Na raiz do projeto:
 
 ```bash
@@ -35,6 +47,16 @@ O `PASS` automatizado registrado acima pode ser reproduzido antes da instalaçã
 Há dois caminhos, e eles servem a propósitos diferentes.
 
 ### 2a. UPIA — para instalar e verificar (sem elevação)
+
+**macOS — instalação local de desenvolvimento:**
+
+```bash
+npm run install:premiere:dev:mac
+```
+
+Esse comando gera o build, valida os manifests e instala um CCX temporário pelo UPIA oficial, removendo o temporário ao terminar. Se o build já foi gerado, use `bash scripts/install-premiere-dev.sh` para não reconstruí-lo. O script não altera o Developer Mode nem encerra os aplicativos. Após a instalação, reabra o Premiere e acesse **Janela > Plug-ins UXP > Moti.on**.
+
+Instalação e reinstalação foram observadas com `Installation Successful` / `Enabled` no Premiere 26.3.2, macOS arm64. Isso não é um pacote assinado de release nem prova de execução do painel. O [procedimento oficial da Adobe](https://developer.adobe.com/premiere-pro/uxp/plugins/distribution/install/) documenta `--install` e `--list` no macOS.
 
 Medido em 2026-08-30 no Premiere Pro 26.3.2/Windows 11: instala sem UXP Developer Tool, sem Developer Mode e sem privilégio de administrador. É o caminho para pôr o painel dentro do host.
 

@@ -41,6 +41,11 @@ export const SCANNED_DIRECTORIES = [
  */
 export const BANNED_CONSTRUCTS = [
   {
+    id: "reserved-native",
+    pattern: /(^|[^\w$.])native\b/,
+    message: "identificador `native`, reservado no parser ExtendScript. Use `useNative`."
+  },
+  {
     id: "arrow-function",
     pattern: /=>/,
     message: "arrow function. Use `function (args) { ... }`."

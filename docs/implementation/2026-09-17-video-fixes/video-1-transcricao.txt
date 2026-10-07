@@ -1,0 +1,14 @@
+[0000.6–0008.0] Então, eu acho que queria que se melhorasse a ideia do layout, aqui está até bom do nosso
+[0008.0–0013.8] plug-in aqui, ele está até bom essa área aqui das passinhas, um dos nomes aqui, está legal,
+[0013.8–0018.8] está bacana, isso aqui também ficou interessante, está bonito, só que eu queria trazer essa
+[0018.8–0024.6] funcionalidade aqui, quando apertar nos três tracinhos, tem que abrir dessa mesma forma
+[0024.6–0033.5] que está aqui o plug-in do Animation Composer, que aqui você escolhe a direção, direção aqui, beleza.
+[0033.5–0039.9] E é isso, porque aqui, atualmente, ele está abrindo e está abrindo uma tela muito grande, você não
+[0039.9–0045.4] consegue ver de onde vem o preview, beleza? Eu quero que seja exatamente desse mesmo jeito aqui,
+[0045.4–0050.2] nessa mesma interfacezinha, utilizando essa mesma interface aqui, esse mesmo estilo.
+[0051.2–0057.9] E eu queria que você corrigisse também alguns outros pontos do nosso plug-in,
+[0057.9–0066.4] como essa moldura aqui para mostrar os efeitos aqui, atualmente tem esse, essa parte cinza aqui,
+[0066.4–0074.3] não gostei muito, queria que ficasse somente o vídeo aqui e a descrição embaixo igual do plug-in
+[0074.3–0081.0] do Animation Composer também, para ficar mais profissional, deixa só o nome do efeito aqui,
+[0081.0–0087.3] o que ele vai fazer, igual aqui no Animation Composer, tira isso, deixa a estrelinha de canto
+[0087.3–0091.1] aqui também apagadinha e aí muda esse negócio aqui, tá?

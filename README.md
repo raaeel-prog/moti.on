@@ -2,11 +2,11 @@
 
 Suíte de motion design projetada para **Premiere Pro** e **After Effects**, respeitando o runtime de cada aplicativo.
 
-> **Estado:** fase P0 (fundação), sobre a base `0.1.0`. CHMS-001 a CHMS-008 estão implementados; o shell atual passou por smoke test no After Effects 26.3x87/CEP 12.0.1/Windows 11, mas o fechamento do P0 ainda depende do Premiere real e da matriz Adobe restante. O núcleo puro do CHMS-009 está concluído e verificado automaticamente; integração com `Layer.comment`, filesystem e Undo real continua `NOT RUN`. Nenhum recurso visual de animação foi implementado. O plano completo está em [`docs/MASTER_BUILD_SPEC.md`](docs/MASTER_BUILD_SPEC.md); o histórico do ponto de partida em [`docs/BASELINE_STARTER_0.1.0.md`](docs/BASELINE_STARTER_0.1.0.md).
+> **Estado em 2026-09-10:** build de desenvolvimento `0.1.0`, com toolkit AE, busca, Quick/Advanced, favoritos, recentes e preferências de tema/espaçamento. Migração para macOS arm64 concluída; Moti.on instalado em AE e Premiere. A validação real do Premiere está bloqueada pela inicialização/licenciamento Adobe. Consulte o [checkpoint atual](docs/HANDOFF_MACOS_2026-09-10.md) para separar implementação de evidência. As seções históricas abaixo descrevem a fundação; não representam todo o código atual. O [master spec](docs/MASTER_BUILD_SPEC.md) e seu [addendum](docs/ADDENDUM_A_QUICK_UX_SPEC.md) continuam sendo o briefing.
 
 ## O que existe hoje
 
-A fundação da fase P0: ponte painel↔host, contrato e registro de comandos, matriz de capacidades, logging com redaction e shell compartilhado. **Nenhum recurso de motion design foi implementado ainda** — as operações do catálogo começam na fase P1.
+A fundação compartilhada permanece preservada. O código atual também contém operações de motion, keyframes, shapes e rigs no After Effects; a disponibilidade e o estado de verificação variam por comando. Novidades de interface e pendências estão no checkpoint atual.
 
 ### Fundação compartilhada
 
@@ -47,7 +47,7 @@ O Premiere Pro possui UXP oficial a partir da versão 25.6. O After Effects cont
 
 ## Requisitos
 
-- Node.js 18 ou posterior para build e validação;
+- Node.js 24 recomendado; compatibilidade de ferramentas: `^20.19.0 || ^22.13.0 || >=24`;
 - Premiere Pro 25.6+;
 - UXP Developer Tool 2.2+;
 - After Effects 25.0+ com CEP 12.

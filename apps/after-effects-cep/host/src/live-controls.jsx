@@ -1,5 +1,5 @@
 /**
- * Writer, reader e updater de Live Controls para After Effects (CHMS-UX-006).
+ * Writer, reader e updater de Live Controls para After Effects (Moti.on-UX-006).
  *
  * Este modulo materializa apenas Expression Controls nativos. Ele nao abre Undo
  * Group: o dispatcher continua sendo o unico dono da transacao. O chamador
@@ -16,7 +16,7 @@
  * Nenhum handle de efeito sobrevive a uma chamada de `addProperty` neste modulo.
  */
 (function (global) {
-  var PREFIX = "CHMS";
+  var PREFIX = "Moti.on";
   var SEPARATOR = " · ";
   var LAYER_LIMIT = 12;
   var CONTROLLER_LIMIT = 24;
@@ -412,10 +412,10 @@
     return targetKind === "layer" ? LAYER_LIMIT : CONTROLLER_LIMIT;
   }
 
-  /** @param {PropertyGroup} parade @param {number} requested @param {string} targetKind */
-  function assertCapacity(parade, requested, targetKind) {
+  /** @param {PropertyGroup} parade @param {number} requested @param {string} targetKind @param {number} [budget] */
+  function assertCapacity(parade, requested, targetKind, budget) {
     var total = countLiveControls(parade) + requested;
-    var capacity = capacityFor(targetKind);
+    var capacity = typeof budget === "number" && budget >= 1 && budget <= 96 ? budget : capacityFor(targetKind);
     var suggested;
     if (total <= capacity) return;
     suggested = targetKind === "layer" ? "controller" : "comp-controller";
@@ -460,7 +460,10 @@
   function addAndResolve(parade, matchName) {
     parade.addProperty(matchName);
     var effect = parade.property(parade.numProperties);
-    if (!effect || effect.matchName !== matchName) throw new Error("After Effects não devolveu o controle recém-criado.");
+    // Native Dropdown Control is materialized as a generated Pseudo/ matchName.
+    // Check its documented parameter capability instead of assuming the add ID persists.
+    var dropdown = matchName === MATCH_NAMES.dropdown && effect && effect.property(1);
+    if (!effect || (effect.matchName !== matchName && !(dropdown && dropdown.isDropdownEffect === true))) throw new Error("After Effects não devolveu o controle recém-criado.");
     return /** @type {PropertyGroup} */ (effect);
   }
 
@@ -517,6 +520,7 @@
 
     var name = uniqueName(parade, nameBase, prepared.rigId);
     effect = addAndResolve(parade, matchName);
+    var effectIndex = effect.propertyIndex;
     effect.name = name;
     property = /** @type {Property} */ (effect.property(1));
     if (!property) throw new Error("O Live Control não expõe a propriedade interna (1).");
@@ -529,11 +533,18 @@
         } else {
           returnedProperty = property.setPropertyParameters(dropdown.labels);
           if (returnedProperty) property = returnedProperty;
+          // setPropertyParameters recreates both effect and property in native AE.
+          effect = parade.property(effectIndex);
+          if (!effect || !effect.property(1) || effect.property(1).isDropdownEffect !== true) throw new Error("Dropdown recriado indisponível.");
+          effect.name = name;
+          matchName = effect.matchName;
+          property = /** @type {Property} */ (effect.property(1));
         }
       } catch (dropdownError) {
         reason = "setPropertyParameters-failed";
       }
       if (reason) {
+        effect = parade.property(effectIndex);
         effect.remove();
         actualControl = "slider";
         matchName = /** @type {string} */ (MATCH_NAMES.slider);
@@ -626,7 +637,11 @@
   function removeCreated(parade, created) {
     var ok = true;
     var i;
+    var removed = /** @type {Record<string, boolean>} */ ({});
     for (i = created.length - 1; i >= 0; i -= 1) {
+      var identity = "$" + created[i].name + "|" + created[i].matchName;
+      if (removed[identity]) continue;
+      removed[identity] = true;
       try {
         var resolved = resolveEffect(parade, created[i]);
         if (!resolved.effect) ok = false;
@@ -683,13 +698,17 @@
   function create(layer, config) {
     var prepared = prepare(config);
     var parade = requireParade(layer);
+    if (config.grouped === true) {
+      assertCapacity(parade, 1, prepared.targetKind, config.controlBudget);
+      return /** @type {any} */ (global.MotionGroupedControls).create(layer, prepared);
+    }
     var initialCount = parade.numProperties;
     /** @type {any[]} */
     var records = [];
     /** @type {any[]} */
     var warnings = [];
     var i;
-    assertCapacity(parade, prepared.items.length, prepared.targetKind);
+    assertCapacity(parade, prepared.items.length, prepared.targetKind, config.controlBudget);
     try {
       for (i = 0; i < prepared.items.length; i += 1) {
         records.push(createOne(parade, prepared.items[i], prepared, warnings));
@@ -745,7 +764,7 @@
       if (!resolved.effect) {
         missing.push(paramId);
       } else {
-        var property = /** @type {Property} */ (resolved.effect.property(1));
+        var property = /** @type {Property} */ (resolved.effect.property(record.propertyIndex || 1));
         if (!property) {
           entry.resolution = "missing";
           entry.actualName = null;
@@ -875,7 +894,7 @@
         missingItems.push(item);
         continue;
       }
-      var property = /** @type {Property} */ (resolved.effect.property(1));
+      var property = /** @type {Property} */ (resolved.effect.property(record.propertyIndex || 1));
       if (!property) {
         missingItems.push(item);
         continue;
@@ -932,6 +951,7 @@
           tool: prepared.tool,
           locale: prepared.locale,
           targetKind: prepared.targetKind,
+          grouped: records.length > 0 && typeof records[0].propertyIndex === "number",
           bindings: missingBindings,
           values: missingValues
         });
@@ -947,7 +967,7 @@
         if (!plan.shouldWrite) continue;
         var current = resolveEffect(parade, plan.record);
         if (!current.effect) throw new Error("Live Control desapareceu durante a atualização.");
-        var currentProperty = /** @type {Property} */ (current.effect.property(1));
+        var currentProperty = /** @type {Property} */ (current.effect.property(plan.record.propertyIndex || 1));
         if (!currentProperty || currentProperty.numKeys > 0) throw new Error("Live Control mudou durante a atualização.");
         if (!valuesEqual(logicalFromHost(plan.record, currentProperty.value), plan.item.logicalValue)) {
           currentProperty.setValue(cloneValue(plan.desiredHostValue));
@@ -964,7 +984,7 @@
           var oldEffect = resolveEffect(parade, written[i].record);
           if (!oldEffect.effect) rollbackOk = false;
           else {
-            var oldProperty = /** @type {Property} */ (oldEffect.effect.property(1));
+            var oldProperty = /** @type {Property} */ (oldEffect.effect.property(written[i].record.propertyIndex || 1));
             if (!oldProperty || oldProperty.numKeys > 0) rollbackOk = false;
             else oldProperty.setValue(cloneValue(written[i].oldHostValue));
           }
@@ -1023,7 +1043,7 @@
   /** @param {any} record @returns {string} */
   function expressionReference(record) {
     if (!record || typeof record.name !== "string" || record.name.length === 0) invalid("Registro sem nome de efeito.");
-    var expression = 'effect("' + escapeExpressionString(record.name) + '")(1)';
+    var expression = 'effect("' + escapeExpressionString(record.name) + '")(' + (record.propertyIndex || 1) + ')';
     if (finiteNumber(record.max)) expression = "Math.min(" + numberLiteral(record.max) + ", " + expression + ")";
     if (finiteNumber(record.min)) expression = "Math.max(" + numberLiteral(record.min) + ", " + expression + ")";
     return expression;

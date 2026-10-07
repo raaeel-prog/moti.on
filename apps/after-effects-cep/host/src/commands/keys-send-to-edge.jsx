@@ -16,8 +16,8 @@
  * dela na timeline.
  *
  * Keyframes NAO selecionados da mesma propriedade ficam onde estao, e dai vem a
- * unica condicao de erro propria do comando: se o grupo, ao deslocar, cruzar um
- * keyframe que ficou parado, o resultado seria perda silenciosa de keyframe. O
+ * unica condicao de erro propria do comando: se o grupo, ao deslocar, coincidir
+ * com um keyframe que ficou parado, haveria perda silenciosa de keyframe. O
  * plano inteiro e conferido antes de qualquer escrita e recusado com
  * `KEYFRAME_CONFLICT`, em vez de escrever e deixar o host resolver o empate.
  *
@@ -174,20 +174,6 @@
   }
 
   /**
-   * @param {number[]} tempos
-   * @returns {boolean} true quando os tempos continuam estritamente crescentes.
-   */
-  function ordemPreservada(tempos) {
-    var i;
-    for (i = 1; i < tempos.length; i += 1) {
-      var anterior = /** @type {number} */ (tempos[i - 1]);
-      var atual = /** @type {number} */ (tempos[i]);
-      if (atual - anterior <= TOLERANCIA_DE_TEMPO) return false;
-    }
-    return true;
-  }
-
-  /**
    * Monta o plano de deslocamento e, com ele, decide se a operacao e legal.
    *
    * Vive fora do `run` porque a secao 8 exige TODA a validacao no preflight, e
@@ -200,7 +186,7 @@
    * @param {CompItem} comp
    * @param {string} edge
    * @param {string} reference
-   * @returns {{planos: {property: Property, tempos: number[], deslocamento: number}[], erro: MotionCommandFailure|null}}
+   * @returns {{planos: {original: MotionPropertySnapshot, target: MotionPropertySnapshot, deslocamento: number}[], erro: MotionCommandFailure|null}}
    */
   function planejar(comp, edge, reference) {
     var alvos = alvosDe(comp);
@@ -217,12 +203,20 @@
     var planos = [];
     var i;
     var j;
+    var total = 0;
     for (i = 0; i < alvos.length; i += 1) {
       var alvo = alvos[i];
       if (!alvo) continue;
       var propriedade = /** @type {Property} */ (alvo.property);
+      if (!MotionKeyframes.isSupportedProperty(propriedade)) {
+        return { planos: [], erro: failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Selecione propriedades numericas, vetoriais ou cores.") };
+      }
+      total += propriedade.numKeys;
+      if (total > MotionKeyframes.MAX_KEYS_PER_BATCH) {
+        return { planos: [], erro: failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Selecione um lote de ate 10.000 keyframes.") };
+      }
       var destino = instanteDeDestino(comp, propriedade, edge, reference);
-      if (destino === null) {
+      if (destino === null || !isFinite(destino)) {
         return {
           planos: [],
           erro: failure(
@@ -232,7 +226,9 @@
         };
       }
 
-      var chaves = MotionKeyframes.captureProperty(propriedade).keys;
+      var original = MotionKeyframes.captureProperty(propriedade);
+      var target = MotionKeyframes.captureProperty(propriedade);
+      var chaves = original.keys;
       var indices = [];
       var selArr = /** @type {number[]} */ (alvo.sel);
       for (j = 0; j < selArr.length; j += 1) {
@@ -262,22 +258,48 @@
 
       // A borda do proprio grupo: o primeiro key selecionado quando o destino e
       // o comeco, o ultimo quando e o fim.
-      var ancora = edge === "start" ? primeiro.time : ultimo.time;
+      var ancora = edge === "start" ? Infinity : -Infinity;
+      var owner = camadaDe(propriedade);
+      if (owner && /** @type {any} */ (owner).locked) return { planos: [], erro: failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie as camadas selecionadas.") };
+      // One common shift across properties; layer reference groups by owner.
+      for (var a = 0; a < alvos.length; a += 1) {
+        var related = alvos[a];
+        if (!related || (reference === "layer" && camadaDe(related.property) !== owner)) continue;
+        for (var b = 0; b < related.sel.length; b += 1) {
+          var selectedIndex = related.sel[b];
+          if (typeof selectedIndex !== "number") continue;
+          var selectedTime = related.property.keyTime(selectedIndex);
+          ancora = edge === "start" ? Math.min(ancora, selectedTime) : Math.max(ancora, selectedTime);
+        }
+      }
       var deslocamento = destino - ancora;
       var tempos = temposDeslocados(chaves, indices, deslocamento);
-
-      if (!ordemPreservada(tempos)) {
-        return {
-          planos: [],
-          erro: failure(
-            MotionContracts.ERROR.KEYFRAME_CONFLICT,
-            "O grupo passaria por cima de um keyframe nao selecionado.",
-            MotionKeyframes.describeProperty(comp, propriedade)
-          )
-        };
+      for (j = 0; j < target.keys.length; j += 1) {
+        var originalKey = /** @type {MotionCapturedKey} */ (chaves[j]);
+        var targetKey = /** @type {MotionCapturedKey} */ (target.keys[j]);
+        originalKey.selected = false;
+        for (var s = 0; s < indices.length; s += 1) if (indices[s] === j) originalKey.selected = true;
+        targetKey.selected = originalKey.selected;
+        targetKey.time = /** @type {number} */ (tempos[j]);
+      }
+      // Crossing an unselected key changes index order but does not overwrite
+      // it. Sort complete records, then reject only actual time collisions.
+      target.keys.sort(function (a, b) { return a.time - b.time; });
+      for (j = 1; j < target.keys.length; j += 1) {
+        var previous = /** @type {MotionCapturedKey} */ (target.keys[j - 1]);
+        var current = /** @type {MotionCapturedKey} */ (target.keys[j]);
+        if (current.time - previous.time <= TOLERANCIA_DE_TEMPO) {
+          return {
+            planos: [],
+            erro: failure(MotionContracts.ERROR.KEYFRAME_CONFLICT,
+              "Ja existe um keyframe no tempo de destino. Inclua esse keyframe na selecao ou escolha outro trecho.",
+              { destination: reference + "-" + edge, operation: "move", time: current.time,
+                propertyName: propriedade.name, layerName: owner ? owner.name : "", conflictWith: "unselected" })
+          };
+        }
       }
 
-      planos.push({ property: propriedade, tempos: tempos, deslocamento: deslocamento });
+      planos.push({ original: original, target: target, deslocamento: deslocamento });
     }
 
     return { planos: planos, erro: null };
@@ -307,7 +329,6 @@
     }
     var planos = plano.planos;
     var i;
-    var j;
 
     var deslocados = 0;
     for (i = 0; i < planos.length; i += 1) {
@@ -320,48 +341,17 @@
       return { changed: false, warnings: [], data: { shifted: 0 } };
     }
 
-    // Sem beginUndoGroup aqui: o dispatcher ja abre o grupo do comando, com o
-    // rotulo localizado do descriptor. O After Effects nao aninha grupos, entao
-    // um segundo par aqui fecharia o grupo de fora no meio do comando.
-    /** @type {MotionPropertySnapshot[]} */
-    var intactos = [];
-
-    try {
-      for (i = 0; i < planos.length; i += 1) {
-        var aplicar = planos[i];
-        if (!aplicar) continue;
-        if (Math.abs(aplicar.deslocamento) <= TOLERANCIA_DE_TEMPO) continue;
-        var alvoProp = /** @type {Property} */ (aplicar.property);
-        // Duas capturas: uma guardada intacta, que e para onde o rollback
-        // volta, e outra que serve de portador dos dados na reescrita.
-        intactos.push(MotionKeyframes.captureProperty(alvoProp));
-        var portador = MotionKeyframes.captureProperty(alvoProp);
-        MotionKeyframes.restoreProperty(portador, aplicar.tempos);
-      }
-    } catch (erroDeAplicacao) {
-      var rollbackFalhou = false;
-      // Na ordem inversa: a ultima propriedade tocada e a que pode estar
-      // meio-escrita.
-      for (j = intactos.length - 1; j >= 0; j -= 1) {
-        var intacto = intactos[j];
-        if (!intacto) {
-          rollbackFalhou = true;
-          continue;
-        }
-        try {
-          MotionKeyframes.restoreProperty(intacto, null);
-        } catch (erroDeRollback) {
-          rollbackFalhou = true;
-        }
-      }
-      if (rollbackFalhou) {
-        throw erroDeHost(
-          MotionContracts.ERROR.ROLLBACK_FAILED,
-          "Rollback de Enviar para a borda falhou."
-        );
-      }
-      throw erroDeAplicacao;
+    // The shared writer owns complete rollback and restores selection only
+    // after all siblings have been recreated. Undo stays with the dispatcher.
+    /** @type {MotionKeyEditPlan} */
+    var edit = { originals: [], targets: [], error: null };
+    for (i = 0; i < planos.length; i += 1) {
+      var aplicar = planos[i];
+      if (!aplicar) continue;
+      edit.originals.push(aplicar.original);
+      edit.targets.push(aplicar.target);
     }
+    MotionKeyframes.applyEdit(edit);
 
     return {
       changed: true,

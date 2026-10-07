@@ -11,6 +11,7 @@ const CONTEXT_KEYS = new Set([
   "workAreaStart",
   "workAreaDuration",
   "selectionCount",
+  "selectionLayerCount",
   "selectionKinds",
   "selectionHasKeyframes",
   "selectionHasExpressions",
@@ -276,6 +277,15 @@ function snapshotQuickContext(value: unknown): Readonly<QuickContext> {
     contextFail("selectionCount", "esperado inteiro maior ou igual a zero");
   }
 
+  const selectionLayerCount = finiteNumber(
+    source["selectionLayerCount"],
+    "selectionLayerCount",
+    contextFail
+  );
+  if (!Number.isInteger(selectionLayerCount) || selectionLayerCount < 0) {
+    contextFail("selectionLayerCount", "esperado inteiro maior ou igual a zero");
+  }
+
   const rawKinds = dataArray(source["selectionKinds"], "selectionKinds", contextFail);
   const selectionKinds = rawKinds.map((kind, index) => {
     if (typeof kind !== "string" || !SELECTION_KINDS.has(kind as QuickSelectionKind)) {
@@ -318,6 +328,7 @@ function snapshotQuickContext(value: unknown): Readonly<QuickContext> {
     workAreaStart,
     workAreaDuration,
     selectionCount,
+    selectionLayerCount,
     selectionKinds: Object.freeze(selectionKinds) as QuickSelectionKind[],
     selectionHasKeyframes: booleanValue(
       source["selectionHasKeyframes"],

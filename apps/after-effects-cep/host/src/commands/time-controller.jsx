@@ -101,6 +101,7 @@
       if (!layer || layer.canSetTimeRemapEnabled !== true) {
         return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A selecao contem camada sem Time Remap scriptavel.", null);
       }
+      if (layer.locked === true) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie a camada antes de aplicar Time Controller.", null);
       if (layer.timeRemapEnabled === true) {
         prop = /** @type {Property} */ (layer.property("ADBE Time Remapping"));
         if (prop instanceof Property && prop.expression !== "" && !MotionExpressions.isManagedTimeController(prop.expression)) {

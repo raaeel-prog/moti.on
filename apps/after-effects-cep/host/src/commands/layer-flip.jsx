@@ -239,6 +239,24 @@
         };
       }
 
+      if (/** @type {any} */ (camada).locked === true) {
+        return {error: failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie a camada antes de espelhar.", {layerIndex: camada.index}), comp: null, camadas: []};
+      }
+      var transform = camada.property(MN.transform);
+      var required = args.preserveTextReadability === true && ehTexto(camada) ? [MN.position] : [MN.position, MN.scale, MN.rotation];
+      for (var r = 0; r < required.length; r += 1) {
+        var target = transform ? transform.property(/** @type {string} */ (required[r])) : null;
+        if (!target || typeof target.setValue !== "function" || /** @type {any} */ (target).dimensionsSeparated === true) {
+          return {error: failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "O transform da camada nao suporta espelhamento direto.", {layerIndex: camada.index}), comp: null, camadas: []};
+        }
+        if (target.numKeys > 0) {
+          return {error: failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Preserve a animacao: espelhe uma camada sem keyframes de transform.", {layerIndex: camada.index}), comp: null, camadas: []};
+        }
+        if (typeof target.expression === "string" && target.expression !== "") {
+          return {error: failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A expressao de transform existente foi preservada.", {layerIndex: camada.index}), comp: null, camadas: []};
+        }
+      }
+
       camadas.push(camada);
     }
 

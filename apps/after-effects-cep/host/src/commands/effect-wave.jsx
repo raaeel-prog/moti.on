@@ -1,23 +1,7 @@
 /**
- * Ondulacao por efeito ou por transform (`ae.effect.wave`, CHMS-027).
- *
- * ## Os dois modos
- *
- * `effect` usa o Wave Warp nativo, que deforma os pixels. `transform` aplica uma
- * expressao em Position, que move a camada inteira sem deformar. Sao resultados
- * visuais diferentes, e nao duas implementacoes da mesma coisa — por isso o modo
- * e escolha do usuario e nao um fallback automatico.
- *
- * O que **e** fallback: quando o Wave Warp nao existe naquela instalacao, o modo
- * `effect` e recusado com `CAPABILITY_UNAVAILABLE` em vez de cair calado para
- * transform. Trocar o resultado visual sem avisar seria pior do que recusar.
- *
- * ## Amplitude zero
- *
- * O criterio de aceite pede que amplitude zero devolva **exatamente** a
- * aparencia original. No modo transform isso sai da propria expressao:
- * `add(value, [0, 0])` e `value`. No modo efeito, amplitude zero e o valor
- * neutro do Wave Warp.
+ * Wave: C++ deforma pixels; transform anima Position de forma editavel.
+ * Os modos sao escolhas visuais distintas. O modo efeito exige CHMS Wave Core;
+ * nao ha substituicao silenciosa do renderizador de um rig legado.
  */
 (function () {
   /* global Property */
@@ -35,16 +19,16 @@
   var MN = {
     transform: "ADBE Transform Group",
     position: "ADBE Position",
-    waveWarp: "ADBE Wave Warp",
-    waveType: "ADBE Wave Warp-0001",
-    waveHeight: "ADBE Wave Warp-0002",
-    waveWidth: "ADBE Wave Warp-0003",
-    direction: "ADBE Wave Warp-0004",
-    waveSpeed: "ADBE Wave Warp-0005"
+    waveWarp: "CHMS Wave Core",
+    waveHeight: "CHMS Wave Core-1001", // Amplitude
+    waveWidth: "CHMS Wave Core-1002",  // Wavelength
+    direction: "CHMS Wave Core-1003",  // Direction (Angle)
+    waveSpeed: "CHMS Wave Core-1004",  // Speed
+    phase: "CHMS Wave Core-1005"
   };
 
   var NOME_GERENCIADO = MotionContracts.RIG_PREFIX + "WAVE";
-  var PARAMETROS = [MN.waveType, MN.waveHeight, MN.waveWidth, MN.direction, MN.waveSpeed];
+  var PARAMETROS = [MN.waveHeight, MN.waveWidth, MN.direction, MN.waveSpeed, MN.phase];
 
   var MAX_FRAMES_BAKE = 18000;
 
@@ -89,8 +73,8 @@
     if (!isInRange(args.amplitude, -100000, 100000)) {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Amplitude invalida.", { field: "amplitude" });
     }
-    if (!isInRange(args.frequency, 0, 1000)) {
-      return failure(MotionContracts.ERROR.INVALID_PRESET, "Frequencia invalida.", { field: "frequency" });
+    if (!isInRange(args.frequency, args.mode === "effect" ? 1 : 0, 1000)) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Comprimento de onda invalido (1 a 1000 pixels no modo efeito).", { field: "frequency" });
     }
     if (!isInRange(args.speed, -1000, 1000)) {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Velocidade invalida.", { field: "speed" });
@@ -125,16 +109,7 @@
     return property instanceof Property ? property : null;
   }
 
-  /**
-   * O Wave Warp existe nesta instalacao?
-   *
-   * Tentar acrescentar e capturar a excecao e o unico jeito honesto de saber: o
-   * After Effects nao expoe um catalogo de efeitos consultavel, e supor que um
-   * efeito de terceiro esta instalado e como um comando quebra em outra maquina.
-   *
-   * @param {PropertyGroup} lista
-   * @returns {boolean}
-   */
+  /** @param {PropertyGroup} lista @returns {boolean} */
   function suportaWaveWarp(lista) {
     try {
       return lista.canAddProperty(MN.waveWarp) === true;
@@ -166,6 +141,8 @@
 
     var i;
     for (i = 0; i < selecionadas.length; i += 1) {
+      var layer = /** @type {any} */ (selecionadas[i]);
+      if (layer && layer.locked) return failure(MotionContracts.ERROR.TRACK_CONFLICT, "Desbloqueie a camada antes de aplicar Wave.", { selectionIndex: i });
       if (args.mode === "effect") {
         var lista = MotionEffects.parade(selecionadas[i]);
         if (!lista) {
@@ -174,16 +151,26 @@
           });
         }
         if (!suportaWaveWarp(lista)) {
-          return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "Wave Warp nao esta disponivel nesta instalacao.", {
+          return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "Instale ou atualize o Moti.on Core para usar Wave.", {
             selectionIndex: i,
             effect: MN.waveWarp
           });
         }
         var qualquer = MotionEffects.findAny(lista, MN.waveWarp);
         if (qualquer && qualquer.name !== NOME_GERENCIADO) {
-          return failure(MotionContracts.ERROR.TRACK_CONFLICT, "Ja existe um Wave Warp do usuario nesta camada.", {
+          return failure(MotionContracts.ERROR.TRACK_CONFLICT, "Ja existe um Wave do usuario nesta camada.", {
             selectionIndex: i
           });
+        }
+        var legado = MotionEffects.findManaged(lista, "ADBE Wave Warp", NOME_GERENCIADO);
+        if (legado) return failure(MotionContracts.ERROR.TRACK_CONFLICT, "Esta camada usa o Wave antigo. Preserve-o ou remova-o manualmente antes de aplicar o motor novo.", { selectionIndex: i });
+        if (qualquer) {
+          for (var p = 0; p < PARAMETROS.length; p += 1) {
+            var parametroName = /** @type {string} */ (PARAMETROS[p]);
+            var parametro = qualquer.property(parametroName);
+            if (!parametro) return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "Atualize o Moti.on Core para incluir todos os controles Wave.", { parameter: PARAMETROS[p] });
+            if (parametro.numKeys > 0 || parametro.expression) return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "Wave contem animacao manual. Ajuste pelos controles do efeito para preserva-la.", { parameter: PARAMETROS[p] });
+          }
         }
         continue;
       }
@@ -268,8 +255,7 @@
             wave = MotionEffects.add(lista, MN.waveWarp, NOME_GERENCIADO);
             criados.push(wave);
           }
-          // Tipo 1 e a onda senoidal, que e a unica que os inputs descrevem.
-          MotionEffects.setStatic(/** @type {Property} */ (wave.property(MN.waveType)), 1);
+          // Padrao organico do motor C++; a fase e independente da velocidade.
           MotionEffects.setStatic(/** @type {Property} */ (wave.property(MN.waveHeight)), amp);
           MotionEffects.setStatic(
             /** @type {Property} */ (wave.property(MN.waveWidth)),
@@ -277,12 +263,13 @@
           );
           MotionEffects.setStatic(
             /** @type {Property} */ (wave.property(MN.direction)),
-            args.direction === "horizontal" ? 90 : 0
+            args.direction === "horizontal" ? 0 : 90
           );
           MotionEffects.setStatic(
             /** @type {Property} */ (wave.property(MN.waveSpeed)),
             /** @type {number} */ (args.speed)
           );
+          MotionEffects.setStatic(/** @type {Property} */ (wave.property(MN.phase)), /** @type {number} */ (args.phase));
           appliedCount += 1;
           continue;
         }

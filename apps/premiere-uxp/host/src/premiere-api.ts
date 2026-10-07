@@ -135,7 +135,8 @@ export interface PremiereSequence {
   getCaptionTrackCount?: () => Promise<number>;
   getCaptionTrack?: (trackIndex: number) => Promise<unknown>;
   getSelection?: () => Promise<PremiereTrackItemSelection>;
-  setSelection?: (selection: PremiereTrackItemSelection) => boolean;
+  /** Promise antes de 26.3; boolean desde 26.3 (changelog Adobe). */
+  setSelection?: (selection: PremiereTrackItemSelection) => boolean | Promise<boolean>;
 }
 
 export interface PremiereSequenceEditor {

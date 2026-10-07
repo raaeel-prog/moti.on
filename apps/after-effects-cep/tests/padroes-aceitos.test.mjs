@@ -32,10 +32,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
 
 import { loadHostModules } from "./host-harness.mjs";
 
 const MAIN = new URL("../client/src/main.ts", import.meta.url);
+const orbitBundle = await build({entryPoints: [fileURLToPath(new URL("../client/src/orbit-presets.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", write: false});
+const {DEFAULT_ORBIT} = await import(`data:text/javascript;base64,${Buffer.from(orbitBundle.outputFiles[0].text).toString("base64")}`);
 
 /**
  * Chamadas cujos argumentos dependem de valor calculado em tempo de execução —
@@ -47,6 +51,9 @@ const MAIN = new URL("../client/src/main.ts", import.meta.url);
  * repositório.
  */
 const NAO_AVALIAVEL = new Map([
+  ["ae.effect.gradient", "o editor dedicado monta settings e changedKeys a partir da leitura e do gesto; gradient-ui.test.mjs, gradient.test.mjs e contratos/gradient.test.mjs verificam os valores padrao, schema e preflight"],
+  ["ae.text.vertical-pulse", "o padrão depende do FPS da composição; vertical-pulse-ui e text-vertical-pulse verificam o payload e o preflight"],
+  ["ae.keys.ease.apply", "os argumentos dependem do modo seleção/criação; keys-ease-tipos e ease-build verificam o contrato e rollback"],
   [
     "ae.style.neon",
     "as cores passam por hexToChannels(); avaliar aqui exigiria reimplementar a conversão, " +
@@ -259,6 +266,8 @@ function despachar(scope, comando, args) {
 async function chamadasDoPainel() {
   const fonte = await readFile(MAIN, "utf8");
   const padroes = lerPadroes(fonte);
+  // Orbit's default moved to its actual shared client helper; use that export.
+  padroes.set("DEFAULT_ORBIT", DEFAULT_ORBIT);
   const porTipo = estadoPorTipo(fonte);
 
   const estado = {};

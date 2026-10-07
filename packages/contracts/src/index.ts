@@ -118,3 +118,11 @@ export {
   type ContractValidationIssue,
   type ContractValidationResult
 } from "./validators.js";
+
+export * from "./motion-library.js";
+export * from "./motion-library-math.js";
+export * from "./preset-workspace.js";
+
+export * from "./text-effects.js";
+
+export * from "./gradient.js";

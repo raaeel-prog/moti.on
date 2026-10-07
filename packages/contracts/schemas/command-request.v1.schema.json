@@ -4,56 +4,1764 @@
   "title": "Moti.on CommandRequest v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["protocolVersion", "requestId", "command", "args", "context"],
+  "required": [
+    "protocolVersion",
+    "requestId",
+    "command",
+    "args",
+    "context"
+  ],
   "properties": {
-    "protocolVersion": { "const": 1 },
-    "requestId": { "type": "string", "pattern": "[\\s\\S]+" },
-    "command": { "type": "string", "pattern": "[\\s\\S]+" },
+    "protocolVersion": {
+      "const": 1
+    },
+    "requestId": {
+      "type": "string",
+      "pattern": "[\\s\\S]+"
+    },
+    "command": {
+      "type": "string",
+      "pattern": "[\\s\\S]+"
+    },
     "args": {
       "type": "object",
-      "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+      "additionalProperties": {
+        "$ref": "#/$defs/jsonValue"
+      }
     },
     "context": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["host", "hostVersion"],
+      "required": [
+        "host",
+        "hostVersion"
+      ],
       "properties": {
-        "host": { "enum": ["after-effects", "premiere-pro"] },
-        "hostVersion": { "type": "string", "pattern": "[\\s\\S]+" },
-        "projectFingerprint": { "type": "string", "pattern": "[\\s\\S]+" },
-        "activeItemId": { "type": "string", "pattern": "[\\s\\S]+" },
-        "locale": { "type": "string", "pattern": "[\\s\\S]+" }
+        "host": {
+          "enum": [
+            "after-effects",
+            "premiere-pro"
+          ]
+        },
+        "hostVersion": {
+          "type": "string",
+          "pattern": "[\\s\\S]+"
+        },
+        "projectFingerprint": {
+          "type": "string",
+          "pattern": "[\\s\\S]+"
+        },
+        "activeItemId": {
+          "type": "string",
+          "pattern": "[\\s\\S]+"
+        },
+        "locale": {
+          "type": "string",
+          "pattern": "[\\s\\S]+"
+        }
       }
     },
     "options": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "dryRun": { "type": "boolean" },
-        "allowDestructive": { "type": "boolean" },
-        "preserveSelection": { "type": "boolean" },
-        "mode": { "enum": ["quick", "advanced"] },
-        "emitLiveControls": { "type": "boolean" },
-        "targetRigId": { "type": "string", "minLength": 1, "pattern": "\\S" }
+        "dryRun": {
+          "type": "boolean"
+        },
+        "allowDestructive": {
+          "type": "boolean"
+        },
+        "preserveSelection": {
+          "type": "boolean"
+        },
+        "mode": {
+          "enum": [
+            "quick",
+            "advanced"
+          ]
+        },
+        "emitLiveControls": {
+          "type": "boolean"
+        },
+        "targetRigId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
       }
     }
   },
   "$defs": {
     "jsonValue": {
       "anyOf": [
-        { "type": "null" },
-        { "type": "boolean" },
-        { "type": "string" },
-        { "type": "number" },
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
         {
           "type": "array",
-          "items": { "$ref": "#/$defs/jsonValue" }
+          "items": {
+            "$ref": "#/$defs/jsonValue"
+          }
         },
         {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+          "additionalProperties": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        }
+      ]
+    },
+    "presetOpaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "presetTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compId",
+        "layerId",
+        "instance",
+        "fingerprint"
+      ],
+      "properties": {
+        "compId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "layerId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "instance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "fingerprint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        }
+      }
+    },
+    "motionLibraryOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase",
+        "direction",
+        "durationFrames",
+        "intensity",
+        "staggerFrames",
+        "unit"
+      ],
+      "properties": {
+        "phase": {
+          "enum": [
+            "in",
+            "out",
+            "both"
+          ]
+        },
+        "direction": {
+          "enum": [
+            "preset",
+            "bottom",
+            "left",
+            "right",
+            "top"
+          ]
+        },
+        "durationFrames": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600
+        },
+        "intensity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 300
+        },
+        "staggerFrames": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60
+        },
+        "unit": {
+          "enum": [
+            "preset",
+            "characters",
+            "words",
+            "lines",
+            "all"
+          ]
+        },
+        "elasticity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "overlap": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "speed": {
+          "type": "number",
+          "minimum": 25,
+          "maximum": 200
+        },
+        "order": {
+          "enum": [
+            "preset",
+            "forward",
+            "reverse",
+            "center-out",
+            "edges-in",
+            "random"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999
+        },
+        "easing": {
+          "enum": [
+            "preset",
+            "smooth",
+            "cubic",
+            "overshoot",
+            "bounce",
+            "flicker",
+            "silk",
+            "glide",
+            "spring"
+          ]
+        }
+      }
+    },
+    "cameraTransitionArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "presetId",
+        "durationFrames",
+        "intensity"
+      ],
+      "properties": {
+        "presetId": {
+          "enum": [
+            "camera-dark-fade",
+            "camera-light-flash",
+            "camera-spin-left",
+            "camera-spin-right",
+            "camera-zoom-soft",
+            "camera-zoom-deep",
+            "camera-distort-flow",
+            "camera-shake-soft",
+            "camera-spec-blur-lens",
+            "camera-spec-blur-gaussian",
+            "camera-spec-fade-dark",
+            "camera-spec-fade-light",
+            "camera-spec-fade-dark-blur-lens",
+            "camera-spec-fade-light-blur-lens",
+            "camera-spec-exposure-light",
+            "camera-spec-distort",
+            "camera-spec-distort-rotation",
+            "camera-spec-distort-shake",
+            "camera-spec-distort-rotation-shake",
+            "camera-native-whip",
+            "camera-native-punch",
+            "camera-native-vortex",
+            "camera-native-lens",
+            "camera-native-smear",
+            "camera-native-prism",
+            "camera-impact-punch",
+            "camera-impact-flash",
+            "camera-impact-shockwave",
+            "camera-impact-zoom-through",
+            "camera-impact-rumble",
+            "camera-impact-handheld",
+            "camera-impact-whip",
+            "camera-impact-twist",
+            "camera-impact-double",
+            "camera-impact-cinematic"
+          ]
+        },
+        "durationFrames": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 600
+        },
+        "intensity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 300
+        }
+      }
+    },
+    "presetAdjustArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "presetId",
+        "options"
+      ],
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/presetTarget"
+        },
+        "presetId": {
+          "$ref": "#/$defs/presetOpaqueId"
+        },
+        "options": {
+          "$ref": "#/$defs/motionLibraryOptions"
+        },
+        "targets": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/presetTarget"
+          }
+        },
+        "optionKeys": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "phase",
+              "direction",
+              "durationFrames",
+              "intensity",
+              "staggerFrames",
+              "unit",
+              "elasticity",
+              "overlap",
+              "speed",
+              "order",
+              "seed",
+              "easing"
+            ]
+          }
+        }
+      }
+    },
+    "personalPresetArgs": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action"
+          ],
+          "properties": {
+            "action": {
+              "enum": [
+                "list",
+                "add"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "rootId"
+          ],
+          "properties": {
+            "action": {
+              "const": "remove"
+            },
+            "rootId": {
+              "$ref": "#/$defs/presetOpaqueId"
+            }
+          }
+        }
+      ]
+    },
+    "personalPresetApplyArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "itemId"
+      ],
+      "properties": {
+        "itemId": {
+          "$ref": "#/$defs/presetOpaqueId"
+        }
+      }
+    },
+    "wordRevealArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "durationFrames",
+        "staggerFrames",
+        "paddingX",
+        "paddingY",
+        "roundness",
+        "revealPoint",
+        "fillColor",
+        "boxGap"
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "apply",
+            "update",
+            "bake",
+            "remove"
+          ]
+        },
+        "durationFrames": {
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 180
+        },
+        "staggerFrames": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60
+        },
+        "paddingX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "paddingY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "roundness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "revealPoint": {
+          "type": "number",
+          "minimum": 10,
+          "maximum": 90
+        },
+        "fillColor": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "boxGap": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "renderer": {
+          "enum": [
+            "legacy",
+            "morph"
+          ]
+        },
+        "direction": {
+          "enum": [
+            "bottom",
+            "top",
+            "left",
+            "right"
+          ]
+        },
+        "smoothness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "formationPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 60
+        },
+        "holdPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 30
+        },
+        "travelPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "order": {
+          "enum": [
+            "normal",
+            "reverse"
+          ]
+        },
+        "automatic": {
+          "type": "boolean"
+        },
+        "progress": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "useSourceColor": {
+          "type": "boolean"
+        },
+        "textColor": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 3,
+          "maxItems": 3
+        }
+      }
+    },
+    "variableMorphArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "radius",
+        "strength",
+        "weight",
+        "contrast",
+        "italic"
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "apply",
+            "update",
+            "bake",
+            "remove",
+            "sweep"
+          ]
+        },
+        "radius": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "strength": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "weight": {
+          "type": "number",
+          "minimum": -100,
+          "maximum": 100
+        },
+        "contrast": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "italic": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "smoothness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "scaleX": {
+          "type": "number",
+          "minimum": 25,
+          "maximum": 300
+        },
+        "scaleY": {
+          "type": "number",
+          "minimum": 25,
+          "maximum": 300
+        },
+        "skew": {
+          "type": "number",
+          "minimum": -60,
+          "maximum": 60
+        },
+        "lift": {
+          "type": "number",
+          "minimum": -200,
+          "maximum": 200
+        },
+        "renderer": {
+          "enum": [
+            "auto",
+            "outline",
+            "variable"
+          ]
+        },
+        "preset": {
+          "enum": [
+            "soft-weight",
+            "strong-weight",
+            "thin",
+            "width",
+            "slant",
+            "magnify",
+            "wave",
+            "rubber"
+          ]
+        },
+        "sweepFrames": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "sweepDirection": {
+          "enum": [
+            "left-to-right",
+            "right-to-left",
+            "top-to-bottom",
+            "bottom-to-top"
+          ]
+        }
+      }
+    },
+    "styleSwapArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "durationFrames",
+        "staggerFrames",
+        "unit"
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "apply",
+            "remove"
+          ]
+        },
+        "durationFrames": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "staggerFrames": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60
+        },
+        "unit": {
+          "enum": [
+            "characters",
+            "words"
+          ]
+        }
+      }
+    },
+    "verticalPulseArgs": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "renderer": {
+                    "const": "morph"
+                  }
+                },
+                "required": [
+                  "renderer"
+                ]
+              },
+              "then": {
+                "required": [
+                  "preset",
+                  "fluidity",
+                  "animationMode",
+                  "waveSpread"
+                ]
+              }
+            }
+          ],
+          "required": [
+            "action",
+            "durationFrames",
+            "peakScalePercent",
+            "distortion",
+            "glow",
+            "seed",
+            "accentColor"
+          ],
+          "properties": {
+            "action": {
+              "const": "apply"
+            },
+            "renderer": {
+              "enum": [
+                "legacy",
+                "morph"
+              ]
+            },
+            "preset": {
+              "enum": [
+                "impact",
+                "electric",
+                "plasma",
+                "liquid",
+                "rupture"
+              ]
+            },
+            "fluidity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "durationFrames": {
+              "type": "integer",
+              "minimum": 12,
+              "maximum": 240
+            },
+            "peakScalePercent": {
+              "type": "number",
+              "minimum": 120,
+              "maximum": 450
+            },
+            "animationMode": {
+              "type": "string",
+              "enum": [
+                "uniform",
+                "center-out",
+                "left-to-right",
+                "right-to-left"
+              ],
+              "default": "center-out"
+            },
+            "waveSpread": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 55
+            },
+            "distortion": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "glow": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "accentColor": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action"
+          ],
+          "properties": {
+            "action": {
+              "enum": [
+                "update",
+                "bake",
+                "remove"
+              ]
+            },
+            "renderer": {
+              "enum": [
+                "legacy",
+                "morph"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "presetTimingArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "phase",
+        "frames",
+        "order"
+      ],
+      "properties": {
+        "operation": {
+          "enum": [
+            "shift",
+            "align",
+            "stagger",
+            "duration"
+          ]
+        },
+        "phase": {
+          "enum": [
+            "in",
+            "out"
+          ]
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": -600,
+          "maximum": 600
+        },
+        "order": {
+          "enum": [
+            "forward",
+            "reverse",
+            "random"
+          ]
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999
+        }
+      }
+    },
+    "presetPhaseAdjustArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "phase",
+        "presetId",
+        "options"
+      ],
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/presetTarget"
+        },
+        "phase": {
+          "enum": [
+            "in",
+            "out"
+          ]
+        },
+        "presetId": {
+          "$ref": "#/$defs/presetOpaqueId"
+        },
+        "options": {
+          "$ref": "#/$defs/motionLibraryOptions"
+        }
+      }
+    },
+    "presetPhaseActionArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "phase",
+        "action"
+      ],
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/presetTarget"
+        },
+        "phase": {
+          "enum": [
+            "in",
+            "out"
+          ]
+        },
+        "action": {
+          "enum": [
+            "remove",
+            "reset"
+          ]
+        }
+      }
+    },
+    "presetPhaseTimingArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "phase",
+        "frames"
+      ],
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/presetTarget"
+        },
+        "phase": {
+          "enum": [
+            "in",
+            "out"
+          ]
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": -600,
+          "maximum": 600
+        }
+      }
+    },
+    "presetColorAdjustArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "key",
+        "hex"
+      ],
+      "properties": {
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "compId",
+            "layerId",
+            "fingerprint"
+          ],
+          "properties": {
+            "compId": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "layerId": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "fingerprint": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 65536
+            }
+          }
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[a-z0-9.:-]+$"
+        },
+        "hex": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        }
+      }
+    },
+    "gradientSettingsV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "stops",
+        "mode",
+        "centerX",
+        "centerY",
+        "scale",
+        "aspect",
+        "angle",
+        "cycles",
+        "offset",
+        "depth",
+        "depthRadius",
+        "bulge",
+        "turbulence",
+        "turbulenceScale",
+        "seed",
+        "glow",
+        "glowRadius",
+        "glowThreshold",
+        "highlightProtection",
+        "diffusion",
+        "diffusionRadius",
+        "focusX",
+        "focusY",
+        "focusRadius",
+        "focusSoftness",
+        "grain",
+        "animation",
+        "duration",
+        "phase",
+        "colorProcessing"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "stops": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "contains": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          },
+          "minContains": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "enabled",
+              "color",
+              "position"
+            ],
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "position": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "color": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": {
+                  "type": "number",
+                  "minimum": -16,
+                  "maximum": 64
+                }
+              }
+            }
+          }
+        },
+        "mode": {
+          "enum": [
+            "linear",
+            "radial",
+            "angular"
+          ]
+        },
+        "centerX": {
+          "type": "number",
+          "minimum": -2,
+          "maximum": 3
+        },
+        "centerY": {
+          "type": "number",
+          "minimum": -2,
+          "maximum": 3
+        },
+        "scale": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 10
+        },
+        "aspect": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 10
+        },
+        "angle": {
+          "type": "number",
+          "minimum": -36000,
+          "maximum": 36000
+        },
+        "cycles": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 20
+        },
+        "offset": {
+          "type": "number",
+          "minimum": -100,
+          "maximum": 100
+        },
+        "depth": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "depthRadius": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "bulge": {
+          "type": "number",
+          "minimum": -2,
+          "maximum": 2
+        },
+        "turbulence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "turbulenceScale": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 2000
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "glow": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "glowRadius": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "glowThreshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "highlightProtection": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "diffusion": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "diffusionRadius": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 500
+        },
+        "focusX": {
+          "type": "number",
+          "minimum": -2,
+          "maximum": 3
+        },
+        "focusY": {
+          "type": "number",
+          "minimum": -2,
+          "maximum": 3
+        },
+        "focusRadius": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "focusSoftness": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 2
+        },
+        "grain": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "animation": {
+          "enum": [
+            "static",
+            "loop"
+          ]
+        },
+        "duration": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 120
+        },
+        "phase": {
+          "type": "number",
+          "minimum": -36000,
+          "maximum": 36000
+        },
+        "colorProcessing": {
+          "enum": [
+            "project",
+            "srgb-linear"
+          ]
+        }
+      }
+    },
+    "gradientArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action"
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "apply",
+            "update",
+            "remove",
+            "create-background"
+          ]
+        },
+        "settings": {
+          "$ref": "#/$defs/gradientSettingsV1"
+        },
+        "changedKeys": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 53,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "mode",
+              "centerX",
+              "centerY",
+              "scale",
+              "aspect",
+              "angle",
+              "cycles",
+              "offset",
+              "depth",
+              "depthRadius",
+              "bulge",
+              "turbulence",
+              "turbulenceScale",
+              "seed",
+              "glow",
+              "glowRadius",
+              "glowThreshold",
+              "highlightProtection",
+              "diffusion",
+              "diffusionRadius",
+              "focusX",
+              "focusY",
+              "focusRadius",
+              "focusSoftness",
+              "grain",
+              "animation",
+              "duration",
+              "phase",
+              "colorProcessing",
+              "stops.0.enabled",
+              "stops.0.color",
+              "stops.0.position",
+              "stops.1.enabled",
+              "stops.1.color",
+              "stops.1.position",
+              "stops.2.enabled",
+              "stops.2.color",
+              "stops.2.position",
+              "stops.3.enabled",
+              "stops.3.color",
+              "stops.3.position",
+              "stops.4.enabled",
+              "stops.4.color",
+              "stops.4.position",
+              "stops.5.enabled",
+              "stops.5.color",
+              "stops.5.position",
+              "stops.6.enabled",
+              "stops.6.color",
+              "stops.6.position",
+              "stops.7.enabled",
+              "stops.7.color",
+              "stops.7.position"
+            ]
+          }
+        },
+        "selectionToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "enum": [
+                  "apply",
+                  "update",
+                  "create-background"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "settings"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "update"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "changedKeys"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "changedKeys"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "remove"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "settings"
+              ]
+            }
+          }
         }
       ]
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.presets.camera-transition"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/cameraTransitionArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.presets.inspect"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [],
+            "properties": {}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.presets.adjust"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/presetAdjustArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.presets.personal"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/personalPresetArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.presets.personal-apply"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/personalPresetApplyArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.text.word-reveal"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/wordRevealArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.text.variable-morph"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/variableMorphArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.text.style-swap"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/styleSwapArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.text.vertical-pulse"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/verticalPulseArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.presets.timing"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/presetTimingArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.presets.personal-preview"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/personalPresetApplyArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.presets.phase-adjust"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/presetPhaseAdjustArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.presets.phase-action"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/presetPhaseActionArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.presets.phase-timing"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/presetPhaseTimingArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.presets.color-adjust"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/presetColorAdjustArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.text.word-reveal.read"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [],
+            "properties": {}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.text.variable-morph.read"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [],
+            "properties": {}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.text.vertical-pulse.read"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.effect.gradient"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/gradientArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.effect.gradient.read"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  ]
 }

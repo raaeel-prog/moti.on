@@ -320,3 +320,4 @@ test("falha no meio da montagem remove a camada recem-criada", async () => {
     FakePropertyGroup.prototype.property = original;
   }
 });
+

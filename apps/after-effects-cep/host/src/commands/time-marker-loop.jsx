@@ -78,16 +78,31 @@
       if (!layer || layer.canSetTimeRemapEnabled !== true) {
         return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A selecao contem camada sem Time Remap scriptavel.", null);
       }
+      if (layer.locked === true) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie a camada antes de aplicar Marker Loop.", null);
       markerProp = /** @type {Property} */ (layer.property("ADBE Marker"));
       if (!(markerProp instanceof Property)) {
         return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camada nao expoe markers scriptaveis.", null);
       }
-      if (args.autoCreateMarkers !== true) {
-        inTime = findMarkerTime(markerProp, /** @type {string} */ (args.inMarkerName));
-        outTime = findMarkerTime(markerProp, /** @type {string} */ (args.outMarkerName));
-        if (!isFinite(inTime) || !isFinite(outTime) || outTime <= inTime) {
-          return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Markers de loop ausentes ou fora de ordem.", null);
+      inTime = findMarkerTime(markerProp, /** @type {string} */ (args.inMarkerName));
+      outTime = findMarkerTime(markerProp, /** @type {string} */ (args.outMarkerName));
+      if (args.autoCreateMarkers === true) {
+        var proposedIn = isFinite(inTime) ? inTime : layer.inPoint;
+        var proposedOut = isFinite(outTime) ? outTime : layer.outPoint - comp.frameDuration;
+        if (!isFinite(outTime) && proposedOut <= proposedIn) proposedOut = layer.outPoint;
+        // setValueAtTime replaces any marker at the same time. Never overwrite
+        // a user's cue merely because the requested loop name is absent.
+        for (var k = 1; k <= markerProp.numKeys; k += 1) {
+          var markerTime = markerProp.keyTime(k);
+          if ((!isFinite(inTime) && Math.abs(markerTime - proposedIn) < 0.000001) ||
+              (!isFinite(outTime) && Math.abs(markerTime - proposedOut) < 0.000001)) {
+            return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Ja existe um marker no limite do loop. Mova-o ou use os nomes dos markers existentes.", {layerIndex: layer.index});
+          }
         }
+        inTime = proposedIn;
+        outTime = proposedOut;
+      }
+      if (!isFinite(inTime) || !isFinite(outTime) || outTime <= inTime) {
+        return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Markers de loop ausentes ou fora de ordem.", null);
       }
       if (layer.timeRemapEnabled === true) {
         var tr = /** @type {Property} */ (layer.property("ADBE Time Remapping"));
@@ -190,6 +205,7 @@
             var markerIn = new MarkerValue(inName);
             markerProp.setValueAtTime(layer.inPoint, markerIn);
             markerCreations.push({ property: markerProp, name: inName, time: layer.inPoint });
+            changed = true;
             inTime = layer.inPoint;
           }
           if (!isFinite(outTime)) {
@@ -198,6 +214,7 @@
             var markerOut = new MarkerValue(outName);
             markerProp.setValueAtTime(outMarkerTime, markerOut);
             markerCreations.push({ property: markerProp, name: outName, time: outMarkerTime });
+            changed = true;
             outTime = outMarkerTime;
           }
         }

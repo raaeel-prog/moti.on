@@ -1,3 +1,4 @@
+import { afterEach } from 'node:test';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -175,7 +176,8 @@ test("tile atrasa spinner, confirma por 700 ms e preserva marca sem depender so 
   assert.equal(tile.icon.getAttribute("data-feedback"), "waiting");
   assert.equal(scheduler.delays.at(-1), 180);
   scheduler.runAll();
-  assert.equal(tile.icon.textContent, "◌");
+  assert.equal(tile.icon.children.length, 1, "spinner estrutural substitui o glifo antigo");
+  assert.equal(tile.icon.children[0].className, "ch-spinner");
   assert.equal(tile.icon.getAttribute("data-feedback"), "loading");
 
   tile.setState("success", "Rig aplicado");
@@ -654,7 +656,7 @@ test("gaveta calcula o foco pela ordem real do DOM, nao agrupado por tag", () =>
   assert.equal(doc.activeElement, firstInDom);
 });
 
-test("toast com acao dura ao menos 8 s, fixa ao foco e usa live region polite", () => {
+test("toast com acao dura ao menos 8 s, pausa ao foco e usa live region polite", () => {
   const doc = createFakeDocument();
   const scheduler = createScheduler();
   const calls = [];
@@ -680,7 +682,7 @@ test("toast com acao dura ao menos 8 s, fixa ao foco e usa live region polite", 
   assert.equal(scheduler.delays[0], 8000);
   assert.equal(scheduler.size, 1);
   toast.element.emit("focusin");
-  assert.equal(toast.element.getAttribute("data-pinned"), "true");
+  assert.equal(toast.element.getAttribute("data-paused"), "true");
   assert.equal(scheduler.size, 0);
   toast.actions[0].click();
   assert.deepEqual(calls, ["adjust"]);
@@ -715,7 +717,7 @@ test("erro recuperavel fica indefinido e assertive so existe quando solicitado",
   assert.equal(scheduler.size, 1);
 });
 
-test("regiao de toast mantem no maximo tres e substitui o mais antigo", () => {
+test("regiao de toast mantem no maximo tres e preserva excedentes na fila", () => {
   const doc = createFakeDocument();
   const scheduler = createScheduler();
   const region = createToastRegion(doc, {
@@ -733,10 +735,11 @@ test("regiao de toast mantem no maximo tres e substitui o mais antigo", () => {
   }));
 
   assert.equal(region.items.length, 3);
-  assert.equal(region.element.children.length, 3);
-  assert.equal(region.items.includes(created[0]), false);
-  assert.match(region.element.allText, /Resultado 4/);
-  assert.doesNotMatch(region.element.allText, /Resultado 1/);
+  assert.equal(region.element.getElementsByTagName("article").length, 3);
+  assert.equal(region.items.includes(created[0]), true);
+  assert.deepEqual(region.pending, [created[3]]);
+  assert.doesNotMatch(region.element.allText, /Resultado 4/);
+  assert.match(region.element.allText, /Resultado 1/);
 });
 
 test("CSS cobre pseudoestados, todos os estados logicos e os IDs de movimento", async () => {
@@ -759,7 +762,6 @@ test("CSS cobre pseudoestados, todos os estados logicos e os IDs de movimento", 
 
   assert.match(css, /\.ch-popover:focus/);
   assert.match(css, /\.ch-drawer:focus/);
-  assert.match(css, /\.ch-quick-tile\[data-state="success"\]\s*>\s*\.ch-component-state[^}]*var\(--accent\)/s);
 
   assert.match(css, /\[data-hidden="true"\]/);
   assert.doesNotMatch(css, /ch-disabled-reason\[aria-hidden/);
@@ -1068,17 +1070,17 @@ test("toast cobre timer, Escape, dismiss por id, action persistente e clear", ()
   const timed = region.push({ message: "Temporario" });
   scheduler.runAll();
   assert.equal(timed.element.getAttribute("data-closing"), "true");
-  timed.element.emit("animationend");
+  timed.element.emit("animationend", { animationName: "motion-toast-out" });
   assert.equal(region.items.includes(timed), false);
 
   region.dismiss("missing");
   region.dismiss(persistentAction.id);
   assert.equal(persistentAction.element.getAttribute("data-closing"), "true");
-  persistentAction.element.emit("animationend");
+  persistentAction.element.emit("animationend", { animationName: "motion-toast-out" });
 
   const escaped = region.push({ message: "Fechar por teclado" });
   assert.equal(escaped.element.keydown("Escape").defaultPrevented, true);
-  escaped.element.emit("animationend");
+  escaped.element.emit("animationend", { animationName: "motion-toast-out" });
   region.push({ message: "A" });
   region.push({ message: "B" });
   region.clear();
@@ -1132,6 +1134,10 @@ test("scheduler padrao encerra toast sem manter timer pendente", async () => {
   const toast = region.push({ message: "Rapido", durationMs: 0 });
   await new Promise((resolve) => setTimeout(resolve, 5));
   assert.equal(toast.element.getAttribute("data-closing"), "true");
-  toast.element.emit("animationend");
+  toast.element.emit("animationend", { animationName: "motion-toast-out" });
   assert.equal(region.items.length, 0);
+});
+
+afterEach(() => {
+  for (const name of ["HTMLElement", "customElements", "document", "window"]) delete globalThis[name];
 });

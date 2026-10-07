@@ -438,3 +438,4 @@ test("camada que nao e de forma e recusada", async () => {
   assert.equal(resposta.ok, false);
   assert.equal(resposta.error.code, "INVALID_SELECTION_TYPE");
 });
+

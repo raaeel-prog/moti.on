@@ -121,3 +121,9 @@ O build Moti.on reproduziu um `FAIL` do `<ScriptPath>` com modal de sintaxe na l
 - [ ] `NOT RUN` — SBOM, notices e checksums.
 - [ ] `NOT RUN` — rollback ensaiado.
 - [ ] `NOT RUN` — nenhuma claim excede a capacidade testada.
+# Checkpoint incremental — 2026-09-10
+
+O último build das adições de interface passou. A suíte de 1155 testes pertence
+ao ponto anterior a favoritos/recentes/tema/densidade; não foi repetida nesta
+etapa por orientação do responsável. Gates de host e release continuam abertos.
+Ver [evidência e próximos passos](HANDOFF_MACOS_2026-09-10.md).

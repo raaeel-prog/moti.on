@@ -1,7 +1,6 @@
 /** Raiz de composição do painel Premiere Pro UXP. */
 import {
   buildCapabilities,
-  parseHostVersion,
   type ProbeFacts
 } from "@motion/capability-matrix";
 import {
@@ -13,19 +12,24 @@ import {
 import { createLogger, type MotionLogger } from "@motion/logging";
 import {
   button,
+  appearanceSettings,
+  browserPreferenceStorage,
+  createPanelPreferences,
   checkboxField,
   createI18n,
+  createDiagnosticsView,
+  createEmptyState,
   createShell,
-  logLine,
   notice,
   propertyRow,
   sectionTitle,
+  selectField,
   type I18n,
   type RenderRegions,
-  type RowTone,
   type Shell,
   type ShellView
 } from "@motion/ui-core";
+const panelPreferences = createPanelPreferences(document.documentElement, browserPreferenceStorage(window));
 import {
   createBrowserReducedMotionController,
   type ReducedMotionController
@@ -34,6 +38,8 @@ import {
 import { createPremiereAdapter } from "../../host/src/adapter.js";
 import { capabilityProbe, contextRead, selfTest } from "../../host/src/commands.js";
 import type { PremiereModule } from "../../host/src/premiere-api.js";
+import { createPremiereSystemView } from "./views/system-view.js";
+import { createPanelRequestScope } from "./request-scope.js";
 import {
   buildEntrypointConfig,
   createPanelLifecycle,
@@ -81,6 +87,9 @@ interface SelfTestData {
 }
 
 interface PanelServices {
+  disposeView: (() => void) | null;
+  state: PanelState;
+  requests: ReturnType<typeof createPanelRequestScope>;
   i18n: I18n;
   messages: PremiereMessages;
   logger: MotionLogger;
@@ -88,10 +97,12 @@ interface PanelServices {
   uxp: unknown;
   canWriteFiles: RuntimeProbeResult;
   motionPreference: ReducedMotionController;
+  hostLocale: string | undefined;
 }
 
 const VIEWS: ShellView[] = [
   { id: "context", labelKey: "nav.context", titleKey: "view.context.title" },
+  { id: "tools", labelKey: "nav.tools", titleKey: "view.tools.title" },
   { id: "system", labelKey: "nav.system", titleKey: "view.system.title" },
   { id: "diagnostics", labelKey: "nav.diagnostics", titleKey: "view.diagnostics.title" },
   { id: "settings", labelKey: "nav.settings", titleKey: "view.settings.title" }
@@ -99,23 +110,21 @@ const VIEWS: ShellView[] = [
 
 const PLUGIN_VERSION = "0.1.0";
 
-const state: {
+interface PanelState {
   context: ContextData | null;
   capabilities: HostCapabilities | null;
   selfTest: SelfTestData | null;
   lastError: LocalizedViewError | null;
   busy: boolean;
-} = {
-  context: null,
-  capabilities: null,
-  selfTest: null,
-  lastError: null,
-  busy: false
-};
+}
+
+function createState(): PanelState {
+  return { context: null, capabilities: null, selfTest: null, lastError: null, busy: false };
+}
 
 let requestCounter = 0;
 
-function resetState(): void {
+function resetState(state: PanelState): void {
   state.context = null;
   state.capabilities = null;
   state.selfTest = null;
@@ -178,9 +187,12 @@ function createPanelRuntime(uxp: unknown, rootNode?: unknown): ManagedPanelRunti
     return null;
   }
 
-  resetState();
+  // Estado e tickets pertencem à montagem, nunca a todo o módulo UXP.
+  const state = createState();
+  const requests = createPanelRequestScope();
   const environment = readUxpHostEnvironment(uxp);
-  const i18n = createI18n({ locale: environment.uiLocale });
+  const preferredLocale = panelPreferences.snapshot().locale;
+  const i18n = createI18n({ locale: preferredLocale === "host" ? environment.uiLocale : preferredLocale });
   const messages = createPremiereMessages(i18n.locale());
   document.documentElement?.setAttribute("lang", i18n.locale());
 
@@ -200,13 +212,17 @@ function createPanelRuntime(uxp: unknown, rootNode?: unknown): ManagedPanelRunti
   const dispatcher = premiere ? createDispatcher(premiere, logger, environment) : null;
   const motionPreference = createBrowserReducedMotionController(document.documentElement, window);
   const services: PanelServices = {
+    disposeView: null,
+    state,
+    requests,
     i18n,
     messages,
     logger,
     dispatcher,
     uxp,
     canWriteFiles: environment.canWriteFiles,
-    motionPreference
+    motionPreference,
+    hostLocale: environment.uiLocale
   };
 
   const shell = createShell({
@@ -229,11 +245,10 @@ function createPanelRuntime(uxp: unknown, rootNode?: unknown): ManagedPanelRunti
       logger.info("panel.shown", { command: "panel.shown" });
       // panel.show é um trigger documentado de invalidação: contexto e matriz
       // não sobrevivem silenciosamente a troca de projeto/sequence.
-      state.context = null;
-      state.capabilities = null;
-      state.selfTest = null;
+      requests.invalidate();
+      resetState(state);
 
-      if (!dispatcher || state.busy) {
+      if (!dispatcher) {
         return;
       }
 
@@ -241,19 +256,29 @@ function createPanelRuntime(uxp: unknown, rootNode?: unknown): ManagedPanelRunti
     },
 
     dispose() {
+      services.disposeView?.();
+      services.disposeView = null;
+      requests.dispose();
       stopObservingWidth();
       motionPreference.dispose();
       logger.info("panel.destroyed", { command: "panel.destroyed" });
-      resetState();
+      resetState(state);
     }
   };
 }
 
 function renderView(viewId: string, regions: RenderRegions, services: PanelServices): void {
-  const { i18n, messages, dispatcher } = services;
+  services.disposeView?.();
+  services.disposeView = null;
+  const { i18n, messages, dispatcher, state } = services;
 
   if (viewId === "settings") {
     renderSettings(regions, services);
+    return;
+  }
+
+  if (viewId === "tools") {
+    renderTools(regions, services);
     return;
   }
 
@@ -280,29 +305,20 @@ function renderView(viewId: string, regions: RenderRegions, services: PanelServi
   }
 
   if (viewId === "system") {
-    renderSystem(regions, services);
+    const view = createPremiereSystemView(document, {
+      i18n,
+      messages,
+      capabilities: state.capabilities,
+      selfTest: state.selfTest,
+      busyReason: state.busy ? messages.t("disabled.busy") : undefined,
+      canPress: () => !state.busy,
+      onRunCheck: () => void runSystemCheck(regions.shell, services, dispatcher),
+      onSelfTest: () => void runSelfTest(regions.shell, services, dispatcher)
+    });
+    regions.content.appendChild(view.content);
+    regions.actions.appendChild(view.actions);
+    services.disposeView = view.dispose;
     renderCurrentError(viewId, regions, services);
-
-    const checkLabel = i18n.t("action.runSystemCheck");
-    regions.actions.appendChild(
-      button(document, {
-        label: checkLabel,
-        variant: "primary",
-        disabled: state.busy,
-        title: state.busy ? messages.t("disabled.busy") : checkLabel,
-        onClick: () => void runSystemCheck(regions.shell, services, dispatcher)
-      })
-    );
-
-    const selfTestLabel = i18n.t("action.runSelfTest");
-    regions.actions.appendChild(
-      button(document, {
-        label: selfTestLabel,
-        disabled: state.busy,
-        title: state.busy ? messages.t("disabled.busy") : selfTestLabel,
-        onClick: () => void runSelfTest(regions.shell, services, dispatcher)
-      })
-    );
     return;
   }
 
@@ -319,7 +335,7 @@ function orFallback(
 }
 
 function renderContext(regions: RenderRegions, services: PanelServices): void {
-  const { i18n, messages } = services;
+  const { i18n, messages, state } = services;
   const context = state.context;
 
   if (!context) {
@@ -360,78 +376,27 @@ function renderContext(regions: RenderRegions, services: PanelServices): void {
   }
 }
 
-function renderSystem(regions: RenderRegions, services: PanelServices): void {
-  const { i18n, messages } = services;
-  const capabilities = state.capabilities;
-
-  if (capabilities) {
-    const versionKnown = parseHostVersion(capabilities.hostVersion) !== null;
-    regions.content.appendChild(
-      propertyRow(
-        document,
-        i18n.t("capability.supportTier"),
-        versionKnown
-          ? i18n.t(
-              `capability.tier.premiere.${capabilities.supportTier}` as Parameters<I18n["t"]>[0]
-            )
-          : i18n.t("capability.state.unknown"),
-        versionKnown ? undefined : "unknown"
-      )
-    );
-
-    for (const [key, finding] of Object.entries(capabilities.findings)) {
-      if (!finding) {
-        continue;
-      }
-
-      const tone: RowTone =
-        finding.state === "available" ? "ok" : finding.state === "unknown" ? "unknown" : "off";
-      const value =
-        finding.state === "available"
-          ? i18n.t("capability.state.available")
-          : `${i18n.t(`capability.state.${finding.state}` as Parameters<I18n["t"]>[0])} — ${
-              finding.reasonKey
-                ? i18n.t(finding.reasonKey as Parameters<I18n["t"]>[0])
-                : ""
-            }`.trim();
-
-      regions.content.appendChild(
-        propertyRow(document, i18n.t(`capability.key.${key}` as Parameters<I18n["t"]>[0]), value, tone)
-      );
-    }
-  }
-
-  if (state.selfTest) {
-    regions.content.appendChild(sectionTitle(document, i18n.t("action.runSelfTest")));
-    for (const check of state.selfTest.checks) {
-      const nameKey = `selfTest.name.${check.name}`;
-      const checkName = messages.has(nameKey) ? messages.t(nameKey) : check.name;
-      const detail =
-        check.detailKey && messages.has(check.detailKey)
-          ? messages.t(check.detailKey)
-          : check.detailKey;
-
-      regions.content.appendChild(
-        propertyRow(
-          document,
-          checkName,
-          check.ok
-            ? i18n.t("capability.state.available")
-            : `${i18n.t("capability.state.unavailable")}${detail ? ` — ${detail}` : ""}`,
-          check.ok ? "ok" : "off"
-        )
-      );
-    }
-  }
-
-  if (!capabilities && !state.selfTest) {
-    regions.content.appendChild(notice(document, messages.t("message.systemCheckNotRun")));
-  }
-}
-
 function renderSettings(regions: RenderRegions, services: PanelServices): void {
   const { i18n, motionPreference } = services;
   regions.content.appendChild(sectionTitle(document, i18n.t("settings.interface.title")));
+  regions.content.appendChild(selectField(document, {
+    id: "settings-language", label: i18n.t("settings.language.label"), value: panelPreferences.snapshot().locale,
+    options: [
+      { value: "host", label: i18n.t("settings.language.host") },
+      { value: "pt-BR", label: "Português (Brasil)" },
+      { value: "en-US", label: "English" }
+    ],
+    onChange: value => {
+      panelPreferences.setLocale(value);
+      i18n.setLocale(value === "host" ? services.hostLocale : value);
+      services.messages = createPremiereMessages(i18n.locale());
+      document.documentElement.setAttribute("lang", i18n.locale());
+      regions.shell.rerender();
+    }
+  }));
+  for (const field of appearanceSettings(document, i18n, panelPreferences, () => regions.shell.rerender())) {
+    regions.content.appendChild(field);
+  }
   regions.content.appendChild(
     checkboxField(document, {
       id: "settings-reduce-motion",
@@ -446,98 +411,48 @@ function renderSettings(regions: RenderRegions, services: PanelServices): void {
   );
 }
 
+function renderTools(regions: RenderRegions, services: PanelServices): void {
+  const { i18n } = services;
+  regions.content.appendChild(createEmptyState(document, {
+    icon: "tools",
+    title: i18n.t("premiere.tools.unavailable"),
+    description: i18n.t("premiere.tools.description"),
+    action: { label: i18n.t("premiere.tools.context"), onClick: () => regions.shell.navigate("context") }
+  }));
+}
+
 function renderDiagnostics(regions: RenderRegions, services: PanelServices): void {
-  const { i18n, messages, logger, canWriteFiles } = services;
-  const entries = logger.entries();
-  const size = logger.size();
-
-  regions.content.appendChild(notice(document, i18n.t("logs.redactionNotice")));
-  if (canWriteFiles !== true) {
-    regions.content.appendChild(
-      notice(document, messages.t("message.exportUnavailable"), "warning")
-    );
-  }
-  regions.content.appendChild(
-    sectionTitle(document, i18n.t("logs.summary", { count: size.entries, dropped: size.dropped }))
-  );
-
-  if (entries.length === 0) {
-    regions.content.appendChild(notice(document, i18n.t("logs.empty")));
-  } else {
-    for (let index = entries.length - 1; index >= 0; index -= 1) {
-      const entry = entries[index];
-      if (!entry) {
-        continue;
+  const { i18n, messages, logger, canWriteFiles, state } = services;
+  const view = createDiagnosticsView(document, {
+    i18n,
+    entries: logger.entries(),
+    droppedEntries: logger.size().dropped,
+    debugMode: logger.isDebugMode(),
+    busyReason: state.busy ? messages.t("disabled.busy") : undefined,
+    exportUnavailableReason: canWriteFiles !== true ? messages.t("disabled.exportUnavailable") : undefined,
+    exportUnavailableNotice: canWriteFiles !== true ? messages.t("message.exportUnavailable") : undefined,
+    canPress: () => !state.busy,
+    onExport: () => void exportBundle(regions.shell, services),
+    onClear: () => {
+      const removed = logger.clear();
+      state.lastError = null;
+      regions.shell.setStatus(i18n.t("message.logsCleared", { count: removed }), "ok");
+      regions.shell.rerender();
+    },
+    onToggleDebug: () => {
+      if (logger.isDebugMode()) {
+        logger.disableDebugMode();
+        regions.shell.setStatus(i18n.t("message.debugDisabled"));
+      } else {
+        logger.enableDebugMode();
+        regions.shell.setStatus(i18n.t("message.debugEnabled"), "ok");
       }
-
-      const parts = [
-        entry.timestamp.slice(11, 19),
-        entry.level.toUpperCase(),
-        entry.message ?? entry.command ?? "-"
-      ];
-      if (entry.durationMs !== null) {
-        parts.push(`${entry.durationMs} ms`);
-      }
-      if (entry.errorCode) {
-        parts.push(entry.errorCode);
-      }
-
-      const level = entry.level === "error" || entry.level === "warn" ? entry.level : undefined;
-      regions.content.appendChild(logLine(document, parts.join("  "), level));
+      regions.shell.rerender();
     }
-  }
-
-  const exportLabel = i18n.t("action.exportBundle");
-  const exportDisabled = state.busy || canWriteFiles !== true;
-  regions.actions.appendChild(
-    button(document, {
-      label: exportLabel,
-      variant: "primary",
-      disabled: exportDisabled,
-      title: state.busy
-        ? messages.t("disabled.busy")
-        : canWriteFiles !== true
-          ? messages.t("disabled.exportUnavailable")
-          : exportLabel,
-      onClick: () => void exportBundle(regions.shell, services)
-    })
-  );
-
-  const clearLabel = i18n.t("action.clearLogs");
-  regions.actions.appendChild(
-    button(document, {
-      label: clearLabel,
-      disabled: state.busy,
-      title: state.busy ? messages.t("disabled.busy") : clearLabel,
-      onClick: () => {
-        const removed = logger.clear();
-        state.lastError = null;
-        regions.shell.setStatus(i18n.t("message.logsCleared", { count: removed }), "ok");
-        regions.shell.rerender();
-      }
-    })
-  );
-
-  const debugLabel = logger.isDebugMode()
-    ? i18n.t("action.disableDebug")
-    : i18n.t("action.enableDebug");
-  regions.actions.appendChild(
-    button(document, {
-      label: debugLabel,
-      disabled: state.busy,
-      title: state.busy ? messages.t("disabled.busy") : debugLabel,
-      onClick: () => {
-        if (logger.isDebugMode()) {
-          logger.disableDebugMode();
-          regions.shell.setStatus(i18n.t("message.debugDisabled"));
-        } else {
-          logger.enableDebugMode();
-          regions.shell.setStatus(i18n.t("message.debugEnabled"), "ok");
-        }
-        regions.shell.rerender();
-      }
-    })
-  );
+  });
+  regions.content.appendChild(view.content);
+  regions.actions.appendChild(view.actions);
+  services.disposeView = view.dispose;
 }
 
 function renderCurrentError(
@@ -545,7 +460,7 @@ function renderCurrentError(
   regions: RenderRegions,
   services: PanelServices
 ): void {
-  const error = state.lastError;
+  const error = services.state.lastError;
   if (!error || error.viewId !== viewId) {
     return;
   }
@@ -568,7 +483,7 @@ function reportFailure(
   response: CommandResponse,
   originViewId: string
 ): void {
-  const { i18n } = services;
+  const { i18n, state } = services;
   const error = response.error;
 
   if (!error) {
@@ -585,9 +500,41 @@ function reportFailure(
   shell.setStatus(i18n.t(error.recoverable ? "status.notCompleted" : "status.failed"), "error");
 }
 
-function setBusy(shell: Shell, busy: boolean): void {
-  state.busy = busy;
+function setBusy(shell: Shell, services: PanelServices, busy: boolean): void {
+  services.state.busy = busy;
   shell.rerender();
+}
+
+/** Invalida a entrega à UI; não promete cancelar operações já enviadas ao host. */
+async function runPanelRequest<T>(
+  shell: Shell,
+  services: PanelServices,
+  originViewId: string,
+  pendingMessage: string,
+  execute: () => Promise<T>,
+  accept: (result: T) => void
+): Promise<void> {
+  const ticket = services.requests.begin();
+  if (!ticket) return;
+  try {
+    services.state.lastError = null;
+    shell.setStatus(pendingMessage, "busy");
+    setBusy(shell, services, true);
+    const result = await execute();
+    if (services.requests.isCurrent(ticket)) accept(result);
+  } catch {
+    if (!services.requests.isCurrent(ticket)) return;
+    // Falhas inesperadas também liberam busy, sem expor paths ou erro cru.
+    services.state.lastError = localizeCommandFailure(originViewId, {
+      code: "HOST_OPERATION_FAILED", message: "Panel operation failed.",
+      recoverable: true, action: "error.action.exportLogBundle"
+    }, services.i18n, services.messages);
+    shell.setStatus(services.i18n.t("status.failed"), "error");
+    services.logger.error("panel.operation.failed", { errorCode: "HOST_OPERATION_FAILED" });
+  } finally {
+    // Um callback velho nunca libera o busy de uma solicitação mais recente.
+    if (services.requests.finish(ticket)) setBusy(shell, services, false);
+  }
 }
 
 async function refreshContext(
@@ -595,22 +542,17 @@ async function refreshContext(
   services: PanelServices,
   dispatch: Dispatcher
 ): Promise<void> {
-  const { i18n } = services;
-  state.lastError = null;
-  shell.setStatus(i18n.t("status.readingContext"), "busy");
-  setBusy(shell, true);
-
-  const response = (await dispatch("pr.context.read")) as CommandResponse<ContextData>;
-  if (!response.ok || !response.data) {
-    state.context = null;
-    reportFailure(shell, services, response, "context");
-    setBusy(shell, false);
-    return;
-  }
-
-  state.context = response.data;
-  shell.setStatus(i18n.t("status.connected"), "ok");
-  setBusy(shell, false);
+  const { i18n, state } = services;
+  return runPanelRequest(shell, services, "context", i18n.t("status.readingContext"),
+    () => dispatch("pr.context.read") as Promise<CommandResponse<ContextData>>, (response) => {
+      if (!response.ok || !response.data) {
+        state.context = null;
+        reportFailure(shell, services, response, "context");
+        return;
+      }
+      state.context = response.data;
+      shell.setStatus(i18n.t("status.connected"), "ok");
+    });
 }
 
 async function runSelfTest(
@@ -618,25 +560,17 @@ async function runSelfTest(
   services: PanelServices,
   dispatch: Dispatcher
 ): Promise<void> {
-  const { i18n, messages } = services;
-  state.lastError = null;
-  shell.setStatus(messages.t("status.runningSelfTest"), "busy");
-  setBusy(shell, true);
-
-  const response = (await dispatch("pr.diagnostics.selfTest")) as CommandResponse<SelfTestData>;
-  if (!response.ok || !response.data) {
-    reportFailure(shell, services, response, "system");
-    setBusy(shell, false);
-    return;
-  }
-
-  state.selfTest = response.data;
-  const allPassed = response.data.passed === response.data.total;
-  shell.setStatus(
-    i18n.t(allPassed ? "status.connected" : "status.notCompleted"),
-    allPassed ? "ok" : "error"
-  );
-  setBusy(shell, false);
+  const { i18n, messages, state } = services;
+  return runPanelRequest(shell, services, "system", messages.t("status.runningSelfTest"),
+    () => dispatch("pr.diagnostics.selfTest") as Promise<CommandResponse<SelfTestData>>, (response) => {
+      if (!response.ok || !response.data) {
+        reportFailure(shell, services, response, "system");
+        return;
+      }
+      state.selfTest = response.data;
+      const allPassed = response.data.passed === response.data.total;
+      shell.setStatus(i18n.t(allPassed ? "status.connected" : "status.notCompleted"), allPassed ? "ok" : "error");
+    });
 }
 
 async function runSystemCheck(
@@ -644,69 +578,53 @@ async function runSystemCheck(
   services: PanelServices,
   dispatch: Dispatcher
 ): Promise<void> {
-  const { i18n } = services;
-  state.lastError = null;
-  shell.setStatus(i18n.t("status.checkingSystem"), "busy");
-  setBusy(shell, true);
-
-  const response = (await dispatch("pr.capability.probe")) as CommandResponse<ProbeFacts>;
-  if (!response.ok || !response.data) {
-    reportFailure(shell, services, response, "system");
-    setBusy(shell, false);
-    return;
-  }
-
-  state.capabilities = buildCapabilities(response.data);
-  shell.setStatus(i18n.t("status.connected"), "ok");
-  setBusy(shell, false);
+  const { i18n, state } = services;
+  return runPanelRequest(shell, services, "system", i18n.t("status.checkingSystem"),
+    () => dispatch("pr.capability.probe") as Promise<CommandResponse<ProbeFacts>>, (response) => {
+      if (!response.ok || !response.data) {
+        reportFailure(shell, services, response, "system");
+        return;
+      }
+      state.capabilities = buildCapabilities(response.data);
+      shell.setStatus(i18n.t("status.connected"), "ok");
+    });
 }
 
 async function exportBundle(shell: Shell, services: PanelServices): Promise<void> {
-  const { i18n, messages, logger, uxp } = services;
-  state.lastError = null;
-  shell.setStatus(messages.t("status.exporting"), "busy");
-  setBusy(shell, true);
-
-  const result = await exportDiagnosticsBundle(uxp, logger.exportBundle());
-
-  if (result.status === "saved") {
-    logger.info("diagnostics.exported", {
-      command: "diagnostics.export",
-      result: "success"
+  const { i18n, messages, logger, uxp, state } = services;
+  return runPanelRequest(shell, services, "diagnostics", messages.t("status.exporting"),
+    () => exportDiagnosticsBundle(uxp, logger.exportBundle()), (result) => {
+      if (result.status === "saved") {
+        logger.info("diagnostics.exported", {
+          command: "diagnostics.export",
+          result: "success"
+        });
+        shell.setStatus(messages.t("message.exportSaved"), "ok");
+      } else if (result.status === "cancelled") {
+        logger.info("diagnostics.export.cancelled", {
+          command: "diagnostics.export",
+          result: "cancelled"
+        });
+        shell.setStatus(messages.t("message.exportCancelled"));
+      } else {
+        const unavailable = result.status === "unsupported";
+        const message = messages.t(unavailable ? "message.exportUnavailable" : "message.exportFailed");
+        const recovery = i18n.t(
+          unavailable ? "error.action.updateHost" : "error.action.grantPermission"
+        );
+        state.lastError = { viewId: "diagnostics", message, recovery };
+        if (unavailable) {
+          logger.warn("diagnostics.export.unavailable", { reason: result.reason });
+        } else {
+          logger.error("diagnostics.export.failed", {
+            command: "diagnostics.export",
+            result: "failure",
+            errorCode: result.reason
+          });
+        }
+        shell.setStatus(i18n.t("status.notCompleted"), "error");
+      }
     });
-    shell.setStatus(messages.t("message.exportSaved"), "ok");
-  } else if (result.status === "cancelled") {
-    logger.info("diagnostics.export.cancelled", {
-      command: "diagnostics.export",
-      result: "cancelled"
-    });
-    shell.setStatus(messages.t("message.exportCancelled"));
-  } else {
-    const unavailable = result.status === "unsupported";
-    const message = messages.t(unavailable ? "message.exportUnavailable" : "message.exportFailed");
-    const recovery = i18n.t(
-      unavailable ? "error.action.updateHost" : "error.action.grantPermission"
-    );
-
-    state.lastError = {
-      viewId: "diagnostics",
-      message,
-      recovery
-    };
-
-    if (unavailable) {
-      logger.warn("diagnostics.export.unavailable", { reason: result.reason });
-    } else {
-      logger.error("diagnostics.export.failed", {
-        command: "diagnostics.export",
-        result: "failure",
-        errorCode: result.reason
-      });
-    }
-    shell.setStatus(i18n.t("status.notCompleted"), "error");
-  }
-
-  setBusy(shell, false);
 }
 
 function loadUxpModule(): UxpModuleWithEntrypoints | null {

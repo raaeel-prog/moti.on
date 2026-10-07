@@ -60,3 +60,26 @@ walkthrough_*.json
 
 # Copias de seguranca deixadas por edicao manual.
 *.bak
+
+# Toolchain e saida de build do plugin nativo (C++).
+# O CMake baixado localmente e os diretorios build-* sao reproduzidos por
+# plugin/build.sh; versiona-los estouraria o limite de 100 MB do GitHub.
+plugin/cmake-*/
+plugin/cmake.tar.gz
+plugin/build/
+plugin/build-*/
+plugin/MotionCore
+plugin/MotionCore.rsrc
+
+# Site institucional: projeto Next.js separado, com repositorio git proprio.
+apps/Site/
+
+# Scripts descartaveis e despejos de saida de sessoes de depuracao na raiz.
+/fix-*.js
+/fix-*.mjs
+/fix_*.js
+/fix3.js
+/move-transitions.js
+/revert-quick-tile.js
+/*-log.txt
+/test-results.txt

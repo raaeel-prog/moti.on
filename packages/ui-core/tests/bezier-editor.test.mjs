@@ -1,3 +1,4 @@
+import { afterEach } from 'node:test';
 /**
  * O editor de curva do CHMS-018 nascia sem teste, sem teclado e com cor fora do
  * tema. Estes testes fixam as tres coisas.
@@ -130,4 +131,8 @@ test("o editor nao registra listener no document", () => {
   // remove-los com um MutationObserver que so via remocao direta do container:
   // a cada redesenho da view sobrava um par de listeners.
   assert.equal(registrosNoDocumento, 0);
+});
+
+afterEach(() => {
+  for (const name of ["HTMLElement", "customElements", "document", "window"]) delete globalThis[name];
 });

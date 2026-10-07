@@ -144,7 +144,7 @@ export interface AeHostAdapter {
 
 export function createAeHostAdapter(logger: {
   warn(message: string, details?: Record<string, unknown>): void;
-}): AeHostAdapter | null {
+}, preferredLocale?: () => string | undefined): AeHostAdapter | null {
   if (typeof CSInterface === "undefined") {
     // O painel foi aberto fora do CEP. Devolver null em vez de lançar deixa a
     // interface mostrar um estado honesto — "não estou dentro do After Effects"
@@ -345,31 +345,49 @@ export function createAeHostAdapter(logger: {
       const request = readLocalRequestMetadata(serialized);
       const encodedChars = encodeForEvalScript(serialized).length;
 
+      let call: string;
+
       if (encodedChars > MAX_INLINE_EVALSCRIPT_CHARS) {
-        logger.warn("Pedido recusado antes do evalScript: payload inline excede o limite.", {
+        logger.warn("Payload excede limite inline; acionando transporte por arquivo temporário.", {
           command: request.command,
           encodedChars,
           maxInlineChars: MAX_INLINE_EVALSCRIPT_CHARS
         });
-        sendTransportFailure(
-          request,
-          onResult,
-          "INTERNAL_ERROR",
-          "O pedido é grande demais para o canal inline e o transporte por arquivo temporário ainda não está disponível.",
-          {
-            reason: "INLINE_PAYLOAD_TOO_LARGE",
-            encodedChars,
-            maxInlineChars: MAX_INLINE_EVALSCRIPT_CHARS,
-            mayHaveMutated: false
+        try {
+          const tempFileName = `motion_req_${Date.now()}_${Math.floor(Math.random() * 10000)}.json`;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const tempPath = csInterface.getSystemPath((window as any).SystemPath.USER_DATA) + "/" + tempFileName;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const writeResult = (window as any).cep.fs.writeFile(tempPath, serialized);
+          
+          if (writeResult.err !== 0) {
+            throw new Error(`Falha ao gravar arquivo temporário (código ${writeResult.err}).`);
           }
-        );
-        return;
+          
+          const encodedPath = encodeForEvalScript(tempPath.replace(/\\/g, "/"));
+          call = `(function(){try{var f=new File("${encodedPath}");f.encoding="UTF-8";var c="";if(f.open("r")){c=f.read();f.close();f.remove();}return typeof MotionAE!=="undefined"&&MotionAE.dispatch?MotionAE.dispatch(c):'{"protocolVersion":1,"ok":false,"error":{"code":"INTERNAL_ERROR","message":"MotionAE não encontrado ao tentar ler o arquivo"}}';}catch(e){return '{"protocolVersion":1,"ok":false,"error":{"code":"INTERNAL_ERROR","message":"Falha ao ler payload temporário no host"}}';}})()`;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          sendTransportFailure(
+            request,
+            onResult,
+            "INTERNAL_ERROR",
+            "O pedido é grande demais para o canal inline e a tentativa de usar arquivo temporário falhou: " + msg,
+            {
+              reason: "TEMP_TRANSPORT_FAILED",
+              encodedChars,
+              maxInlineChars: MAX_INLINE_EVALSCRIPT_CHARS,
+              mayHaveMutated: false
+            }
+          );
+          return;
+        }
+      } else {
+        // A chamada é construída antes de entrar em qualquer callback do CEP. Se
+        // o encoder detectar um defeito, a exceção síncrona é convertida pelo
+        // CommandClient em falha tipada, sem ficar presa até o timeout.
+        call = buildDispatchCall(serialized);
       }
-
-      // A chamada é construída antes de entrar em qualquer callback do CEP. Se
-      // o encoder detectar um defeito, a exceção síncrona é convertida pelo
-      // CommandClient em falha tipada, sem ficar presa até o timeout.
-      const call = buildDispatchCall(serialized);
 
       ensureHost((ready, bootstrapResult) => {
         if (!ready) {
@@ -393,10 +411,11 @@ export function createAeHostAdapter(logger: {
 
   const context = (): CommandContext => {
     const environment = csInterface.getHostEnvironment();
+    const locale = preferredLocale?.() ?? environment.appUILocale;
     return {
       host: "after-effects",
       hostVersion: environment.appVersion ?? "unknown",
-      ...(environment.appUILocale ? { locale: environment.appUILocale } : {})
+      ...(locale ? { locale } : {})
     };
   };
 

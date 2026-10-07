@@ -1,0 +1,61 @@
+{
+  "source": "/Users/rael/Desktop/Gravação de Tela 2026-09-17 às 12.18.01.mov",
+  "duration": 85.972,
+  "segments": [
+    {
+      "start": 0.02,
+      "end": 10.02,
+      "text": "Os processos de câmera, em transição, não são bem em presets, basicamente é o que funciona."
+    },
+    {
+      "start": 10.02,
+      "end": 18.02,
+      "text": "Vou adicionar o shake distorce da câmera, ele adiciona uma pré-comp que faz o efeito."
+    },
+    {
+      "start": 18.02,
+      "end": 26.02,
+      "text": "É isso. Ele precisa adicionar desse jeito na pré-comp, que aqui você controla onde vai ser o corte."
+    },
+    {
+      "start": 26.02,
+      "end": 32.02,
+      "text": "Eu quero que você faça desse jeito, exatamente desse jeito aqui, que é o Animation Composer."
+    },
+    {
+      "start": 32.02,
+      "end": 36.02,
+      "text": "Ele adiciona aqui, você pode ver que eu posso mudar aqui também a cor da distorção."
+    },
+    {
+      "start": 36.02,
+      "end": 39.02,
+      "text": "Tem uns parâmetros de colar e editar."
+    },
+    {
+      "start": 39.02,
+      "end": 49.02,
+      "text": "Beleza? É isso que você precisa fazer nos presets de câmera aqui, porque atualmente ele só está aplicando numa leia."
+    },
+    {
+      "start": 49.02,
+      "end": 56.02,
+      "text": "Eu dou um click, ele precisa fazer isso acontecer em cima das leias, das camadas, entendeu?"
+    },
+    {
+      "start": 56.02,
+      "end": 71.04,
+      "text": "Por exemplo, com câmera aqui, tem que fazer ele funcionar do mesmo jeito com a câmera, entendeu?"
+    },
+    {
+      "start": 71.04,
+      "end": 82.04,
+      "text": "Não só com... ele funcionar com os leias, com o shape leia selecionado, mas ele também adicionar as transições daquele jeito, igual do outro aqui, tá?"
+    },
+    {
+      "start": 82.04,
+      "end": 86.04,
+      "text": "Igual que ele adiciona pré-comp."
+    }
+  ]
+}

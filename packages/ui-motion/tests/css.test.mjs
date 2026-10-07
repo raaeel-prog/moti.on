@@ -10,7 +10,7 @@ const IDS = [
   "preview-exit", "drawer-enter", "drawer-exit", "drawer-dimmer", "drawer-stagger",
   "tab-indicator", "view-enter", "toast-enter", "toast-exit", "confirmation-check",
   "tile-ripple", "live-control-pulse", "slider-knob", "slider-track", "asset-skeleton",
-  "progress-bar", "preset-chip", "command-palette", "context-alert", "empty-state"
+  "progress-bar", "preset-chip", "command-palette", "context-alert", "empty-state", "button-press", "field-expand", "dock-expand", "surface-morph", "disclosure-expand", "curve-preview", "icon-gesture"
 ];
 
 test("a folha de movimento expõe um seletor para cada item do catálogo", async () => {
@@ -51,30 +51,15 @@ test("durações especiais e tempos de intenção vivem na folha de tokens", asy
   assert.match(css, /var\(--dur-live-pulse\)/);
 });
 
-test("movimento reduzido cobre sistema e toggle interno sem remover feedback essencial", async () => {
+test("motion reduction covers every descendant and keeps final operation states readable", async () => {
   const css = await readFile(CSS_URL, "utf8");
-  assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
-  assert.match(css, /\[data-reduced-motion=["']true["']\]/);
-
-  const internalStart = css.indexOf("/* Toggle interno:");
-  const systemStart = css.indexOf("@media (prefers-reduced-motion: reduce)");
-  assert.ok(internalStart >= 0 && systemStart > internalStart);
-  const internalRules = css.slice(internalStart, systemStart);
-  const systemRules = css.slice(systemStart);
-
-  for (const id of IDS) {
-    const selector = new RegExp(`data-motion~=["']${id}["']`);
-    assert.match(internalRules, selector, `toggle interno sem fallback explícito para ${id}`);
-    assert.match(systemRules, selector, `preferência do SO sem fallback explícito para ${id}`);
-  }
-
-  assert.match(css, /data-motion~=["']tile-press["'][^}]*var\(--dur-press\)/s);
-  assert.match(css, /data-motion~=["']progress-bar["'][^}]*var\(--dur-progress-reduced\)/s);
-  assert.match(css, /data-motion~=["']tile-ripple["'][^}]*display:\s*none/s);
-  assert.match(css, /data-motion~=["']drawer-enter["'][^}]*motion-reduced-opacity-in[^}]*var\(--dur-popover-out\)/s);
-  assert.match(css, /data-motion~=["']confirmation-check["'][^}]*animation:\s*none[^}]*stroke-dashoffset:\s*0/s);
-  assert.match(css, /data-motion~=["']live-control-pulse["'][^}]*motion-live-pulse-reduced[^}]*var\(--dur-live-reduced\)/s);
-  assert.match(css, /data-motion~=["']asset-skeleton["'][^}]*motion-skeleton-reduced[^}]*var\(--dur-skeleton\)/s);
+  assert.match(css, /\[data-reduced-motion="true"\] \*/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.equal((css.match(/animation:none !important; transition:none !important;/g) ?? []).length, 2);
+  assert.match(css, /confirmation-check[^}]*stroke-dashoffset:0/s);
+  assert.match(css, /tile-ripple[^}]*display:none/s);
+  assert.doesNotMatch(css, /\binfinite\b/);
+  for (const declaration of css.matchAll(/transition:([^;]+);/g)) assert.doesNotMatch(declaration[1], /\b(?:width|height|flex-basis|clip-path)\b/);
 });
 
 test("will-change só existe durante uma interação explicitamente ativa", async () => {

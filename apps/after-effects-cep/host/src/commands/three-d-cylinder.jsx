@@ -115,6 +115,54 @@
     return property instanceof Property ? property : null;
   }
 
+  /** Nao substituir animacao do usuario por um valor estatico. */
+  /** @param {Property|null} property @returns {string|null} */
+  function propertyConflict(property) {
+    if (!property) return null;
+    if (property.expression) return MotionContracts.ERROR.EXPRESSION_CONFLICT;
+    if (property.numKeys > 0) return MotionContracts.ERROR.KEYFRAME_CONFLICT;
+    if (/** @type {any} */ (property).dimensionsSeparated === true) return MotionContracts.ERROR.INVALID_SELECTION_TYPE;
+    return null;
+  }
+
+  /** @param {unknown} layer @param {number} index @param {boolean} adjusting @returns {MotionCommandFailure|null} */
+  function validateMember(layer, index, adjusting) {
+    var camada = /** @type {any} */ (layer);
+    if (camada.locked || typeof camada.setParentWithJump !== "function") {
+      return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camada esta bloqueada ou nao permite parentesco 3D sem compensacao.", { selectionIndex: index });
+    }
+    if (!adjusting && camada.parent) {
+      return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desparente a camada de origem antes de montar o cilindro.", { selectionIndex: index });
+    }
+    var pos = transformProperty(camada, MN.position);
+    if (!pos) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camada nao expoe Position.", { selectionIndex: index });
+    var properties = [pos, transformProperty(camada, MN.orientation)];
+    var i;
+    for (i = 0; i < properties.length; i += 1) {
+      var code = propertyConflict(properties[i] || null);
+      if (code) return failure(code, "Position ou Orientation tem animacao, expressao ou dimensoes separadas; o rig preservou a camada.", { selectionIndex: index });
+    }
+    if (typeof AutoOrientType !== "undefined" && camada.autoOrient !== undefined && camada.autoOrient !== AutoOrientType.NO_AUTO_ORIENT) {
+      return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Orientacao automatica nao e suportada neste rig.", { selectionIndex: index });
+    }
+    var rotationNames = ["ADBE Rotate X", "ADBE Rotate Y", "ADBE Rotate Z", "ADBE Rotation"];
+    for (i = 0; i < rotationNames.length; i += 1) {
+      var rotation = transformProperty(camada, rotationNames[i] || "");
+      if (rotation && (propertyConflict(rotation) || rotation.value !== 0)) {
+        return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Zere ou remova a rotacao existente antes de montar o cilindro.", { selectionIndex: index });
+      }
+    }
+    return null;
+  }
+
+  /** @param {CompItem} comp @param {Layer[]} saved @returns {void} */
+  function restoreSelection(comp, saved) {
+    var current = comp.selectedLayers.slice(0);
+    var i;
+    for (i = 0; i < current.length; i += 1) /** @type {any} */ (current[i]).selected = false;
+    for (i = 0; i < saved.length; i += 1) /** @type {any} */ (saved[i]).selected = true;
+  }
+
   /**
    * Passo angular entre camadas.
    *
@@ -138,8 +186,20 @@
     var comp = /** @type {CompItem} */ (app.project.activeItem);
     var controller = MotionRigMeta.findController(comp, RIG_TYPE);
     if (controller) {
-      if (MotionRigMeta.findMembers(comp, controller).length === 0) {
+      var existing = MotionRigMeta.findMembers(comp, controller);
+      if (existing.length === 0) {
         return failure(MotionContracts.ERROR.NO_SELECTION, "O rig de cilindro nao tem camadas.", null);
+      }
+      if (existing.length !== args.count) {
+        return failure(MotionContracts.ERROR.INVALID_PRESET, "Alterar count de um rig existente exigiria criar ou remover fontes. Crie outro rig para essa contagem.", { field: "count", existing: existing.length });
+      }
+      if (/** @type {any} */ (controller).locked || !/** @type {any} */ (controller).threeDLayer) {
+        return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "O controller do cilindro esta bloqueado ou deixou de ser 3D.", null);
+      }
+      var j;
+      for (j = 0; j < existing.length; j += 1) {
+        var existingError = validateMember(existing[j], j, true);
+        if (existingError) return existingError;
       }
       return null;
     }
@@ -148,14 +208,14 @@
     if (!selecionadas || selecionadas.length === 0) {
       return failure(MotionContracts.ERROR.NO_SELECTION, "Selecione ao menos uma camada.", null);
     }
+    if (selecionadas.length > /** @type {number} */ (args.count)) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "count nao pode ser menor que a selecao; nenhuma fonte sera ignorada.", { field: "count", selected: selecionadas.length });
+    }
     var i;
     for (i = 0; i < selecionadas.length; i += 1) {
       var camada = /** @type {any} */ (selecionadas[i]);
-      if (!transformProperty(camada, MN.position)) {
-        return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camada nao expoe Position.", {
-          selectionIndex: i
-        });
-      }
+      var memberError = validateMember(camada, i, false);
+      if (memberError) return memberError;
       if (/** @type {number} */ (args.count) > selecionadas.length && typeof camada.duplicate !== "function") {
         return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camada nao pode ser duplicada.", {
           selectionIndex: i
@@ -169,13 +229,15 @@
    * Coloca uma camada no angulo pedido.
    *
    * @param {unknown} layer
+   * @param {unknown} controller
    * @param {number} anguloGraus
    * @param {number} y
    * @param {number} raio
    * @param {string} faceMode
-   * @returns {Record<string, unknown>} estado anterior, para rollback
+   * @param {Array<Record<string, any>>} anteriores
+   * @returns {void}
    */
-  function posicionar(layer, anguloGraus, y, raio, faceMode) {
+  function posicionar(layer, controller, anguloGraus, y, raio, faceMode, anteriores) {
     var camada = /** @type {any} */ (layer);
     var posicao = /** @type {Property} */ (transformProperty(layer, MN.position));
     var orientacao = transformProperty(layer, MN.orientation);
@@ -188,7 +250,16 @@
       orientation: orientacao ? orientacao.value : null
     };
 
+    // Registrar ANTES do primeiro write: um erro na conversao, no parent ou
+    // no setValue ainda precisa restaurar a camada original.
+    anteriores.push(anterior);
     camada.threeDLayer = true;
+    // parent = preserva mundo e reescreve Position/Orientation. O rig precisa
+    // dos valores LOCAIS; setParentWithJump mantem os transforms crus.
+    camada.setParentWithJump(controller);
+    posicao = /** @type {Property} */ (transformProperty(layer, MN.position));
+    orientacao = transformProperty(layer, MN.orientation);
+    if (!posicao || (faceMode !== "none" && !orientacao)) throw new Error("Transform 3D indisponivel.");
     var radianos = anguloGraus * Math.PI / 180;
     posicao.setValue([raio * Math.cos(radianos), y, raio * Math.sin(radianos)]);
 
@@ -198,7 +269,6 @@
       orientacao.setValue([0, giroY, 0]);
     }
 
-    return anterior;
   }
 
   /**
@@ -218,8 +288,10 @@
     var modoAjuste = controller !== null;
 
     var criadas = [];
+    /** @type {Array<Record<string, any>>} */
     var anteriores = [];
     var comentarioAnterior = null;
+    var selecionadasOriginais = comp.selectedLayers.slice(0);
     var i;
 
     try {
@@ -245,7 +317,7 @@
         }
 
         membros = [];
-        var selecionadas = comp.selectedLayers;
+        var selecionadas = selecionadasOriginais;
         for (i = 0; i < selecionadas.length && membros.length < quantidade; i += 1) {
           var candidata = selecionadas[i];
           if (candidata && candidata !== controller) membros.push(candidata);
@@ -266,8 +338,7 @@
         // Com uma camada so nao ha o que distribuir na altura; a divisao por
         // zero viraria NaN e a camada sumiria.
         var y = membros.length > 1 ? -altura / 2 + (altura * i) / (membros.length - 1) : 0;
-        anteriores.push(posicionar(membro, inicio + passo * i, y, raio, faceMode));
-        /** @type {any} */ (membro).parent = controller;
+        posicionar(membro, controller, inicio + passo * i, y, raio, faceMode, anteriores);
       }
 
       if (!modoAjuste) {
@@ -284,6 +355,7 @@
           })
         );
       }
+      restoreSelection(comp, selecionadasOriginais);
     } catch (cylinderError) {
       var rollbackFailed = false;
       for (i = anteriores.length - 1; i >= 0; i -= 1) {
@@ -291,13 +363,13 @@
           var anterior = anteriores[i];
           if (!anterior) continue;
           var camada = /** @type {any} */ (anterior.layer);
-          camada.parent = anterior.parent;
+          camada.setParentWithJump(anterior.parent);
+          camada.threeDLayer = anterior.threeD;
           /** @type {Property} */ (transformProperty(camada, MN.position)).setValue(anterior.position);
           if (anterior.orientation !== null) {
             var orientacao = transformProperty(camada, MN.orientation);
             if (orientacao) orientacao.setValue(anterior.orientation);
           }
-          camada.threeDLayer = anterior.threeD;
         } catch (restoreError) {
           rollbackFailed = true;
         }
@@ -317,6 +389,8 @@
           rollbackFailed = true;
         }
       }
+      try { restoreSelection(comp, selecionadasOriginais); }
+      catch (selectionError) { rollbackFailed = true; }
       if (rollbackFailed) {
         var rollbackError = /** @type {Error & {motionCode?: string}} */ (
           new Error("Cylinder falhou e o estado anterior nao pode ser restaurado.")

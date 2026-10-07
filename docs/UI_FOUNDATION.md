@@ -7,6 +7,56 @@
 > uma cópia autocontida, verificada por teste de drift, para CEP e UXP. O
 > catálogo executável de A6.2 vive em `packages/ui-motion/`.
 
+## Direção atual — 03/10/2026
+
+Evoluir o estado visual do GM preservado em
+`artifacts/onyx-components-20261003/source-before/`. Esta direção foi aprovada
+pelo responsável e substitui as cores, geometria e navegação históricas do
+MASTER, do Addendum e das skills quando houver divergência.
+
+O tema Onyx usa base **#121212**, superfícies **#1A1A1A**, controles
+**#212121**, hover **#2E2E2E** e áreas gráficas profundas **#101010**.
+Ações principais continuam neutras. As famílias cromáticas aparecem nos
+vetores: azul para keyframes, turquesa para camadas, âmbar para animação,
+violeta para espacial, rosa para formas, coral para efeitos e azul acinzentado
+para projeto. Sucesso, aviso e erro têm tokens próprios e informação textual.
+Os dois temas mantêm contraste verificado para texto, controles e famílias.
+
+`packages/ui-tokens/src/tokens.css` é a única origem dos valores visuais.
+O build executa `sync-theme.mjs` para gerar os espelhos CSS/JSON em `shared/`
+e o bloco de tokens de `packages/ui-core/src/theme.css`. Edite a origem,
+nunca os espelhos; geometria e apresentação compartilhadas pertencem ao kit.
+Controles têm 28 px, alvos mínimos de 24 px, espaços de 4/8/12/16/24 px,
+raios de 2/4/6 px e fonte de sistema entre 11 e 14 px com números tabulares.
+
+Os oito Web Components `moti-*` usam TypeScript e **Light DOM**, registro por
+documento e factories públicas. Cada fallback nativo usa a mesma apresentação.
+`moti-button` aceita ícone e modo compacto, preserva botão nativo, nome
+acessível, estados e ativação única. Seus aliases normalizam as variantes
+existentes; o helper legado do shell conserva seu contrato próprio.
+Controladores e adapters continuam responsáveis pelos comandos Adobe.
+Bézier e números arrastáveis mantêm seus comportamentos especializados.
+
+A biblioteca permanece uma grade compacta de ícones: ordem, filtros,
+favoritos, recentes, âncora e dock conservam sua lógica. Os nomes das
+ferramentas aparecem em dicas externas legíveis, inclusive com teclado.
+Suavização tem seis blocos retangulares em duas linhas de três, com diagramas
+que diferenciam origem, resultado e direção. Aplicação com um clique e
+impedimentos por seleção permanecem nos controles.
+
+Configurações organiza Interface, Acessibilidade e Ajuda. Contexto, Sistema
+e Diagnóstico ficam dentro de Ajuda no AE. Não restaurar o rodapé técnico ou
+um status permanente de conexão. Requisitos, erros e progresso continuam
+acessíveis perto da ação. O Premiere conserva suas rotas funcionais e estado
+de indisponibilidade para ferramentas ainda não implementadas. Conta online
+fica para uma etapa posterior, sem campos ou cartões fictícios nesta entrega.
+
+O catálogo tipado de vetores em `packages/ui-core/src/icons.ts` descreve
+identificador, família, segmentos, gesto e desenho estático. Movimento usa o
+catálogo compartilhado: pressão 90 ms, transições 200–260 ms, gesto de ícone
+até 360 ms, uma vez por entrada ou foco, sem deslocar o botão ou repetir em
+loop. Respeitar movimento reduzido efetivo (`interno OR sistema`).
+
 ## Direção aprovada
 
 O painel deve parecer uma ferramenta nativa e discreta dentro do After Effects/Premiere. A referência é a eficiência de painéis como BadFX, Brazu e Premiere Composer, sem copiar identidade, assets ou layout proprietário.
@@ -23,16 +73,16 @@ A interface **não** deve parecer:
 
 ```css
 :root {
-  /* A superfície-base Adobe permanece uma regra do projeto. */
-  --bg-host: #1D1D1D;
+  /* Superfície-base aprovada para Moti.on. */
+  --bg-host: #121212;
 
-  /* Superfícies e accent normativos do Addendum A. */
-  --bg-0: #0E1013;
-  --bg-1: #141619;
-  --bg-2: #1A1D21;
-  --bg-3: #22262B;
-  --bg-4: #2A2F35;
-  --accent: #7C8CFF;
+  /* Base Onyx; valores completos gerados a partir de ui-tokens. */
+  --bg-0: #101010;
+  --bg-1: #121212;
+  --bg-2: #1A1A1A;
+  --bg-3: #212121;
+  --bg-4: #2E2E2E;
+  --accent: #FFFFFF;
 }
 ```
 
@@ -62,9 +112,9 @@ A tela deve priorizar uma ação principal. Preview, presets, layer stack e opç
 
 - Controles com 28–30 px de altura.
 - Ícones com 16–18 px.
-- Base tipográfica entre 12 e 13 px.
+- Hierarquia tipográfica entre 11 e 14 px; nomes nas dicas externas.
 - Padding padrão de 10–12 px.
-- Radius discreto de 3–5 px.
+- Raios de 2, 4 e 6 px, conforme componente.
 - Separadores e twirl-downs substituem cards.
 - No máximo duas colunas em painel largo.
 
@@ -84,11 +134,12 @@ as fronteiras erradas (Compact até 359, uma faixa "standard" até 559, Wide a
 partir de 560) e sem Comfort — na prática um painel em 340 px recebia o layout
 compacto, e a partir de 560 px já entrava no layout mais largo.
 
-**Ainda divergente:** o Addendum pede grid de 2 colunas em Compact e o código
-usa 1. A conta fecha (264 px úteis em 280 px dão dois ladrilhos de 128 px, e o
-nome completo sobrevive no `title`), mas a mesma linha do Addendum descreve
-barra inferior de 44 px, Inspector e dock de recentes, que este shell não tem.
-A contagem de colunas pertence à CHMS-UX-013, junto com o resto daquela linha.
+**Atualizado em 2026-09-10:** a grade passou a 2/3/4 colunas nas faixas
+Compact/Default/Comfort e Wide, com acesso aos nomes por dicas externas e ações de favorito e
+ajuste separadas da aplicação. Tema claro/escuro e densidade são preferências
+locais. A barra inferior, o dock completo e o Inspector do Addendum continuam
+pendentes. A nova grade foi compilada, mas a matriz visual permanece `NOT RUN`
+conforme o pedido do responsável para reduzir verificações durante esta etapa.
 
 Nunca use scroll horizontal. Em altura reduzida, apenas a região de conteúdo rola; a ação principal permanece acessível.
 
@@ -114,9 +165,9 @@ real permanece em `docs/QA_MATRIX.md`.
 ## Movimento
 
 Componentes declaram o movimento por ID em `data-motion`; não reescrevem
-duração, easing ou keyframes localmente. Os 25 IDs normativos, o controller da
+duração, easing ou keyframes localmente. Os IDs normativos, o controller da
 preferência efetiva (`interno OR sistema`) e a folha distribuída aos dois hosts
-vivem em `packages/ui-motion/`. O toggle fica em **Settings → Interface**.
+vivem em `packages/ui-motion/`. O toggle fica em **Configurações → Acessibilidade**.
 
 Build/teste automatizado não prova comportamento no runtime Adobe. Movimento,
 persistência, escala, leitor de tela e orçamento de frames continuam sujeitos
@@ -141,7 +192,7 @@ Busca global, assets, captions e configurações não permanecem visíveis quand
 - logo grande;
 - header de marketing;
 - cards aninhados;
-- três ou mais cores de destaque;
+- múltiplas cores de destaque em fundos e controles; famílias cromáticas ficam nos vetores;
 - motion decorativo em loop;
 - ícone sem tooltip para ação incomum;
 - texto abaixo de 11 px;

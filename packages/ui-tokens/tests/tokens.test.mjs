@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { resolveColorToken, themeDeclarations } from "../scripts/check-contrast.mjs";
 
 const TOKENS_URL = new URL("../src/tokens.css", import.meta.url);
 const HOST_THEME_URL = new URL("../../ui-core/src/theme.css", import.meta.url);
@@ -58,7 +59,7 @@ const REQUIRED_CANONICAL_TOKENS = [
   "focus-offset"
 ];
 
-test("ui-tokens declara os temas escuro e claro do Addendum A", async () => {
+test("ui-tokens declara os temas escuro e claro da direção aprovada", async () => {
   const css = await readFile(TOKENS_URL, "utf8");
   const dark = declarations(selectorBlock(css, ":root"));
   const light = declarations(selectorBlock(css, '[data-theme="light"]'));
@@ -70,8 +71,8 @@ test("ui-tokens declara os temas escuro e claro do Addendum A", async () => {
     assert.ok(light.has(token), `tema claro sem --${token}`);
   }
 
-  assert.equal(dark.get("accent"), "#7c8cff");
-  assert.equal(light.get("accent"), "#4a57d8");
+  assert.equal(resolveColorToken(dark, "accent"), "#F5F5F5");
+  assert.equal(resolveColorToken(light, "accent"), "#212529");
 });
 
 test("o tema embarcado nos dois hosts permanece sincronizado com ui-tokens", async () => {
@@ -88,15 +89,15 @@ test("o tema embarcado nos dois hosts permanece sincronizado com ui-tokens", asy
   const sharedLight = declarations(selectorBlock(sharedCss, '[data-theme="light"]'));
 
   for (const [token, value] of tokenDark) {
-    assert.equal(hostDark.get(token), value, `drift no token escuro --${token}`);
+    assert.equal(hostDark.get(token), value, `drift no tema embarcado --${token}`);
     assert.equal(sharedDark.get(token), value, `drift no token compartilhado --${token}`);
   }
   for (const [token, value] of tokenLight) {
-    assert.equal(hostLight.get(token), value, `drift no token claro --${token}`);
+    assert.equal(hostLight.get(token), value, `drift no tema claro embarcado --${token}`);
     assert.equal(sharedLight.get(token), value, `drift no token claro compartilhado --${token}`);
   }
 
-  assert.equal(hostDark.get("ch-surface-canvas"), "#1d1d1d", "a base Adobe do projeto precisa permanecer #1D1D1D");
+  assert.equal(resolveColorToken(hostDark, "ch-surface-canvas"), "#121212", "a base Onyx precisa permanecer #121212");
 });
 
 test("movimento usa tokens, nunca transition all, e aceita reducao interna", async () => {
@@ -105,7 +106,9 @@ test("movimento usa tokens, nunca transition all, e aceita reducao interna", asy
   assert.doesNotMatch(css, /transition\s*:\s*all\b/i);
   assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
   assert.match(css, /\[data-reduced-motion="true"\]/);
-  assert.match(css, /--ch-motion-fast:\s*var\(--dur-1\)/);
+  const tokens = declarations(selectorBlock(css, ":root"));
+  assert.equal(tokens.get("ch-motion-fast"), "var(--motion-fast)");
+  assert.equal(tokens.get("motion-fast"), "200ms");
 });
 
 test("o espelho JSON identifica a fonte canonica e conserva as cores dos dois temas", async () => {
@@ -113,9 +116,47 @@ test("o espelho JSON identifica a fonte canonica e conserva as cores dos dois te
 
   assert.equal(registry.meta.schemaVersion, 2);
   assert.equal(registry.meta.canonicalSource, "packages/ui-tokens/src/tokens.css");
-  assert.equal(registry.meta.hostBase, "#1D1D1D");
-  assert.equal(registry.themes.dark.accent.$value, "#7C8CFF");
-  assert.equal(registry.themes.dark.textTertiary.$value, "#8E97A0");
-  assert.equal(registry.themes.light.accent.$value, "#4A57D8");
-  assert.equal(registry.themes.light.textTertiary.$value, "#626A72");
+});
+
+test("os nomes de cor usados pelo shell, componentes e movimento existem nos dois temas", async () => {
+  const [tokensCss, hostCss, componentsCss, motionCss] = await Promise.all([
+    readFile(TOKENS_URL, "utf8"),
+    readFile(HOST_THEME_URL, "utf8"),
+    readFile(new URL("../../ui-core/src/components.css", import.meta.url), "utf8"),
+    readFile(new URL("../../ui-motion/src/motion.css", import.meta.url), "utf8")
+  ]);
+  const names = new Set([...`${hostCss}\n${componentsCss}\n${motionCss}`.matchAll(/var\(--((?:bg-|txt-|line-)[a-z0-9-]+|accent(?:-[a-z0-9-]+)?|ok|warn|danger|info|value-editable)\)/g)].map((match) => match[1]));
+  for (const theme of ["dark", "light"]) {
+    const tokens = themeDeclarations(tokensCss, theme);
+    for (const name of names) assert.ok(tokens.has(name), `${theme} usa --${name} sem declarar`);
+  }
+});
+
+test("approved raised surfaces keep tile borders and light aliases intact", async () => {
+  const css=await readFile(TOKENS_URL,"utf8");
+  const dark=themeDeclarations(css,"dark"),light=themeDeclarations(css,"light");
+  assert.equal(resolveColorToken(dark,"surface-raised"),"#1A1A1A");
+  assert.equal(resolveColorToken(dark,"bg-3"),"#212121");
+  assert.equal(resolveColorToken(dark,"bg-4"),"#2E2E2E");
+  assert.equal(resolveColorToken(dark,"surface-hover"),"#2E2E2E");
+  assert.equal(resolveColorToken(dark,"line-hairline"),"#303030");
+  assert.equal(resolveColorToken(light,"surface-raised"),"#FFFFFF");
+  assert.equal(resolveColorToken(light,"gray-900"),"#343A40");
+});
+
+
+test("generated mirrors contain the complete current palette and are deterministic", async () => {
+  const { renderTokenMirror, syncThemeTokens } = await import("../../../scripts/sync-theme.mjs");
+  const css = await readFile(TOKENS_URL, "utf8");
+  const before = await readFile(HOST_THEME_URL, "utf8");
+  assert.equal(await readFile(SHARED_TOKENS_JSON_URL, "utf8"), renderTokenMirror(css));
+  await syncThemeTokens();
+  assert.equal(await readFile(HOST_THEME_URL, "utf8"), before, "generation must not rewrite screen composition");
+  for (const theme of ["dark", "light"]) {
+    const values = themeDeclarations(css, theme);
+    for (const family of ["keyframes", "layers", "animation", "spatial", "shapes", "effects", "project"]) {
+      assert.ok(values.has(`icon-${family}`));
+      for (const semantic of ["ok", "warn", "danger", "info"]) assert.notEqual(resolveColorToken(values, `icon-${family}`), resolveColorToken(values, semantic));
+    }
+  }
 });

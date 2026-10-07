@@ -1,0 +1,27 @@
+#ifndef MOTION_CORE_VERSION_H
+#define MOTION_CORE_VERSION_H
+
+/* Keep this header compatible with both C++ and Apple's Rez preprocessor. */
+#define MOTION_CORE_VERSION 589825
+#define MOTION_CORE_OUT_FLAGS 0x02000004
+#define MOTION_CORE_OUT_FLAGS2 0
+#define MOTION_CORE_NAME "Moti.on Glitch Core"
+#define MOTION_CORE_MATCH_NAME "CHMS Motion Core"
+#define MOTION_CORE_CATEGORY "Moti.on"
+
+#define MOTION_WAVE_NAME "Moti.on Wave Core"
+#define MOTION_WAVE_MATCH_NAME "CHMS Wave Core"
+
+#define MOTION_TRANSITION_NAME "Moti.on Native Transition"
+#define MOTION_TRANSITION_MATCH_NAME "Moti.on Native Transition"
+#define MOTION_TRANSITION_VERSION 524289
+#define MOTION_TRANSITION_FLAGS 0x02000000
+#define MOTION_TRANSITION_FLAGS2 0x08001400
+
+#define MOTION_GRADIENT_NAME "Moti.on Gradient"
+#define MOTION_GRADIENT_MATCH_NAME "Moti.on Gradient"
+#define MOTION_GRADIENT_VERSION 524290
+#define MOTION_GRADIENT_FLAGS 0x02000204
+#define MOTION_GRADIENT_FLAGS2 0x0A001400
+
+#endif

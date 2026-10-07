@@ -13,8 +13,15 @@ if [[ ! -d "$SOURCE" ]]; then
 fi
 
 mkdir -p "$TARGET_ROOT"
-rm -rf "$TARGET"
-cp -R "$SOURCE" "$TARGET"
+# A development update is reversible and never touches another extension.
+BACKUP="$PROJECT_ROOT/artifacts/install-backups/ae-$(date +%Y%m%d-%H%M%S)"
+if [[ -d "$TARGET" ]]; then
+  mkdir -p "$BACKUP"
+  cp -R "$TARGET" "$BACKUP/previous"
+  echo "Backup da instalação anterior: $BACKUP/previous"
+fi
+mkdir -p "$TARGET"
+rsync -a "$SOURCE/" "$TARGET/"
 
 if [[ "${1:-}" == "--enable-debug" ]]; then
   defaults write com.adobe.CSXS.12 PlayerDebugMode 1

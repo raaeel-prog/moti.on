@@ -562,3 +562,213 @@ test("sem seleção e sem composição falham com códigos distintos", async () 
   const semComp = await fixture({ semComp: true });
   assert.equal(alinha(semComp.scope).error.code, "NO_ACTIVE_COMP");
 });
+
+test('dimensões separadas recebem a compensação sem juntar e sem perder keys', async () => {
+  const {scope, comp} = await fixture(); const c = camada(comp, 'A');
+  const followers = [[200,300],[150,190]].map(values => ({
+    value: values[0], numKeys: 2, values: [...values],
+    keyValue(i) { return this.values[i-1]; },
+    setValueAtKey(i,value) { this.values[i-1]=value; }
+  }));
+  const leader = c.transform.property(MN.position);
+  leader.dimensionsSeparated = true; leader.getSeparationFollower = i => followers[i];
+  assert.equal(alinha(scope).ok,true);
+  assert.deepEqual(followers.map(p => p.values),[[250,350],[180,220]]);
+  assert.equal(leader.dimensionsSeparated,true);
+  assert.equal(alinha(scope).ok,true);
+  assert.deepEqual(followers.map(p => p.values),[[250,350],[180,220]]);
+});
+
+test('falha no segundo keyframe restaura também os keys ainda não escritos', async () => {
+  const {scope, comp} = await fixture(); const c = camada(comp, 'A', {positionKeys:[[200,150],[300,250],[400,350]]});
+  const property = c.transform.property(MN.position); const original=JSON.stringify(property.chaves);
+  const write=property.setValueAtKey.bind(property); let failed=false;
+  property.setValueAtKey = (i,value) => { if(i===2&&!failed){failed=true;throw new Error('fault injection');}write(i,value); };
+  assert.equal(alinha(scope).ok,false);
+  assert.equal(JSON.stringify(property.chaves),original);
+  assert.deepEqual(c.ancora,[0,0]);
+});
+
+test('camada bloqueada e expressão desativada são recusadas antes da mutação', async () => {
+  const {scope,comp}=await fixture();const c=camada(comp,'A');c.locked=true;
+  assert.equal(alinha(scope).ok,false);assert.deepEqual(c.ancora,[0,0]);c.locked=false;
+  const position=c.transform.property(MN.position);position.expression='value';position.expressionEnabled=false;
+  assert.equal(alinha(scope).error.code,'EXPRESSION_CONFLICT');assert.deepEqual(c.ancora,[0,0]);
+});
+
+test('várias pré-comps recolhidas centralizam individualmente, com preview e repetição', async () => {
+  const { scope, comp } = await fixture();
+  const layers = [[200, 80], [640, 360], [90, 300]].map(([width, height], i) => {
+    const c = camada(comp, `Pré-comp ${i}`, { rect: {left: 0, top: 0, width, height}, position: [100 * i, 50 * i] });
+    c.source = new FakeCompItem(); c.source.width = width; c.source.height = height;
+    c.collapseTransformation = true;
+    return c;
+  });
+  const preview = preve(scope);
+  assert.equal(preview.ok, true);
+  assert.equal(preview.data.targetCount, 3);
+  assert.deepEqual(layers.map(c => c.ancora), [[0,0],[0,0],[0,0]]);
+  const result = alinha(scope);
+  assert.equal(result.ok, true);
+  assert.equal(result.data.appliedCount, 3);
+  assert.deepEqual(layers.map(c => c.ancora), [[100,40],[320,180],[45,150]]);
+  assert.deepEqual(layers.map(c => c.posicao), [[100,40],[420,230],[245,250]]);
+  assert.ok(layers.every(c => c.selected && c.collapseTransformation));
+  assert.equal(comp.time, 1.5);
+  assert.equal(alinha(scope).data.appliedCount, 0);
+});
+
+test('pré-comp sem sourceRectAtTime usa dimensões da própria fonte', async () => {
+  const { scope, comp } = await fixture();
+  const c = camada(comp, 'Pré-comp', {semRect: true});
+  c.source = new FakeCompItem(); c.collapseTransformation = true;
+  const result = alinha(scope);
+  assert.equal(result.ok, true);
+  assert.deepEqual(c.ancora, [320,180]);
+  assert.deepEqual(c.posicao, [520,330]);
+});
+
+// Oráculo independente: rotações elementares, sem chamar MotionTransform.
+function worldPoint(layer, point) {
+  const p = layer.transform.props;
+  const a = p[MN.anchorPoint].value, s = p[MN.scale].value;
+  let v = [0,1,2].map(i => ((point[i] ?? 0) - (a[i] ?? 0)) * (s[i] ?? 100) / 100);
+  const rotate = (axis, angle) => {
+    const c = Math.cos(angle * Math.PI / 180), sn = Math.sin(angle * Math.PI / 180);
+    const [x,y,z] = v;
+    v = axis === 'x' ? [x,c*y-sn*z,sn*y+c*z] : axis === 'y' ? [c*x+sn*z,y,-sn*x+c*z] : [c*x-sn*y,sn*x+c*y,z];
+  };
+  rotate('z', p[MN.rotation].value);
+  rotate('y', p[MN.rotateY]?.value ?? 0);
+  rotate('x', p[MN.rotateX]?.value ?? 0);
+  const o = p[MN.orientation]?.value ?? [0,0,0];
+  rotate('z', o[2]); rotate('y', o[1]); rotate('x', o[0]);
+  const pos = p[MN.position];
+  v = v.map((n,i) => n + (pos.dimensionsSeparated ? pos.getSeparationFollower(i).value : (pos.value[i] ?? 0)));
+  return layer.parent ? worldPoint(layer.parent, v) : v;
+}
+
+test('lote 3D recolhido e parentado conserva pontos no mundo com escala negativa e eixos separados', async () => {
+  const { scope, comp } = await fixture();
+  const parent = camada(comp, 'Pai', {threeD:true,anchor:[15,22,5],position:[20,40,60],scale:[140,70,90],orientation:[11,23,31],rotationX:13,rotationY:7,rotation:19,selected:false});
+  const layers = [false,true].map(separated => {
+    const c = camada(comp, 'Pré-comp 3D', {threeD:true,anchor:[10,20,37],position:[210,130,80],scale:[-130,75,90],orientation:[17,23,31],rotationX:11,rotationY:13,rotation:19});
+    c.collapseTransformation = true; c.parent = parent;
+    if (separated) {
+      const followers = c.posicao.map(value => ({value,numKeys:0,setValue(v){this.value=v;}}));
+      const leader = c.transform.property(MN.position);
+      leader.dimensionsSeparated = true; leader.getSeparationFollower = i => followers[i];
+    }
+    return c;
+  });
+  const points = [[0,0,0],[100,0,0],[100,60,0],[0,60,50]];
+  const before = layers.map(c => points.map(p => worldPoint(c,p)));
+  const result = alinha(scope);
+  assert.equal(result.ok,true);
+  assert.equal(result.data.appliedCount,2);
+  layers.forEach((c,i) => {
+    assert.deepEqual(c.ancora,[50,30,37]);
+    points.forEach((p,j) => worldPoint(c,p).forEach((n,k) => perto(n,before[i][j][k])));
+    assert.equal(c.parent,parent);
+    assert.equal(c.collapseTransformation,true);
+  });
+});
+
+test('um alvo bloqueado no lote recolhido impede mutações em todas as camadas', async () => {
+  const {scope,comp} = await fixture();
+  const a = camada(comp,'A'); a.collapseTransformation=true;
+  const b = camada(comp,'B'); b.locked=true;
+  const result = alinha(scope);
+  assert.equal(result.ok,false);
+  assert.deepEqual(a.ancora,[0,0]);
+  assert.deepEqual(a.posicao,[200,150]);
+  assert.equal(result.error.details.layerName,'B');
+});
+
+function addMask(scope, layer, vertices, tangents = {}) {
+  scope.MaskMode = {NONE:0, ADD:1};
+  const zero = vertices.map(() => [0,0]);
+  const shape = {closed:true,vertices,inTangents:tangents.in ?? zero,outTangents:tangents.out ?? zero};
+  const props = {'ADBE Mask Shape':new FakeProperty(shape)};
+  const mask = {maskMode:1,inverted:false,property:n=>props[n] ?? null};
+  const original = layer.property.bind(layer);
+  layer.property = n => n === 'ADBE Mask Parade' ? {numProperties:1,property:()=>mask} : original(n);
+  return mask;
+}
+
+test('centro de cada pré-comp usa conteúdo e máscara do PSD em vez do quadro 1080x1920', async () => {
+  const {scope,comp} = await fixture();
+  const sources = [0,100].map(offset => {
+    const source = new FakeCompItem(); source.width=1080;source.height=1920;
+    camada(source,'Texto',{rect:{left:0,top:0,width:160,height:30},anchor:[0,0],position:[660,680+offset]});
+    const box = camada(source,'PSD quadro inteiro',{rect:{left:0,top:0,width:1080,height:1920},anchor:[540,960],position:[540,960]});
+    addMask(scope,box,[[570,660+offset],[645,660+offset],[645,735+offset],[570,735+offset]]);
+    return source;
+  });
+  const layers = sources.map(source => {
+    const l=camada(comp,'Pré-comp',{anchor:[540,960],position:[540,960]});l.source=source;l.collapseTransformation=true;return l;
+  });
+  const preview=preve(scope);
+  assert.equal(preview.ok,true);
+  assert.deepEqual(preview.data.targets.map(t=>t.anchorAfter),[[695,697.5],[695,797.5]]);
+  assert.deepEqual(layers.map(l=>l.ancora),[[540,960],[540,960]]);
+  assert.equal(alinha(scope).ok,true);
+  assert.deepEqual(layers.map(l=>l.posicao),[[695,697.5],[695,797.5]]);
+  assert.deepEqual(sources[0].layer(2).ancora,[540,960]);
+});
+
+test('extremos da curva da máscara incluem a parte além dos vértices', async () => {
+  const {scope,comp}=await fixture();
+  const l=camada(comp,'Curva',{rect:{left:-100,top:-100,width:400,height:400}});
+  addMask(scope,l,[[0,0],[100,0],[100,100],[0,100]],{out:[[0,-100],[0,0],[0,0],[0,0]],in:[[0,0],[0,-100],[0,0],[0,0]]});
+  assert.equal(alinha(scope,{gridPoint:'topCenter'}).ok,true);
+  assert.deepEqual(l.ancora,[50,-75]);
+});
+
+test('conteúdo aninhado respeita tempo da fonte, pai, rotação e camadas ocultas', async () => {
+  const {scope,comp}=await fixture();
+  const source=new FakeCompItem();
+  const parent=camada(source,'Pai',{anchor:[0,0],position:[100,80],rotation:90});parent.nullLayer=true;
+  const child=camada(source,'Conteúdo',{rect:{left:0,top:0,width:80,height:20},anchor:[0,0],position:[10,20]});child.parent=parent;
+  const position=child.transform.property(MN.position);
+  position.valueAtTime=t=>[10+t*10,20];
+  const hidden=camada(source,'Oculta',{rect:{left:0,top:0,width:10000,height:10000}});hidden.enabled=false;
+  const l=camada(comp,'Pré-comp');l.source=source;l.collapseTransformation=true;l.startTime=1;l.stretch=50;
+  // CTI 1.5 => tempo interno 1; conteúdo [20,20]..[100,40], pai gira 90.
+  assert.equal(alinha(scope).ok,true);
+  perto(l.ancora[0],70);perto(l.ancora[1],140);
+  assert.equal(comp.time,1.5);assert.equal(source.time,1.5);
+});
+
+test('pré-comp 3D com conteúdo 2D centraliza conteúdo preservando profundidade', async () => {
+  const {scope,comp}=await fixture();const source=new FakeCompItem();
+  camada(source,'Conteúdo',{rect:{left:0,top:0,width:100,height:40},anchor:[0,0],position:[60,80]});
+  const l=camada(comp,'Pré-comp 3D',{threeD:true,anchor:[0,0,32],position:[200,150,60],scale:[80,120,90],orientation:[30,15,20],rotationX:15,rotationY:20});l.source=source;l.collapseTransformation=true;
+  const before=worldPoint(l,[20,50,0]);
+  assert.equal(alinha(scope).ok,true);assert.deepEqual(l.ancora,[110,100,32]);
+  worldPoint(l,[20,50,0]).forEach((v,i)=>perto(v,before[i]));
+});
+
+test('conteúdo 3D interno e máscaras não mensuráveis falham sem usar centro errado', async () => {
+  const {scope,comp}=await fixture();const source=new FakeCompItem();
+  const child=camada(source,'Conteúdo',{threeD:true});
+  const l=camada(comp,'Pré-comp');l.source=source;
+  assert.equal(alinha(scope).ok,false);assert.deepEqual(l.ancora,[0,0]);
+  child.threeDLayer=false;
+  const mask=addMask(scope,child,[[0,0],[100,0],[100,60]]);mask.inverted=true;
+  assert.equal(alinha(scope).ok,false);assert.deepEqual(l.ancora,[0,0]);
+});
+
+test('arredondamento real do host não causa novas escritas ao repetir', async () => {
+  const {scope,comp}=await fixture();
+  const c=camada(comp,'AE float32',{rect:{left:0,top:0,width:1486.984985351562,height:1572.757995605468}});
+  const anchor=c.transform.property(MN.anchorPoint),position=c.transform.property(MN.position);
+  anchor.setValue=v=>{anchor.value=v.map(Math.fround);};
+  position.setValue=v=>{position.value=v.map(Math.fround);};
+  assert.equal(alinha(scope).data.appliedCount,1);
+  const before=[...c.posicao];
+  assert.equal(preve(scope).data.changedCount,0);
+  assert.equal(alinha(scope).data.appliedCount,0);
+  assert.deepEqual(c.posicao,before);
+});
+

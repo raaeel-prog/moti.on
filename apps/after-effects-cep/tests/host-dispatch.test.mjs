@@ -204,6 +204,35 @@ test("dryRun de comando read-only suportado executa sem Undo", async () => {
   assert.deepEqual(calls, []);
 });
 
+test("Clean scan is read-only; removal still needs consent and Undo", async () => {
+  const { scope, calls } = await loadDispatcher((s) => {
+    s.MotionRegistry.register("ae.project.clean", {
+      preflight: () => null,
+      run: (args) => ({ changed: args.removeConfirmed === true, warnings: [], data: { scanned: !args.removeConfirmed } })
+    });
+  });
+
+  const scan = JSON.parse(scope.MotionAE.dispatch(requestFor("ae.project.clean", {
+    args: { removeConfirmed: false }
+  })));
+  assert.equal(scan.ok, true);
+  assert.equal(scan.data.scanned, true);
+  assert.deepEqual(calls, [], "A prévia não cria uma entrada de Undo vazia.");
+
+  const refused = JSON.parse(scope.MotionAE.dispatch(requestFor("ae.project.clean", {
+    args: { removeConfirmed: true }
+  })));
+  assert.equal(refused.ok, false);
+  assert.equal(refused.error.code, "PERMISSION_DENIED");
+  assert.deepEqual(calls, []);
+
+  const removed = JSON.parse(scope.MotionAE.dispatch(requestFor("ae.project.clean", {
+    args: { removeConfirmed: true }, options: { allowDestructive: true }
+  })));
+  assert.equal(removed.ok, true);
+  assert.deepEqual(calls.map(call => call.type), ["beginUndoGroup", "endUndoGroup"]);
+});
+
 test("opções Quick e Advanced válidas atravessam o gate do AE", async () => {
   let runs = 0;
   const { scope, calls } = await loadDispatcher((s) => {
@@ -575,3 +604,4 @@ test("locale desconhecido cai no idioma padrao em vez de mostrar a chave", async
   assert.equal(begin.label, "Moti.on: create test composition");
   assert.ok(!begin.label.includes("undo."), "A chave i18n não pode vazar para o menu do host.");
 });
+

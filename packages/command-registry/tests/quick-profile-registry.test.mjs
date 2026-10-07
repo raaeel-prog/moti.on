@@ -111,8 +111,21 @@ test("registry indexa QuickProfile por comando/host e preserva ordem do catálog
 });
 
 test("registry global expõe ausência de perfis sem inventar fallback", () => {
+  // Um comando sem QuickProfile devolve `undefined` — nunca um perfil vazio
+  // inventado, que faria o painel achar que existe preset onde não existe.
+  // `ae.animate.wiggle` nunca existiu como id (o registrado é
+  // `ae.expression.wiggle`), então serve de duplo controle.
   assert.equal(getQuickProfile("ae.animate.wiggle"), undefined);
-  assert.deepEqual(quickProfilesForHost("after-effects"), []);
+  assert.equal(getQuickProfile("ae.keys.copy"), undefined);
+
+  // A lista traz exatamente quem declara perfil. Uma versão anterior deste
+  // teste exigia lista vazia, porque foi escrito quando nenhum comando tinha
+  // perfil — e passou a reprovar o primeiro preset real do produto.
+  const registrados = quickProfilesForHost("after-effects").map((r) => r.commandId);
+  for (const id of registrados) {
+    assert.ok(getQuickProfile(id), `${id} está na lista mas get não o devolve`);
+  }
+  assert.deepEqual([...new Set(registrados)], registrados, "id duplicado na lista");
 });
 
 test("registry recusa Quick destrutivo, ids duplicados e perfis estruturalmente inválidos", () => {

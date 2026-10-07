@@ -363,6 +363,19 @@ test("sucesso sem mudanca e opt-in e somente para comando mutante idempotente", 
     // camada ja parenteada ao alvo pedido nao e reescrita, porque reescrever
     // faria o After Effects recalcular o transform e acumular arredondamento.
     [
+      // Reuse the native effect already created by a Quick shortcut, preserving edits.
+      "ae.text.word-reveal",
+      "ae.text.variable-morph",
+      "ae.text.style-swap",
+      "ae.text.vertical-pulse",
+      "ae.presets.apply",
+      "ae.presets.remove",
+    "ae.presets.bake",
+    "ae.presets.color-adjust",
+      "ae.presets.adjust",
+      // Already-aligned markers and a zero shift are valid without rewriting.
+      "ae.presets.timing",
+      "ae.quick-tools.apply",
       "ae.expression.loopout",
       "ae.expression.smooth",
       "ae.expression.wiggle",
@@ -395,6 +408,8 @@ test("sucesso sem mudanca e opt-in e somente para comando mutante idempotente", 
       // Reajustar o raio ou a aresta do rig existente e o Adjust da secao.
       "ae.3d.cylinder",
       "ae.3d.cube",
+      // Reaplicar o mesmo gradiente nao duplica nem reescreve controles.
+      "ae.effect.gradient",
       "ae.effect.wave",
       // O modo grade reaplicado com os mesmos numeros e o Adjust da secao.
       "ae.effect.tile",
@@ -402,8 +417,12 @@ test("sucesso sem mudanca e opt-in e somente para comando mutante idempotente", 
       // preset de eco: os dois sao pedidos ja satisfeitos.
       // Reajustar o rig com os mesmos numeros e o modo Adjust da secao, e nao
       // uma falha: o estado pedido ja vale.
+      "ae.parallax.create",
+      "ae.parallax.adjust",
       "ae.animate.parallax.quick",
       "ae.3d.look-at",
+      // Repeated Orbit clicks retain live null settings without duplicating the rig.
+      "ae.3d.orbit",
       "ae.effect.echo",
       "ae.project.clean"
     ]

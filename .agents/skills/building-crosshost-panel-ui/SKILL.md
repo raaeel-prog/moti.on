@@ -7,7 +7,7 @@ description: "Builds the shared HTML, CSS, TypeScript, state, and component laye
 
 Use this skill to implement the visual system defined by `designing-adobe-workstation-ui` across the CEP and UXP clients without allowing host-specific details to leak through the component tree.
 
-Before UI implementation, read `docs/ADDENDUM_A_QUICK_UX_SPEC.md` and consume `packages/ui-tokens/src/tokens.css` plus `packages/ui-motion/src/motion.css`. The addendum supersedes older §22.3/§22.4 interaction details; the host base remains `#1D1D1D` through the compatibility alias.
+Before UI implementation, read `docs/ADDENDUM_A_QUICK_UX_SPEC.md` and consume `packages/ui-tokens/src/tokens.css` plus `packages/ui-motion/src/motion.css`. The addendum supersedes older §22.3/§22.4 interaction details; the current host base is `#121212` through the compatibility alias.
 
 Use the shared `data-motion` IDs and reduced-motion controller from `@motion/ui-motion`. Both hosts expose the internal preference in Settings → Interface; host code may feature-detect storage/media support, but components must not fork the effective `internal OR system` rule.
 
@@ -139,7 +139,7 @@ The UI must ignore stale responses from superseded requests. Never infer success
 - Use native controls where possible.
 - Add ARIA labels only where the runtime supports them and test actual behavior.
 - All icon buttons need accessible names and tooltips.
-- Focus must remain visible against `#1D1D1D`.
+- Focus must remain visible against `#121212`.
 - Escape closes menus/popovers without losing the current draft.
 - Enter commits focused numeric input where expected.
 - The Bézier editor must expose keyboard alternatives for handle values.

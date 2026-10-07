@@ -164,7 +164,7 @@ For panel work, capture compact, standard, and wide widths. Compare:
 - focus-visible state;
 - disabled/loading/error states;
 - text at display scaling;
-- contrast against `#1D1D1D`;
+- contrast against `#212529`;
 - absence of accidental density or card proliferation.
 
 For motion output, compare before/after world position, keyframe metadata, and render output as applicable.

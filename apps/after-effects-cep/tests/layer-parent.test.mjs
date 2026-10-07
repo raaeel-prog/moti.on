@@ -407,3 +407,4 @@ test("argumento desconhecido é recusado em vez de ignorado", async () => {
   assert.equal(resposta.ok, false);
   assert.equal(resposta.error.details.field, "pivot");
 });
+

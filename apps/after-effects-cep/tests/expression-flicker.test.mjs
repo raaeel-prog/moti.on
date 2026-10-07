@@ -261,3 +261,4 @@ test("rollback devolve o estado anterior quando o host recusa a expressao", asyn
   assert.equal(primeira.expression, "");
   assert.equal(primeira.expressionEnabled, false);
 });
+

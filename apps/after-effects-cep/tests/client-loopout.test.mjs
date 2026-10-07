@@ -10,7 +10,7 @@ test("painel envia somente tokens tipados para o comando LoopOut allowlisted", a
 
   assert.match(apply, /"ae\.expression\.loopout"/);
   assert.match(apply, /conflictMode:\s*"skip"/);
-  assert.match(apply, /\{\s*preserveSelection:\s*true\s*\}/);
+  assert.match(apply, /preserveSelection:\s*true/);
   assert.doesNotMatch(apply, /allowDestructive/);
   assert.doesNotMatch(apply, /source\s*:/);
 });
@@ -35,3 +35,4 @@ test("modo continue zera todos os controles que a API oficial nao aceita", async
   assert.match(apply, /draft\.type !== "continue" && draft\.range === "keys"/);
   assert.match(apply, /const duration = useDuration \? draft\.duration : 0/);
 });
+

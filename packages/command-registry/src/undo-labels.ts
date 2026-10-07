@@ -21,6 +21,26 @@ export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 export const DEFAULT_LOCALE: SupportedLocale = "en-US";
 
 export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
+  "undo.ae.presets.phase-apply": {"pt-BR": "Moti.on: aplicar fase", "en-US": "Moti.on: apply phase"},
+  "undo.ae.presets.phase-adjust": {"pt-BR": "Moti.on: ajustar fase", "en-US": "Moti.on: adjust phase"},
+  "undo.ae.presets.phase-action": {"pt-BR": "Moti.on: editar fase", "en-US": "Moti.on: edit phase"},
+  "undo.ae.presets.phase-timing": {"pt-BR": "Moti.on: deslocar fase", "en-US": "Moti.on: shift phase"},
+  "undo.ae.presets.color-adjust": {"pt-BR": "Moti.on: ajustar cor", "en-US": "Moti.on: adjust color"},
+  "undo.ae.text.word-reveal": {"pt-BR": "Moti.on: revelação com caixas", "en-US": "Moti.on: word box reveal"},
+  "undo.ae.text.variable-morph": {"pt-BR": "Moti.on: morph por proximidade", "en-US": "Moti.on: proximity font morph"},
+  "undo.ae.text.style-swap": {"pt-BR": "Moti.on: troca de estilos", "en-US": "Moti.on: text style swap"},
+  "undo.ae.text.vertical-pulse": {"pt-BR": "Moti.on: Pulso", "en-US": "Moti.on: Pulse"},
+  "undo.ae.presets.camera-transition": {"pt-BR": "Moti.on: criar transição de câmera", "en-US": "Moti.on: create camera transition"},
+  "undo.ae.presets.timing": {"pt-BR": "Moti.on: organizar marcadores de animação", "en-US": "Moti.on: arrange animation markers"},
+  "undo.ae.presets.adjust": {"pt-BR": "Moti.on: ajustar preset", "en-US": "Moti.on: adjust preset"},
+  "undo.ae.presets.personal-apply": {"pt-BR": "Moti.on: aplicar preset da biblioteca", "en-US": "Moti.on: apply personal preset"},
+  "undo.ae.presets.apply": {"pt-BR": "Moti.on: aplicar preset", "en-US": "Moti.on: apply preset"},
+  "undo.ae.presets.remove": {"pt-BR": "Moti.on: remover preset", "en-US": "Moti.on: remove preset"},
+  "undo.ae.presets.bake": {"pt-BR": "Moti.on: converter preset em keyframes", "en-US": "Moti.on: bake preset"},
+  "undo.ae.quickTools": {
+    "en-US": "Moti.on: quick action",
+    "pt-BR": "Moti.on: ação rápida"
+  },
   "undo.none": {
     "en-US": "",
     "pt-BR": ""
@@ -36,6 +56,10 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
   "undo.ae.expression.smooth": {
     "en-US": "Moti.on: apply Smooth",
     "pt-BR": "Moti.on: aplicar Smooth"
+  },
+  "undo.ae.audio.beat": {
+    "en-US": "Moti.on: sync to beat",
+    "pt-BR": "Moti.on: sincronizar com a batida"
   },
   "undo.ae.expression.wiggle": {
     "en-US": "Moti.on: apply Wiggle",
@@ -133,6 +157,7 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
     "en-US": "Moti.on: build cube",
     "pt-BR": "Moti.on: montar cubo"
   },
+  "undo.ae.effect.gradient": { "pt-BR": "Moti.on: Gradientes", "en-US": "Moti.on: Gradients" },
   "undo.ae.effect.wave": {
     "en-US": "Moti.on: apply wave",
     "pt-BR": "Moti.on: aplicar onda"

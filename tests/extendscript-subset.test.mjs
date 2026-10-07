@@ -18,6 +18,7 @@ import {
 
 test("cada construto banido e detectado em codigo real", () => {
   const cases = {
+    "reserved-native": "function kernel(value, native) { return native ? value : 0; }",
     "arrow-function": "var f = function (a) { return a; };\nvar g = (a) => a;",
     let: "let x = 1;",
     const: "const x = 1;",

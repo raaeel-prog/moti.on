@@ -1,3 +1,4 @@
+import { afterEach } from 'node:test';
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -103,4 +104,8 @@ test("a grade desabilitada nao anda nem escolhe pelo teclado", () => {
 
   assert.deepEqual(escolhas, []);
   assert.equal(document.activeElement, null, "foco em controle desabilitado nao");
+});
+
+afterEach(() => {
+  for (const name of ["HTMLElement", "customElements", "document", "window"]) delete globalThis[name];
 });

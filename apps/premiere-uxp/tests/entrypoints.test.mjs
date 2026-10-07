@@ -5,6 +5,8 @@ import { runInNewContext } from "node:vm";
 
 import { createPanelLifecycle, buildEntrypointConfig } from "../dist/client/src/lifecycle.js";
 
+import { createFakeDocument, createFakeWindow } from "../../../packages/ui-core/tests/fake-dom.mjs";
+
 const premiereBundle = new URL("../../../dist/premiere-uxp/main.js", import.meta.url);
 
 /**
@@ -67,7 +69,9 @@ test("o bundle final registra a configuracao valida, nao apenas o helper isolado
   let configRegistrada = null;
   const source = readFileSync(premiereBundle, "utf8");
 
-  runInNewContext(source, {
+  const document = createFakeDocument();
+  document.documentElement = document.createElement("html");
+  runInNewContext(source, { document, window: createFakeWindow(),
     require(moduleId) {
       if (moduleId !== "uxp") {
         throw new Error(`modulo inesperado durante o bootstrap: ${moduleId}`);

@@ -272,8 +272,8 @@ test("writer cria os seis controles na ordem declarada e acessa somente a propri
     layer.effects.states.map((effect) => effect.matchName),
     [MATCH.slider, MATCH.angle, MATCH.color, MATCH.checkbox, MATCH.point, MATCH.dropdown]
   );
-  assert.deepEqual(layer.effects.states.map((effect) => effect.propertyLookups), [[1], [1], [1], [1], [1], [1]]);
-  assert.equal(layer.effects.states[0].name, "CHMS · Wiggle · Amplitude (px)");
+  assert.ok(layer.effects.states.every(effect => effect.propertyLookups.length > 0 && effect.propertyLookups.every(index => index === 1)), "native re-resolution still accesses only parameter (1)");
+  assert.equal(layer.effects.states[0].name, "Moti.on · Wiggle · Amplitude (px)");
   assert.deepEqual(layer.effects.states[5].property.items, ["Ciclo", "Pingue-pongue"]);
   assert.equal(layer.effects.states[5].property.value, 2, "dropdown grava o índice do item no host");
   assert.deepEqual(result.records.map((record) => record.paramId), bindings.toSorted((a, b) => a.order - b.order).map((item) => item.paramId));
@@ -283,7 +283,7 @@ test("writer cria os seis controles na ordem declarada e acessa somente a propri
 
 test("nome colidente recebe rigId curto e a referência de expressão é escapada e clampada", async () => {
   const { scope, layer } = await fixture();
-  layer.effects.seed(MATCH.slider, 'CHMS · Wi"ggle\\ · Amplitude (px)', 1);
+  layer.effects.seed(MATCH.slider, 'Moti.on · Wi"ggle\\ · Amplitude (px)', 1);
   const controls = config(
     [binding("amplitude", "slider", 1, { label: 'Amplitude', unit: "px", min: 0, max: 500 })],
     { amplitude: 30 },
@@ -293,10 +293,10 @@ test("nome colidente recebe rigId curto e a referência de expressão é escapad
   const result = scope.MotionLiveControls.create(layer, controls);
   const record = result.records[0];
 
-  assert.equal(record.name, 'CHMS · Wi"ggle\\ · Amplitude (px) #7f3a');
+  assert.equal(record.name, 'Moti.on · Wi"ggle\\ · Amplitude (px) #7f3a');
   assert.equal(
     scope.MotionLiveControls.expressionReference(record),
-    'Math.max(0, Math.min(500, effect("CHMS · Wi\\"ggle\\\\ · Amplitude (px) #7f3a")(1)))'
+    'Math.max(0, Math.min(500, effect("Moti.on · Wi\\"ggle\\\\ · Amplitude (px) #7f3a")(1)))'
   );
 });
 
@@ -320,7 +320,7 @@ test("dropdown indisponível cai para slider inteiro e documenta as opções no 
 
   assert.equal(layer.effects.states.length, 1, "o dropdown de capability incompleta foi removido");
   assert.equal(layer.effects.states[0].matchName, MATCH.slider);
-  assert.equal(layer.effects.states[0].name, "CHMS · Wiggle · Modo (1 Ciclo · 2 Pingpong)");
+  assert.equal(layer.effects.states[0].name, "Moti.on · Wiggle · Modo (1 Ciclo · 2 Pingpong)");
   assert.equal(result.records[0].actualControl, "slider");
   assert.equal(result.records[0].fallback, "dropdown-as-slider");
   assert.equal(result.warnings[0].code, "DROPDOWN_FALLBACK");

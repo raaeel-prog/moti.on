@@ -1,0 +1,342 @@
+{
+  "source": "Gravação de Tela 2026-09-14 às 20.15.43.mov",
+  "count": 56,
+  "items": [
+    {
+      "group": "Motion — transições 2D",
+      "referenceLabel": "Gaussian Blur & Fade Eased 1",
+      "timeSeconds": 44,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 2D",
+      "referenceLabel": "Fade Cubic In 1",
+      "timeSeconds": 44,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 2D",
+      "referenceLabel": "Ease Position & Rotate 1",
+      "timeSeconds": 57,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 2D",
+      "referenceLabel": "Overshoot Position & Rotate 1",
+      "timeSeconds": 71,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 2D",
+      "referenceLabel": "Ease Position & Rotate & Scale 2",
+      "timeSeconds": 72,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 2D",
+      "referenceLabel": "Overshoot Position & Rotate & Scale 4",
+      "timeSeconds": 74,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 2D",
+      "referenceLabel": "Overshoot Position & Scale 2",
+      "timeSeconds": 76,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 2D",
+      "referenceLabel": "Overshoot XY Scale From Anchor Point 2",
+      "timeSeconds": 78,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 2D",
+      "referenceLabel": "Bounce XY Scale From Anchor Point 1",
+      "timeSeconds": 81,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 3D",
+      "referenceLabel": "Ease Fade & Rotate Around Edge Forward 1",
+      "timeSeconds": 83,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 3D",
+      "referenceLabel": "Ease Position & Rotate ND A 5",
+      "timeSeconds": 87,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 3D",
+      "referenceLabel": "Ease Position & Rotate ND A Two Way 1",
+      "timeSeconds": 88,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 3D",
+      "referenceLabel": "Overshoot Position & Rotate NS B Two Way 1",
+      "timeSeconds": 90,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 3D",
+      "referenceLabel": "Overshoot Rotate Around Anchor Point 3",
+      "timeSeconds": 91,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 3D",
+      "referenceLabel": "Bounce Rotate Around Anchor Point 2",
+      "timeSeconds": 94,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — transições 3D",
+      "referenceLabel": "Ease Rotate NS From Front 1",
+      "timeSeconds": 95,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Gaussian Blur & Wave Warp 2",
+      "timeSeconds": 97,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "2 Color Chroma Split",
+      "timeSeconds": 100,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Duotone",
+      "timeSeconds": 102,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "High Contrast Colors",
+      "timeSeconds": 103,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "RGB Split",
+      "timeSeconds": 103,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Extrude Left Side",
+      "timeSeconds": 104,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Extrude Right Side",
+      "timeSeconds": 106,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Extrude Top Side",
+      "timeSeconds": 107,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Extrude Top Side Rotated",
+      "timeSeconds": 107,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Extrude",
+      "timeSeconds": 110,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Long Shadow",
+      "timeSeconds": 111,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Long Shadow & Stripes",
+      "timeSeconds": 115,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Long Shadow with Gradient",
+      "timeSeconds": 116,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Wiggle X Position 1",
+      "timeSeconds": 117,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Cosine Position & Rotate & Scale 1",
+      "timeSeconds": 120,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Wiggle Position & Rotate & Scale 1",
+      "timeSeconds": 120,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Cosine Absolute Y Position & Rotation 1",
+      "timeSeconds": 121,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Cosine Absolute Y Sine X Position & Rotation 1",
+      "timeSeconds": 123,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Cosine Position & Rotation 3",
+      "timeSeconds": 124,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Motion — efeitos",
+      "referenceLabel": "Wiggle Position & Rotation 2",
+      "timeSeconds": 131,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Ease Fade Separately 3",
+      "timeSeconds": 133,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Ease Fade Together 3",
+      "timeSeconds": 134,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Ease Position & Rotate & Scale Y 1",
+      "timeSeconds": 135,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Ease Position & Rotate & Scale Randomly 2",
+      "timeSeconds": 136,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Overshoot Position & Rotate & Scale 1",
+      "timeSeconds": 137,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Flickering Decode & Scale 3",
+      "timeSeconds": 138,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Flickering Decode & Scale 6",
+      "timeSeconds": 139,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Ease Position Together Y",
+      "timeSeconds": 140,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Ease Position Together X",
+      "timeSeconds": 141,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Overshoot Position & Mask Y",
+      "timeSeconds": 142,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Ease Position & Rotate 3",
+      "timeSeconds": 143,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Ease Position & Rotate 6",
+      "timeSeconds": 144,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Wiggly Position & Rotate & Scale 7",
+      "timeSeconds": 145,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Flickering Position & Scale Randomly 6",
+      "timeSeconds": 146,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — transições por caracteres, palavras e linhas",
+      "referenceLabel": "Decode 2",
+      "timeSeconds": 148,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — efeitos",
+      "referenceLabel": "Decode Continuously 3",
+      "timeSeconds": 149,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — efeitos",
+      "referenceLabel": "Flickering Decode & Scale & Tracking 3",
+      "timeSeconds": 150,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — efeitos",
+      "referenceLabel": "Wiggly Fade 1",
+      "timeSeconds": 150,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — efeitos",
+      "referenceLabel": "Skew Jiggling",
+      "timeSeconds": 151,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    },
+    {
+      "group": "Texto — efeitos",
+      "referenceLabel": "Turbulent Jiggling",
+      "timeSeconds": 152,
+      "implementationStatus": "NOT_IMPLEMENTED_IN_THIS_TASK"
+    }
+  ]
+}

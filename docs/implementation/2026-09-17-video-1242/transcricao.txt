@@ -1,0 +1,17 @@
+[0.2–6.2] Então, eu acho que tem uma missão pra você. Tá vendo esse plugin aqui, Animation Composer, tá?
+[6.2–12.2] Atualmente ele é assim, a estrutura dele tá. Ele funciona desse jeitinho aqui.
+[12.2–16.2] Aqui são só parte de outras ferramentas que não precisa implementar no nosso.
+[16.2–22.2] É só até aqui, o MyLibrary pra ter a biblioteca pessoal, porque já tá até implementado aqui, tá?
+[22.2–28.2] Não precisa mexer nem nisso. Só queria que você melhorasse o nosso tema aqui em questão
+[28.2–32.2] pra deixar mais parecido com esse visual aqui, tá?
+[32.2–40.2] Alguns botões aqui, isso aqui mais minimalista. Atualmente o nosso tá meio feio aqui, né?
+[40.2–46.2] Negócio meio estranho. Pode ocupar menos espaço, esse texto pode vir aqui pra frente, não sei.
+[46.2–48.2] Que nem aqui, tá?
+[48.2–52.2] Aí aqui tem, eu queria que você basicamente
+[52.2–58.2] desce uma melhorada, não mexesse muito no design do nosso plugin, mas desce uma melhorada
+[58.2–62.2] aqui pra deixar o visual mais parecido com esse, possível, tá?
+[62.2–68.2] Pode ver aqui como é a parte de aplicado, algum efeito.
+[68.2–74.2] Continua, aplica. Aí lá no Animation Composer tem todo um process, enfim, já pra editar.
+[74.2–80.2] Coisa que aqui no nosso não tá muito legal, tá? Tá um slide feio ainda.
+[80.2–86.2] Corrige, deixa esses parâmetros assim bonitinho, asusinho, igual o do Animation Composer, tá?
+[86.2–88.2] Tenta fazer isso pra mim aí, tá?

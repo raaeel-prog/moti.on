@@ -381,3 +381,22 @@ test("argumentos fora do contrato são recusados", async () => {
     assert.deepEqual(c.posicao, [100, 100]);
   }
 });
+
+
+test("Flip recusa animacao ou expressao em todo o lote antes de alterar qualquer camada", async () => {
+  for (const conflict of ["keys", "expression", "separated", "locked"]) {
+    const {scope, comp} = await fixture();
+    const first = camada(comp, "Primeira");
+    const second = camada(comp, "Segunda");
+    const target = second.transform.property(MN.position);
+    if (conflict === "keys") target.numKeys = 2;
+    if (conflict === "expression") target.expression = "value + [30, 0]";
+    if (conflict === "separated") target.dimensionsSeparated = true;
+    if (conflict === "locked") second.locked = true;
+    const response = JSON.parse(scope.MotionAE.dispatch(request(args())));
+    assert.equal(response.ok, false, conflict);
+    assert.deepEqual(first.escala, [100, 100]);
+    assert.deepEqual(first.posicao, [100, 100]);
+  }
+});
+

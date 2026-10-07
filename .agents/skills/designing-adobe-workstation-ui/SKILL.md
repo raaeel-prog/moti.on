@@ -1,6 +1,6 @@
 ---
 name: designing-adobe-workstation-ui
-description: "Designs and reviews the CrossHost plugin interface as a subtle Adobe-style workstation panel. Use for layouts, navigation, visual hierarchy, tokens, controls, responsive docking, iconography, interaction polish, or UI audits. Enforces the #1D1D1D dark direction and prevents crowded dashboard output."
+description: "Designs and reviews the CrossHost plugin interface as a subtle Adobe-style workstation panel. Use for layouts, navigation, visual hierarchy, tokens, controls, responsive docking, iconography, interaction polish, or UI audits. Enforces the #121212 dark direction and prevents crowded dashboard output."
 ---
 
 # Designing an Adobe Workstation UI
@@ -31,26 +31,25 @@ Increasing feature count must not increase simultaneous visual density. Use prog
 
 ## Color foundation
 
-The user-selected dashboard base is non-negotiable:
+The current user-selected docked panel base is:
 
 ```css
---bg-host: #1D1D1D;
---bg-0: #0E1013;
---bg-1: #141619;
---bg-2: #1A1D21;
---bg-3: #22262B;
---bg-4: #2A2F35;
---accent: #7C8CFF;
+--bg-host: #121212;
+--ch-surface-raised: #262626;
+--ch-surface-hover: #303030;
+--ch-surface-pressed: #303030;
+--ch-text-primary: #FFFFFF;
+--ch-accent: #FFFFFF;
 ```
 
 The complete dark/light palette and AA-corrected implementation values live in `packages/ui-tokens/src/tokens.css`; never retype a partial palette in a component.
 
 Rules:
 
-- Neutral surfaces carry the interface; accent color carries selection and primary action only.
-- No “AI glow,” mesh gradient, glassmorphism, or neon halo as a default. The violet-blue accent is semantic and must not become decoration.
+- Neutral surfaces carry the interface; white carries the primary action, while selection has a restrained highlight.
+- No “AI glow,” mesh gradient, glassmorphism, or neon halo as a default. Color for feedback is semantic and must not become decoration.
 - Use a one-pixel border or surface contrast, not both everywhere.
-- Avoid pure black and pure white except tiny glyph details.
+- Avoid pure black; white is reserved for the primary action and high-contrast text where needed.
 - Status must never depend on color alone.
 
 ## Typography
@@ -75,7 +74,7 @@ Use a 4 px base grid:
 - control height: 28–30 px;
 - icon button: 28–30 px;
 - icon size: 16–18 px;
-- border radius: 3–5 px;
+- border radius: 4–8 px;
 - large card radius is prohibited.
 
 Do not turn every group into a card. Prefer separators, twirl-down sections, compact rows, and a shared background.

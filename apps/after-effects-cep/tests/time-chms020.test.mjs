@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 
 import { loadHostModules } from "./host-harness.mjs";
 
@@ -219,3 +220,40 @@ test("Kinetic nao abre Undo proprio e usa diferenca entre as duas primeiras keys
   assert.ok(layer.position.expression.includes("sub(k2.value, k1.value)"));
   assert.deepEqual(calls, [["begin", "Moti.on: aplicar animação kinetic"], ["end"]]);
 });
+
+
+test("Marker Loop preserva marker do usuario no limite, antes de mutar", async () => {
+  for (const time of [0, 4 - 1 / 25]) {
+    const layer = new FakeLayer({ marker: new FakeProperty({ keys: [{time, value: new FakeMarkerValue("Cue cliente")}] }) });
+    const { scope, calls } = await fixture(new FakeCompItem([layer]));
+    const response = JSON.parse(scope.MotionAE.dispatch(request("ae.time.marker-loop", markerArgs)));
+    assert.equal(response.ok, false);
+    assert.equal(response.error.code, "KEYFRAME_CONFLICT");
+    assert.equal(layer.timeRemapEnabled, false);
+    assert.equal(layer.marker.keyValue(1).comment, "Cue cliente");
+    assert.deepEqual(calls, []);
+  }
+});
+
+test("Marker Loop valida ordem inclusive quando autocriacao esta ligada", async () => {
+  const layer = new FakeLayer({ marker: new FakeProperty({ keys: [
+    {time: 2, value: new FakeMarkerValue("loop_out")}, {time: 3, value: new FakeMarkerValue("loop_in")}
+  ] }) });
+  const { scope, calls } = await fixture(new FakeCompItem([layer]));
+  const response = JSON.parse(scope.MotionAE.dispatch(request("ae.time.marker-loop", markerArgs)));
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, "KEYFRAME_CONFLICT");
+  assert.deepEqual(calls, []);
+});
+
+test("Time Controller reverse parte do ultimo frame visivel e retrocede", async () => {
+  const { scope } = await fixture();
+  const expression = scope.MotionExpressions.renderTimeController({...timeArgs, speedPercent: 100, offsetFrames: 0, reverse: true});
+  const evaluate = (time) => vm.runInNewContext(expression, {time, thisComp: {frameDuration: 1/25}, thisLayer: {inPoint: 2, outPoint: 6}, valueAtTime: (t) => t});
+  assert.ok(Math.abs(evaluate(2) - 5.96) < 1e-8);
+  assert.ok(Math.abs(evaluate(3) - 4.96) < 1e-8);
+  assert.equal(scope.MotionExpressions.isManagedTimeController(expression), true);
+  const legacy = expression.replace("  if (rev < 0) t += Math.max(0, thisLayer.outPoint - thisLayer.inPoint - thisComp.frameDuration);\n", "");
+  assert.equal(scope.MotionExpressions.isManagedTimeController(legacy), true);
+});
+

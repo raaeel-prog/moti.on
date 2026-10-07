@@ -1,18 +1,8 @@
 /**
- * Orientar camada ou camera para um alvo (`ae.3d.look-at`, CHMS-026).
- *
- * ## Eixos suportados
- *
- * Os seis eixos. Os quatro do plano XZ saem de somar na componente Y da
- * orientacao que `lookAt` devolve, porque ali a correcao e um giro em Y e a
- * composicao se reduz a uma soma. Os dois verticais precisam de um giro em X, e
- * ai nao ha atalho: a expressao compoe `R_lookAt . Rx(±90)` e decompoe o
- * resultado de volta em angulos.
- *
- * Os verticais eram recusados enquanto `MotionTransform` nao sabia decompor uma
- * matriz em Euler. Sabe agora, e `euler-decomposition.test.mjs` mede o
- * round-trip; `euler-paridade.test.mjs` garante que a versao em linguagem de
- * expressao nao divirja da versao do host.
+ * Encarar em um clique: um nulo gerenciado contem o seletor de alvo compartilhado.
+ * 2D usa Rotacao Z com offset original; 3D/cameras usam Orientation e seis eixos.
+ * O dispatcher e dono do Undo. O comando valida o lote antes de criar o nulo,
+ * reutiliza metadata e restaura expressoes, controller e selecao se uma escrita falhar.
  */
 (function () {
   /* global Property CameraLayer */
@@ -57,7 +47,7 @@
         return failure(MotionContracts.ERROR.INVALID_PRESET, "Argumento Look At ausente.", { field: key });
       }
     }
-    if (typeof args.targetLayerName !== "string" || args.targetLayerName.length < 1 || args.targetLayerName.length > 200) {
+    if (typeof args.targetLayerName !== "string" || args.targetLayerName.length > 200) {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Nome do alvo invalido.", { field: "targetLayerName" });
     }
 
@@ -108,16 +98,10 @@
     return null;
   }
 
-  /**
-   * O alvo e resolvido por nome no preflight so para provar que ele existe agora;
-   * a expressao guarda o nome porque o After Effects reescreve
-   * `thisComp.layer("...")` sozinho quando a camada e renomeada. Guardar indice
-   * seria pior: reordenar a timeline apontaria para outra camada em silencio.
-   *
-   * @param {CompItem} comp
-   * @param {string} nome
-   * @returns {Layer|null}
-   */
+  /** Explicit targets are resolved before mutation; the native Layer Control tracks
+   * their identity through reorder/rename. Reapply repairs a renamed controller
+   * reference using its metadata rather than creating another null.
+   * @param {CompItem} comp @param {string} nome @returns {Layer|null} */
   function findLayerByName(comp, nome) {
     var i;
     for (i = 1; i <= comp.numLayers; i += 1) {
@@ -127,132 +111,163 @@
     return null;
   }
 
-  /** @param {unknown} layer @returns {Property|null} */
-  function orientationOf(layer) {
-    var grupo = /** @type {any} */ (layer).property(MN.transform);
-    if (!grupo) return null;
-    var property = grupo.property(MN.orientation);
+  var TYPE = "look-at";
+  var EFFECT_NAME = "Moti.on Encarar";
+
+  /** @param {any} layer @returns {Property|null} */
+  function rotationOf(layer) {
+    var group = layer.property(MN.transform);
+    if (!group) return null;
+    var property = group.property(is3D(layer) ? MN.orientation : "ADBE Rotate Z");
     return property instanceof Property ? property : null;
+  }
+
+  /** @param {any} layer @returns {boolean} */
+  function is3D(layer) {
+    return layer.threeDLayer === true || (typeof CameraLayer !== "undefined" && layer instanceof CameraLayer);
+  }
+
+  /** Only a metadata-owned null can be reused. @param {CompItem} comp @returns {any} */
+  function controllerOf(comp) {
+    var candidate = MotionRigMeta.findController(comp, TYPE);
+    return candidate && candidate.nullLayer === true ? candidate : null;
+  }
+
+  /** The controller owns exactly one Layer Control. Names remain editable.
+   * @param {any} controller @returns {any} */
+  function controlOf(controller) {
+    if (!controller) return null;
+    var effects = controller.property("ADBE Effect Parade");
+    var found = null;
+    var i;
+    for (i = 1; effects && i <= effects.numProperties; i += 1) {
+      var effect = effects.property(i);
+      if (effect && effect.matchName === "ADBE Layer Control") {
+        if (found) return null;
+        found = effect;
+      }
+    }
+    return found;
   }
 
   /** @param {Record<string, unknown>} args @returns {MotionCommandFailure|null} */
   function preflight(args) {
     var validation = validateArgs(args);
     if (validation) return validation;
-
     var comp = /** @type {CompItem} */ (app.project.activeItem);
-    var alvo = findLayerByName(comp, /** @type {string} */ (args.targetLayerName));
-    if (!alvo) {
-      return failure(MotionContracts.ERROR.NO_SELECTION, "A camada alvo nao existe nesta composicao.", {
-        field: "targetLayerName"
-      });
-    }
-
-    var selecionadas = comp.selectedLayers;
-    if (!selecionadas || selecionadas.length === 0) {
-      return failure(MotionContracts.ERROR.NO_SELECTION, "Selecione ao menos uma camada.", null);
-    }
-
+    var target = args.targetLayerName ? findLayerByName(comp, /** @type {string} */ (args.targetLayerName)) : null;
+    if (args.targetLayerName && !target) return failure(MotionContracts.ERROR.NO_SELECTION, "O alvo escolhido nao existe na composicao.", null);
+    var controller = controllerOf(comp);
+    if (controller && controller.locked) return failure(MotionContracts.ERROR.HOST_OPERATION_FAILED, "Desbloqueie o nulo de Encarar.", null);
+    if (controller && !controlOf(controller)) return failure(MotionContracts.ERROR.HOST_OPERATION_FAILED, "O controle de alvo do nulo foi removido ou esta ambiguo.", null);
+    var selected = comp.selectedLayers;
+    var count = 0;
     var i;
-    for (i = 0; i < selecionadas.length; i += 1) {
-      var layer = /** @type {any} */ (selecionadas[i]);
-      if (layer === alvo) {
-        return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Uma camada nao pode encarar a si mesma.", {
-          selectionIndex: i
-        });
-      }
-      // Camera ja e 3D por natureza; qualquer outra precisa estar em 3D para ter
-      // orientacao com significado.
-      var ehCamera = typeof CameraLayer !== "undefined" && layer instanceof CameraLayer;
-      if (!ehCamera && layer.threeDLayer !== true) {
-        return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A selecao contem camada 2D.", {
-          selectionIndex: i
-        });
-      }
-      var orientacao = orientationOf(layer);
-      if (!orientacao || orientacao.canSetExpression !== true) {
-        return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camada nao expoe Orientation scriptavel.", {
-          selectionIndex: i
-        });
-      }
-      if (orientacao.expression !== "" && !MotionExpressions.isManagedLookAt(orientacao.expression)) {
-        return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "Orientation contem expressao de usuario.", {
-          selectionIndex: i
-        });
-      }
+    for (i = 0; selected && i < selected.length; i += 1) {
+      var layer = /** @type {any} */ (selected[i]);
+      if (layer === target || layer === controller) continue;
+      var property = rotationOf(layer);
+      if (!property || property.canSetExpression !== true) continue;
+      if (layer.locked) return failure(MotionContracts.ERROR.HOST_OPERATION_FAILED, "Desbloqueie as camadas selecionadas para encarar.", { selectionIndex: i });
+      var managed = is3D(layer) ? MotionExpressions.isManagedLookAt(property.expression) : MotionExpressions.isManagedLookAt2D(property.expression);
+      if (property.expression !== "" && !managed) return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A rotacao contem uma expressao de usuario.", { selectionIndex: i });
+      count += 1;
     }
+    if (count === 0) return failure(MotionContracts.ERROR.NO_SELECTION, "Selecione ao menos uma camada para encarar o alvo.", null);
     return null;
   }
 
-  /**
-   * @param {Record<string, unknown>} args
-   * @returns {MotionCommandResult}
-   */
+  /** @param {Record<string, unknown>} args @returns {MotionCommandResult} */
   function run(args) {
     var comp = /** @type {CompItem} */ (app.project.activeItem);
-    var selecionadas = comp.selectedLayers;
-    var expr = MotionExpressions.renderLookAt({
-      targetLayerName: args.targetLayerName,
-      forwardAxis: args.forwardAxis,
-      offsetOrientation: args.offsetOrientation,
-      constrainAxes: args.constrainAxes
-    });
-
-    var tocadas = [];
+    var controller = controllerOf(comp);
+    var target = args.targetLayerName ? findLayerByName(comp, /** @type {string} */ (args.targetLayerName)) : null;
+    // Copy references before addNull changes the native selection and all indices.
+    var selected = comp.selectedLayers;
+    var followers = [];
+    var originalSelection = [];
+    var has3D = false;
+    var i;
+    for (i = 0; i < selected.length; i += 1) {
+      originalSelection.push(selected[i]);
+      var selectedProperty = rotationOf(selected[i]);
+      if (selected[i] !== target && selected[i] !== controller && selectedProperty && selectedProperty.canSetExpression === true) {
+        followers.push(selected[i]);
+        if (is3D(selected[i])) has3D = true;
+      }
+    }
+    var created = false;
+    var touched = [];
+    var control = null;
+    var previousTarget = null;
+    var previous3D = controller ? controller.threeDLayer : false;
     var appliedCount = 0;
     var unchangedCount = 0;
-    var i;
-
+    var controlChanged = false;
     try {
-      for (i = 0; i < selecionadas.length; i += 1) {
-        var orientacao = /** @type {Property} */ (orientationOf(selecionadas[i]));
-        if (orientacao.expression === expr && orientacao.expressionEnabled === true) {
-          unchangedCount += 1;
-          continue;
-        }
-        tocadas.push({
-          property: orientacao,
-          expression: orientacao.expression,
-          expressionEnabled: orientacao.expressionEnabled
-        });
-        orientacao.expression = expr;
-        // O After Effects nao lanca ao recusar uma expressao: reporta em
-        // expressionError e deixa a propriedade acesa e quebrada.
-        if (typeof orientacao.expressionError === "string" && orientacao.expressionError !== "") {
-          throw new Error("After Effects recusou a expressao gerenciada.");
-        }
-        orientacao.expressionEnabled = true;
+      if (!controller) {
+        controller = comp.layers.addNull();
+        created = true;
+        var name = "Alvo (Moti.on)";
+        var suffix = 2;
+        while (findLayerByName(comp, name)) { name = "Alvo (Moti.on) " + suffix; suffix += 1; }
+        controller.name = name;
+        controller.threeDLayer = has3D;
+        controller.property(MN.transform).property("ADBE Position").setValue(has3D ? [comp.width / 2, comp.height / 2, 0] : [comp.width / 2, comp.height / 2]);
+        controller.comment = MotionRigMeta.write(controller.comment, MotionJson.stringify({
+          namespace: "Moti.on", rigType: TYPE, schemaVersion: 1, role: "controller", rigId: "look-at-" + controller.id
+        }));
+        control = controller.property("ADBE Effect Parade").addProperty("ADBE Layer Control");
+        control.name = EFFECT_NAME;
+        control.property(1).setValue(target ? target.index : controller.index);
+      } else {
+        control = controlOf(controller);
+        previousTarget = control.property(1).value;
+        if (has3D && !controller.threeDLayer) { controller.threeDLayer = true; controlChanged = true; }
+        if (target && previousTarget !== target.index) { control.property(1).setValue(target.index); controlChanged = true; }
+        // A cleared/deleted target falls back to the null when reapplying.
+        if (!target && previousTarget === 0) { control.property(1).setValue(controller.index); controlChanged = true; }
+      }
+      for (i = 0; i < followers.length; i += 1) {
+        var layer = followers[i];
+        var property = /** @type {Property} */ (rotationOf(layer));
+        var tokens = { targetLayerName: args.targetLayerName, controllerName: controller.name, effectName: control.name,
+          forwardAxis: args.forwardAxis, offsetOrientation: args.offsetOrientation, constrainAxes: args.constrainAxes };
+        var expression = is3D(layer) ? MotionExpressions.renderLookAt(tokens) : MotionExpressions.renderLookAt2D(tokens);
+        if (property.expression === expression && property.expressionEnabled === true) { unchangedCount += 1; continue; }
+        touched.push({ property: property, expression: property.expression, enabled: property.expressionEnabled });
+        property.expression = expression;
+        property.expressionEnabled = true;
+        if (property.expressionError) throw new Error("After Effects recusou a expressao de Encarar: " + property.expressionError);
         appliedCount += 1;
       }
-    } catch (lookError) {
+    } catch (error) {
       var rollbackFailed = false;
-      for (i = tocadas.length - 1; i >= 0; i -= 1) {
-        try {
-          var anterior = tocadas[i];
-          if (!anterior) continue;
-          anterior.property.expression = anterior.expression;
-          anterior.property.expressionEnabled = anterior.expressionEnabled;
-        } catch (restoreError) {
-          rollbackFailed = true;
+      for (i = touched.length - 1; i >= 0; i -= 1) {
+        try { var previous = touched[i]; if (previous) { previous.property.expression = previous.expression; previous.property.expressionEnabled = previous.enabled; } }
+        catch (restoreError) { rollbackFailed = true; }
+      }
+      try {
+        if (created) { controller.remove(); controller = null; }
+        else if (controller) {
+          controller.threeDLayer = previous3D;
+          if (previousTarget !== null) control.property(1).setValue(previousTarget);
         }
+      } catch (restoreControllerError) { rollbackFailed = true; }
+      var failureError = /** @type {Error & {motionCode?: string}} */ (new Error("Nao foi possivel aplicar Encarar: " + String(error)));
+      failureError.motionCode = rollbackFailed ? MotionContracts.ERROR.ROLLBACK_FAILED : MotionContracts.ERROR.HOST_OPERATION_FAILED;
+      throw failureError;
+    } finally {
+      // Preserve selected properties/keyframes by touching only selection changed by addNull.
+      if (created && controller && controller.selected === true) controller.selected = false;
+      for (i = 0; i < originalSelection.length; i += 1) {
+        var selectedLayer = /** @type {any} */ (originalSelection[i]);
+        if (selectedLayer && selectedLayer.selected !== true) selectedLayer.selected = true;
       }
-      if (rollbackFailed) {
-        var rollbackError = /** @type {Error & {motionCode?: string}} */ (
-          new Error("Look At falhou e o estado anterior nao pode ser restaurado.")
-        );
-        rollbackError.motionCode = MotionContracts.ERROR.ROLLBACK_FAILED;
-        throw rollbackError;
-      }
-      var failErr = /** @type {Error & {motionCode?: string}} */ (new Error("Look At falhou."));
-      failErr.motionCode = MotionContracts.ERROR.HOST_OPERATION_FAILED;
-      throw failErr;
     }
-
-    return {
-      changed: appliedCount > 0,
-      warnings: [],
-      data: { appliedCount: appliedCount, unchangedCount: unchangedCount }
-    };
+    return { changed: created || controlChanged || appliedCount > 0, warnings: [], data: {
+      appliedCount: appliedCount, unchangedCount: unchangedCount, controllerName: controller.name, controllerLayerIndex: controller.index
+    } };
   }
 
   MotionRegistry.register("ae.3d.look-at", { preflight: preflight, run: run });

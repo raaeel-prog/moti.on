@@ -9,18 +9,42 @@
  * navegação, os tokens e a i18n são os mesmos do painel do Premiere, e o que
  * muda entre os dois é apenas quais linhas cada view desenha.
  */
-import type { CommandResponse, HostCapabilities } from "@motion/contracts";
+import type {
+  CommandResponse,
+  HostCapabilities,
+  QuickContext,
+  QuickProfile,
+  TextEffectKind
+} from "@motion/contracts";
 import { buildCapabilities, type ProbeFacts } from "@motion/capability-matrix";
 import { createLogger, type MotionLogger } from "@motion/logging";
+import { renderTextEffect, resetTextEffect, textEffectArgs, validTextEffect, hydrateWordReveal, isWordRevealReadData,
+  wordRevealActionLabel, wordRevealDisabledReason, markWordRevealReadFailed, hydrateVariableMorph, isVariableMorphReadData,
+  variableMorphActionLabel, variableMorphDisabledReason, markVariableMorphReadFailed, variableMorphCompatibleArgs } from "./text-effects.js";
+import { renderVerticalPulse, resetVerticalPulse, validVerticalPulse, verticalPulseAction, verticalPulseArgs,
+  hydrateVerticalPulse, isVerticalPulseReadData, markVerticalPulseReadFailed, verticalPulseActionLabel,
+  verticalPulseReadDisabledReason, verticalPulseRevision } from "./vertical-pulse.js";
+import { WORD_REVEAL_DEFAULTS, PROXIMITY_MORPH_DEFAULTS, STYLE_SWAP_DEFAULTS, pulsePresetArgs } from "@motion/contracts";
+import { createAeSystemView } from "./views/system-view.js";
+import { createAeSettingsView } from "./views/settings-view.js";
+import { groupToolSections } from "./views/tool-sections.js";
+import { focusedPoll } from "./focused-poll.js";
+import { createGradientEditor } from "./gradient-editor.js";
+import type { GradientReadData } from "@motion/contracts";
 import {
   anchorGrid,
+  browserPreferenceStorage,
+  createPanelPreferences,
+  createElement,
+  createActionButton,
+  type ActionButtonOptions,
   button,
   checkboxField,
   colorField,
   createI18n,
+  createDiagnosticsView,
   createShell,
   hint,
-  logLine,
   notice,
   normalizeHexColor,
   numberField,
@@ -28,25 +52,48 @@ import {
   sectionTitle,
   selectField,
   textField,
-  searchField,
-  syncToolGridRoving,
-  toolGrid,
-  toolTile,
   bezierEditor,
   type I18n,
   type RenderRegions,
-  type RowTone,
   type Shell,
-  type ShellView
+  type ShellView,
+  createFeedbackController,
+  createAlert,
+  type FeedbackController
 } from "@motion/ui-core";
+
+let globalFeedback: FeedbackController | null = null;
+let feedbackReady = false;
+import { getDescriptor, getQuickProfile } from "@motion/command-registry";
 import {
   createBrowserReducedMotionController,
   type ReducedMotionController
 } from "@motion/ui-motion";
 
 import { createAeHostAdapter } from "./host-adapter.js";
+import { createQuickLibrary, type LibraryState, type LibraryItem } from "./quick-library.js";
+import { createQuickActions, updateQuickActions, quickActionName, type QuickAction } from "./quick-actions.js";
+import { createQuickDock } from "./quick-dock.js";
+import { hostFailureMessage } from "./host-feedback.js";
+import { createEaseEditor } from "./ease-editor.js";
+import { createEaseActions, type EaseAction } from "./ease-actions.js";
+import { DEFAULT_ORBIT, ORBIT_PRESETS, deriveOrbitPreset, selectOrbitPreset, type OrbitDraft, type OrbitTargetMode } from "./orbit-presets.js";
+import { presetArgs, type PresetNavigation } from "./preset-gallery.js";
+
+const panelPreferences = createPanelPreferences(document.documentElement, browserPreferenceStorage(window));
+let panelHostLocale: string | undefined;
+const libraryNavigation: LibraryState = { category: panelPreferences.snapshot().category, scope: "all", query: "", scroll: 0 };
+let disposeView: (() => void) | null = null;
+let refreshLibrary: (() => void) | null = null;
+let refreshToolContext: (() => void) | null = null;
+let refreshPresetContext: (() => void) | null = null;
+let orbitAdvancedOpen = false;
+import { createPresetWorkspace, type PresetWorkspaceCache } from "./preset-workspace.js";
+const presetWorkspaceCache: PresetWorkspaceCache = {};
+const presetNavigation: PresetNavigation = { category: "all", scope: "all", query: "", scroll: 0 };
 
 interface ContextData {
+  selectionSignature?: string;
   hostVersion: string | null;
   projectName: string | null;
   projectPath: string | null;
@@ -56,6 +103,32 @@ interface ContextData {
   compHeight: number | null;
   compDuration: number | null;
   compFrameRate: number | null;
+  currentTime: number | null;
+  workAreaStart: number | null;
+  workAreaDuration: number | null;
+  /**
+   * Retrato da seleção na timeline. É o que permite o painel decidir sozinho o
+   * que dá para aplicar, em vez de perguntar ao usuário o que ele acabou de
+   * fazer — ou tentar e falhar.
+   */
+  selectionLayerCount: number;
+  selectionPropertyCount: number;
+  /** Propriedades selecionadas que aceitam expressão. */
+  selectionExpressibleCount: number;
+  /**
+   * Keyframes efetivamente selecionados, somados sobre as propriedades.
+   *
+   * Não é o mesmo que `selectionHasKeyframes`: uma propriedade pode ter
+   * keyframes sem nenhum deles selecionado, e as ferramentas de keyframe operam
+   * sobre `selectedKeys`. É esta contagem que decide se o ladrilho pode acender.
+   */
+  selectionSelectedKeyCount: number;
+  selectionHasKeyframes: boolean;
+  selectionHasExpressions: boolean;
+  selectionIs3D: boolean;
+  averageLayerDurationSeconds: number | null;
+  /** `true` quando a seleção passou do teto de varredura do host. */
+  selectionTruncated: boolean;
 }
 
 type LoopOutType = "cycle" | "pingpong" | "offset" | "continue";
@@ -468,8 +541,9 @@ interface SendToEdgeDraft {
 const DEFAULT_SEND_TO_EDGE: SendToEdgeDraft = { edge: "start", reference: "comp" };
 
 type CloneKeysMode = "repeat" | "mirror";
-interface CloneKeysDraft { mode: CloneKeysMode; }
-const DEFAULT_CLONE_KEYS: CloneKeysDraft = { mode: "repeat" };
+type CloneKeysDestination = "after" | "cti" | "comp-end" | "layer-end" | "work-area-end";
+interface CloneKeysDraft { mode: CloneKeysMode; destination: CloneKeysDestination; }
+const DEFAULT_CLONE_KEYS: CloneKeysDraft = { mode: "repeat", destination: "after" };
 
 type AnimateKineticDirection = "in" | "out" | "both";
 type AnimateKineticSplit = "none" | "chars" | "words" | "lines";
@@ -539,40 +613,20 @@ const DEFAULT_JUMP: JumpDraft = {
   staggerFrames: 0
 };
 
-type LookAtAxis = "+z" | "-z" | "+x" | "-x";
+type LookAtAxis = "+z" | "-z" | "+x" | "-x" | "+y" | "-y";
 
 interface LookAtDraft {
   targetLayerName: string;
   forwardAxis: LookAtAxis;
+  offsetOrientation: [number, number, number];
   constrainAxes: { x: boolean; y: boolean; z: boolean };
 }
 
 const DEFAULT_LOOK_AT: LookAtDraft = {
   targetLayerName: "",
   forwardAxis: "+z",
+  offsetOrientation: [0, 0, 0],
   constrainAxes: { x: false, y: false, z: false }
-};
-
-type OrbitTargetMode = "newController" | "reuseController";
-
-interface OrbitDraft {
-  radius: number;
-  speed: number;
-  inclination: number;
-  phase: number;
-  targetMode: OrbitTargetMode;
-  faceTarget: boolean;
-  bake: boolean;
-}
-
-const DEFAULT_ORBIT: OrbitDraft = {
-  radius: 400,
-  speed: 60,
-  inclination: 15,
-  phase: 0,
-  targetMode: "newController",
-  faceTarget: true,
-  bake: false
 };
 
 type EchoOperator =
@@ -797,7 +851,7 @@ const DEFAULT_GLITCH: GlitchDraft = {
   durationFrames: 12
 };
 
-type ParallaxFullOperation = "autoFocus" | "zoom" | "wiggle" | "bake";
+type ParallaxFullOperation = "create" | "adjust" | "remove" | "subtle" | "truck" | "vertical" | "dolly" | "autoFocus" | "zoom" | "wiggle" | "bake";
 
 interface ParallaxFullDraft {
   operation: ParallaxFullOperation;
@@ -813,7 +867,7 @@ interface ParallaxFullDraft {
 }
 
 const DEFAULT_PARALLAX_FULL: ParallaxFullDraft = {
-  operation: "autoFocus",
+  operation: "create",
   targetLayerName: "",
   focusOffset: 0,
   enableDepthOfField: true,
@@ -837,7 +891,7 @@ interface ParallaxDraft {
 }
 
 const DEFAULT_PARALLAX: ParallaxDraft = {
-  depthStep: 200,
+  depthStep: 0,
   strength: 1,
   orderMode: "selection",
   createCamera: true,
@@ -967,8 +1021,9 @@ const DEFAULT_PARTICLES: ParticlesDraft = { birthRate: 2, longevity: 1, velocity
 interface TextureDraft { blendMode: string; opacity: number; }
 const DEFAULT_TEXTURE: TextureDraft = { blendMode: "overlay", opacity: 100 };
 
-interface CleanDraft { removeConfirmed: boolean; }
-const DEFAULT_CLEAN: CleanDraft = { removeConfirmed: false };
+interface CleanFinding { id: number | null; name: string; origin: "managed" | "external"; risk: "low" | "high"; }
+interface CleanDraft { scanToken: string | null; findings: CleanFinding[]; selectedItemIds: number[]; }
+const DEFAULT_CLEAN: CleanDraft = { scanToken: null, findings: [], selectedItemIds: [] };
 type MessageKey = Parameters<I18n["t"]>[0];
 type ToolId =
   | "loopOut"
@@ -976,6 +1031,10 @@ type ToolId =
   | "wiggle"
   | "flicker"
   | "textBox"
+  | "wordReveal"
+  | "variableMorph"
+  | "styleSwap"
+  | "verticalPulse"
   | "parent"
   | "createNull"
   | "flip"
@@ -994,6 +1053,7 @@ type ToolId =
   | "reverseValues"
   | "sendToEdge"
   | "neon"
+  | "beat"
   | "cloneKeys"
   | "timeController"
   | "animateKinetic"
@@ -1009,6 +1069,7 @@ type ToolId =
   | "echo"
   | "fastEdit"
   | "parallax"
+  | "gradient"
   | "wave"
   | "tile"
   | "glitch"
@@ -1027,15 +1088,19 @@ type ToolId =
  * `renderView`. Era assim antes, e com quatro comandos o painel já gastava sete
  * abas: a §22 pede grade de ícones e uma tarefa dominante por vez.
  */
-interface ToolDefinition {
+interface ToolDefinitionBase {
   /** Precisa bater com uma chave de ícone do shell. */
   readonly id: ToolId;
   readonly nameKey: MessageKey;
   readonly descriptionKey: MessageKey;
-  render(regions: RenderRegions, i18n: I18n): void;
+  /**
+   * Comando que o clique aplica direto, quando ele tem `QuickProfile`.
+   *
+   * Ferramenta sem isto — Copiar keys, Limpar projeto, Alinhador — continua
+   * abrindo a tela: nao ha preset a aplicar, so uma operacao a configurar.
+   */
+  readonly commandId?: string;
   disabledReason(i18n: I18n): string | null;
-  apply(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void>;
-  reset(): void;
   /**
    * Carga sob demanda ao abrir a ferramenta, e de novo pelo botão Atualizar.
    *
@@ -1053,10 +1118,164 @@ interface ToolDefinition {
    */
   loadLabelKey?: MessageKey;
 }
+type ToolDefinition = ToolDefinitionBase & ({
+  readonly id: Exclude<ToolId, "gradient">;
+  render(regions: RenderRegions, i18n: I18n): void;
+  apply(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void>;
+  reset(): void;
+} | { readonly id: "gradient"; readonly editor: "gradient" });
+
+/**
+ * Categorias da grade de ferramentas.
+ *
+ * Sete grupos, e não um por afinidade fina: o objetivo é dar ao usuário um
+ * primeiro corte por onde varrer, e vinte títulos de seção seriam tão pouco
+ * navegáveis quanto a lista plana que eles substituem.
+ *
+ * A ordem aqui **é** a ordem na tela, e começa pelo que se usa mais: mexer em
+ * keyframe é o trabalho diário; converter vetor e limpar projeto são pontuais.
+ */
+const TOOL_CATEGORIES = [
+  "keyframes",
+  "layers",
+  "animation",
+  "spatial",
+  "shapes",
+  "effects",
+  "project"
+] as const;
+
+type ToolCategory = (typeof TOOL_CATEGORIES)[number];
+
+/**
+ * A categoria de cada ferramenta.
+ *
+ * `Record<ToolId, ...>` é exaustivo de propósito: uma ferramenta nova sem
+ * categoria vira erro de compilação, e não um ladrilho que some da grade
+ * agrupada sem ninguém notar. É a mesma razão de `tool-icons.test.mjs` existir
+ * para os ícones.
+ */
+const TOOL_CATEGORY: Record<ToolId, ToolCategory> = {
+  cutKeys: "keyframes",
+  delay: "keyframes",
+  ease: "keyframes",
+  reverseKeys: "keyframes",
+  reverseValues: "keyframes",
+  sendToEdge: "keyframes",
+  cloneKeys: "keyframes",
+  copyKeys: "keyframes",
+  pasteKeys: "keyframes",
+  timeController: "keyframes",
+  timeMarkerLoop: "keyframes",
+
+  rename: "layers",
+  reverseOrder: "layers",
+  anchor: "layers",
+  flip: "layers",
+  createNull: "layers",
+  parent: "layers",
+  fastEdit: "layers",
+
+  loopOut: "animation",
+  smooth: "animation",
+  wiggle: "animation",
+  flicker: "animation",
+  animateKinetic: "animation",
+  jump: "animation",
+  inertial: "animation",
+
+  lookAt: "spatial",
+  orbit: "spatial",
+  cylinder: "spatial",
+  cube: "spatial",
+  cameraTransition: "spatial",
+  parallax: "spatial",
+  parallaxFull: "spatial",
+
+  breakShape: "shapes",
+  shapeLibrary: "shapes",
+  trimPath: "shapes",
+  textBox: "shapes",
+  wordReveal: "animation",
+  variableMorph: "animation",
+  styleSwap: "animation",
+  verticalPulse: "effects",
+  effector: "shapes",
+
+  gradient: "effects",
+  wave: "effects",
+  tile: "effects",
+  glitch: "effects",
+  echo: "effects",
+  particles: "effects",
+  neon: "effects",
+  beat: "animation",
+
+  aiToVector: "project",
+  textToVector: "project",
+  texture: "project",
+  clean: "project"
+};
+
+const CATEGORY_NAME_KEY: Record<ToolCategory, MessageKey> = {
+  keyframes: "tools.category.keyframes",
+  layers: "tools.category.layers",
+  animation: "tools.category.animation",
+  spatial: "tools.category.spatial",
+  shapes: "tools.category.shapes",
+  effects: "tools.category.effects",
+  project: "tools.category.project"
+};
 
 const TOOLS: readonly ToolDefinition[] = [
   {
+    id: "wordReveal",
+    commandId: "ae.text.word-reveal",
+    nameKey: "tool.wordReveal.name",
+    descriptionKey: "tool.wordReveal.description",
+    render: (regions, i18n) => renderTextEffect("wordReveal", regions, i18n, state.busy),
+    disabledReason: (i18n) => textEffectsDisabledReason("wordReveal", "ae.text.word-reveal", i18n),
+    apply: (shell, i18n, logger, client) => applyTextEffect("wordReveal", "ae.text.word-reveal", shell, i18n, logger, client),
+    reset: () => resetTextEffect("wordReveal"),
+    load: refreshWordRevealControls,
+    loadLabelKey: "wordReveal.readControls"
+  },
+  {
+    id: "variableMorph",
+    commandId: "ae.text.variable-morph",
+    nameKey: "tool.variableMorph.name",
+    descriptionKey: "tool.variableMorph.description",
+    render: (regions, i18n) => renderTextEffect("variableMorph", regions, i18n, state.busy),
+    disabledReason: (i18n) => textEffectsDisabledReason("variableMorph", "ae.text.variable-morph", i18n),
+    apply: (shell, i18n, logger, client) => applyTextEffect("variableMorph", "ae.text.variable-morph", shell, i18n, logger, client),
+    load: refreshVariableMorphControls,
+    reset: () => resetTextEffect("variableMorph")
+  },
+  {
+    id: "styleSwap",
+    commandId: "ae.text.style-swap",
+    nameKey: "tool.styleSwap.name",
+    descriptionKey: "tool.styleSwap.description",
+    render: (regions, i18n) => renderTextEffect("styleSwap", regions, i18n, state.busy),
+    disabledReason: (i18n) => textEffectsDisabledReason("styleSwap", "ae.text.style-swap", i18n),
+    apply: (shell, i18n, logger, client) => applyTextEffect("styleSwap", "ae.text.style-swap", shell, i18n, logger, client),
+    reset: () => resetTextEffect("styleSwap")
+  },
+  {
+    id: "verticalPulse",
+    commandId: "ae.text.vertical-pulse",
+    nameKey: "tool.verticalPulse.name",
+    descriptionKey: "tool.verticalPulse.description",
+    render: (regions, i18n) => renderVerticalPulse(regions, i18n, state.busy, state.context?.compFrameRate ?? null),
+    disabledReason: verticalPulseDisabledReason,
+    apply: applyVerticalPulse,
+    reset: () => resetVerticalPulse(state.context?.compFrameRate ?? null),
+    load: refreshVerticalPulseControls,
+    loadLabelKey: "verticalPulse.readControls"
+  },
+  {
     id: "loopOut",
+    commandId: "ae.expression.loopout",
     nameKey: "tool.loopOut.name",
     descriptionKey: "tool.loopOut.description",
     render: renderLoopOut,
@@ -1068,6 +1287,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "smooth",
+    commandId: "ae.expression.smooth",
     nameKey: "tool.smooth.name",
     descriptionKey: "tool.smooth.description",
     render: renderSmooth,
@@ -1079,6 +1299,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "wiggle",
+    commandId: "ae.expression.wiggle",
     nameKey: "tool.wiggle.name",
     descriptionKey: "tool.wiggle.description",
     render: renderWiggle,
@@ -1090,6 +1311,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "flicker",
+    commandId: "ae.expression.flicker",
     nameKey: "tool.flicker.name",
     descriptionKey: "tool.flicker.description",
     render: renderFlicker,
@@ -1101,6 +1323,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "rename",
+    commandId: "ae.layer.rename",
     nameKey: "tool.rename.name",
     descriptionKey: "tool.rename.description",
     render: renderRename,
@@ -1115,6 +1338,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "reverseOrder",
+    commandId: "ae.layer.reverse-order",
     nameKey: "tool.reverseOrder.name",
     descriptionKey: "tool.reverseOrder.description",
     render: renderReverseOrder,
@@ -1129,6 +1353,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "anchor",
+    commandId: "ae.anchor.align",
     nameKey: "tool.anchor.name",
     descriptionKey: "tool.anchor.description",
     render: renderAnchor,
@@ -1143,6 +1368,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "cutKeys",
+    commandId: "ae.keys.cut",
     nameKey: "tool.cutKeys.name",
     descriptionKey: "tool.cutKeys.description",
     render: renderCutKeys,
@@ -1157,6 +1383,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "delay",
+    commandId: "ae.keys.delay",
     nameKey: "tool.delay.name",
     descriptionKey: "tool.delay.description",
     render: renderDelay,
@@ -1171,6 +1398,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "flip",
+    commandId: "ae.layer.flip",
     nameKey: "tool.flip.name",
     descriptionKey: "tool.flip.description",
     render: renderFlip,
@@ -1182,6 +1410,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "createNull",
+    commandId: "ae.layer.create-null",
     nameKey: "tool.createNull.name",
     descriptionKey: "tool.createNull.description",
     render: renderCreateNull,
@@ -1193,6 +1422,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "parent",
+    commandId: "ae.layer.parent",
     nameKey: "tool.parent.name",
     descriptionKey: "tool.parent.description",
     render: renderParent,
@@ -1206,6 +1436,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "textBox",
+    commandId: "ae.text.box",
     nameKey: "tool.textBox.name",
     descriptionKey: "tool.textBox.description",
     render: renderTextBox,
@@ -1217,6 +1448,10 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "ease",
+    commandId: "ae.keys.ease.apply",
+    // O clique abre o editor; o commandId identifica a aplicacao explicita.
+    // O gráfico de velocidade é o produto desta ferramenta — aplicar uma curva
+    // sem mostrá-la antes é justamente o que ninguém quer aqui.
     nameKey: "tool.ease.name",
     descriptionKey: "tool.ease.description",
     render: renderEase,
@@ -1228,6 +1463,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "aiToVector",
+    commandId: "ae.vector.ai-to-vector",
     nameKey: "tool.aiToVector.name",
     descriptionKey: "tool.aiToVector.description",
     render: renderAiToVector,
@@ -1237,6 +1473,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "textToVector",
+    commandId: "ae.vector.text-to-vector",
     nameKey: "tool.textToVector.name",
     descriptionKey: "tool.textToVector.description",
     render: renderTextToVector,
@@ -1246,6 +1483,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "particles",
+    commandId: "ae.effect.particles",
     nameKey: "tool.particles.name",
     descriptionKey: "tool.particles.description",
     render: renderParticles,
@@ -1255,6 +1493,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "texture",
+    commandId: "ae.asset.texture",
     nameKey: "tool.texture.name",
     descriptionKey: "tool.texture.description",
     render: renderTexture,
@@ -1264,15 +1503,17 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "clean",
+    commandId: "ae.project.clean",
     nameKey: "tool.clean.name",
     descriptionKey: "tool.clean.description",
     render: renderClean,
     disabledReason: cleanDisabledReason,
     apply: applyClean,
-    reset: () => { state.clean = { ...DEFAULT_CLEAN }; }
+    reset: () => { state.clean = { scanToken: null, findings: [], selectedItemIds: [] }; }
   },
   {
     id: "reverseKeys",
+    commandId: "ae.keys.reverse",
     nameKey: "tool.reverseKeys.name",
     descriptionKey: "tool.reverseKeys.description",
     render: renderReverseKeys,
@@ -1282,6 +1523,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "reverseValues",
+    commandId: "ae.keys.reverse-values",
     nameKey: "tool.reverseValues.name",
     descriptionKey: "tool.reverseValues.description",
     render: renderReverseValues,
@@ -1291,6 +1533,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "sendToEdge",
+    commandId: "ae.keys.send-to-edge",
     nameKey: "tool.sendToEdge.name",
     descriptionKey: "tool.sendToEdge.description",
     render: renderSendToEdge,
@@ -1300,6 +1543,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "neon",
+    commandId: "ae.style.neon",
     nameKey: "tool.neon.name",
     descriptionKey: "tool.neon.description",
     render: renderNeon,
@@ -1308,7 +1552,18 @@ const TOOLS: readonly ToolDefinition[] = [
     reset: () => { state.neon = { ...DEFAULT_NEON }; }
   },
   {
+    id: "beat",
+    commandId: "ae.audio.beat",
+    nameKey: "tool.beat.name",
+    descriptionKey: "tool.beat.description",
+    render: renderBeat,
+    disabledReason: beatDisabledReason,
+    apply: applyBeat,
+    reset: () => {}
+  },
+  {
     id: "cloneKeys",
+    commandId: "ae.keys.clone",
     nameKey: "tool.cloneKeys.name",
     descriptionKey: "tool.cloneKeys.description",
     render: renderCloneKeys,
@@ -1318,6 +1573,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "timeController",
+    commandId: "ae.time.controller",
     nameKey: "tool.timeController.name",
     descriptionKey: "tool.timeController.description",
     render: renderTimeController,
@@ -1327,6 +1583,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "animateKinetic",
+    commandId: "ae.animate.kinetic",
     nameKey: "tool.animateKinetic.name",
     descriptionKey: "tool.animateKinetic.description",
     render: renderAnimateKinetic,
@@ -1336,6 +1593,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "inertial",
+    commandId: "ae.animate.inertial",
     nameKey: "tool.inertial.name",
     descriptionKey: "tool.inertial.description",
     render: renderInertial,
@@ -1347,6 +1605,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "jump",
+    commandId: "ae.animate.jump",
     nameKey: "tool.jump.name",
     descriptionKey: "tool.jump.description",
     render: renderJump,
@@ -1358,6 +1617,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "copyKeys",
+    commandId: "ae.keys.copy",
     nameKey: "tool.copyKeys.name",
     descriptionKey: "tool.copyKeys.description",
     render: renderCopyKeys,
@@ -1369,6 +1629,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "pasteKeys",
+    commandId: "ae.keys.paste",
     nameKey: "tool.pasteKeys.name",
     descriptionKey: "tool.pasteKeys.description",
     render: renderPasteKeys,
@@ -1380,17 +1641,23 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "lookAt",
+    commandId: "ae.3d.look-at",
     nameKey: "tool.lookAt.name",
     descriptionKey: "tool.lookAt.description",
     render: renderLookAt,
     disabledReason: lookAtDisabledReason,
     apply: applyLookAt,
     reset: () => {
-      state.lookAt = { ...DEFAULT_LOOK_AT };
+      state.lookAt = {
+        ...DEFAULT_LOOK_AT,
+        offsetOrientation: [...DEFAULT_LOOK_AT.offsetOrientation],
+        constrainAxes: { ...DEFAULT_LOOK_AT.constrainAxes }
+      };
     }
   },
   {
     id: "orbit",
+    commandId: "ae.3d.orbit",
     nameKey: "tool.orbit.name",
     descriptionKey: "tool.orbit.description",
     render: renderOrbit,
@@ -1402,6 +1669,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "breakShape",
+    commandId: "ae.shape.break",
     nameKey: "tool.breakShape.name",
     descriptionKey: "tool.breakShape.description",
     render: renderBreakShape,
@@ -1413,6 +1681,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "effector",
+    commandId: "ae.rig.effector",
     nameKey: "tool.effector.name",
     descriptionKey: "tool.effector.description",
     render: renderEffector,
@@ -1424,6 +1693,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "cameraTransition",
+    commandId: "ae.camera.transition",
     nameKey: "tool.cameraTransition.name",
     descriptionKey: "tool.cameraTransition.description",
     render: renderCameraTransition,
@@ -1435,6 +1705,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "cylinder",
+    commandId: "ae.3d.cylinder",
     nameKey: "tool.cylinder.name",
     descriptionKey: "tool.cylinder.description",
     render: renderCylinder,
@@ -1446,6 +1717,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "cube",
+    commandId: "ae.3d.cube",
     nameKey: "tool.cube.name",
     descriptionKey: "tool.cube.description",
     render: renderCube,
@@ -1456,7 +1728,16 @@ const TOOLS: readonly ToolDefinition[] = [
     }
   },
   {
+    id: "gradient",
+    commandId: "ae.effect.gradient",
+    nameKey: "tool.gradient.name",
+    descriptionKey: "tool.gradient.description",
+    editor: "gradient",
+    disabledReason: () => state.busy ? state.busyReason : null
+  },
+  {
     id: "wave",
+    commandId: "ae.effect.wave",
     nameKey: "tool.wave.name",
     descriptionKey: "tool.wave.description",
     render: renderWave,
@@ -1468,6 +1749,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "tile",
+    commandId: "ae.effect.tile",
     nameKey: "tool.tile.name",
     descriptionKey: "tool.tile.description",
     render: renderTile,
@@ -1479,6 +1761,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "glitch",
+    commandId: "ae.effect.glitch",
     nameKey: "tool.glitch.name",
     descriptionKey: "tool.glitch.description",
     render: renderGlitch,
@@ -1490,6 +1773,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "echo",
+    commandId: "ae.effect.echo",
     nameKey: "tool.echo.name",
     descriptionKey: "tool.echo.description",
     render: renderEcho,
@@ -1500,29 +1784,21 @@ const TOOLS: readonly ToolDefinition[] = [
     }
   },
   {
-    id: "parallaxFull",
-    nameKey: "tool.parallaxFull.name",
-    descriptionKey: "tool.parallaxFull.description",
-    render: renderParallaxFull,
+    id: "parallax",
+    commandId: "ae.animate.parallax.quick",
+    nameKey: "tool.parallax.name",
+    descriptionKey: "tool.parallax.description",
+    render: renderUnifiedParallax,
     disabledReason: parallaxFullDisabledReason,
     apply: applyParallaxFull,
     reset: () => {
+      state.parallax = { ...DEFAULT_PARALLAX };
       state.parallaxFull = { ...DEFAULT_PARALLAX_FULL };
     }
   },
   {
-    id: "parallax",
-    nameKey: "tool.parallax.name",
-    descriptionKey: "tool.parallax.description",
-    render: renderParallax,
-    disabledReason: parallaxDisabledReason,
-    apply: applyParallax,
-    reset: () => {
-      state.parallax = { ...DEFAULT_PARALLAX };
-    }
-  },
-  {
     id: "fastEdit",
+    commandId: "ae.comp.fast-edit",
     nameKey: "tool.fastEdit.name",
     descriptionKey: "tool.fastEdit.description",
     render: renderFastEdit,
@@ -1539,6 +1815,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "shapeLibrary",
+    commandId: "ae.shape.library",
     nameKey: "tool.shapeLibrary.name",
     descriptionKey: "tool.shapeLibrary.description",
     render: renderShapeLibrary,
@@ -1550,6 +1827,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "trimPath",
+    commandId: "ae.shape.trim-path",
     nameKey: "tool.trimPath.name",
     descriptionKey: "tool.trimPath.description",
     render: renderTrimPath,
@@ -1561,6 +1839,7 @@ const TOOLS: readonly ToolDefinition[] = [
   },
   {
     id: "timeMarkerLoop",
+    commandId: "ae.time.marker-loop",
     nameKey: "tool.timeMarkerLoop.name",
     descriptionKey: "tool.timeMarkerLoop.description",
     render: renderTimeMarkerLoop,
@@ -1571,19 +1850,24 @@ const TOOLS: readonly ToolDefinition[] = [
 ];
 
 const VIEWS: ShellView[] = [
-  { id: "context", labelKey: "nav.context", titleKey: "view.context.title" },
-  { id: "tools", labelKey: "nav.tools", titleKey: "view.tools.title" },
-  { id: "system", labelKey: "nav.system", titleKey: "view.system.title" },
-  { id: "diagnostics", labelKey: "nav.diagnostics", titleKey: "view.diagnostics.title" },
+  // Entrada de busca, favoritos e ferramentas recentes; Quick preserva a view.
+  { id: "home", labelKey: "library.browse", titleKey: "view.home.title" },
+  { id: "ease", primary: true, labelKey: "tool.ease.name", titleKey: "tool.ease.name" },
+  { id: "presets", labelKey: "library.presets", titleKey: "library.presets" },
+  { id: "tools", labelKey: "library.edit", titleKey: "view.tools.title" },
+  { id: "context", utilityOnly: true, labelKey: "nav.context", titleKey: "view.context.title" },
+  { id: "system", utilityOnly: true, labelKey: "nav.system", titleKey: "view.system.title" },
+  { id: "diagnostics", utilityOnly: true, labelKey: "nav.diagnostics", titleKey: "view.diagnostics.title" },
   { id: "settings", labelKey: "nav.settings", titleKey: "view.settings.title" }
 ];
 
 /** Versão do plugin, embutida no bundle para aparecer no bundle de suporte. */
-const PLUGIN_VERSION = "0.1.0";
+const PLUGIN_VERSION = "0.2.0";
 
 const state: {
   context: ContextData | null;
   capabilities: HostCapabilities | null;
+  _lastError: string | null;
   lastError: string | null;
   busy: boolean;
   busyReason: string | null;
@@ -1653,7 +1937,12 @@ const state: {
 } = {
   context: null,
   capabilities: null,
-  lastError: null,
+  _lastError: null,
+  get lastError() { return this._lastError; },
+  set lastError(value: string | null) {
+    this._lastError = value;
+    if (value) globalFeedback?.reportError(value);
+  },
   busy: false,
   busyReason: null,
   loopOut: { ...DEFAULT_LOOP_OUT },
@@ -1688,7 +1977,11 @@ const state: {
   copyKeys: { ...DEFAULT_COPY_KEYS },
   trimPath: { ...DEFAULT_TRIM_PATH },
   shapeLibrary: { ...DEFAULT_SHAPE_LIBRARY },
-  lookAt: { ...DEFAULT_LOOK_AT },
+  lookAt: {
+    ...DEFAULT_LOOK_AT,
+    offsetOrientation: [...DEFAULT_LOOK_AT.offsetOrientation],
+    constrainAxes: { ...DEFAULT_LOOK_AT.constrainAxes }
+  },
   orbit: { ...DEFAULT_ORBIT },
   echo: { ...DEFAULT_ECHO },
   fastEdit: { ...DEFAULT_FAST_EDIT },
@@ -1734,19 +2027,45 @@ function start(): void {
   // O adapter precisa do logger antes de o shell existir: ele reporta falha de
   // transporte, e uma falha logo no primeiro comando não pode depender de a
   // interface já estar montada.
-  const adapter = createAeHostAdapter(logger);
+  const adapter = createAeHostAdapter(logger, () => {
+    const locale = panelPreferences.snapshot().locale;
+    return locale === "host" ? undefined : locale;
+  });
 
   if (adapter) {
     // "pt_BR", com underscore — formato medido no After Effects 26.3, não
     // suposto. `normalizeLocale` cuida da conversão.
-    i18n.setLocale(adapter.uiLocale());
+    panelHostLocale = adapter.uiLocale();
     logger.setHost("after-effects");
+
+    // Moti.on Theme Sync: Inject native highlight color and typography
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const csInterface = new (window as any).CSInterface();
+      const applyTheme = () => {
+        const env = csInterface.getHostEnvironment();
+        if (env && env.appSkinInfo) {
+          const rgb = env.appSkinInfo.systemHighlightColor;
+          if (rgb) {
+            const highlightHex = `#${Math.round(rgb.red).toString(16).padStart(2, '0')}${Math.round(rgb.green).toString(16).padStart(2, '0')}${Math.round(rgb.blue).toString(16).padStart(2, '0')}`;
+            document.documentElement.style.setProperty('--focus-ring', highlightHex);
+          }
+          document.documentElement.style.setProperty('--ch-font-family', '"Adobe Clean", sans-serif');
+        }
+      };
+      applyTheme();
+      csInterface.addEventListener("com.adobe.csxs.events.ThemeColorChanged", applyTheme);
+    } catch { /* Ignored */ }
   }
+
+  const preferredLocale = panelPreferences.snapshot().locale;
+  i18n.setLocale(preferredLocale === "host" ? panelHostLocale : preferredLocale);
 
   // O idioma acessível precisa acompanhar o catálogo realmente selecionado.
   // Deixar o `lang` fixo em pt-BR faz leitores de tela pronunciarem inglês com
   // regras de português quando o After Effects está em en-US.
   document.documentElement.lang = i18n.locale();
+  document.documentElement.setAttribute("data-runtime", "cep");
 
   const shell = createShell({
     mount,
@@ -1754,9 +2073,28 @@ function start(): void {
     i18n,
     subtitleKey: "app.subtitle.afterEffects",
     views: VIEWS,
+    layout: "library",
+    toolContext: () => {
+      const tool = TOOLS.find(item => item.id === state.activeTool);
+      return tool ? i18n.t(tool.nameKey) : null;
+    },
+    onStatus: (message, status) => {
+      if (!feedbackReady || !status) return;
+      if (status === "error" && !state.lastError) globalFeedback?.reportError(message);
+      globalFeedback?.onStatus({ message, state: status });
+    },
     onRender: (viewId, regions) =>
       renderView(viewId, regions, { i18n, logger, adapter, motionPreference })
   });
+
+  globalFeedback = createFeedbackController(document, {
+    id: "app-toasts",
+    labels: () => i18n.locale() === "pt-BR"
+      ? { region: "Notificações", dismiss: "Fechar", queued: n => `${n} avisos aguardando`, success: "Concluído", error: "Erro", warning: "Atenção", info: "Informação" }
+      : { region: "Notifications", dismiss: "Dismiss", queued: n => `${n} queued notifications`, success: "Complete", error: "Error", warning: "Warning", info: "Information" }
+  });
+  mount.appendChild(globalFeedback.element);
+  window.addEventListener("unload", () => { disposeView?.(); globalFeedback?.dispose(); });
 
   shell.observeWidth(window);
   logger.info("panel.started", { command: "panel.started" });
@@ -1766,7 +2104,12 @@ function start(): void {
     return;
   }
 
-  void refreshContext(shell, i18n, logger, adapter.client);
+  void refreshContext(shell, i18n, logger, adapter.client).finally(() => { feedbackReady = true; });
+
+  // A partir daqui o painel se mantem sozinho: trocar de composicao ou de
+  // selecao na timeline chega aqui sem o usuario apertar nada.
+  const pararWatch = startContextWatch(shell, logger, adapter.client);
+  window.addEventListener("unload", pararWatch);
 }
 
 interface Wiring {
@@ -1792,89 +2135,334 @@ interface Wiring {
  * `state.toolQuery` sobrevive ao redesenho para o filtro continuar valendo
  * quando a tela volta da ferramenta para a grade.
  */
-function renderToolBrowser(regions: RenderRegions, i18n: I18n, shell: Shell): void {
-  const grade = toolGrid(
-    document,
-    TOOLS.map((item) =>
-      toolTile(document, {
-        id: item.id,
-        label: i18n.t(item.nameKey),
-        description: i18n.t(item.descriptionKey),
-        onSelect: () => {
-          state.activeTool = item.id;
-          state.lastError = null;
-          shell.rerender();
-          // Depois do rerender: a ferramenta já está desenhada quando a carga
-          // começa, então o estado ocupado aparece no lugar certo.
-          void item.load?.();
-        }
-      })
-    )
-  );
+/**
+ * Monta o `QuickContext` do contrato a partir do que o painel já leu do host.
+ *
+ * `selectionKinds` e `existingRigIdsInSelection` saem vazios: o
+ * `ae.context.read` ainda não classifica tipo de camada nem lê metadata de rig.
+ * Devolver vazio é honesto — o derivador trata os dois como "não sei", e os
+ * perfis atuais não dependem deles. No dia em que um perfil depender, o campo
+ * precisa existir de verdade antes, e não ser preenchido com chute aqui.
+ */
+function quickContextFromState(context: ContextData): QuickContext {
+  return {
+    host: "after-effects",
+    hostVersion: context.hostVersion ?? "0",
+    fps: context.compFrameRate ?? 30,
+    compWidth: context.compWidth ?? 1920,
+    compHeight: context.compHeight ?? 1080,
+    compDurationSeconds: context.compDuration ?? 0,
+    currentTimeSeconds: context.currentTime ?? 0,
+    workAreaStart: context.workAreaStart ?? 0,
+    workAreaDuration: context.workAreaDuration ?? context.compDuration ?? 0,
+    selectionCount: context.selectionPropertyCount,
+    // Camadas e propriedades são contagens diferentes, e as ferramentas de
+    // operação dependem da primeira: quem seleciona duas camadas e clica em Null
+    // tem zero propriedades selecionadas.
+    selectionLayerCount: context.selectionLayerCount,
+    selectionKinds: [],
+    selectionHasKeyframes: context.selectionHasKeyframes,
+    selectionHasExpressions: context.selectionHasExpressions,
+    selectionIs3D: context.selectionIs3D,
+    averageLayerDurationSeconds: context.averageLayerDurationSeconds ?? 0,
+    existingRigIdsInSelection: []
+  };
+}
 
-  // As células vêm da própria `toolGrid`, e não de uma montagem paralela aqui:
-  // a classe e o `role=listitem` de cada célula pertencem à primitiva, e uma
-  // segunda cópia delas sairia de sincronia na primeira mudança.
-  const celulas = Array.from(grade.children) as HTMLElement[];
-  const itens = TOOLS.map((item, indice) => ({
-    celula: celulas[indice],
-    // Busca por nome e por descrição: quem procura "brilho" precisa achar o
-    // Neon mesmo sem saber que a ferramenta se chama Neon. O separador nulo
-    // impede que o fim de um nome e o começo da descrição formem um casamento
-    // que nenhum dos dois textos contém.
-    texto: `${i18n.t(item.nameKey)}\u0000${i18n.t(item.descriptionKey)}`.toLowerCase()
-  }));
-
-  const contagem = document.createElement("div");
-  contagem.className = "ch-field__description";
-  // `status` e não `alert`: a contagem muda a cada tecla e interromper o leitor
-  // de tela a cada letra tornaria o campo inutilizável.
-  contagem.setAttribute("role", "status");
-  contagem.setAttribute("aria-live", "polite");
-
-  const vazio = notice(document, i18n.t("tools.search.empty"));
-  vazio.hidden = true;
-
-  function aplicarFiltro(bruto: string): void {
-    const consulta = bruto.trim().toLowerCase();
-    let visiveis = 0;
-    for (const { celula, texto } of itens) {
-      if (!celula) continue;
-      const casa = consulta === "" || texto.indexOf(consulta) >= 0;
-      celula.hidden = !casa;
-      if (casa) visiveis += 1;
+/**
+ * Aplica o preset de fábrica da ferramenta direto na seleção.
+ *
+ * É o coração do produto: um clique, e a propriedade selecionada sai animada com
+ * os sliders já no Effect Controls. Nenhuma tela intermediária — a configuração
+ * fina acontece nos próprios controles, dentro do After Effects.
+ *
+ * `derive` é uma função pura do contexto: a amplitude sai da resolução da
+ * composição, a duração sai do fps. Por isso o preset se comporta igual numa
+ * comp 1080p e numa 4K, sem o usuário ajustar nada.
+ */
+async function applyQuickPreset(
+  tool: ToolDefinition, commandId: string, profile: Readonly<Pick<QuickProfile, "derive" | "liveControls">>,
+  shell: Shell, i18n: I18n, logger: MotionLogger, client: Client,
+  selectedPreset?: { name: string; recentId: string }
+): Promise<void> {
+  if (state.busy) return;
+  state.lastError = null;
+  const name = selectedPreset?.name ?? i18n.t(tool.nameKey);
+  setBusy(shell, true, i18n.t("status.applyingQuick", { tool: name }));
+  shell.setStatus(i18n.t("status.applyingQuick", { tool: name }), "busy");
+  try {
+    // Refresh defaults at click time; the command revalidates the real selection.
+    const current = await client.execute<ContextData>("ae.context.read");
+    logger.recordResponse("ae.context.read", current);
+    if (!current.ok || !current.data) { reportFailure(shell, i18n, current); return; }
+    state.context = current.data;
+    if (!current.data.isComposition) {
+      state.lastError = i18n.t("message.quickNoActiveComp");
+      shell.setStatus(state.lastError, "error");
+      return;
     }
-    vazio.hidden = visiveis > 0;
-    // A âncora de teclado da grade precisa voltar para o primeiro ladrilho que
-    // ainda aparece: sem isto, filtrar até esconder o ladrilho que carrega
-    // `tabindex="0"` tira a grade inteira da ordem de Tab.
-    syncToolGridRoving(grade);
-    contagem.textContent =
-      consulta === ""
-        ? ""
-        : i18n.t("tools.search.count", { count: visiveis, total: itens.length });
-  }
-
-  regions.content.appendChild(
-    searchField(document, {
-      id: "tools-search",
-      label: i18n.t("tools.search"),
-      value: state.toolQuery,
-      placeholder: i18n.t("tools.search.placeholder"),
-      onInput: (value) => {
-        state.toolQuery = value;
-        aplicarFiltro(value);
+    let args = profile.derive ? profile.derive(quickContextFromState(current.data)) : {};
+    let preserveMorphSelection = false;
+    if (commandId === "ae.text.word-reveal") {
+      const selected = await client.execute("ae.text.word-reveal.read", {});
+      logger.recordResponse("ae.text.word-reveal.read", selected);
+      if (!selected.ok) { reportFailure(shell, i18n, selected); return; }
+      if (!isWordRevealReadData(selected.data)) { shell.setStatus(i18n.t("wordReveal.readInvalid"), "error"); return; }
+      hydrateWordReveal(selected.data);
+      if (selected.data.controls) args = { ...selected.data.controls, renderer: selected.data.renderer, action: "apply" };
+    }
+    if (commandId === "ae.text.variable-morph") {
+      const selected = await client.execute("ae.text.variable-morph.read", {});
+      logger.recordResponse("ae.text.variable-morph.read", selected);
+      if (!selected.ok) { reportFailure(shell, i18n, selected); return; }
+      if (!isVariableMorphReadData(selected.data)) { shell.setStatus(i18n.t("proximityMorph.readInvalid"), "error"); return; }
+      hydrateVariableMorph(selected.data, Math.max(1, Math.min(5000, 250 * (current.data.compHeight ?? 1080) / 1080)));
+      if (selected.data.controls) args = variableMorphCompatibleArgs({ ...selected.data.controls, renderer: selected.data.renderer ?? "auto", action: "apply" }, selected.data.rigVersion);
+      preserveMorphSelection = selected.data.rigVersion > 0;
+    }
+    if (commandId === "ae.text.vertical-pulse") {
+      const selected = await client.execute("ae.text.vertical-pulse.read", {});
+      logger.recordResponse("ae.text.vertical-pulse.read", selected);
+      if (!selected.ok) { reportFailure(shell, i18n, selected); return; }
+      if (!isVerticalPulseReadData(selected.data)) { shell.setStatus(i18n.t("verticalPulse.readInvalid"), "error"); return; }
+      hydrateVerticalPulse(selected.data, current.data.compFrameRate);
+      const blocked = verticalPulseReadDisabledReason(i18n, current.data.compFrameRate);
+      if (blocked) { shell.setStatus(blocked, "error"); return; }
+      args = selected.data.controls ? { ...selected.data.controls, renderer: selected.data.renderer ?? "legacy" }
+        : { ...pulsePresetArgs("impact", current.data.compFrameRate) };
+    }
+    const response = await client.execute(commandId, args as Record<string, unknown>,
+      { mode: "quick", emitLiveControls: true, preserveSelection: commandId === "ae.text.variable-morph" ? preserveMorphSelection : commandId !== "ae.text.style-swap" });
+    logger.recordResponse(commandId, response);
+    if (!response.ok) { reportFailure(shell, i18n, response); return; }
+    if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+    panelPreferences.recordUse(selectedPreset?.recentId ?? tool.id);
+    if (!selectedPreset) state.activeTool = tool.id;
+    const data = response.data as { appliedCount?: number; unchangedCount?: number; skippedCount?: number; mode?: string; status?: string } | null;
+    const reused = data?.appliedCount === 0 && (data?.unchangedCount ?? 0) > 0;
+    if (commandId === "ae.3d.orbit") {
+      const draft = { ...args };
+      delete draft["applyPreset"];
+      state.orbit = { ...state.orbit, ...draft };
+      shell.setStatus(i18n.t(state.orbit.bake ? "message.orbitBaked" : "message.orbitApplied"), "ok");
+    } else if (commandId === "ae.keys.ease.apply") {
+      shell.setStatus(i18n.t("message.easeApplied", { count: data?.appliedCount ?? 0 }),
+        data?.appliedCount === 0 ? "error" : "ok");
+    } else if (commandId === "ae.animate.parallax.quick") {
+      shell.setStatus(i18n.t(data?.status === "reused" ? "message.parallaxReused" : data?.mode === "adjust" ? "message.parallaxAdjusted" : "message.parallaxCreated"), "ok");
+    } else if (commandId === "ae.text.style-swap") shell.setStatus(i18n.t("textEffects.styleSwap.applied"), "ok");
+    else shell.setStatus(i18n.t(reused ? "message.quickReused" : profile.liveControls.length > 0 ? "message.quickApplied" : "message.quickAppliedOperation", { tool: name }), "ok");
+    if (commandId === "ae.text.word-reveal") {
+      const selected = await client.execute("ae.text.word-reveal.read", {});
+      logger.recordResponse("ae.text.word-reveal.read", selected);
+      if (selected.ok && isWordRevealReadData(selected.data)) hydrateWordReveal(selected.data);
+    }
+    if (commandId === "ae.text.variable-morph") {
+      const selected = await client.execute("ae.text.variable-morph.read", {});
+      logger.recordResponse("ae.text.variable-morph.read", selected);
+      if (selected.ok && isVariableMorphReadData(selected.data)) hydrateVariableMorph(selected.data);
+    }
+    if (commandId === "ae.text.vertical-pulse") {
+      const selected = await client.execute("ae.text.vertical-pulse.read", {});
+      logger.recordResponse("ae.text.vertical-pulse.read", selected);
+      if (selected.ok && isVerticalPulseReadData(selected.data)) {
+        hydrateVerticalPulse(selected.data, current.data.compFrameRate);
+        verticalPulseReadContextKey = contextFingerprint(state.context);
       }
-    })
-  );
-  regions.content.appendChild(contagem);
-  regions.content.appendChild(vazio);
-  regions.content.appendChild(grade);
+    }
+  } catch {
+    state.lastError = i18n.t("message.failureWithoutReason");
+    shell.setStatus(state.lastError, "error");
+  } finally { setBusy(shell, false); }
+}
 
-  aplicarFiltro(state.toolQuery);
+/**
+ * Liga o navegador de ferramentas compartilhado ao estado e ao catálogo deste
+ * painel.
+ *
+ * O componente vive em `@motion/ui-core` e não sabe nada de `state`, de
+ * `MessageKey` nem do host: recebe textos já traduzidos e devolve DOM. É o que
+ * o torna testável de verdade — `main.ts` monta o shell no import e não pode
+ * ser carregado por um teste, então enquanto a lógica morava aqui só dava para
+ * verificá-la lendo o próprio código-fonte com expressão regular.
+ */
+async function applyLibraryCommand(action: "apply" | "phase-apply" | "remove" | "bake" | "camera-transition", args: Record<string, unknown>, recentId: string,
+  shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  const pt = i18n.locale() === "pt-BR";
+  setBusy(shell, true); state.lastError = null;
+  shell.setStatus(pt ? "Atualizando preset…" : "Updating preset…", "busy");
+  try {
+    const command = `ae.presets.${action}`;
+    const response = await client.execute(command, args, { preserveSelection: true });
+    logger.recordResponse(command, response);
+    if (!response.ok) {
+      state.lastError = response.error?.message || (pt ? "Não foi possível aplicar o preset." : "Unable to apply preset.");
+      shell.setStatus(state.lastError, "error"); return;
+    }
+    if (recentId) panelPreferences.recordUse(recentId);
+    const count = Number((response.data as { appliedCount?: number } | null)?.appliedCount ?? 0);
+    // setBusy(false) recreates the workspace; choose Edit before that render so
+    // its fresh inspection loads the values actually applied in After Effects.
+    if (count > 0 && (action === "apply" || action === "phase-apply" || action === "camera-transition")) presetNavigation.view = "edit";
+    // Removing a managed preset returns to the browser context retained before
+    // application, including the selected card, filters and scroll position.
+    if (count > 0 && action === "remove") presetNavigation.view = "browse";
+    const message = action === "camera-transition" && count ? pt ? "Transição pronta. O marcador CUT indica o corte." : "Transition ready. The CUT marker marks the cut." : count ? pt ? action === "remove" ? "Preset removido da seleção." : action === "bake" ? "Animação convertida em keyframes." : "Preset aplicado. Ajuste na aba Editar." : action === "remove" ? "Preset removed." : action === "bake" ? "Animation baked to keyframes." : "Preset applied. Adjust in the Edit tab." : pt ? "Nenhum preset gerenciado na seleção." : "No managed preset in selection.";
+    shell.setStatus(message, count ? "ok" : "busy");
+    if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+  } catch { shell.setStatus(i18n.t("message.failureWithoutReason"), "error"); }
+  finally { setBusy(shell, false); }
+}
+
+async function applyQuickAction(action: QuickAction, shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  const name = quickActionName(action, i18n.locale());
+  state.lastError = null;
+  setBusy(shell, true, i18n.t("status.applyingQuick", { tool: name }));
+  shell.setStatus(i18n.t("status.applyingQuick", { tool: name }), "busy");
+  try {
+    const command = action === "save-frame" ? "ae.quick-tools.save-frame" : "ae.quick-tools.apply";
+    const response = await client.execute(command, { action }, { mode: "quick", emitLiveControls: false, preserveSelection: true });
+    logger.recordResponse(command, response);
+    if (!response.ok) { reportFailure(shell, i18n, response); return; }
+    const data = response.data as { changedItems: number; unchangedItems: number; outputPath?: string };
+    const message = data.outputPath ? `${name}: ${data.outputPath}`
+      : i18n.t(data.unchangedItems && !data.changedItems ? "message.quickReused" : "message.quickAppliedOperation", { tool: name });
+    shell.setStatus(message, "ok");
+    if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+    const current = await client.execute<ContextData>("ae.context.read");
+    logger.recordResponse("ae.context.read", current);
+    if (current.ok && current.data) state.context = current.data;
+  } catch {
+    state.lastError = i18n.t("message.failureWithoutReason");
+    shell.setStatus(state.lastError, "error");
+  } finally { setBusy(shell, false); }
+}
+
+function renderToolBrowser(
+  regions: RenderRegions, i18n: I18n, shell: Shell, logger: MotionLogger, client: Client
+): void {
+  regions.content.classList.add("ch-browser-body");
+  regions.content.parentElement?.setAttribute("data-browser", "true");
+  const anchor = createElement(document, "section", "ch-quick-anchor");
+  anchor.setAttribute("aria-label", i18n.t("tool.anchor.name"));
+  const grid = anchorGrid(document, {
+    value: "", disabled: state.busy,
+    labels: ANCHOR_GRID.map(({ ponto, rotulo }) => ({ value: ponto, label: i18n.t(rotulo) })),
+    onSelect: point => {
+      if (state.busy) return;
+      state.anchor = { ...state.anchor, mode: "normal", gridPoint: point as AnchorGridPoint };
+      void applyAnchor(shell, i18n, logger, client);
+    }
+  });
+  grid.id = "library-anchor-grid";
+  anchor.appendChild(grid);
+  const edit = (tool: ToolDefinition): void => {
+    state.activeTool = tool.id;
+    state.lastError = null;
+    if (shell.activeView() === "tools") shell.rerender();
+    else shell.navigate("tools");
+    void tool.load?.();
+  };
+  const quickOptions = () => ({ locale: i18n.locale(), busy: state.busy,
+    hasComp: Boolean(state.context?.isComposition), selectionCount: state.context?.selectionLayerCount ?? 0 });
+  const quickActions = createQuickActions(document, {
+    ...quickOptions(), onAction: action => { void applyQuickAction(action, shell, i18n, logger, client); }
+  });
+  anchor.appendChild(quickActions);
+  const dock = createQuickDock(document, {
+    content: anchor, locale: i18n.locale(), pinned: panelPreferences.snapshot().quickDockPinned,
+    onPinChange: pinned => panelPreferences.setQuickDockPinned(pinned),
+    onHeightChange: height => document.documentElement.style.setProperty("--ch-feedback-bottom", `${height + 38}px`)
+  });
+
+  const icons = ["ease", "reverseOrder", "wiggle", "cameraTransition", "shapeLibrary", "neon", "context"];
+  const libraryItems = (): LibraryItem[] => TOOLS.filter(tool => !["ease", "cloneKeys", "reverseKeys", "reverseValues", "sendToEdge"].includes(tool.id)).map(tool => {
+      const profile = tool.commandId ? getQuickProfile(tool.commandId) ?? operationQuickProfile(tool.id) : undefined;
+      const quick = Boolean(tool.id !== "beat" && tool.id !== "ease" && profile && !getDescriptor(tool.commandId ?? "")?.destructive);
+      return {
+        id: tool.id, name: i18n.t(tool.nameKey), description: i18n.t(tool.descriptionKey),
+        aliases: TOOL_ALIASES[tool.id] ?? tool.id, category: TOOL_CATEGORY[tool.id],
+        interaction: tool.id === "anchor" ? "direct-control" : quick ? "quick" : "configure",
+        reason: tool.id === "ease" || tool.id === "anchor" ? (state.busy ? state.busyReason : null) : tool.disabledReason(i18n),
+        edit: () => edit(tool),
+        run: () => {
+          if (tool.id === "anchor") { dock.expandAndFocus(); return; }
+          if (profile && tool.commandId) void applyQuickPreset(tool, tool.commandId, profile, shell, i18n, logger, client);
+        }
+      };
+    });
+  const library = createQuickLibrary(document, {
+    locale: i18n.locale(), navigation: libraryNavigation, preferences: panelPreferences, anchor: dock.element,
+    categories: TOOL_CATEGORIES.map((id, index) => ({ id, name: i18n.t(CATEGORY_NAME_KEY[id]), icon: icons[index] ?? "tools" })),
+    onNavigate: () => { state.toolQuery = libraryNavigation.query; panelPreferences.setCategory(libraryNavigation.category); },
+    items: libraryItems()
+  });
+  refreshLibrary = () => {
+    library.update(libraryItems());
+    updateQuickActions(quickActions, quickOptions());
+    for (const node of grid.querySelectorAll<HTMLButtonElement>("button")) {
+      node.disabled = state.busy || !state.context?.isComposition || !state.context.selectionLayerCount;
+      node.setAttribute("aria-disabled", String(node.disabled));
+    }
+    dock.update({ ...quickOptions(), contextKey: [state.context?.activeItemName, state.context?.selectionSignature, state.context?.selectionLayerCount].join("|"), busy: state.busy });
+    shell.refreshChrome();
+  };
+  disposeView = () => { library.dispose(); dock.dispose(); refreshLibrary = null; document.documentElement.style.setProperty("--ch-feedback-bottom", "38px"); };
+  regions.content.appendChild(library.element);
+  refreshLibrary();
+
+}
+
+const TOOL_ALIASES: Partial<Record<ToolId, string>> = {
+  wordReveal: "word box reveal palavras caixas texto text revelacao",
+  variableMorph: "morph morphing proximity proximidade variable font fonte variavel peso italico",
+  styleSwap: "text swapping font swap troca fontes estilos texto",
+  verticalPulse: "pulso vertical de texto texto glow brilho rasgo distorcao pulse vertical text pulse stretched text eletrico plasma liquido ruptura",
+  anchor: "ancora anchor point pivot pivo", ease: "ease easing suavizar curva bezier",
+  wiggle: "wiggle tremer oscilacao shake", flicker: "flicker piscar opacidade",
+  smooth: "smooth suavizar expressao", createNull: "null nulo controlador",
+  reverseOrder: "reverse layers order inverter ordem", loopOut: "loop repeat repetir",
+  cameraTransition: "camera movimento transicao", timeController: "time remap tempo"
+};
+
+/** Adapt existing editor drafts to commands that perform an immediate operation.
+ * Rig generators without a reusable-instance contract stay in their editor. */
+function operationQuickProfile(id: ToolId): Pick<QuickProfile, "derive" | "liveControls"> | undefined {
+  const factories: Partial<Record<ToolId, NonNullable<QuickProfile["derive"]>>> = {
+    wordReveal: context => ({ ...WORD_REVEAL_DEFAULTS,
+      durationFrames: Math.max(4, Math.min(180, Math.round(context.fps * 1.2))),
+      staggerFrames: Math.max(0, Math.min(60, Math.round(context.fps / 6))) }),
+    variableMorph: context => ({ ...PROXIMITY_MORPH_DEFAULTS, radius: Math.max(1, Math.min(5000, 250 * context.compHeight / 1080)) }),
+    verticalPulse: context => ({ ...pulsePresetArgs("impact", context.fps) }),
+    styleSwap: context => ({ ...STYLE_SWAP_DEFAULTS, durationFrames: Math.max(1, Math.min(300, Math.round(context.fps * 0.8))) }),
+    parallax: () => ({ ...DEFAULT_PARALLAX }),
+    ease: () => ({ ...DEFAULT_EASE, x1: 0.333, y1: 0, x2: 0.667, y2: 1 }),
+    delay: () => delayArgs({ ...DEFAULT_DELAY, shiftMode: "keyframes" }),
+    lookAt: () => ({ ...DEFAULT_LOOK_AT, upAxis: "+y", offsetOrientation: [...DEFAULT_LOOK_AT.offsetOrientation], constrainAxes: { ...DEFAULT_LOOK_AT.constrainAxes } }),
+    orbit: context => ({ ...deriveOrbitPreset(context) }),
+    copyKeys: () => ({}),
+    pasteKeys: () => ({ ...DEFAULT_COPY_KEYS }),
+    cloneKeys: () => ({ ...DEFAULT_CLONE_KEYS }),
+    aiToVector: () => ({ ...DEFAULT_AI_TO_VECTOR }),
+    textToVector: () => ({ ...DEFAULT_TEXT_TO_VECTOR }),
+    jump: context => ({ ...DEFAULT_JUMP, height: 180 * context.compHeight / 1080,
+      durationFrames: Math.max(1, Math.round(context.fps * 0.67)) }),
+    cameraTransition: context => ({ ...DEFAULT_CAMERA_TRANSITION,
+      durationFrames: Math.max(1, Math.round(context.fps)), amount: 400 * context.compWidth / 1920, cameraName: "" }),
+    shapeLibrary: context => ({ ...DEFAULT_SHAPE_LIBRARY,
+      size: 200 * context.compHeight / 1080, position: [context.compWidth / 2, context.compHeight / 2] })
+  };
+  const derive = factories[id];
+  return derive ? { derive, liveControls: [] } : undefined;
 }
 
 function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): void {
+  disposeView?.();
+  disposeView = null;
+  refreshLibrary = null; refreshToolContext = null; refreshPresetContext = null;
+  globalFeedback?.refreshLabels();
   const { i18n, logger, adapter, motionPreference } = wiring;
 
   if (viewId === "settings") {
@@ -1893,23 +2481,67 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
   // assíncrono e precisam do cliente que `render` não recebe.
   wiringAtual = { shell, i18n, logger, client };
 
-  // A falha pertence à tarefa que a pessoa acabou de executar, portanto aparece
-  // na view atual — inclusive Sistema — e não fica escondida em outra aba.
-  if (state.lastError) {
-    regions.content.appendChild(notice(document, state.lastError, "error"));
+  // A falha pertence à tarefa que a pessoa acabou de executar. O ToastRegion
+  // agora se encarrega de exibi-la de forma flutuante sem quebrar a grade,
+  // mantendo o design limpo.
+
+  if (viewId === "home") {
+    renderToolBrowser(regions, i18n, shell, logger, client);
+    return;
+  }
+
+  if (viewId === "presets") {
+    regions.content.classList.add("ch-browser-body");
+    regions.content.parentElement?.setAttribute("data-browser", "true");
+    const gallery = createPresetWorkspace(document, {
+      cache: presetWorkspaceCache,
+      context: () => ({ hasComp: Boolean(state.context?.isComposition), selectionCount: state.context?.selectionLayerCount ?? 0, selectedKeys: state.context?.selectionSelectedKeyCount ?? 0 }),
+      execute: async (command, args) => { const response = await client.execute(command, args, {preserveSelection:true}); if(command !== "ae.presets.inspect") logger.recordResponse(command,response); return response; },
+      locale: i18n.locale(), preferences: panelPreferences, busy: state.busy, navigation: presetNavigation,
+      apply: (preset, settings, mode) => {
+        if (preset.category === "camera-transitions" && mode !== "layers") {
+          void applyLibraryCommand("camera-transition", { presetId: preset.motion!.id,
+            durationFrames: settings?.durationFrames ?? preset.params.durationFrames,
+            intensity: settings?.intensity ?? preset.params.intensity }, preset.id, shell, i18n, logger, client); return;
+        }
+        if (preset.motion) { void applyLibraryCommand(preset.motion.mode==="transition"?"phase-apply":"apply", { presetId: preset.motion.id, ...settings }, preset.id, shell, i18n, logger, client); return; }
+        const tool = TOOLS.find(item => item.commandId === preset.handler);
+        if (tool) void applyQuickPreset(tool, preset.handler, { derive: context => presetArgs(preset, context), liveControls: [] },
+          shell, i18n, logger, client, { name: preset.displayName[i18n.locale()] ?? preset.id, recentId: preset.id });
+      },
+      lifecycle: action => { void applyLibraryCommand(action, {}, "", shell, i18n, logger, client); },
+      edit: preset => {
+        if (!state.context) return;
+        const args = presetArgs(preset, quickContextFromState(state.context));
+        if (preset.category === "ease") { state.ease = { ...DEFAULT_EASE, ...preset.curve }; state.activeTool = "ease"; }
+        else {
+          state.cameraTransition = { ...DEFAULT_CAMERA_TRANSITION, preset: args.preset as CameraTransitionPreset,
+            amount: Number(args.amount), durationFrames: Number(args.durationFrames), curve: { ...preset.curve } };
+          state.activeTool = "cameraTransition";
+        }
+        shell.navigate(preset.category === "ease" ? "ease" : "tools");
+      }
+    });
+    document.documentElement.style.setProperty("--ch-feedback-bottom", "92px");
+    refreshPresetContext = gallery.updateContext;
+    disposeView = () => { gallery.dispose(); refreshPresetContext = null; document.documentElement.style.setProperty("--ch-feedback-bottom", "38px"); }; regions.content.appendChild(gallery.element); return;
+  }
+
+  if (["context", "system", "diagnostics"].includes(viewId)) {
+    const back = createActionButton(document, {
+      id: "support-back-settings", label: i18n.t("settings.help.back"), variant: "tertiary",
+      onPress: () => shell.navigate("settings")
+    });
+    back.element.classList.add("ch-support-back");
+    regions.content.appendChild(back.element);
   }
 
   if (viewId === "context") {
+    // Sem botao Atualizar: `startContextWatch` rele o host a cada 700 ms e
+    // redesenha quando algo muda. Um botao aqui ofereceria ao usuario um
+    // trabalho que o programa ja faz — e era a reclamacao que originou o
+    // polling.
     renderContext(regions, i18n);
-    regions.actions.appendChild(
-      button(document, {
-        label: i18n.t("action.refresh"),
-        variant: "primary",
-        disabled: state.busy,
-        title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.refresh"),
-        onClick: () => void refreshContext(shell, i18n, logger, client)
-      })
-  );
     regions.actions.appendChild(
       button(document, {
         label: i18n.t("action.createDemo"),
@@ -1921,103 +2553,134 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
     return;
   }
 
-  if (viewId === "tools") {
-    const tool = TOOLS.find((item) => item.id === state.activeTool);
+  if (viewId === "tools" || viewId === "ease") {
+    const tool = TOOLS.find((item) => item.id === (viewId === "ease" ? "ease" : state.activeTool));
 
     // Sem ferramenta escolhida: so a grade. A §22 proibe inspector antes da
     // escolha — parametros de quatro ferramentas na mesma tela seriam quatro
     // tarefas competindo.
     if (!tool) {
-      regions.content.appendChild(notice(document, i18n.t("message.toolsInstructions")));
-      renderToolBrowser(regions, i18n, shell);
+      renderToolBrowser(regions, i18n, shell, logger, client);
       return;
     }
 
     // Ferramenta aberta: o titulo passa a ser o nome dela. Deixa-lo em
     // "Ferramentas" obrigaria o usuario a voltar a grade para lembrar onde esta.
     shell.setViewTitle(i18n.t(tool.nameKey));
-    tool.render(regions, i18n);
-
-    const disabledReason = tool.disabledReason(i18n);
-    regions.actions.appendChild(
-      button(document, {
-        label: i18n.t("action.apply"),
-        variant: "primary",
-        ...(disabledReason ? { disabled: true as const, disabledReason } : { disabled: false as const }),
-        title: disabledReason ?? i18n.t("action.apply"),
-        onClick: () => void tool.apply(shell, i18n, logger, client)
-      })
-  );
-    // Só ferramentas que leem dados do projeto ganham Atualizar. Um botão que
-    // não faz nada nas outras cinco seria pior que a ausência dele.
-    if (tool.load) {
-      regions.actions.appendChild(
-        button(document, {
-          label: i18n.t(tool.loadLabelKey ?? "action.refreshPreview"),
-          ...(state.busy
-            ? { disabled: true as const, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
-            : { disabled: false as const }),
-          title: state.busy
-            ? state.busyReason ?? i18n.t("status.initializing")
-            : i18n.t(tool.loadLabelKey ?? "action.refreshPreview"),
-          onClick: () => void tool.load?.()
-        })
-  );
+    regions.content.classList.add("ch-tool-editor");
+    regions.content.setAttribute("data-tool", tool.id);
+    if (tool.id === "gradient") {
+      let storage: Storage | undefined;
+      try { storage = window.localStorage; } catch { /* The editor reports storage failures on save. */ }
+      const editor = createGradientEditor(document, {
+        i18n, ...(storage ? { storage } : {}),
+        context: () => ({ isComposition: Boolean(state.context?.isComposition), signature: contextFingerprint(state.context) }),
+        read: async () => {
+          const response = await client.execute<GradientReadData>("ae.effect.gradient.read", {});
+          logger.recordResponse("ae.effect.gradient.read", response);
+          return response;
+        },
+        execute: async args => {
+          const response = await client.execute("ae.effect.gradient", args);
+          logger.recordResponse("ae.effect.gradient", response);
+          return response;
+        },
+        error: response => response.error ? hostFailureMessage(response.error, i18n) : i18n.t("gradient.operationFailed"),
+        busy: value => { state.busy = value; shell.setBusy(value); },
+        back: () => shell.navigate("home")
+      });
+      regions.content.appendChild(editor.element); regions.actions.appendChild(editor.actions);
+      const refresh = () => { void editor.refresh(); };
+      refreshToolContext = refresh;
+      const polling = focusedPoll(document, refresh, CONTEXT_POLL_MS);
+      const stopPositioning = keepFeedbackAboveActions(regions.actions);
+      disposeView = () => { editor.dispose(); polling.dispose(); stopPositioning(); refreshToolContext = null; };
+      void editor.refresh();
+      return;
     }
-    regions.actions.appendChild(
-      button(document, {
-        label: i18n.t("action.reset"),
-        ...(state.busy
-          ? { disabled: true as const, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
-          : { disabled: false as const }),
-        title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.reset"),
-        onClick: () => {
-          tool.reset();
-          state.lastError = null;
-          shell.rerender();
-        }
-      })
-  );
-    regions.actions.appendChild(
-      button(document, {
-        label: i18n.t("action.backToTools"),
-        ...(state.busy
-          ? { disabled: true as const, disabledReason: state.busyReason ?? i18n.t("status.initializing") }
-          : { disabled: false as const }),
-        title: state.busy ? state.busyReason ?? i18n.t("status.initializing") : i18n.t("action.backToTools"),
-        onClick: () => {
-          state.activeTool = null;
-          state.lastError = null;
-          shell.rerender();
-        }
-      })
-  );
+    tool.render(regions, i18n);
+    groupToolSections(document, regions.content);
+    for (const section of Array.from(regions.content.getElementsByTagName("details"))) section.classList.add("ch-tool-disclosure");
+    const refreshEditorContext = refreshToolContext as (() => void) | null;
+
+    const editorContext = contextFingerprint(state.context);
+    const currentDisabledReason = (): string | null => tool.load && editorContext !== contextFingerprint(state.context)
+      ? (i18n.locale() === "pt-BR" ? "A seleção mudou. Atualize a prévia antes de aplicar." : "Selection changed. Refresh the preview before applying.")
+      : tool.disabledReason(i18n);
+    const disabledReason = currentDisabledReason();
+    const contextNotice = createAlert(document, { tone: "warning", title: disabledReason ?? i18n.t("action.apply") });
+    contextNotice.element.hidden = !disabledReason;
+    regions.content.appendChild(contextNotice.element);
+    const disposeEditor = disposeView as (() => void) | null;
+    let actionAreaAlive = true;
+    const actionBar = createElement(document, "div", "ch-panel-action-bar ch-tool-action-bar");
+    const appendAction = (options: ActionButtonOptions) => {
+      const control = createActionButton(document, { ...options, onPress: () => {
+        if (actionAreaAlive && !state.busy) options.onPress();
+      } });
+      control.element.classList.add("ch-tool-action-control");
+      if (options.variant === "primary") control.element.classList.add("ch-panel-action-bar__primary");
+      actionBar.appendChild(control.element);
+      return control;
+    };
+    const removing = tool.id === "verticalPulse" && verticalPulseAction(state.context?.compFrameRate ?? null) === "remove"
+      || tool.id === "wordReveal" && textEffectArgs("wordReveal").action === "remove"
+      || tool.id === "variableMorph" && textEffectArgs("variableMorph").action === "remove";
+    const applyControl = appendAction({
+      id: `tool-${tool.id}-apply`,
+      label: tool.id === "wordReveal" ? wordRevealActionLabel(i18n) : tool.id === "variableMorph" ? variableMorphActionLabel(i18n)
+        : tool.id === "verticalPulse" ? verticalPulseActionLabel(i18n, state.context?.compFrameRate ?? null) : removing ? i18n.t("textEffects.remove") : tool.id === "clean"
+        ? i18n.t(state.clean.scanToken ? "action.clean.remove" : "action.clean.scan") : i18n.t("action.apply"),
+      variant: removing ? "destructive" : "primary",
+      disabled: Boolean(disabledReason), ...(disabledReason ? { disabledReason } : {}),
+      onPress: () => {
+        const invalid = regions.content.querySelector<HTMLInputElement>("[aria-invalid='true']");
+        if (invalid) { invalid.focus(); return; }
+        if (!currentDisabledReason()) void tool.apply(shell, i18n, logger, client);
+      }
+    });
+    refreshToolContext = () => {
+      if (tool.id === "wordReveal" && editorContext !== contextFingerprint(state.context) && !state.busy) void refreshWordRevealControls();
+      if (tool.id === "variableMorph" && editorContext !== contextFingerprint(state.context) && !state.busy) void refreshVariableMorphControls();
+      if (tool.id === "verticalPulse" && editorContext !== contextFingerprint(state.context) && !state.busy) void refreshVerticalPulseControls();
+      refreshEditorContext?.();
+      const reason = currentDisabledReason();
+      contextNotice.element.hidden = !reason;
+      contextNotice.setTitle(reason ?? i18n.t("action.apply"));
+      applyControl.setDisabled(Boolean(reason), reason ?? undefined);
+      shell.refreshChrome();
+      shell.setViewTitle(i18n.t(tool.nameKey));
+    };
+    const busy = state.busy ? { disabled: true, disabledReason: state.busyReason ?? i18n.t("status.initializing") } : {};
+    if (tool.load) appendAction({
+      id: `tool-${tool.id}-refresh`, label: i18n.t(tool.loadLabelKey ?? "action.refreshPreview"), ...busy,
+      onPress: () => { void tool.load?.(); }
+    });
+    appendAction({
+      id: `tool-${tool.id}-reset`, label: i18n.t("action.reset"), variant: "tertiary", ...busy,
+      onPress: () => { tool.reset(); state.lastError = null; shell.rerender(); }
+    });
+    if (tool.id !== "ease") appendAction({
+      id: `tool-${tool.id}-back`, label: i18n.t("action.backToTools"), variant: "tertiary", ...busy,
+      onPress: () => { state.lastError = null; shell.navigate("home"); }
+    });
+    regions.actions.appendChild(actionBar);
+    const stopPositioningFeedback = keepFeedbackAboveActions(regions.actions);
+    disposeView = () => { actionAreaAlive = false; disposeEditor?.(); contextNotice.dispose(); stopPositioningFeedback(); };
     return;
   }
 
   if (viewId === "system") {
-    renderSystem(regions, i18n);
-    regions.actions.appendChild(
-      button(document, {
-        label: i18n.t("action.runSystemCheck"),
-        variant: "primary",
-        disabled: state.busy,
-        title: state.busy
-          ? state.busyReason ?? i18n.t("status.initializing")
-          : i18n.t("action.runSystemCheck"),
-        onClick: () => void runSystemCheck(shell, i18n, logger, client)
-      })
-  );
-    regions.actions.appendChild(
-      button(document, {
-        label: i18n.t("action.verifyBridge"),
-        disabled: state.busy,
-        title: state.busy
-          ? state.busyReason ?? i18n.t("status.initializing")
-          : i18n.t("action.verifyBridge"),
-        onClick: () => void verifyBridge(shell, i18n, logger, client)
-      })
-  );
+    const view = createAeSystemView(document, {
+      i18n,
+      capabilities: state.capabilities,
+      hasError: Boolean(state.lastError),
+      busyReason: state.busy ? state.busyReason ?? i18n.t("status.initializing") : undefined,
+      canPress: () => !state.busy,
+      onRunCheck: () => void runSystemCheck(shell, i18n, logger, client),
+      onVerifyBridge: () => void verifyBridge(shell, i18n, logger, client)
+    });
+    mountSupportView(regions, view);
     return;
   }
 
@@ -2088,6 +2751,9 @@ function loopOutDisabledReason(i18n: I18n): string | null {
   if (!state.context?.isComposition) {
     return i18n.t("message.loopOutNoActiveComp");
   }
+  if (state.context.selectionExpressibleCount < 1) {
+    return i18n.t("message.quickNeedsExpressible");
+  }
   if (!isLoopOutDraftValid(state.loopOut)) {
     return i18n.t("message.loopOutInvalidNumber");
   }
@@ -2109,6 +2775,9 @@ function flickerDisabledReason(i18n: I18n): string | null {
   }
   if (!state.context?.isComposition) {
     return i18n.t("message.flickerNoActiveComp");
+  }
+  if (state.context.selectionExpressibleCount < 1) {
+    return i18n.t("message.quickNeedsExpressible");
   }
   // A faixa invertida ganha mensagem propria: o usuario precisa saber QUAL
   // regra quebrou, e nao apenas que algum numero esta errado.
@@ -2220,6 +2889,9 @@ function wiggleDisabledReason(i18n: I18n): string | null {
   }
   if (!state.context?.isComposition) {
     return i18n.t("message.wiggleNoActiveComp");
+  }
+  if (state.context.selectionExpressibleCount < 1) {
+    return i18n.t("message.quickNeedsExpressible");
   }
   if (!isWiggleDraftValid(state.wiggle)) {
     return i18n.t("message.wiggleInvalidNumber");
@@ -2358,6 +3030,9 @@ function smoothDisabledReason(i18n: I18n): string | null {
   }
   if (!state.context?.isComposition) {
     return i18n.t("message.smoothNoActiveComp");
+  }
+  if (state.context.selectionExpressibleCount < 1) {
+    return i18n.t("message.quickNeedsExpressible");
   }
   if (!isSmoothDraftValid(state.smooth)) {
     return i18n.t("message.smoothInvalidNumber");
@@ -2563,143 +3238,81 @@ function renderLoopOut(regions: RenderRegions, i18n: I18n): void {
   regions.content.appendChild(notice(document, i18n.t("loopOut.safeConflict.description")));
 }
 
-function renderSystem(regions: RenderRegions, i18n: I18n): void {
-  const capabilities = state.capabilities;
-
-  if (!capabilities) {
-    if (!state.lastError) {
-      regions.content.appendChild(notice(document, i18n.t("message.systemCheckIdle")));
-    }
-    return;
-  }
-
-  regions.content.appendChild(
-    propertyRow(
-      document,
-      i18n.t("capability.supportTier"),
-      i18n.t(`capability.tier.afterEffects.${capabilities.supportTier}` as Parameters<I18n["t"]>[0])
-    )
-  );
-
-  regions.content.appendChild(sectionTitle(document, i18n.t("view.system.title")));
-
-  for (const [key, finding] of Object.entries(capabilities.findings)) {
-    if (!finding) {
-      continue;
-    }
-
-    // Estado por texto, não só por cor: a §22.4 proíbe status que dependa de cor.
-    const tone: RowTone =
-      finding.state === "available" ? "ok" : finding.state === "unknown" ? "unknown" : "off";
-    const value =
-      finding.state === "available"
-        ? i18n.t("capability.state.available")
-        : `${i18n.t(`capability.state.${finding.state}` as Parameters<I18n["t"]>[0])} — ${
-            finding.reasonKey ? i18n.t(finding.reasonKey as Parameters<I18n["t"]>[0]) : ""
-          }`.trim();
-
-    regions.content.appendChild(
-      propertyRow(
-        document,
-        i18n.t(`capability.key.${key}` as Parameters<I18n["t"]>[0]),
-        value,
-        tone
-      )
-    );
-  }
-}
-
 function renderSettings(
   regions: RenderRegions,
   i18n: I18n,
   motionPreference: ReducedMotionController
 ): void {
-  regions.content.appendChild(sectionTitle(document, i18n.t("settings.interface.title")));
-  regions.content.appendChild(
-    checkboxField(document, {
-      id: "settings-reduce-motion",
-      label: i18n.t("settings.reduceMotion.label"),
-      description: i18n.t("settings.reduceMotion.description"),
-      checked: motionPreference.snapshot().internal,
-      onChange: (checked) => {
-        motionPreference.setInternal(checked);
-        regions.shell.rerender();
-      }
-    })
-  );
+  const view = createAeSettingsView(document, {
+    i18n, preferences: panelPreferences, motionPreference,
+    onLocale: value => {
+      panelPreferences.setLocale(value);
+      i18n.setLocale(value === "host" ? panelHostLocale : value);
+      document.documentElement.lang = i18n.locale();
+      regions.shell.rerender();
+    },
+    onRefresh: () => regions.shell.rerender(),
+    onNavigate: viewId => regions.shell.navigate(viewId)
+  });
+  regions.content.appendChild(view.element);
+  disposeView = () => view.dispose();
+}
+
+function mountSupportView(
+  regions: RenderRegions,
+  view: { content: HTMLElement; actions: HTMLElement; dispose(): void }
+): void {
+  regions.content.appendChild(view.content);
+  regions.actions.appendChild(view.actions);
+  const stopPositioningFeedback = keepFeedbackAboveActions(regions.actions);
+  disposeView = () => { view.dispose(); stopPositioningFeedback(); };
+}
+
+/** Keeps feedback above the real footer height, including wrapped/translated actions. */
+function keepFeedbackAboveActions(actions: HTMLElement): () => void {
+  const positionFeedback = (): void => {
+    const top = actions.getBoundingClientRect().top;
+    const offset = Math.max(38, document.documentElement.clientHeight - top + 8);
+    document.documentElement.style.setProperty("--ch-feedback-bottom", `${offset}px`);
+  };
+  const observer = typeof ResizeObserver === "function" ? new ResizeObserver(positionFeedback) : null;
+  observer?.observe(actions);
+  window.addEventListener("resize", positionFeedback);
+  positionFeedback();
+  return () => {
+    observer?.disconnect();
+    window.removeEventListener("resize", positionFeedback);
+    document.documentElement.style.setProperty("--ch-feedback-bottom", "38px");
+  };
 }
 
 function renderDiagnostics(regions: RenderRegions, i18n: I18n, logger: MotionLogger): void {
-  const entries = logger.entries();
-  const size = logger.size();
-
-  regions.content.appendChild(notice(document, i18n.t("logs.redactionNotice")));
-  regions.content.appendChild(
-    sectionTitle(document, i18n.t("logs.summary", { count: size.entries, dropped: size.dropped }))
-  );
-
-  if (entries.length === 0) {
-    regions.content.appendChild(notice(document, i18n.t("logs.empty")));
-  } else {
-    // Mais recente primeiro: quem abre o diagnóstico está atrás do que acabou de
-    // acontecer, não do início da sessão.
-    for (let index = entries.length - 1; index >= 0; index -= 1) {
-      const entry = entries[index];
-      if (!entry) {
-        continue;
-      }
-
-      const parts = [
-        entry.timestamp.slice(11, 19),
-        entry.level.toUpperCase(),
-        entry.message ?? entry.command ?? "-"
-      ];
-      if (entry.durationMs !== null) {
-        parts.push(`${entry.durationMs} ms`);
-      }
-      if (entry.errorCode) {
-        parts.push(entry.errorCode);
-      }
-
-      const level = entry.level === "error" || entry.level === "warn" ? entry.level : undefined;
-      regions.content.appendChild(logLine(document, parts.join("  "), level));
-    }
-  }
-
   const shell = regions.shell;
-
-  regions.actions.appendChild(
-    button(document, {
-      label: i18n.t("action.exportBundle"),
-      variant: "primary",
-      onClick: () => exportBundle(shell, i18n, logger)
-    })
-  );
-  regions.actions.appendChild(
-    button(document, {
-      label: i18n.t("action.clearLogs"),
-      onClick: () => {
-        const removed = logger.clear();
-        shell.setStatus(i18n.t("message.logsCleared", { count: removed }), "ok");
-        shell.rerender();
+  const view = createDiagnosticsView(document, {
+    i18n,
+    entries: logger.entries(),
+    droppedEntries: logger.size().dropped,
+    debugMode: logger.isDebugMode(),
+    busyReason: state.busy ? state.busyReason ?? i18n.t("status.initializing") : undefined,
+    canPress: () => !state.busy,
+    onExport: () => exportBundle(shell, i18n, logger),
+    onClear: () => {
+      const removed = logger.clear();
+      shell.setStatus(i18n.t("message.logsCleared", { count: removed }), "ok");
+      shell.rerender();
+    },
+    onToggleDebug: () => {
+      if (logger.isDebugMode()) {
+        logger.disableDebugMode();
+        shell.setStatus(i18n.t("message.debugDisabled"));
+      } else {
+        logger.enableDebugMode();
+        shell.setStatus(i18n.t("message.debugEnabled"), "ok");
       }
-    })
-  );
-  regions.actions.appendChild(
-    button(document, {
-      label: logger.isDebugMode() ? i18n.t("action.disableDebug") : i18n.t("action.enableDebug"),
-      onClick: () => {
-        if (logger.isDebugMode()) {
-          logger.disableDebugMode();
-          shell.setStatus(i18n.t("message.debugDisabled"));
-        } else {
-          logger.enableDebugMode();
-          shell.setStatus(i18n.t("message.debugEnabled"), "ok");
-        }
-        shell.rerender();
-      }
-    })
-  );
+      shell.rerender();
+    }
+  });
+  mountSupportView(regions, view);
 }
 
 /**
@@ -2725,7 +3338,7 @@ function describeFailure(i18n: I18n, response: CommandResponse): string {
       ? i18n.t(error.action as Parameters<I18n["t"]>[0])
       : error.action
     : null;
-  const localizedMessage = i18n.t(error.recoverable ? "status.notCompleted" : "status.failed");
+  const localizedMessage = hostFailureMessage(error, i18n);
   const failure = i18n.t("error.withCode", { code: error.code, message: localizedMessage });
   return action ? `${failure} — ${action}` : failure;
 }
@@ -2744,10 +3357,9 @@ function reportFailure(shell: Shell, i18n: I18n, response: CommandResponse): voi
       ? i18n.t(error.action as Parameters<I18n["t"]>[0])
       : error.action
     : null;
-  // `message` atravessa uma fronteira de host e pode vir de versão antiga,
-  // exceção de provider ou texto não localizado. A UI nunca o renderiza. Código
-  // e recoverable escolhem uma mensagem local; action fornece a correção exata.
-  const localizedMessage = i18n.t(error.recoverable ? "status.notCompleted" : "status.failed");
+  // Local host preflight messages explain the specific conflict. Render as plain
+  // text; paths/stacks fall back to the localized code and recovery action.
+  const localizedMessage = hostFailureMessage(error, i18n);
   const failure = i18n.t("error.withCode", { code: error.code, message: localizedMessage });
   state.lastError = action ? `${failure} — ${action}` : failure;
   shell.setStatus(i18n.t(error.recoverable ? "status.notCompleted" : "status.failed"), "error");
@@ -2758,7 +3370,103 @@ type Client = NonNullable<ReturnType<typeof createAeHostAdapter>>["client"];
 function setBusy(shell: Shell, busy: boolean, reason?: string): void {
   state.busy = busy;
   state.busyReason = busy ? reason ?? null : null;
-  shell.rerender();
+  shell.setBusy(busy);
+  if (refreshLibrary) refreshLibrary();
+  else shell.rerender();
+}
+
+/**
+ * Assinatura do contexto que importa para a interface.
+ *
+ * Só entram os campos que mudam o que o painel mostra ou habilita. `currentTime`
+ * fica de fora de propósito: ele muda a cada quadro que o usuário arrasta o CTI,
+ * e incluí-lo faria o painel se redesenhar durante um scrub — matando o foco de
+ * quem estivesse digitando na busca.
+ */
+function contextFingerprint(context: ContextData | null): string {
+  if (!context) return "sem-contexto";
+  return [
+    context.selectionSignature ?? "",
+    context.isComposition ? "1" : "0",
+    context.activeItemName ?? "",
+    context.compWidth ?? "",
+    context.compHeight ?? "",
+    context.compFrameRate ?? "",
+    context.compDuration ?? "",
+    context.selectionLayerCount,
+    context.selectionPropertyCount,
+    context.selectionExpressibleCount,
+    context.selectionSelectedKeyCount,
+    context.selectionHasKeyframes ? "1" : "0",
+    context.selectionHasExpressions ? "1" : "0",
+    context.selectionIs3D ? "1" : "0"
+  ].join("\u0000");
+}
+
+/** Cadência do polling. Ver `startContextWatch` para o porquê deste número. */
+const CONTEXT_POLL_MS = 700;
+
+/**
+ * Mantém o contexto fresco sozinho, sem botão de Atualizar.
+ *
+ * O usuário troca de composição, seleciona outra camada, aplica um keyframe — e
+ * o painel precisa acompanhar. Exigir que ele aperte "Atualizar" depois de cada
+ * uma dessas ações é pedir que ele faça o trabalho do programa.
+ *
+ * Três cuidados que fazem isso não atrapalhar:
+ *
+ * 1. **Só redesenha quando algo que importa mudou.** Um `rerender()` por tique
+ *    destruiria o foco de quem está digitando na busca ou num campo numérico.
+ *    A assinatura decide, e ela ignora o tempo corrente justamente para o
+ *    painel não piscar durante um scrub.
+ * 2. **Silencioso.** Não mexe em `busy` nem no status: o polling é pano de
+ *    fundo, e uma leitura de rotina não pode parecer uma operação do usuário.
+ *    Falha de leitura também não vira erro na tela — o tique seguinte tenta de
+ *    novo, e um `evalScript` perdido não merece um alerta vermelho.
+ * 3. **Não concorre.** Pula o tique enquanto uma operação está em curso ou
+ *    enquanto a leitura anterior não voltou, senão uma fila de leituras se
+ *    empilha atrás de um comando lento.
+ *
+ * 700 ms é o meio-termo: rápido o bastante para a troca de seleção parecer
+ * instantânea, e folgado o bastante para o custo do `evalScript` sumir no ruído.
+ */
+function startContextWatch(shell: Shell, logger: MotionLogger, client: Client): () => void {
+  let assinatura = contextFingerprint(state.context);
+  let lendo = false;
+  const numberGesturePending = (): boolean => Boolean(document.querySelector(".ch-preset-workspace input[data-scrub-pressed], .ch-preset-workspace input[data-scrubbing], .ch-preset-workspace [data-gesture-active], .ch-preset-workspace .ch-phase-scrub-row:hover"));
+
+  const polling = focusedPoll(document, () => {
+    if (lendo || state.busy || document.hidden || numberGesturePending() || document.querySelector(".ch-bezier[data-dragging]")) return;
+    lendo = true;
+
+    void client
+      .execute<ContextData>("ae.context.read")
+      .then((response) => {
+        if (state.busy || numberGesturePending() || document.querySelector(".ch-bezier[data-dragging]") || !response.ok || !response.data) return;
+
+        const nova = contextFingerprint(response.data);
+        state.context = response.data;
+        if (nova === assinatura) return;
+
+        assinatura = nova;
+        // O host pode ter mudado de versão entre leituras? Não — mas o log
+        // precisa do host preenchido antes do primeiro erro, e esta é a única
+        // leitura que roda sempre.
+        logger.setHost("after-effects", response.data.hostVersion ?? undefined);
+        if (refreshLibrary) refreshLibrary();
+        else if (refreshToolContext) refreshToolContext();
+        else if (refreshPresetContext) refreshPresetContext();
+        else if (!document.querySelector(".ch-preset-workspace")) shell.rerender();
+      })
+      .catch(() => {
+        // Silêncio deliberado: ver o item 2 acima.
+      })
+      .then(() => {
+        lendo = false;
+      });
+  }, CONTEXT_POLL_MS);
+
+  return () => polling.dispose();
 }
 
 async function refreshContext(
@@ -2832,7 +3540,7 @@ async function applyFlicker(
       seed: draft.seed,
       conflictMode: "skip"
     },
-    { preserveSelection: true }
+    { mode: "advanced", emitLiveControls: true, preserveSelection: true }
   );
   logger.recordResponse("ae.expression.flicker", response);
 
@@ -3271,10 +3979,11 @@ function renderAnchor(regions: RenderRegions, i18n: I18n): void {
       value: draft.gridPoint,
       disabled: state.busy,
       labels: ANCHOR_GRID.map(({ ponto, rotulo }) => ({ value: ponto, label: i18n.t(rotulo) })),
-      onSelect: (ponto) =>
-        confirma(() => {
-          state.anchor.gridPoint = ponto as AnchorGridPoint;
-        })
+      onSelect: (ponto) => {
+        if (state.busy || !wiringAtual) return;
+        state.anchor.gridPoint = ponto as AnchorGridPoint;
+        void applyAnchor(shell, i18n, wiringAtual.logger, wiringAtual.client);
+      }
     })
   );
 
@@ -3421,6 +4130,9 @@ function anchorDisabledReason(i18n: I18n): string | null {
   if (!state.context?.isComposition) {
     return i18n.t("message.anchorNoActiveComp");
   }
+  if (state.context.selectionLayerCount < 1) {
+    return i18n.t("message.quickNeedsLayers");
+  }
   if (state.previewError) {
     return state.previewError;
   }
@@ -3466,7 +4178,8 @@ async function applyAnchor(
   shell.setStatus(i18n.t("message.anchorApplied", { count: alinhadas }), "ok");
   setBusy(shell, false);
 
-  await refreshAnchorPreview();
+  panelPreferences.recordUse("anchor");
+  if (shell.activeView() === "tools" && state.activeTool === "anchor") await refreshAnchorPreview();
 }
 
 interface CutKeysPreviewData {
@@ -4414,6 +5127,9 @@ function flipDisabledReason(i18n: I18n): string | null {
   if (!state.context?.isComposition) {
     return i18n.t("message.flipNoActiveComp");
   }
+  if (state.context.selectionLayerCount < 1) {
+    return i18n.t("message.quickNeedsLayers");
+  }
   return null;
 }
 
@@ -5087,7 +5803,7 @@ async function applyWiggle(
       seed: draft.seed,
       conflictMode: "skip"
     },
-    { preserveSelection: true }
+    { mode: "advanced", emitLiveControls: true, preserveSelection: true }
   );
   logger.recordResponse("ae.expression.wiggle", response);
 
@@ -5158,7 +5874,7 @@ async function applySmooth(
       referenceTime,
       conflictMode: "skip"
     },
-    { preserveSelection: true }
+    { mode: "advanced", emitLiveControls: true, preserveSelection: true }
   );
   logger.recordResponse("ae.expression.smooth", response);
 
@@ -5225,7 +5941,7 @@ async function applyLoopOut(
       useDuration,
       conflictMode: "skip"
     },
-    { preserveSelection: true }
+    { mode: "advanced", emitLiveControls: true, preserveSelection: true }
   );
   logger.recordResponse("ae.expression.loopout", response);
 
@@ -5381,76 +6097,101 @@ if (document.readyState === "loading") {
 function easeDisabledReason(i18n: I18n): string | null {
   if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
   if (!state.context?.isComposition) return i18n.t("message.easeNoActiveComp");
+  if (!state.ease.applyIn && !state.ease.applyOut) return i18n.t("ease.needsSide");
+  if (state.context.selectionSelectedKeyCount < 1) return i18n.t("message.quickNeedsKeys");
   return null;
 }
 
 function renderEase(regions: RenderRegions, i18n: I18n): void {
-  // shell unused
-  const container = regions.content;
-
-  container.appendChild(checkboxField(document, {
-    id: "ease-apply-in",
-    label: i18n.t("ease.applyIn"),
-    checked: state.ease.applyIn,
-    onChange: (checked) => {
-      state.ease.applyIn = checked;
+  const actions = createEaseActions(document, {
+    i18n, disabledReason: easeActionsDisabledReason(i18n),
+    onAction: action => {
+      if (wiringAtual && !easeActionsDisabledReason(i18n)) {
+        void applyEaseAction(action, regions.shell, i18n, wiringAtual.logger, wiringAtual.client);
+      }
     }
-  }));
+  });
+  regions.content.appendChild(actions.element);
+  refreshToolContext = () => actions.update(easeActionsDisabledReason(i18n));
+  const editor = createEaseEditor(document, {
+    i18n, curve: state.ease, busy: state.busy,
+    onChange: curve => { Object.assign(state.ease, curve); },
+    onApply: () => { if (wiringAtual && !easeDisabledReason(i18n)) void applyEase(regions.shell, i18n, wiringAtual.logger, wiringAtual.client); }
+  });
+  disposeView = () => { actions.dispose(); editor.dispose(); };
+  regions.content.appendChild(editor.element);
+  const sides = createElement(document, "div", "ch-ease-sides");
+  sides.appendChild(checkboxField(document, { id: "ease-apply-in", label: i18n.t("ease.applyIn"), checked: state.ease.applyIn,
+    onChange: value => { state.ease.applyIn = value; regions.shell.rerender(); } }));
+  sides.appendChild(checkboxField(document, { id: "ease-apply-out", label: i18n.t("ease.applyOut"), checked: state.ease.applyOut,
+    onChange: value => { state.ease.applyOut = value; regions.shell.rerender(); } }));
+  (editor.element.querySelector(".ch-ease-main") ?? editor.element).appendChild(sides);
+}
 
-  container.appendChild(checkboxField(document, {
-    id: "ease-apply-out",
-    label: i18n.t("ease.applyOut"),
-    checked: state.ease.applyOut,
-    onChange: (checked) => {
-      state.ease.applyOut = checked;
+function easeActionsDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.easeNoActiveComp");
+  if (state.context.selectionSelectedKeyCount < 1) return i18n.t("ease.actions.needsSelection");
+  return null;
+}
+
+async function applyEaseAction(action: EaseAction, shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (easeActionsDisabledReason(i18n)) return;
+  state.lastError = null;
+  const label = i18n.t(action.labelKey);
+  setBusy(shell, true, i18n.t("status.applyingQuick", { tool: label }));
+  shell.setStatus(i18n.t("status.applyingQuick", { tool: label }), "busy");
+  try {
+    const response = await client.execute<{ appliedCount: number }>(action.command, { ...action.args }, { preserveSelection: true });
+    logger.recordResponse(action.command, response);
+    if (!response.ok) {
+      if (response.error?.code === "KEYFRAME_CONFLICT") {
+        const key = action.command === "ae.keys.reverse" || action.command === "ae.keys.reverse-values" ? "ease.conflict.reverse"
+          : action.args.destination === "cti" ? "ease.conflict.cursor"
+          : action.args.destination === "layer-start" || action.args.destination === "layer-end" ? "ease.conflict.edge" : "ease.conflict.after";
+        state.lastError = i18n.t(key);
+        shell.setStatus(i18n.t("status.notCompleted"), "error");
+      } else reportFailure(shell, i18n, response);
+      return;
     }
-  }));
-
-  container.appendChild(bezierEditor(document, {
-    label: "",
-    outHandleLabel: "",
-    inHandleLabel: "",
-    x1: state.ease.x1,
-    y1: state.ease.y1,
-    x2: state.ease.x2,
-    y2: state.ease.y2,
-    onChange: (nx1, ny1, nx2, ny2) => {
-      state.ease.x1 = nx1;
-      state.ease.y1 = ny1;
-      state.ease.x2 = nx2;
-      state.ease.y2 = ny2;
-    }
-  }));
-
-  container.appendChild(hint(document, i18n.t("message.easeInstructions")));
+    if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+    shell.setStatus(i18n.t("message.quickAppliedOperation", { tool: label }), "ok");
+    const current = await client.execute<ContextData>("ae.context.read");
+    logger.recordResponse("ae.context.read", current);
+    if (current.ok && current.data) state.context = current.data;
+  } catch {
+    state.lastError = i18n.t("message.failureWithoutReason");
+    shell.setStatus(state.lastError, "error");
+  } finally { setBusy(shell, false); }
 }
 
 async function applyEase(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
   if (state.busy) return;
-  shell.setStatus(i18n.t("status.applyingEase") || "Aplicando curva...", "busy");
+  const invalid = document.querySelector<HTMLInputElement>(".ch-ease-editor [aria-invalid='true']");
+  if (invalid) { invalid.focus(); return; }
+  const args = { ...state.ease };
+  state.lastError = null;
   setBusy(shell, true, i18n.t("status.applyingEase"));
-
-  const response = await client.execute("ae.keys.ease.apply", {
-    x1: state.ease.x1,
-    y1: state.ease.y1,
-    x2: state.ease.x2,
-    y2: state.ease.y2,
-    applyIn: state.ease.applyIn,
-    applyOut: state.ease.applyOut
-  });
-  logger.recordResponse("ae.keys.ease.apply", response);
-
-  if (response.ok) {
-    shell.setStatus(i18n.t("message.easeApplied"), "ok");
-  } else {
-    reportFailure(shell, i18n, response);
-  }
-  setBusy(shell, false);
+  shell.setStatus(i18n.t("status.applyingEase"), "busy");
+  try {
+    const response = await client.execute<{ appliedCount: number; skippedCount: number }>("ae.keys.ease.apply", args);
+    logger.recordResponse("ae.keys.ease.apply", response);
+    if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+    if (response.ok && (response.data?.appliedCount ?? 0) > 0) {
+      shell.setStatus(i18n.t("message.easeApplied", { count: response.data!.appliedCount }), "ok");
+    } else if (!response.ok) reportFailure(shell, i18n, response);
+    else shell.setStatus(i18n.t("ease.noChange"), "error");
+  } catch {
+    shell.setStatus(i18n.t("message.failureWithoutReason"), "error");
+  } finally { setBusy(shell, false); }
 }
 
 function reverseKeysDisabledReason(i18n: I18n): string | null {
   if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
   if (!state.context?.isComposition) return i18n.t("message.reverseKeysNoActiveComp");
+  if (state.context.selectionSelectedKeyCount < 1) {
+    return i18n.t("message.quickNeedsKeys");
+  }
   return null;
 }
 
@@ -5477,6 +6218,9 @@ async function applyReverseKeys(shell: Shell, i18n: I18n, logger: MotionLogger, 
 function reverseValuesDisabledReason(i18n: I18n): string | null {
   if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
   if (!state.context?.isComposition) return i18n.t("message.reverseValuesNoActiveComp");
+  if (state.context.selectionSelectedKeyCount < 1) {
+    return i18n.t("message.quickNeedsKeys");
+  }
   return null;
 }
 
@@ -5503,6 +6247,9 @@ async function applyReverseValues(shell: Shell, i18n: I18n, logger: MotionLogger
 function sendToEdgeDisabledReason(i18n: I18n): string | null {
   if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
   if (!state.context?.isComposition) return i18n.t("message.sendToEdgeNoActiveComp");
+  if (state.context.selectionSelectedKeyCount < 1) {
+    return i18n.t("message.quickNeedsKeys");
+  }
   return null;
 }
 
@@ -5558,6 +6305,50 @@ async function applySendToEdge(shell: Shell, i18n: I18n, logger: MotionLogger, c
   logger.recordResponse("ae.keys.send-to-edge", response);
   if (response.ok) {
     shell.setStatus(i18n.t("message.sendToEdgeApplied"), "ok");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function beatDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.beatNoActiveComp");
+  if (state.context.selectionExpressibleCount < 1) {
+    return i18n.t("message.quickNeedsExpressible");
+  }
+  return null;
+}
+
+function renderBeat(regions: RenderRegions, i18n: I18n): void {
+  // Sem campos: os dois parâmetros do Beat viram Live Controls no Effect
+  // Controls, e é lá que o ajuste acontece. A tela só explica o pré-requisito.
+  regions.content.appendChild(hint(document, i18n.t("message.beatInstructions")));
+}
+
+async function applyBeat(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  shell.setStatus(i18n.t("status.applyingBeat"), "busy");
+  setBusy(shell, true, i18n.t("status.applyingBeat"));
+
+  const response = await client.execute<{ createdAmplitudeLayer: boolean }>("ae.audio.beat", {
+    mode: 1,
+    shakeFreq: 10,
+    shakeAmp: 30
+  });
+  logger.recordResponse("ae.audio.beat", response);
+  if (response.ok) {
+    // Quando o comando converte o áudio ele acrescenta uma camada à
+    // composição. Dizer isso é o mínimo: uma camada que aparece sozinha na
+    // timeline, sem aviso, parece defeito e não recurso.
+    shell.setStatus(
+      i18n.t(
+        response.data?.createdAmplitudeLayer
+          ? "message.beatCreatedAmplitude"
+          : "message.beatApplied"
+      ),
+      "ok"
+    );
   } else {
     reportFailure(shell, i18n, response);
   }
@@ -5704,6 +6495,13 @@ function renderCloneKeys(regions: RenderRegions, i18n: I18n): void {
     })
   );
 
+  regions.content.appendChild(selectField(document, {
+    id: "cloneKeys-destination", label: i18n.t("cloneKeys.destination"), value: state.cloneKeys.destination,
+    options: (["after", "cti", "comp-end", "layer-end", "work-area-end"] as const).map(value => ({
+      value, label: i18n.t(`cloneKeys.destination.${value}`)
+    })),
+    onChange: value => { state.cloneKeys.destination = value as CloneKeysDestination; shell.rerender(); }
+  }));
   regions.content.appendChild(hint(document, i18n.t("message.cloneKeysInstructions")));
 }
 
@@ -5713,7 +6511,7 @@ async function applyCloneKeys(shell: Shell, i18n: I18n, logger: MotionLogger, cl
   setBusy(shell, true, i18n.t("status.applyingCloneKeys"));
 
   const response = await client.execute("ae.keys.clone", {
-    mode: state.cloneKeys.mode
+    mode: state.cloneKeys.mode, destination: state.cloneKeys.destination
   });
   logger.recordResponse("ae.keys.clone", response);
   if (response.ok) {
@@ -5966,6 +6764,9 @@ async function applyAnimateKinetic(shell: Shell, i18n: I18n, logger: MotionLogge
 function inertialDisabledReason(i18n: I18n): string | null {
   if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
   if (!state.context?.isComposition) return i18n.t("message.inertialNoActiveComp");
+  if (state.context.selectionExpressibleCount < 1) {
+    return i18n.t("message.quickNeedsExpressible");
+  }
   return null;
 }
 
@@ -6357,7 +7158,8 @@ async function applyPasteKeys(shell: Shell, i18n: I18n, logger: MotionLogger, cl
 function lookAtDisabledReason(i18n: I18n): string | null {
   if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
   if (!state.context?.isComposition) return i18n.t("message.lookAtNoActiveComp");
-  if (state.lookAt.targetLayerName.trim().length === 0) return i18n.t("message.lookAtNeedsTarget");
+  if (!state.context.selectionLayerCount) return i18n.t("message.lookAtNeedsSelection");
+  if (Object.values(state.lookAt.constrainAxes).every(Boolean)) return i18n.t("message.lookAtAllAxesLocked");
   return null;
 }
 
@@ -6365,22 +7167,8 @@ function renderLookAt(regions: RenderRegions, i18n: I18n): void {
   const shell = regions.shell;
   const t = state.lookAt;
 
-  regions.content.appendChild(
-    textField(document, {
-      id: "lookAt-targetLayerName",
-      label: i18n.t("lookAt.target"),
-      value: t.targetLayerName,
-      maxLength: 200,
-      onCommit: (value) => {
-        t.targetLayerName = value;
-        shell.rerender();
-      }
-    })
-  );
+  // Removido o campo "Alvo" para simplificar a ferramenta e ser 1-clique
 
-  // Só os quatro eixos do plano XZ: os verticais exigiriam decompor a matriz de
-  // volta em ângulos de Euler, e o host os recusa. Oferecê-los aqui seria
-  // prometer uma falha.
   regions.content.appendChild(
     selectField(document, {
       id: "lookAt-forwardAxis",
@@ -6390,7 +7178,9 @@ function renderLookAt(regions: RenderRegions, i18n: I18n): void {
         { value: "+z", label: i18n.t("lookAt.axis.zPos") },
         { value: "-z", label: i18n.t("lookAt.axis.zNeg") },
         { value: "+x", label: i18n.t("lookAt.axis.xPos") },
-        { value: "-x", label: i18n.t("lookAt.axis.xNeg") }
+        { value: "-x", label: i18n.t("lookAt.axis.xNeg") },
+        { value: "+y", label: i18n.t("lookAt.axis.yPos") },
+        { value: "-y", label: i18n.t("lookAt.axis.yNeg") }
       ],
       onChange: (value) => {
         t.forwardAxis = value as LookAtAxis;
@@ -6398,6 +7188,30 @@ function renderLookAt(regions: RenderRegions, i18n: I18n): void {
       }
     })
   );
+
+  for (const { index, axis, labelKey } of [
+    { index: 0, axis: "x", labelKey: "lookAt.offset.x" },
+    { index: 1, axis: "y", labelKey: "lookAt.offset.y" },
+    { index: 2, axis: "z", labelKey: "lookAt.offset.z" }
+  ] as const) {
+    regions.content.appendChild(
+      numberField(document, {
+        id: `lookAt-offset-${axis}`,
+        label: i18n.t(labelKey),
+        value: t.offsetOrientation[index],
+        min: -3600,
+        max: 3600,
+        step: 1,
+        unit: i18n.t("lookAt.unit.degrees"),
+        onCommit: (value) => {
+          const offsetOrientation: [number, number, number] = [...t.offsetOrientation];
+          offsetOrientation[index] = value;
+          t.offsetOrientation = offsetOrientation;
+          shell.rerender();
+        }
+      })
+    );
+  }
 
   for (const [eixo, chave] of [
     ["x", "lookAt.constrain.x"],
@@ -6437,7 +7251,7 @@ async function applyLookAt(shell: Shell, i18n: I18n, logger: MotionLogger, clien
     targetLayerName: state.lookAt.targetLayerName,
     forwardAxis: state.lookAt.forwardAxis,
     upAxis: "+y",
-    offsetOrientation: [0, 0, 0],
+    offsetOrientation: [...state.lookAt.offsetOrientation],
     constrainAxes: { ...state.lookAt.constrainAxes }
   });
   logger.recordResponse("ae.3d.look-at", response);
@@ -6453,6 +7267,7 @@ async function applyLookAt(shell: Shell, i18n: I18n, logger: MotionLogger, clien
 function orbitDisabledReason(i18n: I18n): string | null {
   if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
   if (!state.context?.isComposition) return i18n.t("message.orbitNoActiveComp");
+  if (!state.context.selectionLayerCount) return i18n.t("message.orbitNeedsSelection");
   return null;
 }
 
@@ -6460,13 +7275,51 @@ function renderOrbit(regions: RenderRegions, i18n: I18n): void {
   const shell = regions.shell;
   const t = state.orbit;
 
+  regions.content.appendChild(sectionTitle(document, i18n.t("orbit.presets")));
+  regions.content.appendChild(hint(document, i18n.t("message.orbitPresetInstructions")));
+  const presets = createElement(document, "div", "ch-preset-variant-actions");
+  presets.setAttribute("role", "group");
+  presets.setAttribute("aria-label", i18n.t("orbit.presets"));
+  const presetControls = ORBIT_PRESETS.map(preset => {
+    const reason = orbitDisabledReason(i18n);
+    const control = createActionButton(document, {
+      id: `orbit-preset-${preset}`, label: i18n.t(`orbit.preset.${preset}`),
+      variant: "secondary", disabled: Boolean(reason), ...(reason ? { disabledReason: reason } : {}),
+      onPress: () => {
+        if (orbitDisabledReason(i18n) || !wiringAtual) return;
+        const draft = selectOrbitPreset(state.orbit, preset);
+        const tool = TOOLS.find(candidate => candidate.id === "orbit");
+        if (!tool) return;
+        void applyQuickPreset(tool, "ae.3d.orbit", { derive: () => ({ ...draft, applyPreset: true }), liveControls: [] },
+          shell, i18n, wiringAtual.logger, wiringAtual.client,
+          { name: i18n.t(`orbit.preset.${preset}`), recentId: "orbit" });
+      }
+    });
+    presets.appendChild(control.element);
+    return control;
+  });
+  regions.content.appendChild(presets);
+  refreshToolContext = () => {
+    const reason = orbitDisabledReason(i18n);
+    for (const control of presetControls) control.setDisabled(Boolean(reason), reason ?? undefined);
+  };
+
+  regions.content.appendChild(hint(document, i18n.t("message.orbitInstructions")));
+  const advanced = createElement(document, "details", "ch-preset-adjustments") as HTMLDetailsElement;
+  advanced.open = orbitAdvancedOpen;
+  advanced.addEventListener("toggle", () => { orbitAdvancedOpen = advanced.open; });
+  advanced.appendChild(createElement(document, "summary", "", i18n.t("orbit.advanced")));
+
   for (const campo of [
     { id: "radius", key: "orbit.radius", min: 1, max: 1000000, step: 1, unit: "orbit.unit.px" },
     { id: "speed", key: "orbit.speed", min: -36000, max: 36000, step: 1, unit: "orbit.unit.degreesPerSecond" },
     { id: "inclination", key: "orbit.inclination", min: -360, max: 360, step: 1, unit: "orbit.unit.degrees" },
-    { id: "phase", key: "orbit.phase", min: -36000, max: 36000, step: 1, unit: "orbit.unit.degrees" }
+    { id: "azimuth", key: "orbit.azimuth", min: -360, max: 360, step: 1, unit: "orbit.unit.degrees" },
+    { id: "bank", key: "orbit.bank", min: -360, max: 360, step: 1, unit: "orbit.unit.degrees" },
+    { id: "phase", key: "orbit.phase", min: -36000, max: 36000, step: 1, unit: "orbit.unit.degrees" },
+    { id: "spread", key: "orbit.spread", min: 0, max: 100, step: 1, unit: "orbit.unit.percent" }
   ] as const) {
-    regions.content.appendChild(
+    advanced.appendChild(
       numberField(document, {
         id: `orbit-${campo.id}`,
         label: i18n.t(campo.key),
@@ -6483,7 +7336,7 @@ function renderOrbit(regions: RenderRegions, i18n: I18n): void {
     );
   }
 
-  regions.content.appendChild(
+  advanced.appendChild(
     selectField(document, {
       id: "orbit-targetMode",
       label: i18n.t("orbit.targetMode"),
@@ -6499,7 +7352,7 @@ function renderOrbit(regions: RenderRegions, i18n: I18n): void {
     })
   );
 
-  regions.content.appendChild(
+  advanced.appendChild(
     checkboxField(document, {
       id: "orbit-faceTarget",
       label: i18n.t("orbit.faceTarget"),
@@ -6511,7 +7364,7 @@ function renderOrbit(regions: RenderRegions, i18n: I18n): void {
     })
   );
 
-  regions.content.appendChild(
+  advanced.appendChild(
     checkboxField(document, {
       id: "orbit-bake",
       label: i18n.t("orbit.bake"),
@@ -6523,14 +7376,15 @@ function renderOrbit(regions: RenderRegions, i18n: I18n): void {
     })
   );
 
-  regions.content.appendChild(hint(document, i18n.t("message.orbitInstructions")));
+  regions.content.appendChild(advanced);
 }
 
 async function applyOrbit(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
   if (state.busy) return;
 
-  if (!state.context?.isComposition) {
-    state.lastError = i18n.t("message.orbitNoActiveComp");
+  const reason = orbitDisabledReason(i18n);
+  if (reason) {
+    state.lastError = reason;
     shell.setStatus(i18n.t("status.notCompleted"), "error");
     shell.rerender();
     return;
@@ -6539,15 +7393,17 @@ async function applyOrbit(shell: Shell, i18n: I18n, logger: MotionLogger, client
   shell.setStatus(i18n.t("status.applyingOrbit"), "busy");
   setBusy(shell, true, i18n.t("status.applyingOrbit"));
 
-  const response = await client.execute("ae.3d.orbit", { ...state.orbit });
-  logger.recordResponse("ae.3d.orbit", response);
-
-  if (response.ok) {
-    shell.setStatus(i18n.t("message.orbitApplied"), "ok");
-  } else {
-    reportFailure(shell, i18n, response);
-  }
-  setBusy(shell, false);
+  try {
+    const response = await client.execute("ae.3d.orbit", { ...state.orbit }, { mode: "advanced", emitLiveControls: true, preserveSelection: true });
+    logger.recordResponse("ae.3d.orbit", response);
+    if (response.ok) {
+      if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+      shell.setStatus(i18n.t(state.orbit.bake ? "message.orbitBaked" : "message.orbitApplied"), "ok");
+    } else reportFailure(shell, i18n, response);
+  } catch {
+    state.lastError = i18n.t("message.failureWithoutReason");
+    shell.setStatus(state.lastError, "error");
+  } finally { setBusy(shell, false); }
 }
 
 
@@ -7158,7 +8014,7 @@ function renderWave(regions: RenderRegions, i18n: I18n): void {
         id: "wave-frequency",
         label: i18n.t("wave.frequency"),
         value: t.frequency,
-        min: 0,
+        min: 1,
         max: 1000,
         step: 1,
         onCommit: (value) => {
@@ -7487,8 +8343,8 @@ async function applyGlitch(shell: Shell, i18n: I18n, logger: MotionLogger, clien
   logger.recordResponse("ae.effect.glitch", response);
 
   if (response.ok) {
-    // Um efeito ausente na instalação vira warning e o glitch continua: dizer
-    // quantos entraram é mais honesto do que só "aplicado".
+    // O core é obrigatório; warnings indicam controles animados preservados.
+    // O efeito continua editável diretamente no Effect Controls.
     shell.setStatus(
       i18n.t("message.glitchApplied", { count: response.data?.effectCount ?? 0 }),
       response.warnings.length > 0 ? "busy" : "ok"
@@ -7641,6 +8497,14 @@ async function executeParallaxFull(
   client: Client,
   t: ParallaxFullDraft
 ): Promise<{ command: string; response: CommandResponse }> {
+  if (t.operation === "create") return { command: "ae.parallax.create", response: await client.execute("ae.parallax.create", { ...state.parallax }) };
+  // Adjust must execute the host's redistribution path. In Quick mode the
+  // existing rig is intentionally reused without changes.
+  if (t.operation === "adjust") return { command: "ae.parallax.adjust", response: await client.execute("ae.parallax.adjust", { ...state.parallax }, { mode: "advanced" }) };
+  if (t.operation === "remove") return { command: "ae.parallax.remove", response: await client.execute("ae.parallax.remove", {}, { allowDestructive: true }) };
+  if (["subtle", "truck", "vertical", "dolly"].includes(t.operation)) return {
+    command: "ae.parallax.move", response: await client.execute("ae.parallax.move", { preset: t.operation, durationSeconds: 3 })
+  };
   if (t.operation === "autoFocus") {
     return {
       command: "ae.parallax.auto-focus",
@@ -7697,6 +8561,13 @@ function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
       label: i18n.t("parallaxFull.operation"),
       value: t.operation,
       options: [
+        { value: "create", label: i18n.t("parallaxFull.op.create") },
+        { value: "adjust", label: i18n.t("parallaxFull.op.adjust") },
+        { value: "subtle", label: i18n.t("parallaxFull.op.subtle") },
+        { value: "truck", label: i18n.t("parallaxFull.op.truck") },
+        { value: "vertical", label: i18n.t("parallaxFull.op.vertical") },
+        { value: "dolly", label: i18n.t("parallaxFull.op.dolly") },
+        { value: "remove", label: i18n.t("parallaxFull.op.remove") },
         { value: "autoFocus", label: i18n.t("parallaxFull.op.autoFocus") },
         { value: "zoom", label: i18n.t("parallaxFull.op.zoom") },
         { value: "wiggle", label: i18n.t("parallaxFull.op.wiggle") },
@@ -7852,20 +8723,19 @@ async function applyParallaxFull(
   logger.recordResponse(command, response);
 
   if (response.ok) {
-    shell.setStatus(i18n.t("message.parallaxFullApplied"), "ok");
+    shell.setStatus(i18n.t(state.parallaxFull.operation === "remove" ? "message.parallaxRemoved" :
+      ["subtle", "truck", "vertical", "dolly"].includes(state.parallaxFull.operation) ? "message.parallaxMotionApplied" :
+      state.parallaxFull.operation === "create" ? "message.parallaxCreated" :
+      state.parallaxFull.operation === "adjust" ? "message.parallaxAdjusted" : "message.parallaxFullApplied"), "ok");
   } else {
     reportFailure(shell, i18n, response);
   }
   setBusy(shell, false);
 }
 
-function parallaxDisabledReason(i18n: I18n): string | null {
-  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
-  if (!state.context?.isComposition) return i18n.t("message.parallaxNoActiveComp");
-  // O host recusa nome vazio no preflight; dizer isso antes do clique evita a
-  // ida ao host so para voltar com erro.
-  if (state.parallax.controllerName.trim() === "") return i18n.t("message.parallaxNeedsName");
-  return null;
+function renderUnifiedParallax(regions: RenderRegions, i18n: I18n): void {
+  renderParallaxFull(regions, i18n);
+  if (state.parallaxFull.operation === "create" || state.parallaxFull.operation === "adjust") renderParallax(regions, i18n);
 }
 
 function renderParallax(regions: RenderRegions, i18n: I18n): void {
@@ -7873,7 +8743,7 @@ function renderParallax(regions: RenderRegions, i18n: I18n): void {
   const t = state.parallax;
 
   for (const campo of [
-    { id: "depthStep", key: "parallax.depthStep", min: 1, max: 100000, step: 10, unit: "parallax.unit.px" },
+    { id: "depthStep", key: "parallax.depthStep", min: 0, max: 100000, step: 10, unit: "parallax.unit.px" },
     { id: "strength", key: "parallax.strength", min: 0, max: 10, step: 0.1, unit: "parallax.unit.factor" }
   ] as const) {
     regions.content.appendChild(
@@ -7949,33 +8819,6 @@ function renderParallax(regions: RenderRegions, i18n: I18n): void {
   );
 
   regions.content.appendChild(hint(document, i18n.t("message.parallaxInstructions")));
-}
-
-async function applyParallax(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
-  if (state.busy) return;
-
-  if (!state.context?.isComposition) {
-    state.lastError = i18n.t("message.parallaxNoActiveComp");
-    shell.setStatus(i18n.t("status.notCompleted"), "error");
-    shell.rerender();
-    return;
-  }
-
-  shell.setStatus(i18n.t("status.applyingParallax"), "busy");
-  setBusy(shell, true, i18n.t("status.applyingParallax"));
-
-  const response = await client.execute<{ layerCount: number; cameraDistance: number }>(
-    "ae.animate.parallax.quick",
-    { ...state.parallax }
-  );
-  logger.recordResponse("ae.animate.parallax.quick", response);
-
-  if (response.ok) {
-    shell.setStatus(i18n.t("message.parallaxApplied", { count: response.data?.layerCount ?? 0 }), "ok");
-  } else {
-    reportFailure(shell, i18n, response);
-  }
-  setBusy(shell, false);
 }
 
 function fastEditDisabledReason(i18n: I18n): string | null {
@@ -8611,7 +9454,13 @@ async function applyTimeMarkerLoop(shell: Shell, i18n: I18n, logger: MotionLogge
 }
 
 
-function aiToVectorDisabledReason(): string | null { return null; }
+function vectorDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.quickNoActiveComp");
+  if (state.context.selectionLayerCount < 1) return i18n.t("message.quickNeedsLayers");
+  return null;
+}
+function aiToVectorDisabledReason(i18n: I18n): string | null { return vectorDisabledReason(i18n); }
 function renderAiToVector(regions: RenderRegions, i18n: I18n): void {
   const shell = regions.shell;
   regions.content.appendChild(checkboxField(document, { id: "field.aiToVector.keepOriginal", label: i18n.t("field.aiToVector.keepOriginal"), checked: state.aiToVector.keepOriginal, onChange: (val: boolean) => { state.aiToVector.keepOriginal = val; shell.rerender(); } }));
@@ -8619,14 +9468,14 @@ function renderAiToVector(regions: RenderRegions, i18n: I18n): void {
 }
 async function applyAiToVector(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
   if (state.busy) return;
-  setBusy(shell, true, "Converting...");
+  setBusy(shell, true, i18n.t("status.applyingQuick", { tool: i18n.t("tool.aiToVector.name") }));
   const response = await client.execute("ae.vector.ai-to-vector", { keepOriginal: state.aiToVector.keepOriginal });
   logger.recordResponse("ae.vector.ai-to-vector", response);
   if (response.ok) { shell.setStatus(i18n.t("message.aiToVectorApplied"), "ok"); } else { reportFailure(shell, i18n, response); }
   setBusy(shell, false);
 }
 
-function textToVectorDisabledReason(): string | null { return null; }
+function textToVectorDisabledReason(i18n: I18n): string | null { return vectorDisabledReason(i18n); }
 function renderTextToVector(regions: RenderRegions, i18n: I18n): void {
   const shell = regions.shell;
   regions.content.appendChild(checkboxField(document, { id: "field.textToVector.keepOriginal", label: i18n.t("field.textToVector.keepOriginal"), checked: state.textToVector.keepOriginal, onChange: (val: boolean) => { state.textToVector.keepOriginal = val; shell.rerender(); } }));
@@ -8634,14 +9483,18 @@ function renderTextToVector(regions: RenderRegions, i18n: I18n): void {
 }
 async function applyTextToVector(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
   if (state.busy) return;
-  setBusy(shell, true, "Converting...");
+  setBusy(shell, true, i18n.t("status.applyingQuick", { tool: i18n.t("tool.textToVector.name") }));
   const response = await client.execute("ae.vector.text-to-vector", { keepOriginal: state.textToVector.keepOriginal });
   logger.recordResponse("ae.vector.text-to-vector", response);
   if (response.ok) { shell.setStatus(i18n.t("message.textToVectorApplied"), "ok"); } else { reportFailure(shell, i18n, response); }
   setBusy(shell, false);
 }
 
-function particlesDisabledReason(): string | null { return null; }
+function particlesDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.quickNoActiveComp");
+  return null;
+}
 function renderParticles(regions: RenderRegions, i18n: I18n): void {
   const shell = regions.shell;
   regions.content.appendChild(numberField(document, { id: "field.particles.birthRate", label: i18n.t("field.particles.birthRate"), value: state.particles.birthRate, min: 0.1, max: 10, step: 0.1, onCommit: (val: number) => { state.particles.birthRate = val; shell.rerender(); }}));
@@ -8651,14 +9504,18 @@ function renderParticles(regions: RenderRegions, i18n: I18n): void {
 }
 async function applyParticles(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
   if (state.busy) return;
-  setBusy(shell, true, "Creating particles...");
+  setBusy(shell, true, i18n.t("status.applyingQuick", { tool: i18n.t("tool.particles.name") }));
   const response = await client.execute("ae.effect.particles", { birthRate: state.particles.birthRate, longevity: state.particles.longevity, velocity: state.particles.velocity });
   logger.recordResponse("ae.effect.particles", response);
   if (response.ok) { shell.setStatus(i18n.t("message.particlesApplied"), "ok"); } else { reportFailure(shell, i18n, response); }
   setBusy(shell, false);
 }
 
-function textureDisabledReason(): string | null { return null; }
+function textureDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.quickNoActiveComp");
+  return null;
+}
 function renderTexture(regions: RenderRegions, i18n: I18n): void {
   const shell = regions.shell;
   regions.content.appendChild(numberField(document, { id: "field.texture.opacity", label: i18n.t("field.texture.opacity"), value: state.texture.opacity, min: 0, max: 100, step: 1, onCommit: (val: number) => { state.texture.opacity = val; shell.rerender(); }}));
@@ -8666,24 +9523,289 @@ function renderTexture(regions: RenderRegions, i18n: I18n): void {
 }
 async function applyTexture(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
   if (state.busy) return;
-  setBusy(shell, true, "Applying texture...");
+  setBusy(shell, true, i18n.t("status.applyingQuick", { tool: i18n.t("tool.texture.name") }));
   const response = await client.execute("ae.asset.texture", { blendMode: state.texture.blendMode, opacity: state.texture.opacity });
   logger.recordResponse("ae.asset.texture", response);
   if (response.ok) { shell.setStatus(i18n.t("message.textureApplied"), "ok"); } else { reportFailure(shell, i18n, response); }
   setBusy(shell, false);
 }
 
-function cleanDisabledReason(): string | null { return null; }
+function cleanDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (state.clean.scanToken && state.clean.selectedItemIds.length === 0) return i18n.t("message.clean.selectManaged");
+  return null;
+}
 function renderClean(regions: RenderRegions, i18n: I18n): void {
   const shell = regions.shell;
-  regions.content.appendChild(checkboxField(document, { id: "field.clean.removeConfirmed", label: i18n.t("field.clean.removeConfirmed"), checked: state.clean.removeConfirmed, onChange: (val: boolean) => { state.clean.removeConfirmed = val; shell.rerender(); } }));
-  regions.content.appendChild(hint(document, i18n.t("message.cleanInstructions")));
+  if (!state.clean.scanToken) {
+    regions.content.appendChild(hint(document, i18n.t("message.cleanInstructions")));
+    return;
+  }
+  regions.content.appendChild(hint(document, i18n.t("message.clean.previewCount", { count: state.clean.findings.length })));
+  if (state.clean.findings.length === 0) regions.content.appendChild(hint(document, i18n.t("message.clean.none")));
+  for (const finding of state.clean.findings) {
+    if (finding.origin === "managed" && finding.id !== null) {
+      const id = finding.id;
+      regions.content.appendChild(checkboxField(document, {
+        id: "clean-item-" + id,
+        label: i18n.t("message.clean.managedItem", { name: finding.name }),
+        checked: state.clean.selectedItemIds.includes(id),
+        onChange: (checked) => {
+          state.clean.selectedItemIds = checked
+            ? state.clean.selectedItemIds.concat(id)
+            : state.clean.selectedItemIds.filter(value => value !== id);
+          shell.rerender();
+        }
+      }));
+    } else {
+      regions.content.appendChild(hint(document, i18n.t("message.clean.externalItem", { name: finding.name })));
+    }
+  }
+  regions.content.appendChild(button(document, {
+    label: i18n.t("action.clean.refresh"),
+    onClick: () => void refreshCleanPreview()
+  }));
 }
 async function applyClean(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
   if (state.busy) return;
-  setBusy(shell, true, "Cleaning project...");
-  const response = await client.execute("ae.project.clean", { removeConfirmed: state.clean.removeConfirmed });
+  if (!state.clean.scanToken) { await scanClean(shell, i18n, logger, client); return; }
+  if (state.clean.selectedItemIds.length === 0) return;
+  setBusy(shell, true, i18n.t("status.clean.removing"));
+  const response = await client.execute("ae.project.clean", {
+    removeConfirmed: true,
+    selectedItemIds: state.clean.selectedItemIds.slice(),
+    scanToken: state.clean.scanToken
+  }, { allowDestructive: true });
   logger.recordResponse("ae.project.clean", response);
-  if (response.ok) { shell.setStatus(i18n.t("message.cleanApplied"), "ok"); } else { reportFailure(shell, i18n, response); }
+  if (response.ok) {
+    const removed = response.data && typeof response.data === "object" && "removedCount" in response.data
+      ? Number(response.data.removedCount) : 0;
+    state.clean = { scanToken: null, findings: [], selectedItemIds: [] };
+    shell.setStatus(i18n.t("message.clean.removed", { count: removed }), "ok");
+  } else {
+    state.clean = { scanToken: null, findings: [], selectedItemIds: [] };
+    reportFailure(shell, i18n, response);
+  }
   setBusy(shell, false);
+}
+
+async function refreshCleanPreview(): Promise<void> {
+  const wiring = wiringAtual;
+  if (!wiring) return;
+  await scanClean(wiring.shell, wiring.i18n, wiring.logger, wiring.client);
+}
+
+function isCleanPreviewData(data: unknown): data is { scanToken: string; findings: CleanFinding[] } {
+  if (!data || typeof data !== "object") return false;
+  const candidate = data as Record<string, unknown>;
+  return typeof candidate.scanToken === "string" && candidate.scanToken.length > 0 &&
+    Array.isArray(candidate.findings) && candidate.findings.every((item: unknown) => {
+      if (!item || typeof item !== "object") return false;
+      const finding = item as Record<string, unknown>;
+      return (finding.id === null || (typeof finding.id === "number" && Number.isInteger(finding.id) && finding.id > 0)) &&
+        typeof finding.name === "string" &&
+        (finding.origin === "managed" || finding.origin === "external") &&
+        (finding.risk === "low" || finding.risk === "high");
+    });
+}
+
+async function scanClean(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  state.clean = { scanToken: null, findings: [], selectedItemIds: [] };
+  setBusy(shell, true, i18n.t("status.clean.scanning"));
+  const response = await client.execute("ae.project.clean", { removeConfirmed: false });
+  logger.recordResponse("ae.project.clean", response);
+  if (response.ok && isCleanPreviewData(response.data)) {
+    state.clean = { scanToken: response.data.scanToken, findings: response.data.findings, selectedItemIds: [] };
+    shell.setStatus(i18n.t("message.clean.scanReady"), "ok");
+  } else if (response.ok) {
+    shell.setStatus(i18n.t("message.clean.invalidPreview"), "error");
+  } else {
+    reportFailure(shell, i18n, response);
+  }
+  setBusy(shell, false);
+}
+
+function textEffectsDisabledReason(kind: TextEffectKind, command: string, i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("message.textBoxNoActiveComp");
+  if (!state.context.selectionLayerCount) return i18n.t("textEffects.needsSelection");
+  if (kind === "wordReveal") {
+    const readReason = wordRevealDisabledReason(i18n, state.activeTool === "wordReveal" && wiringAtual?.shell.activeView() === "tools");
+    if (readReason) return readReason;
+  }
+  if (kind === "variableMorph") {
+    const readReason = variableMorphDisabledReason(i18n, state.activeTool === "variableMorph" && wiringAtual?.shell.activeView() === "tools");
+    if (readReason) return readReason;
+  }
+  if (!validTextEffect(kind, command)) return i18n.t("textEffects.invalid");
+  return null;
+}
+
+function verticalPulseDisabledReason(i18n: I18n): string | null {
+  if (state.busy) return state.busyReason ?? i18n.t("status.initializing");
+  if (!state.context?.isComposition) return i18n.t("verticalPulse.noActiveComp");
+  if (!state.context.selectionLayerCount) return i18n.t("verticalPulse.needsText");
+  const editor = state.activeTool === "verticalPulse" && wiringAtual?.shell.activeView() === "tools";
+  if (editor && (verticalPulseReadingKey !== null || verticalPulseReadContextKey !== contextFingerprint(state.context))) return i18n.t("verticalPulse.reading");
+  if (editor) {
+    const readReason = verticalPulseReadDisabledReason(i18n, state.context.compFrameRate, true);
+    if (readReason) return readReason;
+    if (!validVerticalPulse(state.context.compFrameRate)) return i18n.t("textEffects.invalid");
+  }
+  return null;
+}
+
+async function applyVerticalPulse(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  const reason = verticalPulseDisabledReason(i18n);
+  if (reason) { state.lastError = reason; shell.rerender(); return; }
+  const action = verticalPulseAction(state.context?.compFrameRate ?? null);
+  const args = verticalPulseArgs(state.context?.compFrameRate ?? null);
+  setBusy(shell, true, i18n.t(action === "bake" ? "verticalPulse.baking" : action === "update" ? "verticalPulse.updating" : "verticalPulse.applying"));
+  try {
+    const response = await client.execute("ae.text.vertical-pulse", args, { preserveSelection: true });
+    logger.recordResponse("ae.text.vertical-pulse", response);
+    if (!response.ok) reportFailure(shell, i18n, response);
+    else {
+      state.lastError = null;
+      if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+      shell.setStatus(i18n.t(action === "remove" ? "verticalPulse.removed" : action === "bake" ? "verticalPulse.baked"
+        : action === "update" ? "verticalPulse.updated" : "verticalPulse.applied"), "ok");
+      // The mutation may have changed engines or lifecycle state. Keep Apply
+      // blocked if its following read rejects or throws before hydration.
+      markVerticalPulseReadFailed();
+      const selected = await client.execute("ae.text.vertical-pulse.read", {});
+      logger.recordResponse("ae.text.vertical-pulse.read", selected);
+      if (selected.ok && isVerticalPulseReadData(selected.data)) {
+        hydrateVerticalPulse(selected.data, state.context?.compFrameRate ?? null);
+        verticalPulseReadContextKey = contextFingerprint(state.context);
+      } else {
+        markVerticalPulseReadFailed();
+        if (!selected.ok) reportFailure(shell, i18n, selected);
+        else { state.lastError = i18n.t("verticalPulse.readInvalid"); shell.setStatus(state.lastError, "error"); }
+      }
+    }
+  } catch {
+    state.lastError = i18n.t("message.failureWithoutReason");
+    shell.setStatus(state.lastError, "error");
+  } finally { setBusy(shell, false); }
+}
+
+let verticalPulseReadSequence = 0;
+let verticalPulseReadContextKey: string | null = null;
+let verticalPulseReadingKey: string | null = null;
+/** Automatic selection reads stay silent and never overwrite edits made while awaiting the host. */
+async function refreshVerticalPulseControls(): Promise<void> {
+  const wiring = wiringAtual;
+  if (!wiring || state.busy) return;
+  const { shell, i18n, logger, client } = wiring;
+  const signature = contextFingerprint(state.context);
+  if (verticalPulseReadingKey === signature) return;
+  const sequence = ++verticalPulseReadSequence, revision = verticalPulseRevision();
+  verticalPulseReadingKey = signature;
+  const isCurrent = (): boolean => sequence === verticalPulseReadSequence && signature === contextFingerprint(state.context)
+    && state.activeTool === "verticalPulse" && shell.activeView() === "tools";
+  try {
+    const response = await client.execute("ae.text.vertical-pulse.read", {});
+    logger.recordResponse("ae.text.vertical-pulse.read", response);
+    if (!isCurrent()) return;
+    if (!response.ok) { verticalPulseReadContextKey = signature; markVerticalPulseReadFailed(); reportFailure(shell, i18n, response); }
+    else if (!isVerticalPulseReadData(response.data)) {
+      verticalPulseReadContextKey = signature; markVerticalPulseReadFailed(); state.lastError = i18n.t("verticalPulse.readInvalid"); shell.setStatus(state.lastError, "error");
+    } else if (hydrateVerticalPulse(response.data, state.context?.compFrameRate ?? null, revision)) {
+      verticalPulseReadContextKey = signature; state.lastError = null;
+    } else {
+      verticalPulseReadContextKey = signature; markVerticalPulseReadFailed();
+    }
+  } catch {
+    if (isCurrent()) { verticalPulseReadContextKey = signature; markVerticalPulseReadFailed(); state.lastError = i18n.t("verticalPulse.readInvalid"); shell.setStatus(state.lastError, "error"); }
+  } finally {
+    if (sequence === verticalPulseReadSequence) verticalPulseReadingKey = null;
+    if (isCurrent()) shell.rerender();
+  }
+}
+
+async function applyTextEffect(kind: TextEffectKind, command: string, shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy) return;
+  const reason = textEffectsDisabledReason(kind, command, i18n);
+  if (reason) { state.lastError = reason; shell.rerender(); return; }
+  setBusy(shell, true, i18n.t("textEffects.applying"));
+  try {
+    const args = textEffectArgs(kind);
+    let preserveSelection = kind === "wordReveal";
+    if (kind === "variableMorph") {
+      const selected = await client.execute("ae.text.variable-morph.read", {});
+      logger.recordResponse("ae.text.variable-morph.read", selected);
+      if (!selected.ok) { reportFailure(shell, i18n, selected); return; }
+      if (!isVariableMorphReadData(selected.data)) { markVariableMorphReadFailed(); shell.setStatus(i18n.t("proximityMorph.readInvalid"), "error"); return; }
+      preserveSelection = args.action !== "apply" || selected.data.rigVersion > 0;
+    }
+    const response = await client.execute(command, args, { preserveSelection });
+    logger.recordResponse(command, response);
+    if (!response.ok) reportFailure(shell, i18n, response);
+    else {
+      state.lastError = null;
+      shell.setStatus(i18n.t(args.action === "remove" ? "textEffects.removed" : args.action === "bake" ? kind === "variableMorph" ? "proximityMorph.baked" : "wordReveal.baked"
+        : args.action === "sweep" ? "proximityMorph.swept" : kind === "variableMorph" && args.action === "update" ? "proximityMorph.updated" : "textEffects.applied"), "ok");
+      if (kind === "wordReveal") {
+        const selected = await client.execute("ae.text.word-reveal.read", {});
+        logger.recordResponse("ae.text.word-reveal.read", selected);
+        if (selected.ok && isWordRevealReadData(selected.data)) hydrateWordReveal(selected.data);
+      }
+      if (kind === "variableMorph") {
+        const selected = await client.execute("ae.text.variable-morph.read", {});
+        logger.recordResponse("ae.text.variable-morph.read", selected);
+        if (selected.ok && isVariableMorphReadData(selected.data)) hydrateVariableMorph(selected.data);
+      }
+    }
+  } catch {
+    state.lastError = i18n.t("message.failureWithoutReason");
+    shell.setStatus(state.lastError, "error");
+  } finally { setBusy(shell, false); }
+}
+
+let wordRevealReadSequence = 0;
+let variableMorphReadSequence = 0;
+async function refreshVariableMorphControls(): Promise<void> {
+  const wiring = wiringAtual;
+  if (!wiring || state.busy) return;
+  const { shell, i18n, logger, client } = wiring;
+  const sequence = ++variableMorphReadSequence;
+  const signature = contextFingerprint(state.context);
+  setBusy(shell, true, i18n.t("proximityMorph.reading"));
+  const isCurrent = (): boolean => sequence === variableMorphReadSequence && signature === contextFingerprint(state.context)
+    && state.activeTool === "variableMorph" && shell.activeView() === "tools";
+  try {
+    const response = await client.execute("ae.text.variable-morph.read", {});
+    logger.recordResponse("ae.text.variable-morph.read", response);
+    if (!isCurrent()) return;
+    if (!response.ok) { markVariableMorphReadFailed(); reportFailure(shell, i18n, response); }
+    else if (!isVariableMorphReadData(response.data)) {
+      markVariableMorphReadFailed(); state.lastError = i18n.t("proximityMorph.readInvalid"); shell.setStatus(state.lastError, "error");
+    } else {
+      hydrateVariableMorph(response.data, Math.max(1, Math.min(5000, 250 * (state.context?.compHeight ?? 1080) / 1080)));
+      state.lastError = null;
+    }
+  } catch {
+    if (isCurrent()) { markVariableMorphReadFailed(); state.lastError = i18n.t("proximityMorph.readInvalid"); shell.setStatus(state.lastError, "error"); }
+  } finally { if (sequence === variableMorphReadSequence) setBusy(shell, false); }
+}
+async function refreshWordRevealControls(): Promise<void> {
+  const wiring = wiringAtual;
+  if (!wiring || state.busy) return;
+  const { shell, i18n, logger, client } = wiring;
+  const sequence = ++wordRevealReadSequence;
+  const signature = contextFingerprint(state.context);
+  setBusy(shell, true, i18n.t("wordReveal.reading"));
+  try {
+    const response = await client.execute("ae.text.word-reveal.read", {});
+    logger.recordResponse("ae.text.word-reveal.read", response);
+    if (sequence !== wordRevealReadSequence || signature !== contextFingerprint(state.context) || state.activeTool !== "wordReveal") return;
+    if (!response.ok) { markWordRevealReadFailed(); reportFailure(shell, i18n, response); }
+    else if (!isWordRevealReadData(response.data)) {
+      markWordRevealReadFailed(); state.lastError = i18n.t("wordReveal.readInvalid"); shell.setStatus(state.lastError, "error");
+    } else { hydrateWordReveal(response.data); state.lastError = null; }
+  } catch { markWordRevealReadFailed(); state.lastError = i18n.t("wordReveal.readInvalid"); shell.setStatus(state.lastError, "error"); }
+  finally { if (sequence === wordRevealReadSequence) setBusy(shell, false); }
 }

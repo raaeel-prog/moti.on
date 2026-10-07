@@ -204,7 +204,8 @@
       if (
         beforeExpression !== "" &&
         beforeExpression !== desired &&
-        !MotionExpressions.isManagedWiggle(beforeExpression)
+        !MotionExpressions.isManagedWiggle(beforeExpression) &&
+        !MotionExpressions.isManagedWiggleLive(beforeExpression)
       ) {
         return {
           error: failure(
@@ -236,19 +237,105 @@
     property.expressionEnabled = item.beforeEnabled === true;
   }
 
+  /**
+   * Os tres controles que o Wiggle expoe no Effect Controls.
+   *
+   * Sem `unit`: `live-controls.jsx` acrescenta " (unidade)" ao nome do efeito
+   * quando ela existe, e aqui o nome curto le melhor no painel do After
+   * Effects, que ja e estreito.
+   */
+  var LIVE_BINDINGS = /** @type {MotionLiveControlBindingHost[]} */ ([
+    {
+      paramId: "frequency",
+      label: { "pt-BR": "Frequência", "en-US": "Frequency" },
+      help: { "pt-BR": "Oscilações por segundo.", "en-US": "Wiggles per second." },
+      control: "slider",
+      target: "layer",
+      order: 1,
+      min: 0,
+      max: 100
+    },
+    {
+      paramId: "amplitude",
+      label: { "pt-BR": "Amplitude", "en-US": "Amplitude" },
+      help: { "pt-BR": "Quanto a propriedade se afasta do valor.", "en-US": "How far the property strays." },
+      control: "slider",
+      target: "layer",
+      order: 2,
+      min: 0,
+      max: 100000
+    },
+    {
+      paramId: "seed",
+      label: { "pt-BR": "Seed", "en-US": "Seed" },
+      help: { "pt-BR": "Muda o sorteio sem mudar a intensidade.", "en-US": "Changes the draw, not the intensity." },
+      control: "slider",
+      target: "layer",
+      order: 3,
+      min: 0,
+      max: 100000
+    }
+  ]);
+
   MotionRegistry.register("ae.expression.wiggle", {
-    preflight: function (args) {
+    preflight: function (args, context, options) {
+      if (options && options.emitLiveControls === true) return validateArgs(args) || MotionQuickEffects.prepare("wiggle", args, options).error;
       return prepare(args).error;
     },
 
-    run: function (args) {
+    /**
+     * @param {Record<string, unknown>} args
+     * @param {Record<string, unknown>} context
+     * @param {Record<string, unknown>} [options]
+     * @returns {MotionCommandResult}
+     */
+    run: function (args, context, options) {
+      if (options && options.emitLiveControls === true) return MotionQuickEffects.run("wiggle", args, context, options);
       var prepared = prepare(args);
       if (prepared.error) throw new Error("Wiggle ficou invalido depois do preflight.");
+
+      // Live Controls: em vez de cravar os numeros na expressao, cria sliders
+      // na camada e aponta a expressao para eles. E o que permite ajustar
+      // frequencia e amplitude dentro do After Effects, sem voltar ao painel.
+      var live = !!(options && options.emitLiveControls === true);
+      var preset = null;
+      var i;
+
+      if (live && prepared.items.length > 0) {
+        var propriedades = [];
+        for (i = 0; i < prepared.items.length; i += 1) {
+          var origem = prepared.items[i];
+          if (origem) propriedades.push(origem.property);
+        }
+        preset = MotionLivePreset.aplicar(propriedades, {
+          tool: "Wiggle",
+          rigId: "ae.expression.wiggle",
+          locale: context ? context.locale : null,
+          bindings: LIVE_BINDINGS,
+          values: {
+            frequency: args.frequency,
+            amplitude: args.amplitude,
+            seed: args.seed
+          }
+        });
+
+        // Os controles ja existem: agora cada propriedade recebe a expressao
+        // que aponta para os DELA. `changed` e recalculado porque o texto
+        // desejado so ficou conhecido agora.
+        for (i = 0; i < prepared.items.length; i += 1) {
+          var alvo = prepared.items[i];
+          var refs = preset.refsPorPropriedade[i];
+          if (!alvo || !refs) continue;
+          alvo.desired = MotionExpressions.renderWiggleLive(
+            /** @type {{frequency: string, amplitude: string, seed: string}} */ (refs)
+          );
+          alvo.changed = alvo.beforeExpression !== alvo.desired || alvo.beforeEnabled !== true;
+        }
+      }
 
       var touched = [];
       var appliedCount = 0;
       var unchangedCount = 0;
-      var i;
       try {
         for (i = 0; i < prepared.items.length; i += 1) {
           var item = prepared.items[i];
@@ -279,6 +366,9 @@
             rollbackFailed = true;
           }
         }
+        // Os controles criados saem junto: deixa-los para tras encheria o
+        // Effect Controls de sliders orfaos que nenhuma expressao le.
+        if (preset && !preset.desfazer()) rollbackFailed = true;
         if (rollbackFailed) {
           var rollbackError = /** @type {Error & {motionCode?: string}} */ (
             new Error("Rollback Wiggle falhou.")
@@ -291,10 +381,11 @@
 
       return {
         changed: appliedCount > 0,
-        warnings: [],
+        warnings: preset ? preset.avisos : [],
         data: {
           appliedCount: appliedCount,
-          unchangedCount: unchangedCount
+          unchangedCount: unchangedCount,
+          liveControls: live
         }
       };
     }

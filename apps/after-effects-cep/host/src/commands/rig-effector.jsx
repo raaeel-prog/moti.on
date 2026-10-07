@@ -186,24 +186,14 @@
     return null;
   }
 
-  /**
-   * Acrescenta um Slider Control com nome e valor.
-   *
-   * @param {PropertyGroup} lista
-   * @param {string} nome
-   * @param {number} valor
-   * @returns {void}
-   */
-  function adicionarSlider(lista, nome, valor) {
-    var slider = MotionEffects.add(lista, MN.slider, nome);
-    MotionEffects.setStatic(/** @type {Property} */ (slider.property(MN.sliderValue)), valor);
-  }
+  var GROUP_BINDINGS = [{"paramId": "radius", "label": {"pt-BR": "Raio", "en-US": "Radius"}, "control": "slider", "target": "controller", "order": 1, "min": 0, "max": 1000000, "unit": "px"}, {"paramId": "positionAmount", "label": {"pt-BR": "Posição", "en-US": "Position"}, "control": "slider", "target": "controller", "order": 2, "min": -100000, "max": 100000, "unit": "px"}, {"paramId": "scaleAmount", "label": {"pt-BR": "Escala", "en-US": "Scale"}, "control": "slider", "target": "controller", "order": 3, "min": -100000, "max": 100000, "unit": "%"}, {"paramId": "rotationAmount", "label": {"pt-BR": "Rotação", "en-US": "Rotation"}, "control": "slider", "target": "controller", "order": 4, "min": -100000, "max": 100000, "unit": "°"}, {"paramId": "opacityAmount", "label": {"pt-BR": "Opacidade", "en-US": "Opacity"}, "control": "slider", "target": "controller", "order": 5, "min": -100000, "max": 100000, "unit": "%"}];
 
   /**
    * @param {Record<string, unknown>} args
+   * @param {any} context
    * @returns {MotionCommandResult}
    */
-  function run(args) {
+  function run(args, context) {
     var comp = /** @type {CompItem} */ (app.project.activeItem);
     var selecionadas = comp.selectedLayers;
 
@@ -211,6 +201,7 @@
     var controllerCriado = null;
     var tocadas = [];
     var comentarioAnterior = null;
+    var controls = /** @type {any} */ (null);
     var appliedCount = 0;
     var i;
     var j;
@@ -225,13 +216,6 @@
           comp.height / 2
         ]);
 
-        var lista = /** @type {PropertyGroup} */ (MotionEffects.parade(controller));
-        adicionarSlider(lista, NOME_RAIO, /** @type {number} */ (args.radius));
-        for (j = 0; j < ALVOS.length; j += 1) {
-          var criar = /** @type {{slider: string, argumento: string}} */ (ALVOS[j]);
-          adicionarSlider(lista, criar.slider, /** @type {number} */ (args[criar.argumento]));
-        }
-
         var alvoMeta = /** @type {any} */ (controller);
         comentarioAnterior = { layer: alvoMeta, comment: alvoMeta.comment };
         alvoMeta.comment = MotionRigMeta.write(
@@ -240,6 +224,26 @@
         );
       }
 
+      var oldNames = {radius: NOME_RAIO, positionAmount: "Posicao", scaleAmount: "Escala", rotationAmount: "Rotacao", opacityAmount: "Opacidade"};
+      controls = MotionGroupedControls.stage(controller, {tool: "Effector", rigId: "effector", locale: MotionLivePreset.normalizarLocale(context ? context.locale : null), targetKind: "controller", bindings: GROUP_BINDINGS, values: args}, oldNames);
+      var groupName = controls.records[0].name;
+      // Migrate every existing member in this composition, including unselected members.
+      if (controls.legacy.length) {
+        for (var n = 1; n <= comp.numLayers; n += 1) {
+          var member = comp.layer(n);
+          for (var t = 0; t < ALVOS.length; t += 1) {
+            var oldTarget = /** @type {any} */ (ALVOS[t]);
+            var oldProp = transformProperty(member, oldTarget.propriedade);
+            if (!oldProp || !MotionExpressions.isManagedEffector(oldProp.expression)) continue;
+            var source = oldProp.expression;
+            if (source.indexOf("var nomeCtrl = " + MotionJson.stringify(controller.name) + ";") < 0) continue;
+            var replacement = source.replace("var nomeRaio = " + MotionJson.stringify(NOME_RAIO), "var nomeRaio = " + MotionJson.stringify(groupName)).replace("var nomeQuantia = " + MotionJson.stringify(oldTarget.slider), "var nomeQuantia = " + MotionJson.stringify(groupName)).replace("ctrl.effect(nomeQuantia)(1)", "ctrl.effect(nomeQuantia)(" + (t + 2) + ")");
+            tocadas.push({property: oldProp, expression: source, expressionEnabled: oldProp.expressionEnabled});
+            oldProp.expression = replacement;
+            if (oldProp.expressionError) throw new Error("A migração do Effector falhou.");
+          }
+        }
+      }
       var nomeController = /** @type {any} */ (controller).name;
 
       for (i = 0; i < selecionadas.length; i += 1) {
@@ -253,8 +257,9 @@
           var property = /** @type {Property} */ (transformProperty(camada, alvo.propriedade));
           var expr = MotionExpressions.renderEffector({
             controllerName: nomeController,
-            radiusEffectName: NOME_RAIO,
-            amountEffectName: alvo.slider,
+            radiusEffectName: groupName,
+            amountEffectName: groupName,
+            amountPropertyIndex: j + 2,
             falloffCurve: args.falloffCurve,
             curve: args.curve,
             target: alvo.alvo
@@ -269,14 +274,16 @@
           // O After Effects nao lanca ao recusar uma expressao: reporta em
           // expressionError e deixa a propriedade acesa e quebrada.
           if (typeof property.expressionError === "string" && property.expressionError !== "") {
-            throw new Error("After Effects recusou a expressao do effector.");
+            throw new Error("After Effects recusou a expressao do effector: " + property.expressionError);
           }
           property.expressionEnabled = true;
           appliedCount += 1;
         }
       }
+      controls.commit();
     } catch (effectorError) {
       var rollbackFailed = false;
+      if (controls) { try { controls.rollback(); } catch (controlsError) { rollbackFailed = true; } }
       for (i = tocadas.length - 1; i >= 0; i -= 1) {
         try {
           var anterior = tocadas[i];
@@ -308,7 +315,7 @@
         rollbackError.motionCode = MotionContracts.ERROR.ROLLBACK_FAILED;
         throw rollbackError;
       }
-      var failErr = /** @type {Error & {motionCode?: string}} */ (new Error("Effector falhou."));
+      var failErr = /** @type {Error & {motionCode?: string}} */ (new Error("Effector falhou: " + String(effectorError)));
       failErr.motionCode = MotionContracts.ERROR.HOST_OPERATION_FAILED;
       throw failErr;
     }

@@ -1,316 +1,171 @@
-/**
- * CHMS-022 — Parallax Quick Rig.
- *
- * O critério de aceite central: com três camadas de tamanhos diferentes, o
- * primeiro frame permanece visualmente equivalente. Isso é medido aqui — não
- * assumido — reconstruindo o tamanho aparente de cada camada antes e depois.
- */
 import test from "node:test";
 import assert from "node:assert/strict";
-
+import { runInNewContext } from "node:vm";
 import { loadHostModules } from "./host-harness.mjs";
 
-const PropertyType = { PROPERTY: 1, INDEXED_GROUP: 2 };
-const PropertyValueType = { NO_VALUE: 0, ThreeD_SPATIAL: 6, ThreeD: 4, OneD: 1 };
-
-const clone = (v) => (Array.isArray(v) ? [...v] : v);
-
-class FakeProperty {
-  constructor(matchName, valor) {
-    this.matchName = matchName;
-    this.name = matchName;
-    this.propertyType = PropertyType.PROPERTY;
-    this.propertyValueType = PropertyValueType.ThreeD_SPATIAL;
-    this.canSetExpression = true;
-    this.expression = "";
-    this.expressionEnabled = false;
-    this.expressionError = "";
-    this.value = valor;
-    this.keys = [];
-  }
-  get numKeys() {
-    return this.keys.length;
-  }
-  setValue(v) {
-    this.value = clone(v);
-  }
+let nextId = 1;
+const clone = (v) => structuredClone(v);
+class Property {
+  constructor(value) { this.value = clone(value); this.numKeys = 0; this.expression = ""; this.keys = []; }
+  setValue(value) { if (this.failOnce) { this.failOnce = false; throw new Error("injected write failure"); } this.value = clone(value); }
+  setValueAtTime(t, value) { this.keys.push({ t, value: clone(value) }); this.numKeys = this.keys.length; }
+  valueAtTime(t) { return clone(this.keys.find((k) => k.t === t)?.value ?? this.value); }
+  removeKey(i) { this.keys.splice(i-1, 1); this.numKeys = this.keys.length; }
+  setInterpolationTypeAtKey() {}
+  setSpatialAutoBezierAtKey() {}
+  setSpatialTangentsAtKey() {}
 }
-
-class FakeLayer {
-  constructor(opcoes = {}) {
-    this.name = opcoes.name ?? "Camada";
-    this.index = opcoes.index ?? 1;
-    this.parent = null;
-    this.comment = opcoes.comment ?? "";
-    this.threeDLayer = opcoes.threeDLayer ?? false;
-    this.removido = false;
-    /** Tamanho da fonte, usado só pelo teste para medir o tamanho aparente. */
-    this.sourceWidth = opcoes.sourceWidth ?? 100;
-    this.position = new FakeProperty("ADBE Position", opcoes.position ?? [960, 540]);
-    this.scale = new FakeProperty("ADBE Scale", opcoes.scale ?? [100, 100]);
-    this.zoom = new FakeProperty("ADBE Camera Zoom", opcoes.zoom ?? 1000);
-    this.transform = {
-      property: (n) => {
-        if (n === "ADBE Position") return this.position;
-        if (n === "ADBE Scale") return this.scale;
-        if (n === "ADBE Camera Zoom") return this.zoom;
-        return null;
-      }
-    };
+class Layer {
+  constructor() {
+    this.id = nextId++; this.comment = "User notes"; this.threeDLayer = false; this.parent = null;
+    this.selected = true; this.enabled = true; this.hasVideo = true; this.blendingMode = 1;
+    this.source = {mainSource:{isStill:true},pixelAspect:1};
+    this.values = Object.fromEntries(Object.entries({"ADBE Position":[1350,250],"ADBE Scale":[-70,130],"ADBE Anchor Point":[40,90],"ADBE Rotate Z":23,"ADBE Opacity":100,"ADBE Orientation":[0,0,0],"ADBE Rotate X":0,"ADBE Rotate Y":0}).map(([k,v])=>[k,new Property(v)]));
   }
-  property(matchName) {
-    return matchName === "ADBE Transform Group" ? this.transform : null;
+  get index() { return this.comp.items.indexOf(this)+1; }
+  property(name) {
+    if (name === "ADBE Transform Group") return {property:(key)=>this.values[key]};
+    return {numProperties:0};
   }
-  remove() {
-    this.removido = true;
-  }
+  remove() { this.comp.items.splice(this.comp.items.indexOf(this),1); }
+  moveToBeginning() { this.remove(); this.comp.items.unshift(this); }
 }
-
-class FakeCameraLayer extends FakeLayer {}
-
-class FakeCompItem {
-  constructor(layers = [], opcoes = {}) {
-    this.todas = layers;
-    this.selectedLayers = opcoes.selecionadas ?? layers;
-    this.selectedProperties = [];
-    this.frameDuration = 1 / 25;
-    this.duration = 5;
-    this.width = opcoes.width ?? 1920;
-    this.height = opcoes.height ?? 1080;
-    this.time = 0;
-    this.layers = {
-      addNull: () => {
-        const n = new FakeLayer({ name: "Null 1", index: this.todas.length + 1 });
-        this.todas.push(n);
-        return n;
-      },
-      addCamera: (nome) => {
-        const c = new FakeCameraLayer({ name: nome, index: this.todas.length + 1, zoom: 1000 });
-        this.todas.push(c);
-        return c;
-      }
-    };
-  }
-  get numLayers() {
-    return this.todas.length;
-  }
-  layer(i) {
-    return this.todas[i - 1] ?? null;
-  }
+class CameraLayer extends Layer {
+  constructor() { super(); this.zoom = new Property(2000); this.dof = new Property(1); }
+  property(name) { if (name === "ADBE Camera Options Group") return {property:(key)=>key === "ADBE Camera Zoom" ? this.zoom : this.dof}; return super.property(name); }
 }
-
-async function fixture(comp) {
-  const calls = [];
-  const app = {
-    project: { activeItem: comp, expressionEngine: "javascript-1.0" },
-    beginUndoGroup(label) {
-      calls.push(["begin", label]);
-    },
-    endUndoGroup() {
-      calls.push(["end"]);
-    }
-  };
-  const scope = await loadHostModules(
-    [
-      "generated/motion-contracts.jsx",
-      "generated/motion-descriptors.jsx",
-      "src/json.jsx",
-      "src/undo.jsx",
-      "src/registry.jsx",
-      "src/rig-meta.jsx",
-      "src/commands/animate-parallax-quick.jsx",
-      "src/dispatch.jsx"
-    ],
-    {
-      app,
-      CompItem: FakeCompItem,
-      CameraLayer: FakeCameraLayer,
-      Property: FakeProperty,
-      PropertyType,
-      PropertyValueType
-    }
-  );
-  return { scope, app, comp, calls };
+class LightLayer extends Layer {}
+class CompItem {
+  constructor(n=4) {
+    this.id = nextId++; this.width=1920;this.height=1080;this.pixelAspect=1;this.renderer="ADBE Advanced 3d";this.time=0;this.duration=6;
+    this.items=Array.from({length:n},()=>new Layer());this.items.forEach(l=>l.comp=this);
+    // AE addCamera/addNull reindex existing layers AND change the selected layers.
+    this.layers={addCamera:()=>this.add(new CameraLayer()),addNull:()=>this.add(new Layer())};
+  }
+  add(layer) { this.items.forEach(l=>l.selected=false);layer.comp=this;this.items.unshift(layer);return layer; }
+  get activeCamera() { return this.items.find(l=>l instanceof CameraLayer && l.enabled); }
+  get numLayers() { return this.items.length; }
+  get selectedLayers() { return (this.selectionOrder ?? this.items).filter(l=>l.selected); }
+  layer(index) { return this.items[index-1]; }
 }
-
-function request(args) {
-  return JSON.stringify({
-    protocolVersion: 1,
-    requestId: "parallax-1",
-    command: "ae.animate.parallax.quick",
-    args,
-    context: { host: "after-effects", hostVersion: "26.3", locale: "pt_BR" },
-    options: {}
+const args = {depthStep:0,strength:1,orderMode:"selection",createCamera:true,preserveFraming:true,controllerName:"Parallax"};
+async function setup(n=4) {
+  const comp=new CompItem(n), original=[...comp.items];
+  const scope=await loadHostModules(["generated/motion-contracts.jsx","src/json.jsx","src/registry.jsx","src/rig-meta.jsx","src/commands/animate-parallax-quick.jsx"],{app:{project:{activeItem:comp}},CompItem,CameraLayer,LightLayer,Property,PropertyType:{PROPERTY:1},AutoOrientType:{NO_AUTO_ORIENT:0},BlendingMode:{NORMAL:1},KeyframeInterpolationType:{LINEAR:1}});
+  const handler=scope.MotionRegistry.get("ae.animate.parallax.quick");
+  return {comp,original,scope,handler,run:(a=args)=>{assert.equal(handler.preflight(a),null);return handler.run(a);}};
+}
+const value=(l,k)=> {
+  const p=l.values[k];
+  if (!p.expression || !p.expressionEnabled) return p.value;
+  return Array.from(runInNewContext(p.expression, {value:p.value, transform: {position: k === "ADBE Scale" ? value(l,"ADBE Position") : p.value}}));
+};
+function corners(layer) {
+  const p=value(layer,"ADBE Position"),s=value(layer,"ADBE Scale"),a=value(layer,"ADBE Anchor Point"),r=value(layer,"ADBE Rotate Z")*Math.PI/180;
+  return [[0,0],[500,0],[500,300],[0,300],a].map(([x,y])=>{
+    x=(x-a[0])*s[0]/100;y=(y-a[1])*s[1]/100;
+    const xx=p[0]+x*Math.cos(r)-y*Math.sin(r), yy=p[1]+x*Math.sin(r)+y*Math.cos(r),k=3000/(3000+(p[2]??0));
+    return [960+(xx-960)*k,540+(yy-540)*k];
   });
 }
+test("realistic selection changes do not consume the new camera as a participant",async()=>{
+  const f=await setup();const result=f.run();assert.equal(result.data.layerCount,4);
+  assert.deepEqual(f.original.map(l=>value(l,"ADBE Position")[2]),[-2500,-5000/3,-2500/3,-0]);
+  assert.ok(f.original.every(l=>l.threeDLayer&&!l.parent&&l.selected));
+  assert.equal(f.comp.activeCamera.zoom.value,3000);assert.deepEqual(value(f.comp.activeCamera,"ADBE Position"),[0,0,-3000]);
+});
+test("selection and timeline order distribute depth differently", async()=>{
+  const selected = await setup(3);
+  selected.comp.selectionOrder = [selected.original[2], selected.original[0], selected.original[1]];
+  selected.run();
+  assert.deepEqual(selected.original.map(l=>value(l,"ADBE Position")[2]),[-1250,-0,-2500]);
 
-const baseArgs = {
-  depthStep: 500,
-  strength: 1,
-  orderMode: "selection",
-  createCamera: true,
-  preserveFraming: true,
-  controllerName: "MOTION | PARALLAX"
-};
-
-/**
- * Tamanho aparente de uma camada: o tamanho da fonte, vezes a escala, dividido
- * pelo encolhimento da perspectiva na profundidade z.
- */
-function tamanhoAparente(layer, distancia) {
-  const z = layer.position.value[2] ?? 0;
-  const escala = layer.scale.value[0] / 100;
-  return (layer.sourceWidth * escala * distancia) / (distancia + z);
-}
-
-test("o primeiro frame permanece equivalente com tres camadas de tamanhos diferentes", async () => {
-  const a = new FakeLayer({ name: "A", index: 1, sourceWidth: 100 });
-  const b = new FakeLayer({ name: "B", index: 2, sourceWidth: 640 });
-  const c = new FakeLayer({ name: "C", index: 3, sourceWidth: 1920 });
-  const comp = new FakeCompItem([a, b, c], { selecionadas: [a, b, c] });
-
-  const antes = [a, b, c].map((l) => tamanhoAparente(l, 1000));
-  const { scope, calls } = await fixture(comp);
-
-  const resposta = JSON.parse(scope.MotionAE.dispatch(request(baseArgs)));
-
-  assert.equal(resposta.ok, true);
-  assert.equal(resposta.data.mode, "create");
-  assert.equal(resposta.data.layerCount, 3);
-
-  const depois = [a, b, c].map((l) => tamanhoAparente(l, resposta.data.cameraDistance));
-  for (let i = 0; i < 3; i += 1) {
-    assert.ok(
-      Math.abs(depois[i] - antes[i]) < 1e-9,
-      `camada ${i}: aparente ${depois[i]} contra ${antes[i]} antes do rig`
-    );
-  }
-  assert.deepEqual(calls, [["begin", "Moti.on: criar rig de parallax"], ["end"]]);
+  const timeline = await setup(3);
+  timeline.comp.selectionOrder = [timeline.original[2], timeline.original[0], timeline.original[1]];
+  timeline.run({...args,orderMode:"timeline"});
+  assert.deepEqual(timeline.original.map(l=>value(l,"ADBE Position")[2]),[-2500,-1250,-0]);
+});
+test("off-center anchor, mirror, nonuniform scale and rotated corners preserve projection within 1e-8",async()=>{
+  const f=await setup();const before=f.original.map(corners);f.run();const after=f.original.map(corners);
+  before.flat(2).forEach((v,i)=>assert.ok(Math.abs(v-after.flat(2)[i])<1e-8));
+});
+test("metadata survives a serialized round-trip, preserves comments, and adjusts A-B-A without drift",async()=>{
+  const f=await setup();const notes=f.original.map(l=>l.comment);f.run();const before=f.original.map(corners);const count=f.comp.numLayers;
+  const master=f.comp.items.find(l=>l.comment.includes('"rigType":"parallax.quick"'));
+  master.comment="Prefix\n"+master.comment+"\nSuffix";
+  f.run({...args,strength:0.5});f.run();assert.equal(f.comp.numLayers,count);
+  assert.deepEqual(f.original.map(corners),before);assert.deepEqual(f.original.map(l=>l.comment),notes);
+  assert.ok(master.comment.startsWith("Prefix\n")&&master.comment.endsWith("\nSuffix"));
+});
+test("partial plane write failure restores all originals and removes only newly created objects",async()=>{
+  const f=await setup();const before=f.original.map(l=>clone(l.values));f.original[1].values["ADBE Scale"].failOnce=true;
+  assert.throws(()=>f.run(),/injected write failure/);assert.equal(f.comp.numLayers,4);
+  f.original.forEach((l,i)=>{assert.equal(l.threeDLayer,false);for(const k of ["ADBE Position","ADBE Scale","ADBE Anchor Point"])assert.deepEqual(l.values[k].value,before[i][k].value);});
+});
+for(const [name,change] of [
+  ["locked",f=>f.original[1].locked=true],["parent",f=>f.original[1].parent=f.original[0]],
+  ["pre-existing 3D",f=>f.original[1].threeDLayer=true],["separated position",f=>f.original[1].values["ADBE Position"].dimensionsSeparated=true],
+  ["disabled expression",f=>f.original[1].values["ADBE Scale"].expression="value"],["rotation keys",f=>f.original[1].values["ADBE Rotate Z"].numKeys=1],
+  ["matte provider",f=>f.original[1].isTrackMatte=true],["matte consumer",f=>f.original[1].hasTrackMatte=true],
+  ["unsupported renderer",f=>f.comp.renderer="Advanced 3D"],["non-square pixels",f=>f.comp.pixelAspect=2],
+  ["external camera",f=>f.comp.add(new CameraLayer())],
+  ["solo",f=>f.original[1].solo=true]
+]) test(`${name} fails before mutation`,async()=>{const f=await setup();change(f);const count=f.comp.numLayers;assert.ok(f.handler.preflight(args));assert.equal(f.comp.numLayers,count);});
+test("one plane and preserveFraming off are explicitly refused",async()=>{const f=await setup(1);assert.ok(f.handler.preflight(args));const g=await setup();assert.ok(g.handler.preflight({...args,preserveFraming:false}));});
+test("manual edits and composition duplication cannot silently adopt or overwrite an existing rig",async()=>{
+  const f=await setup();f.run();f.original[0].values["ADBE Scale"].value=[1,2,100];assert.ok(f.handler.preflight(args));
+  const g=await setup();g.run();g.comp.id++;assert.ok(g.handler.preflight(args));
+});
+test("depth safety rollback leaves the original scene intact",async()=>{const f=await setup();assert.throws(()=>f.run({...args,depthStep:10000}),/85%/);assert.equal(f.comp.numLayers,4);assert.ok(f.original.every(l=>!l.threeDLayer));});
+test("Create and Quick share one executor; movement produces native Position keys without changing Zoom",async()=>{
+  const f=await setup();assert.equal(f.scope.MotionRegistry.get("ae.parallax.create").run,f.handler.run);f.run();
+  const h=f.scope.MotionRegistry.get("ae.parallax.move");const a={preset:"subtle",durationSeconds:3};assert.equal(h.preflight(a),null);h.run(a);
+  const camera=f.comp.activeCamera;assert.equal(camera.zoom.value,3000);assert.deepEqual(camera.parent.values["ADBE Position"].keys,[{t:0,value:[960,540,0]},{t:3,value:[998.4,540,90]}]);assert.ok(h.preflight(a));
+});
+test("remove restores original 2D transforms and preserves layer comments",async()=>{
+  const f=await setup();const before=f.original.map(l=>[value(l,"ADBE Position"),value(l,"ADBE Scale"),l.comment]);f.run();
+  const h=f.scope.MotionRegistry.get("ae.parallax.remove");assert.equal(h.preflight({}),null);h.run({});
+  assert.equal(f.comp.numLayers,4);assert.deepEqual(f.original.map(l=>[value(l,"ADBE Position"),value(l,"ADBE Scale"),l.comment]),before);assert.ok(f.original.every(l=>!l.threeDLayer));
 });
 
-test("a profundidade cresce por camada e produz z distintos", async () => {
-  const a = new FakeLayer({ name: "A", index: 1 });
-  const b = new FakeLayer({ name: "B", index: 2 });
-  const c = new FakeLayer({ name: "C", index: 3 });
-  const comp = new FakeCompItem([a, b, c], { selecionadas: [a, b, c] });
-  const { scope } = await fixture(comp);
-
-  scope.MotionAE.dispatch(request({ ...baseArgs, depthStep: 400, strength: 2 }));
-
-  // z = indice * depthStep * strength
-  assert.equal(a.position.value[2], 0);
-  assert.equal(b.position.value[2], 800);
-  assert.equal(c.position.value[2], 1600);
+test("precomps, video footage, text and shapes share the planar projection",async()=>{
+  const f=await setup();
+  f.original[0].source=new CompItem(0);
+  f.original[1].source.mainSource.isStill=false;
+  f.original[2].source=null;
+  f.original[3].source=null;
+  f.run();assert.ok(f.original.every(l=>l.threeDLayer));
+});
+test("manual depth changes preserve projection through real generated expressions and Quick does not reset them",async()=>{
+  const f=await setup();const before=corners(f.original[0]);f.run();
+  const layer=f.original[0];layer.values["ADBE Position"].setValue([1350,250,-1200]);
+  const after=corners(layer);before.flat().forEach((v,i)=>assert.ok(Math.abs(v-after.flat()[i])<1e-8));
+  const reused=f.handler.run(args,{}, {mode:"quick"});
+  assert.equal(reused.data.status,"reused");assert.equal(layer.values["ADBE Position"].value[2],-1200);
+});
+test("moving the null leaves plane compensation frozen while the camera follows its parent",async()=>{
+  const f=await setup();f.run();const camera=f.comp.activeCamera;
+  assert.ok(camera.parent.threeDLayer);assert.ok(f.original.every(l=>!l.parent));
+  const before=f.original.map(corners);camera.parent.values["ADBE Position"].setValue([1100,540,200]);
+  assert.deepEqual(f.original.map(corners),before);
 });
 
-test("as camadas viram 3D e ficam parenteadas ao controller", async () => {
-  const a = new FakeLayer({ name: "A", index: 1 });
-  const b = new FakeLayer({ name: "B", index: 2 });
-  const comp = new FakeCompItem([a, b], { selecionadas: [a, b] });
-  const { scope } = await fixture(comp);
-
-  scope.MotionAE.dispatch(request(baseArgs));
-
-  const controller = comp.todas.find((l) => l.name === "MOTION | PARALLAX");
-  assert.ok(controller, "esperava o controller");
-  assert.equal(controller.threeDLayer, true);
-  for (const camada of [a, b]) {
-    assert.equal(camada.threeDLayer, true);
-    assert.equal(camada.parent, controller);
-  }
+test("collapsed planar PSD precomps and locked interleaved overlays remain editable", async()=>{
+  const f=await setup(5);
+  for(const l of f.original) {l.source=new CompItem(2);l.collapseTransformation=true;}
+  const overlay=f.original[1];overlay.selected=false;overlay.locked=true;
+  const before=clone(overlay.values);
+  const result=f.run();assert.equal(result.data.layerCount,4);
+  assert.equal(overlay.threeDLayer,false);assert.equal(overlay.locked,true);
+  assert.deepEqual(clone(overlay.values),before);
+  assert.ok(f.original.filter(l=>l!==overlay).every(l=>!l.collapseTransformation));
+  assert.equal(overlay.collapseTransformation,true);
+  const remove=f.scope.MotionRegistry.get("ae.parallax.remove");remove.run({});
+  assert.ok(f.original.every(l=>l.collapseTransformation));
+});
+test("collapsed precomps containing nested 3D are refused before mutation",async()=>{
+ const f=await setup();f.original[0].source=new CompItem(1);f.original[0].collapseTransformation=true;
+ f.original[0].source.layer(1).threeDLayer=true;
+ assert.match(f.handler.preflight(args).message,/cena 3D/);assert.equal(f.comp.numLayers,4);
 });
 
-test("a metadata do rig entra no comentario, entre os marcadores do contrato", async () => {
-  const a = new FakeLayer({ name: "A", index: 1 });
-  const b = new FakeLayer({ name: "B", index: 2 });
-  const comp = new FakeCompItem([a, b], { selecionadas: [a, b] });
-  const { scope } = await fixture(comp);
-
-  scope.MotionAE.dispatch(request(baseArgs));
-
-  const controller = comp.todas.find((l) => l.name === "MOTION | PARALLAX");
-  assert.ok(controller.comment.includes("[MOTION_META_V1]"));
-  assert.ok(controller.comment.includes("[/MOTION_META_V1]"));
-  assert.ok(controller.comment.includes('"rigType":"parallax.quick"'));
-});
-
-test("o comentario que o usuario escreveu e preservado", async () => {
-  const a = new FakeLayer({ name: "A", index: 1 });
-  const b = new FakeLayer({ name: "B", index: 2 });
-  const comp = new FakeCompItem([a, b], { selecionadas: [a, b] });
-  const { scope } = await fixture(comp);
-
-  // O null é criado pelo comando, então o comentário do usuário é simulado
-  // escrevendo nele antes de o rig gravar a metadata.
-  const original = comp.layers.addNull;
-  comp.layers.addNull = () => {
-    const n = original();
-    n.comment = "anotacao do usuario";
-    return n;
-  };
-
-  scope.MotionAE.dispatch(request(baseArgs));
-
-  const controller = comp.todas.find((l) => l.name === "MOTION | PARALLAX");
-  assert.ok(
-    controller.comment.indexOf("anotacao do usuario") >= 0,
-    "o comentario do usuario e campo dele: o plugin so escreve entre os marcadores"
-  );
-});
-
-test("com rig existente o comando entra em Adjust em vez de duplicar", async () => {
-  const a = new FakeLayer({ name: "A", index: 1 });
-  const b = new FakeLayer({ name: "B", index: 2 });
-  const comp = new FakeCompItem([a, b], { selecionadas: [a, b] });
-  const { scope } = await fixture(comp);
-
-  scope.MotionAE.dispatch(request(baseArgs));
-  const camadasDepoisDoPrimeiro = comp.numLayers;
-
-  const segunda = JSON.parse(scope.MotionAE.dispatch(request({ ...baseArgs, depthStep: 1000 })));
-
-  assert.equal(segunda.ok, true);
-  assert.equal(segunda.data.mode, "adjust");
-  assert.equal(comp.numLayers, camadasDepoisDoPrimeiro, "nenhum controller novo foi criado");
-  // Os membros vêm do parentesco, e o novo passo já vale.
-  assert.equal(b.position.value[2], 1000);
-});
-
-test("uma camada so e recusada: sem duas nao existe paralaxe", async () => {
-  const a = new FakeLayer({ name: "A", index: 1 });
-  const comp = new FakeCompItem([a], { selecionadas: [a] });
-  const { scope, calls } = await fixture(comp);
-
-  const resposta = JSON.parse(scope.MotionAE.dispatch(request(baseArgs)));
-
-  assert.equal(resposta.ok, false);
-  assert.equal(resposta.error.code, "NO_SELECTION");
-  assert.deepEqual(calls, []);
-});
-
-test("camada com keyframes em Position e recusada antes de sobrescrever a animacao", async () => {
-  const a = new FakeLayer({ name: "A", index: 1 });
-  a.position.keys.push({ time: 0, value: [0, 0] });
-  const b = new FakeLayer({ name: "B", index: 2 });
-  const comp = new FakeCompItem([a, b], { selecionadas: [a, b] });
-  const { scope, calls } = await fixture(comp);
-
-  const resposta = JSON.parse(scope.MotionAE.dispatch(request(baseArgs)));
-
-  assert.equal(resposta.ok, false);
-  assert.equal(resposta.error.code, "KEYFRAME_CONFLICT");
-  assert.deepEqual(calls, []);
-  assert.equal(a.threeDLayer, false, "nada foi tocado");
-});
-
-test("sem preservar enquadramento a escala nao e compensada", async () => {
-  const a = new FakeLayer({ name: "A", index: 1 });
-  const b = new FakeLayer({ name: "B", index: 2 });
-  const comp = new FakeCompItem([a, b], { selecionadas: [a, b] });
-  const { scope } = await fixture(comp);
-
-  scope.MotionAE.dispatch(request({ ...baseArgs, preserveFraming: false }));
-
-  assert.deepEqual(b.scale.value, [100, 100], "a escala fica como estava");
-  assert.equal(b.position.value[2], 500, "mas a profundidade e aplicada");
-});

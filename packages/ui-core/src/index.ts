@@ -24,14 +24,13 @@ export {
 
 export {
   COMPACT_MAX,
-  COMFORT_MAX,
   anchorGrid,
-  DEFAULT_MAX,
   button,
   checkboxField,
   clearNode,
   colorField,
   createElement,
+  createIcon,
   createShell,
   hint,
   logLine,
@@ -71,16 +70,27 @@ export { bezierEditor, type BezierEditorOptions } from "./bezier.js";
 
 export {
   COMPONENT_STATES,
+  createBadge,
+  type BadgeOptions,
+  type BadgeController,
+  type FeedbackTone,
+  type ToastRegionLabels,
   createActionButton,
+  createAlert,
   createChipGroup,
   createDrawer,
   createPopover,
   createQuickTile,
   createQuickTileGrid,
+  createSkeleton,
   createSliderField,
+  createSpinner,
+  createSpinnerContainer, createEmptyState,
   createToastRegion,
   type ActionButtonController,
   type ActionButtonOptions,
+  type AlertController,
+  type AlertOptions,
   type ChipGroupController,
   type ChipGroupOptions,
   type ChipItem,
@@ -107,3 +117,41 @@ export {
   type ToastRegionController,
   type ToastRegionOptions
 } from "./components.js";
+
+export {
+  createToolBrowser,
+  type ToolBrowser,
+  type ToolBrowserItem,
+  type ToolBrowserOptions,
+  type ToolBrowserTexts
+} from "./tool-browser.js";
+
+export * from "./asset-components.js";
+export * from "./panel-preferences.js";
+
+export * from "./feedback.js";
+
+export { attachCompactNumberEditing, attachScrubbableNumber, type ScrubbableNumberOptions } from "./scrubbable-number.js";
+export {
+  registerMotiButton,
+  type MotiButton,
+  type MotiButtonConstructor,
+  type ButtonVariant
+} from "./elements/moti-button.js";
+
+export { createPanelActionBar, type PanelActionBar, type PanelActionBarOptions } from "./panel-action-bar.js";
+export { createDiagnosticsView, type DiagnosticsView, type DiagnosticsViewOptions, type DiagnosticEntry } from "./diagnostics-view.js";
+
+export { registerMotiToast, type MotiToast, type MotiToastConstructor } from "./elements/moti-toast.js";
+
+export { registerMotiDropdown, type MotiDropdown, type MotiDropdownConstructor } from "./elements/moti-dropdown.js";
+
+export { registerMotiAlert, type MotiAlert, type MotiAlertConstructor } from "./elements/moti-alert.js";
+export { registerMotiBadge, type MotiBadge, type MotiBadgeConstructor } from "./elements/moti-badge.js";
+
+export { registerMotiSlider, type MotiSlider, type MotiSliderConstructor } from "./elements/moti-slider.js";
+
+export { registerMotiPopover, type MotiPopover, type MotiPopoverConstructor } from "./elements/moti-popover.js";
+export { registerMotiDrawer, type MotiDrawer, type MotiDrawerConstructor } from "./elements/moti-drawer.js";
+
+export { ICON_CATALOG, type IconDefinition, type IconId, type IconFamily, type IconGesture } from "./icons.js";

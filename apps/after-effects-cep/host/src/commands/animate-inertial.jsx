@@ -160,7 +160,12 @@
       }
 
       var antes = property.expression;
-      if (antes !== "" && antes !== desired && !MotionExpressions.isManagedInertial(antes)) {
+      if (
+        antes !== "" &&
+        antes !== desired &&
+        !MotionExpressions.isManagedInertial(antes) &&
+        !MotionExpressions.isManagedInertialLive(antes)
+      ) {
         return {
           error: failure(
             MotionContracts.ERROR.EXPRESSION_CONFLICT,
@@ -176,6 +181,10 @@
         property: property,
         beforeExpression: antes,
         beforeEnabled: property.expressionEnabled,
+        // Por item, e nao so em `prepared.desired`: com Live Controls cada
+        // propriedade aponta para os controles da SUA camada, e o texto deixa
+        // de ser um so para o lote.
+        desired: desired,
         changed: antes !== desired || property.expressionEnabled !== true
       });
     }
@@ -190,12 +199,61 @@
     property.expressionEnabled = item.beforeEnabled === true;
   }
 
+  /**
+   * Os tres controles que a inercia expoe.
+   *
+   * `maxDurationFrames` e `startMode` ficam de fora: o primeiro e teto de
+   * seguranca contra expressao que nao converge, e o segundo muda a SEMANTICA
+   * da expressao, nao a intensidade dela. Slider serve para o que o usuario
+   * quer sentir mudando.
+   */
+  var LIVE_BINDINGS = /** @type {MotionLiveControlBindingHost[]} */ ([
+    {
+      paramId: "amplitude",
+      label: { "pt-BR": "Amplitude", "en-US": "Amplitude" },
+      help: { "pt-BR": "Tamanho do repique.", "en-US": "Size of the bounce." },
+      control: "slider",
+      target: "layer",
+      order: 1,
+      min: 0,
+      max: 1000
+    },
+    {
+      paramId: "frequency",
+      label: { "pt-BR": "Frequência", "en-US": "Frequency" },
+      help: { "pt-BR": "Repiques por segundo.", "en-US": "Bounces per second." },
+      control: "slider",
+      target: "layer",
+      order: 2,
+      min: 0,
+      max: 100
+    },
+    {
+      paramId: "decay",
+      label: { "pt-BR": "Decaimento", "en-US": "Decay" },
+      help: {
+        "pt-BR": "Quanto o repique perde força a cada volta.",
+        "en-US": "How fast the bounce loses strength."
+      },
+      control: "slider",
+      target: "layer",
+      order: 3,
+      min: 0,
+      max: 100
+    }
+  ]);
   MotionRegistry.register("ae.animate.inertial", {
     preflight: function (args) {
       return prepare(args).error;
     },
 
-    run: function (args) {
+    /**
+     * @param {Record<string, unknown>} args
+     * @param {Record<string, unknown>} context
+     * @param {Record<string, unknown>} [options]
+     * @returns {MotionCommandResult}
+     */
+    run: function (args, context, options) {
       var prepared = prepare(args);
       if (prepared.error) throw new Error("Inertial ficou invalido depois do preflight.");
 
@@ -203,6 +261,49 @@
       var appliedCount = 0;
       var unchangedCount = 0;
       var i;
+
+      // Live Controls: sliders na camada em vez de numeros cravados, para o
+      // usuario ajustar o repique dentro do After Effects.
+      var live = !!(options && options.emitLiveControls === true);
+      var preset = null;
+      if (live && options && options.mode === "quick") {
+        // Quick preserves a recognized instance before allocating any controls.
+        var fresh = [];
+        for (i = 0; i < prepared.items.length; i += 1) {
+          var existing = prepared.items[i];
+          if (existing && (MotionExpressions.isManagedInertialLive(String(existing.beforeExpression)) || MotionExpressions.isManagedInertial(String(existing.beforeExpression)))) unchangedCount += 1;
+          else if (existing) fresh.push(existing);
+        }
+        prepared.items = fresh;
+      }
+      if (live && prepared.items.length > 0) {
+        var propriedades = [];
+        for (i = 0; i < prepared.items.length; i += 1) {
+          var origem = prepared.items[i];
+          if (origem) propriedades.push(origem.property);
+        }
+        preset = MotionLivePreset.aplicar(propriedades, {
+          tool: "Inertial",
+          rigId: "ae.animate.inertial",
+          locale: context ? context.locale : null,
+          bindings: LIVE_BINDINGS,
+          values: {
+            amplitude: args.amplitude,
+            frequency: args.frequency,
+            decay: args.decay
+          }
+        });
+        for (i = 0; i < prepared.items.length; i += 1) {
+          var item2 = prepared.items[i];
+          var refs = preset.refsPorPropriedade[i];
+          if (!item2 || !refs) continue;
+          item2.desired = MotionExpressions.renderInertialLive(
+            /** @type {{amplitude: string, frequency: string, decay: string}} */ (refs),
+            { maxDurationFrames: args.maxDurationFrames, startMode: args.startMode }
+          );
+          item2.changed = item2.beforeExpression !== item2.desired || item2.beforeEnabled !== true;
+        }
+      }
 
       try {
         for (i = 0; i < prepared.items.length; i += 1) {
@@ -214,7 +315,7 @@
 
           tocadas.push(item);
           var property = /** @type {Property} */ (item.property);
-          property.expression = prepared.desired;
+          property.expression = /** @type {string} */ (item.desired);
           // O After Effects nao lanca ao recusar uma expressao: reporta em
           // expressionError e deixa a propriedade acesa e quebrada.
           if (typeof property.expressionError === "string" && property.expressionError !== "") {
@@ -236,6 +337,9 @@
             rollbackFailed = true;
           }
         }
+        // Os controles criados saem junto: sliders orfaos no Effect Controls
+        // sao pior que nenhum.
+        if (preset && !preset.desfazer()) rollbackFailed = true;
         if (rollbackFailed) {
           var rollbackError = /** @type {Error & {motionCode?: string}} */ (
             new Error("Inertial falhou e o estado anterior nao pode ser restaurado.")
@@ -250,7 +354,7 @@
 
       return {
         changed: appliedCount > 0,
-        warnings: [],
+        warnings: preset ? preset.avisos : [],
         data: { appliedCount: appliedCount, unchangedCount: unchangedCount }
       };
     }

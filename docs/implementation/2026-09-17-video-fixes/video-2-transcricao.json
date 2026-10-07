@@ -1,0 +1,31 @@
+{
+  "source": "/Users/rael/Desktop/Gravação de Tela 2026-09-17 às 01.44.18.mov",
+  "duration": 41.492,
+  "segments": [
+    {
+      "start": 0.75,
+      "end": 4.01,
+      "text": "Presets de Câmera."
+    },
+    {
+      "start": 4.01,
+      "end": 11.51,
+      "text": "Temos os presets de câmera aqui, mas eles são bem simples."
+    },
+    {
+      "start": 11.51,
+      "end": 21.01,
+      "text": "Eu queria estar melhorando essa aba aqui, principalmente em esses efeitos aqui, igual do Animation Composer também."
+    },
+    {
+      "start": 21.01,
+      "end": 35.01,
+      "text": "Efeito Black, isso aqui, essa girada aqui, essa rotação, shake distorce, simple zoom, essas transições de câmera aqui."
+    },
+    {
+      "start": 35.01,
+      "end": 39.51,
+      "text": "Eu queria que você fizesse também isso no plugin lá, do mesmo jeito que está aqui."
+    }
+  ]
+}

@@ -21,7 +21,7 @@ const PropertyType = { PROPERTY: 1, INDEXED_GROUP: 2, NAMED_GROUP: 3 };
 
 /** Parâmetros que cada efeito expõe nesta instalação simulada. */
 const PARAMS = {
-  "ADBE Glo2": ["ADBE Glo2-0003", "ADBE Glo2-0004", "ADBE Glo2-0007", "ADBE Glo2-0012"]
+  "ADBE Glo2": ["ADBE Glo2-0003", "ADBE Glo2-0004", "ADBE Glo2-0007", "ADBE Glo2-0012", "ADBE Glo2-0013"]
 };
 
 class FakeProperty {
@@ -236,7 +236,7 @@ test("o glow nativo entra como efeito gerenciado, com raio e intensidade escrito
   assert.equal(glow.matchName, "ADBE Glo2");
   assert.equal(glow.property("ADBE Glo2-0003").value, 40, "raio");
   assert.equal(glow.property("ADBE Glo2-0004").value, 2, "intensidade");
-  assert.deepEqual(glow.property("ADBE Glo2-0012").value, [0.2, 0.6, 1], "Color A");
+  assert.deepEqual(glow.property("ADBE Glo2-0012").value, [0.2, 0.6, 1, 1], "Color A");
 });
 
 test("parametro de glow ausente falha nomeando o parametro, e nao vira neon sem brilho", async () => {
@@ -372,3 +372,35 @@ test("os padroes do painel sao aceitos pelo host", async () => {
 
   assert.equal(resposta.ok, true, JSON.stringify(resposta));
 });
+
+test('Neon preserves source-text animation and manual Glow keys or expressions', async () => {
+  for (const mode of ['textKeys', 'textExpression', 'glowKeys', 'glowExpression', 'locked']) {
+    const layer = new FakeLayer();
+    const comp = new FakeCompItem([layer]);
+    if (mode === 'textKeys') layer.sourceText.numKeys = 2;
+    if (mode === 'textExpression') layer.sourceText.expression = 'value';
+    if (mode === 'locked') layer.locked = true;
+    if (mode.indexOf('glow') === 0) {
+      const effect = layer.efeitos.addProperty('ADBE Glo2');
+      effect.name = 'MOTION | NEON';
+      const prop = effect.property('ADBE Glo2-0003');
+      if (mode === 'glowKeys') prop.numKeys = 2;
+      else prop.expression = 'time*100';
+    }
+    const result = await aplica(comp);
+    assert.equal(result.ok, false, mode);
+    assert.equal(layer.sourceText.escritas, 0, mode);
+    assert.equal(result.error.code, mode === 'locked' ? 'INVALID_SELECTION_TYPE' : mode.endsWith('Keys') ? 'KEYFRAME_CONFLICT' : 'EXPRESSION_CONFLICT');
+  }
+});
+
+test('Neon writes RGBA to both glow colors while text remains RGB', async () => {
+  const layer = new FakeLayer();
+  const result = await aplica(new FakeCompItem([layer]));
+  assert.equal(result.ok, true);
+  const effect = layer.efeitos.property(1);
+  assert.deepEqual(effect.property('ADBE Glo2-0012').value, [0.2, 0.6, 1, 1]);
+  assert.deepEqual(effect.property('ADBE Glo2-0013').value, [0.2, 0.6, 1, 1]);
+  assert.deepEqual(layer.sourceText.documento.strokeColor, [0.2, 0.6, 1]);
+});
+

@@ -125,17 +125,29 @@
 
     var i;
     for (i = 0; i < selecionadas.length; i += 1) {
+      if ((/** @type {any} */ (selecionadas[i])).locked) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie as camadas selecionadas.", { selectionIndex: i });
       var efeitos = MotionEffects.parade(selecionadas[i]);
       if (!efeitos) {
         return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A selecao contem camada que nao aceita efeito.", {
           selectionIndex: i
         });
       }
+      if (!efeitos.canAddProperty(MN.echo)) return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "Echo nao esta disponivel nesta camada.", { selectionIndex: i });
       var qualquer = MotionEffects.findAny(efeitos, MN.echo);
       if (qualquer && qualquer.name !== NOME_GERENCIADO) {
         return failure(MotionContracts.ERROR.TRACK_CONFLICT, "Ja existe um Echo do usuario nesta camada.", {
           selectionIndex: i
         });
+      }
+      var gerenciado = MotionEffects.findManaged(efeitos, MN.echo, NOME_GERENCIADO);
+      if (gerenciado) {
+        var p;
+        for (p = 0; p < PARAMETROS.length; p += 1) {
+          var parametro = gerenciado.property(/** @type {string} */ (PARAMETROS[p]));
+          if (!parametro) return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "Parametro Echo indisponivel.", { parameter: PARAMETROS[p] });
+          if (parametro.expressionEnabled || parametro.expression) return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "O Echo possui expressao; ajuste o efeito diretamente.", { parameter: PARAMETROS[p] });
+          if (parametro.numKeys > 0) return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "O Echo possui animacao; ajuste os keyframes diretamente.", { parameter: PARAMETROS[p] });
+        }
       }
     }
     return null;

@@ -1,0 +1,88 @@
+/* The numeric value itself is the drag target; no extra handle or layout width. */
+.ch-shell input.ch-scrubbable-number,
+input.ch-scrubbable-number {
+  color: var(--value-editable);
+  cursor: ew-resize;
+  font-variant-numeric: tabular-nums;
+  touch-action: none;
+  -webkit-user-drag: none;
+}
+input.ch-scrubbable-number:hover:not(:disabled):not([readonly]) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+input.ch-scrubbable-number:focus {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+  text-decoration: none;
+}
+input.ch-scrubbable-number[data-scrub-pressed="true"],
+input.ch-scrubbable-number[data-scrubbing="true"] {
+  cursor: ew-resize;
+  user-select: none;
+  -webkit-user-select: none;
+  caret-color: transparent;
+  text-decoration: none;
+}
+.ch-shell input.ch-scrubbable-number:disabled,
+input.ch-scrubbable-number:disabled,
+input.ch-scrubbable-number[readonly] {
+  cursor: default;
+  color: var(--ch-text-disabled, var(--txt-3));
+  text-decoration: none;
+}
+
+/* Preserve the existing compact Edit field after changing its input type. */
+.ch-applied-value input.ch-scrubbable-number { box-sizing:border-box; width:62px; min-height:26px; padding:2px 4px; border:1px solid transparent; border-radius:3px; background:transparent; text-align:right; font:inherit; }
+.ch-applied-value input.ch-scrubbable-number:hover, .ch-applied-value input.ch-scrubbable-number:focus { background:var(--bg-2); border-color:var(--line-hairline); }
+.ch-shell[data-layout="library"] .ch-preset-workspace input.ch-scrubbable-number { color:var(--value-editable); }
+.ch-shell[data-layout="library"] .ch-preset-workspace input.ch-scrubbable-number:disabled { color:var(--ch-text-disabled,var(--txt-3)); }
+.ch-applied-value-reset { flex:0 0 auto; font-size:11px; }
+
+/* Match the editing area to the number, including in compact Tools controls. */
+.ch-shell input.ch-scrubbable-number, input.ch-scrubbable-number,
+.ch-shell input.ch-compact-number {
+  width:calc(var(--ch-number-width,3ch) + 8px) !important; min-width:0; max-width:none;
+  flex:0 0 auto; height:auto; min-height:24px; padding:1px 3px;
+  border:1px solid transparent !important; background:transparent !important;
+  border-radius:2px; box-shadow:none !important;
+}
+.ch-shell input.ch-scrubbable-number[data-number-editing="true"],
+.ch-shell input.ch-compact-number[data-number-editing="true"] {
+  border-color:var(--line-hairline) !important;
+}
+.ch-shell input.ch-scrubbable-number:focus,
+.ch-shell input.ch-compact-number:focus {
+  outline:var(--focus-ring);
+  outline-offset:1px;
+}
+.ch-shell input.ch-scrubbable-number[data-scrubbing="true"],
+.ch-shell input.ch-scrubbable-number[data-scrub-pressed="true"] {
+  border-color:transparent !important; outline:none !important;
+}
+/* Pointer focus uses the caret; keyboard focus retains a small visible cue. */
+.ch-shell input:focus:not(:focus-visible),
+.ch-shell select:focus:not(:focus-visible),
+.ch-shell .ch-library-search-trigger:focus:not(:focus-visible),
+.ch-shell .ch-tab:focus:not(:focus-visible) { outline:none; box-shadow:none; }
+.ch-shell .ch-library-search:focus-within { outline:var(--focus-ring); outline-offset:1px; }
+
+.ch-shell .ch-search-trigger:focus:not(:focus-visible),
+.ch-shell .ch-select-trigger:focus:not(:focus-visible),
+.ch-shell .ch-number-scrub:focus:not(:focus-visible) { outline:none; box-shadow:none; }
+.ch-shell input[type="text"]:focus:not([aria-invalid="true"]),
+.ch-shell input[type="search"]:focus:not([aria-invalid="true"]) { outline:var(--focus-ring); outline-offset:1px; box-shadow:none !important; }
+.ch-shell .ch-field--search input:focus,
+.ch-shell .ch-library-search-editor input:focus { border-color:var(--line-hairline); }
+
+/* Prevent global scroll during scrubbing */
+body.ch-global-scrubbing {
+  overflow: hidden !important;
+  pointer-events: none;
+}
+body.ch-global-scrubbing * {
+  cursor: ew-resize !important;
+}
+body.ch-global-scrubbing .ch-scrubbable-number {
+  pointer-events: auto;
+}

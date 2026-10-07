@@ -188,7 +188,8 @@
       if (
         beforeExpression !== "" &&
         beforeExpression !== desired &&
-        !MotionExpressions.isManagedFlicker(beforeExpression)
+        !MotionExpressions.isManagedFlicker(beforeExpression) &&
+        !MotionExpressions.isManagedFlickerLive(beforeExpression)
       ) {
         return {
           error: failure(
@@ -220,12 +221,64 @@
     property.expressionEnabled = item.beforeEnabled === true;
   }
 
+  /** Os quatro controles que o Flicker expoe no Effect Controls. */
+  var LIVE_BINDINGS = /** @type {MotionLiveControlBindingHost[]} */ ([
+    {
+      paramId: "rate",
+      label: { "pt-BR": "Taxa", "en-US": "Rate" },
+      help: { "pt-BR": "Trocas por segundo.", "en-US": "Changes per second." },
+      control: "slider",
+      target: "layer",
+      order: 1,
+      min: 0,
+      max: 120
+    },
+    {
+      paramId: "minFactor",
+      label: { "pt-BR": "Mínimo", "en-US": "Minimum" },
+      help: { "pt-BR": "Fator mais baixo do sorteio.", "en-US": "Lowest drawn factor." },
+      control: "slider",
+      target: "layer",
+      order: 2,
+      min: 0,
+      max: 10
+    },
+    {
+      paramId: "maxFactor",
+      label: { "pt-BR": "Máximo", "en-US": "Maximum" },
+      help: { "pt-BR": "Fator mais alto do sorteio.", "en-US": "Highest drawn factor." },
+      control: "slider",
+      target: "layer",
+      order: 3,
+      min: 0,
+      max: 10
+    },
+    {
+      paramId: "seed",
+      label: { "pt-BR": "Seed", "en-US": "Seed" },
+      help: { "pt-BR": "Muda o sorteio sem mudar a intensidade.", "en-US": "Changes the draw, not the intensity." },
+      control: "slider",
+      target: "layer",
+      order: 4,
+      min: 0,
+      max: 100000
+    }
+  ]);
+
   MotionRegistry.register("ae.expression.flicker", {
-    preflight: function (args) {
+    preflight: function (args, context, options) {
+      if (options && options.emitLiveControls === true) return validateArgs(args) || MotionQuickEffects.prepare("flicker", args, options).error;
       return prepare(args).error;
     },
 
-    run: function (args) {
+    /**
+     * @param {Record<string, unknown>} args
+     * @param {Record<string, unknown>} context
+     * @param {Record<string, unknown>} [options]
+     * @returns {MotionCommandResult}
+     */
+    run: function (args, context, options) {
+      if (options && options.emitLiveControls === true) return MotionQuickEffects.run("flicker", args, context, options);
       var prepared = prepare(args);
       if (prepared.error) throw new Error("Flicker ficou invalido depois do preflight.");
 
@@ -233,6 +286,39 @@
       var appliedCount = 0;
       var unchangedCount = 0;
       var i;
+
+      // Live Controls: sliders na camada em vez de numeros cravados, para o
+      // usuario ajustar a taxa e a faixa dentro do After Effects.
+      var live = !!(options && options.emitLiveControls === true);
+      var preset = null;
+      if (live && prepared.items.length > 0) {
+        var propriedades = [];
+        for (i = 0; i < prepared.items.length; i += 1) {
+          var origem = prepared.items[i];
+          if (origem) propriedades.push(origem.property);
+        }
+        preset = MotionLivePreset.aplicar(propriedades, {
+          tool: "Flicker",
+          rigId: "ae.expression.flicker",
+          locale: context ? context.locale : null,
+          bindings: LIVE_BINDINGS,
+          values: {
+            rate: args.rate,
+            minFactor: args.minFactor,
+            maxFactor: args.maxFactor,
+            seed: args.seed
+          }
+        });
+        for (i = 0; i < prepared.items.length; i += 1) {
+          var alvo = prepared.items[i];
+          var refs = preset.refsPorPropriedade[i];
+          if (!alvo || !refs) continue;
+          alvo.desired = MotionExpressions.renderFlickerLive(
+            /** @type {{rate: string, minFactor: string, maxFactor: string, seed: string}} */ (refs)
+          );
+          alvo.changed = alvo.beforeExpression !== alvo.desired || alvo.beforeEnabled !== true;
+        }
+      }
       try {
         for (i = 0; i < prepared.items.length; i += 1) {
           var item = prepared.items[i];
@@ -263,6 +349,9 @@
             rollbackFailed = true;
           }
         }
+        // Os controles criados saem junto: deixa-los para tras encheria o
+        // Effect Controls de sliders orfaos que nenhuma expressao le.
+        if (preset && !preset.desfazer()) rollbackFailed = true;
         if (rollbackFailed) {
           var rollbackError = /** @type {Error & {motionCode?: string}} */ (
             new Error("Rollback Flicker falhou.")
@@ -275,7 +364,7 @@
 
       return {
         changed: appliedCount > 0,
-        warnings: [],
+        warnings: preset ? preset.avisos : [],
         data: {
           appliedCount: appliedCount,
           unchangedCount: unchangedCount

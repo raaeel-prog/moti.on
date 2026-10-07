@@ -42,7 +42,7 @@ async function decomposicaoDaExpressao() {
   });
 
   const inicio = expressao.indexOf("function motionEuler(");
-  const fim = expressao.indexOf("var origem =");
+  const fim = expressao.indexOf("var alvoLayer =");
   assert.ok(inicio >= 0 && fim > inicio, "as funcoes de matriz nao foram encontradas na expressao");
   const fonte = expressao.slice(inicio, fim);
 
@@ -141,3 +141,4 @@ test("o guarda de paridade pega uma divergencia real", async () => {
     "uma divergencia de 0,01% precisa ser visivel"
   );
 });
+

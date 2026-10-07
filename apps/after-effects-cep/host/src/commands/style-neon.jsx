@@ -52,7 +52,8 @@
     glowRadius: "ADBE Glo2-0003",
     glowIntensity: "ADBE Glo2-0004",
     glowColors: "ADBE Glo2-0007",
-    colorA: "ADBE Glo2-0012"
+    colorA: "ADBE Glo2-0012",
+    colorB: "ADBE Glo2-0013"
   };
 
   var NOME_GERENCIADO = MotionContracts.RIG_PREFIX + "NEON";
@@ -192,6 +193,10 @@
 
     var i;
     for (i = 0; i < selecionadas.length; i += 1) {
+      if ((/** @type {any} */ (selecionadas[i])).locked) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie as camadas selecionadas.");
+      var fonte = args.mode === "editable" ? sourceTextDe(selecionadas[i]) : null;
+      if (fonte && (fonte.expressionEnabled || fonte.expression)) return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "O texto possui expressao; use apenas Glow para preservar seu conteudo.");
+      if (fonte && fonte.numKeys > 0) return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "O texto possui keyframes; use apenas Glow para preservar sua animacao.");
       var lista = MotionEffects.parade(selecionadas[i]);
       if (!lista) {
         return failure(
@@ -214,6 +219,16 @@
           "Ja existe um Glow do usuario nesta camada.",
           { selectionIndex: i }
         );
+      }
+      var gerenciado = MotionEffects.findManaged(lista, MN.glow, NOME_GERENCIADO);
+      if (gerenciado) {
+        var parametros = [MN.glowRadius, MN.glowIntensity, MN.glowColors, MN.colorA, MN.colorB];
+        var p;
+        for (p = 0; p < parametros.length; p += 1) {
+          var prop = parametro(gerenciado, /** @type {string} */ (parametros[p]));
+          if (prop && (prop.expressionEnabled || prop.expression)) return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "O Glow possui expressao; ajuste o efeito diretamente.", { parameter: parametros[p] });
+          if (prop && prop.numKeys > 0) return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "O Glow possui keyframes; ajuste o efeito diretamente.", { parameter: parametros[p] });
+        }
       }
     }
     return null;
@@ -287,7 +302,7 @@
         var glow = MotionEffects.findManaged(lista, MN.glow, NOME_GERENCIADO);
         if (glow) {
           anteriores.push(
-            MotionEffects.snapshot(glow, [MN.glowRadius, MN.glowIntensity, MN.glowColors, MN.colorA])
+            MotionEffects.snapshot(glow, [MN.glowRadius, MN.glowIntensity, MN.glowColors, MN.colorA, MN.colorB])
           );
         } else {
           glow = MotionEffects.add(lista, MN.glow, NOME_GERENCIADO);
@@ -296,13 +311,16 @@
 
         var raio = parametro(glow, MN.glowRadius);
         var intensidade = parametro(glow, MN.glowIntensity);
-        if (!raio || !intensidade) {
+        var modoDeCor = parametro(glow, MN.glowColors);
+        var corA = parametro(glow, MN.colorA);
+        var corB = parametro(glow, MN.colorB);
+        if (!raio || !intensidade || !modoDeCor || !corA || !corB) {
           // Nao lancar com codigo proprio: o dispatcher descarta a mensagem da
           // excecao e colapsa todo motionCode que nao seja ROLLBACK_FAILED em
           // HOST_OPERATION_FAILED. O que ele PRESERVA numa falha sao os
           // `warnings` do proprio comando — entao o nome do parametro que
           // faltou viaja por ali, e o rollback normal acontece antes.
-          var faltando = raio ? MN.glowIntensity : MN.glowRadius;
+          var faltando = !raio ? MN.glowRadius : !intensidade ? MN.glowIntensity : !modoDeCor ? MN.glowColors : !corA ? MN.colorA : MN.colorB;
           var erroComAviso = /** @type {Error & {neonAviso?: unknown}} */ (
             new Error("Parametro de Glow ausente: " + faltando)
           );
@@ -319,16 +337,12 @@
         MotionEffects.setStatic(raio, /** @type {number} */ (args.glowRadius));
         MotionEffects.setStatic(intensidade, /** @type {number} */ (args.intensity));
 
-        // Cor do glow e opcional de proposito: sem ela o Glow usa as cores
-        // originais da camada, que ja e um neon valido. Recusar a operacao
-        // inteira por causa dela seria desproporcional.
-        var modoDeCor = parametro(glow, MN.glowColors);
-        var corA = parametro(glow, MN.colorA);
-        if (modoDeCor && corA) {
-          // 2 e "A & B Colors" na ordem do menu; sem ele o Color A e ignorado.
-          MotionEffects.setStatic(modoDeCor, 2);
-          MotionEffects.setStatic(corA, /** @type {[number, number, number]} */ (args.glowColor));
-        }
+        // Ambos os extremos recebem a cor escolhida: deixar B no default mistura
+        // preto ao halo, mesmo quando o painel pede uma cor saturada.
+        MotionEffects.setStatic(modoDeCor, 2);
+        var cor = /** @type {number[]} */ (args.glowColor);
+        MotionEffects.setStatic(corA, [cor[0], cor[1], cor[2], 1]);
+        MotionEffects.setStatic(corB, [cor[0], cor[1], cor[2], 1]);
 
         aplicadas += 1;
       }

@@ -1,3 +1,14 @@
+import { registerMotiAlert } from "./elements/moti-alert.js";
+import { mountAlertView, validateAlertOptions } from "./elements/alert-view.js";
+import { registerMotiBadge } from "./elements/moti-badge.js";
+import { mountBadgeView, validateBadgeOptions } from "./elements/badge-view.js";
+import { registerMotiDrawer } from "./elements/moti-drawer.js";
+import { mountDrawerView, validateDrawerOptions, type DrawerController, type DrawerOptions } from "./elements/drawer-view.js";
+import { registerMotiPopover } from "./elements/moti-popover.js";
+import { mountPopoverView, validatePopoverOptions, type PopoverController, type PopoverOptions } from "./elements/popover-view.js";
+import { registerMotiSlider } from "./elements/moti-slider.js";
+import { mountSliderView, validateSliderOptions } from "./elements/slider-view.js";
+export { type DrawerController, type DrawerOptions, type PopoverController, type PopoverOptions };
 /**
  * CHMS-UX-003 — primitivas de interface compartilhadas por CEP e UXP.
  *
@@ -6,50 +17,72 @@
  * a controllers e adapters fora da camada de apresentacao.
  */
 
-export const COMPONENT_STATES = Object.freeze([
-  "default",
-  "loading",
-  "empty",
-  "success",
-  "warning",
-  "error",
-  "unsupported"
-] as const);
+import { createIcon } from "./shell.js";
 
-export type ComponentState = (typeof COMPONENT_STATES)[number];
+import {
+  type ComponentState,
+  type ComponentStateOptions,
+  type StatefulController,
+  type DisableableController,
+  type InteractiveOptions,
+  type StateMarkers,
+  STATE_MARKERS,
+  nextId,
+  requireText,
+  resolveId,
+  element,
+  removeAttribute,
+  validateState,
+  createStateBinding,
+  applyState,
+  validateDisabled,
+  createDisabledBinding,
+  updateDisabledReason,
+  bindDisabledExplanation,
+  updateInteractiveDescriptions,
+  isActivationKey,
+  stateBlocksInteraction,
+  createSpinner,
+} from "./component-dom.js";
 
-export interface ComponentStateOptions {
-  state?: ComponentState;
-  /** Obrigatorio em runtime quando `state` nao e `default`. */
-  stateLabel?: string;
+export {
+  COMPONENT_STATES, createSpinner,
+  type ComponentState, type ComponentStateOptions, type DisableableOptions,
+  type StatefulController, type DisableableController
+} from "./component-dom.js";
+export { type ActionButtonController, type ActionButtonOptions } from "./elements/action-button-view.js";
+import { mountActionButton, validateActionButtonOptions, type ActionButtonController, type ActionButtonOptions } from "./elements/action-button-view.js";
+import { registerMotiButton } from "./elements/moti-button.js";
+import { registerMotiToast } from "./elements/moti-toast.js";
+import { mountToastView, validateToastViewOptions, type ToastView, type ToastViewOptions } from "./elements/toast-view.js";
+
+export function createActionButton(doc: Document, options: ActionButtonOptions): ActionButtonController {
+  validateActionButtonOptions(options);
+  const id = resolveId(options.id, "action");
+  const ButtonElement = registerMotiButton(doc);
+  if (ButtonElement) {
+    let root: HTMLElement | undefined;
+    try {
+      root = doc.createElement("moti-button");
+    } catch {
+      // A partial host registry may accept define() but reject construction.
+      // The same presentation below remains usable through native elements.
+    }
+    // A registry shim must actually construct the registered element.
+    if (root instanceof ButtonElement) {
+      root.configure({ ...options, id });
+      return {
+        element: root,
+        button: root.button,
+        setState: (state, label) => root.setState(state, label),
+        setDisabled: (disabled, reason) => root.setDisabled(disabled, reason)
+      };
+    }
+  }
+  const root = element(doc, "span");
+  root.id = `${id}-component`;
+  return mountActionButton(doc, root, id, options);
 }
-
-export interface DisableableOptions {
-  disabled?: boolean;
-  /** Obrigatorio em runtime quando `disabled` e verdadeiro. */
-  disabledReason?: string;
-}
-
-export interface StatefulController {
-  setState(state: ComponentState, stateLabel?: string): void;
-}
-
-export interface DisableableController {
-  setDisabled(disabled: boolean, disabledReason?: string): void;
-}
-
-type InteractiveOptions = ComponentStateOptions & DisableableOptions;
-
-type StateMarkers = Readonly<Record<Exclude<ComponentState, "default">, string>>;
-
-const STATE_MARKERS: StateMarkers = Object.freeze({
-  loading: "…",
-  empty: "—",
-  success: "✓",
-  warning: "▲",
-  error: "!",
-  unsupported: "—"
-});
 
 const TILE_STATE_MARKERS: StateMarkers = Object.freeze({
   ...STATE_MARKERS,
@@ -58,282 +91,6 @@ const TILE_STATE_MARKERS: StateMarkers = Object.freeze({
 
 const TILE_SPINNER_DELAY_MS = 180;
 const TILE_CONFIRMATION_DURATION_MS = 700;
-
-let generatedId = 0;
-
-function nextId(prefix: string): string {
-  generatedId += 1;
-  return `${prefix}-${generatedId}`;
-}
-
-function requireText(value: string | undefined, name: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${name} must be a non-empty string.`);
-  }
-  return value;
-}
-
-function resolveId(value: string | undefined, prefix: string): string {
-  if (value === undefined) return nextId(prefix);
-  return requireText(value, "id");
-}
-
-function element<K extends keyof HTMLElementTagNameMap>(
-  doc: Document,
-  tag: K,
-  className?: string,
-  text?: string
-): HTMLElementTagNameMap[K] {
-  const node = doc.createElement(tag);
-  if (className !== undefined) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-
-function removeAttribute(node: Element, name: string): void {
-  node.removeAttribute(name);
-}
-
-/**
- * O atributo HTML `hidden` nao e consistente entre CEP e Premiere UXP. Manter
- * um estado de dados em paralelo oferece um fallback CSS explicito sem remover
- * o comportamento nativo dos runtimes que o implementam.
- */
-function setHidden(node: HTMLElement, hidden: boolean): void {
-  node.hidden = hidden;
-  node.setAttribute("data-hidden", hidden ? "true" : "false");
-}
-
-function setDescriptionIds(node: Element, ids: readonly string[]): void {
-  const value = ids.filter((id) => id.length > 0).join(" ");
-  if (value.length > 0) node.setAttribute("aria-describedby", value);
-  else removeAttribute(node, "aria-describedby");
-}
-
-interface StateBinding {
-  readonly node: HTMLElement;
-  readonly markers: StateMarkers;
-  state: ComponentState;
-  label?: string;
-}
-
-function validateState(state: ComponentState, stateLabel?: string): void {
-  if (state !== "default") requireText(stateLabel, "stateLabel");
-}
-
-function createStateBinding(
-  doc: Document,
-  owner: HTMLElement,
-  ownerId: string,
-  options: ComponentStateOptions,
-  announce = true,
-  markers: StateMarkers = STATE_MARKERS
-): StateBinding {
-  const state = options.state ?? "default";
-  validateState(state, options.stateLabel);
-
-  const node = element(doc, "span", "ch-component-state");
-  node.id = `${ownerId}-state`;
-  if (announce) {
-    node.setAttribute("role", "status");
-    node.setAttribute("aria-live", "polite");
-  }
-  owner.appendChild(node);
-
-  const binding: StateBinding = { node, markers, state };
-  if (options.stateLabel !== undefined) binding.label = options.stateLabel;
-  applyState(owner, binding, state, options.stateLabel);
-  return binding;
-}
-
-function applyState(
-  owner: HTMLElement,
-  binding: StateBinding,
-  state: ComponentState,
-  stateLabel?: string
-): void {
-  validateState(state, stateLabel);
-  binding.state = state;
-  if (stateLabel === undefined) delete binding.label;
-  else binding.label = stateLabel;
-  owner.setAttribute("data-state", state);
-
-  if (state === "default") {
-    binding.node.textContent = "";
-    setHidden(binding.node, true);
-    binding.node.setAttribute("aria-hidden", "true");
-    return;
-  }
-
-  setHidden(binding.node, false);
-  removeAttribute(binding.node, "aria-hidden");
-  binding.node.textContent = `${binding.markers[state]} ${requireText(stateLabel, "stateLabel")}`;
-}
-
-interface DisabledBinding {
-  readonly owner: HTMLElement;
-  readonly node: HTMLElement;
-  disabled: boolean;
-  reason?: string;
-}
-
-function validateDisabled(disabled: boolean, disabledReason?: string): void {
-  if (disabled) requireText(disabledReason, "disabledReason");
-}
-
-function createDisabledBinding(
-  doc: Document,
-  owner: HTMLElement,
-  ownerId: string,
-  options: DisableableOptions
-): DisabledBinding {
-  const disabled = options.disabled ?? false;
-  validateDisabled(disabled, options.disabledReason);
-  const node = element(doc, "span", "ch-disabled-reason");
-  node.id = `${ownerId}-disabled-reason`;
-  owner.appendChild(node);
-  const binding: DisabledBinding = { owner, node, disabled };
-  if (options.disabledReason !== undefined) binding.reason = options.disabledReason;
-  updateDisabledReason(binding, disabled, options.disabledReason);
-  return binding;
-}
-
-function updateDisabledReason(
-  binding: DisabledBinding,
-  disabled: boolean,
-  disabledReason?: string
-): void {
-  validateDisabled(disabled, disabledReason);
-  binding.disabled = disabled;
-  if (disabledReason === undefined) delete binding.reason;
-  else binding.reason = disabledReason;
-  binding.node.textContent = disabled ? requireText(disabledReason, "disabledReason") : "";
-  setHidden(binding.node, !disabled);
-  binding.node.setAttribute("aria-hidden", disabled ? "false" : "true");
-  binding.owner.setAttribute("data-disabled-explanation", "closed");
-}
-
-function bindDisabledExplanation(
-  binding: DisabledBinding,
-  targets: readonly HTMLElement[]
-): void {
-  for (const target of targets) {
-    target.addEventListener("focus", () => {
-      binding.owner.setAttribute(
-        "data-disabled-explanation",
-        binding.disabled ? "open" : "closed"
-      );
-    });
-    target.addEventListener("blur", () => {
-      binding.owner.setAttribute("data-disabled-explanation", "closed");
-    });
-  }
-}
-
-function updateInteractiveDescriptions(
-  target: HTMLElement,
-  state: StateBinding,
-  disabled: DisabledBinding,
-  baseIds: readonly string[] = []
-): void {
-  const ids = [...baseIds];
-  if (state.state !== "default") ids.push(state.node.id);
-  if (disabled.disabled) ids.push(disabled.node.id);
-  setDescriptionIds(target, ids);
-}
-
-function isActivationKey(key: string): boolean {
-  return key === "Enter" || key === " " || key === "Spacebar";
-}
-
-function stateBlocksInteraction(state: ComponentState): boolean {
-  return state === "loading" || state === "unsupported";
-}
-
-export interface ActionButtonOptions extends InteractiveOptions {
-  id?: string;
-  label: string;
-  variant?: "default" | "primary" | "danger" | "quiet";
-  title?: string;
-  onPress(): void;
-}
-
-export interface ActionButtonController extends StatefulController, DisableableController {
-  readonly element: HTMLElement;
-  readonly button: HTMLButtonElement;
-}
-
-export function createActionButton(
-  doc: Document,
-  options: ActionButtonOptions
-): ActionButtonController {
-  const id = resolveId(options.id, "action");
-  const label = requireText(options.label, "label");
-  const root = element(doc, "span", "ch-action");
-  root.id = `${id}-component`;
-
-  const button = element(
-    doc,
-    "button",
-    `ch-action-button ch-action-button--${options.variant ?? "default"}`,
-    label
-  );
-  button.id = id;
-  button.setAttribute("type", "button");
-  root.appendChild(button);
-
-  const state = createStateBinding(doc, root, id, options);
-  const disabled = createDisabledBinding(doc, root, id, options);
-  bindDisabledExplanation(disabled, [button]);
-
-  function blocked(): boolean {
-    return disabled.disabled || stateBlocksInteraction(state.state);
-  }
-
-  function refresh(): void {
-    const unavailable = blocked();
-    if (unavailable) button.setAttribute("aria-disabled", "true");
-    else removeAttribute(button, "aria-disabled");
-
-    if (state.state === "loading") button.setAttribute("aria-busy", "true");
-    else removeAttribute(button, "aria-busy");
-
-    button.title = disabled.disabled
-      ? requireText(disabled.reason, "disabledReason")
-      : options.title ?? state.label ?? label;
-    updateInteractiveDescriptions(button, state, disabled);
-  }
-
-  function press(event?: Event): void {
-    if (blocked()) {
-      event?.preventDefault();
-      return;
-    }
-    options.onPress();
-  }
-
-  button.addEventListener("click", (event) => press(event));
-  button.addEventListener("keydown", (event) => {
-    const keyboardEvent = event as KeyboardEvent;
-    if (!isActivationKey(keyboardEvent.key)) return;
-    event.preventDefault();
-    press(event);
-  });
-  refresh();
-
-  return {
-    element: root,
-    button,
-    setState(nextState, stateLabel) {
-      applyState(root, state, nextState, stateLabel);
-      refresh();
-    },
-    setDisabled(nextDisabled, disabledReason) {
-      updateDisabledReason(disabled, nextDisabled, disabledReason);
-      refresh();
-    }
-  };
-}
 
 export interface QuickTileOptions extends InteractiveOptions {
   id: string;
@@ -413,8 +170,13 @@ export function createQuickTile(doc: Document, options: QuickTileOptions): Quick
     feedbackTimer = undefined;
   }
 
-  function showIcon(text: string, feedback: "default" | "waiting" | "loading" | "success" | "disabled"): void {
-    icon.textContent = text;
+  function showIcon(text: string | null, feedback: "default" | "waiting" | "loading" | "success" | "disabled"): void {
+    icon.textContent = "";
+    if (feedback === "loading") {
+      icon.appendChild(createSpinner(doc));
+    } else if (text !== null) {
+      icon.textContent = text;
+    }
     icon.setAttribute("data-feedback", feedback);
   }
 
@@ -428,7 +190,7 @@ export function createQuickTile(doc: Document, options: QuickTileOptions): Quick
       showIcon(iconText, "waiting");
       feedbackTimer = scheduler.setTimeout(() => {
         feedbackTimer = undefined;
-        if (!disabled.disabled && state.state === "loading") showIcon("◌", "loading");
+        if (!disabled.disabled && state.state === "loading") showIcon(null, "loading");
       }, TILE_SPINNER_DELAY_MS);
       return;
     }
@@ -642,259 +404,15 @@ function requireFinite(value: number, name: string): number {
   return value;
 }
 
-function decimalPlaces(value: number): number {
-  const text = String(value).toLowerCase();
-  const exponentIndex = text.indexOf("e-");
-  if (exponentIndex >= 0) return Number(text.slice(exponentIndex + 2));
-  const dot = text.indexOf(".");
-  return dot < 0 ? 0 : text.length - dot - 1;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function snap(value: number, min: number, max: number, step: number): number {
-  const snapped = min + Math.round((clamp(value, min, max) - min) / step) * step;
-  const precision = Math.min(12, Math.max(decimalPlaces(min), decimalPlaces(max), decimalPlaces(step)) + 2);
-  return clamp(Number(snapped.toFixed(precision)), min, max);
-}
-
-export function createSliderField(
-  doc: Document,
-  options: SliderFieldOptions
-): SliderFieldController {
-  const id = resolveId(options.id, "slider");
-  const min = requireFinite(options.min, "min");
-  const max = requireFinite(options.max, "max");
-  const step = requireFinite(options.step, "step");
-  if (max <= min) throw new Error("max must be greater than min.");
-  if (step <= 0) throw new Error("step must be greater than zero.");
-  for (const [name, candidate] of [["value", options.value], ["defaultValue", options.defaultValue]] as const) {
-    requireFinite(candidate, name);
-    if (candidate < min || candidate > max) throw new Error(`${name} must be within min and max.`);
+export function createSliderField(doc: Document, options: SliderFieldOptions): SliderFieldController {
+  validateSliderOptions(options);
+  const Constructor = registerMotiSlider(doc);
+  if (Constructor) {
+    let root: HTMLElement | undefined;
+    try { root = doc.createElement("moti-slider"); } catch { /* fallback */ }
+    if (root instanceof Constructor) return root.configure(options);
   }
-
-  const root = element(doc, "div", "ch-slider-field");
-  root.id = `${id}-component`;
-  const label = element(doc, "label", "ch-slider-field__label", requireText(options.label, "label"));
-  label.id = `${id}-label`;
-  label.htmlFor = `${id}-range`;
-  label.title = requireText(options.label, "label");
-  root.appendChild(label);
-
-  if (options.description !== undefined) {
-    const description = element(doc, "span", "ch-slider-field__description", options.description);
-    description.id = `${id}-description`;
-    root.appendChild(description);
-  }
-
-  const controls = element(doc, "div", "ch-slider-field__controls");
-  const track = element(doc, "span", "ch-slider-field__track");
-  const fill = element(doc, "span", "ch-slider-field__fill");
-  fill.setAttribute("data-motion", "slider-track");
-  track.appendChild(fill);
-
-  const range = element(doc, "input", "ch-slider-field__range");
-  range.id = `${id}-range`;
-  range.type = "range";
-  range.min = String(min);
-  range.max = String(max);
-  range.step = String(step);
-  range.setAttribute("role", "slider");
-  range.setAttribute("aria-labelledby", label.id);
-  range.setAttribute("data-motion", "slider-knob");
-  track.appendChild(range);
-  controls.appendChild(track);
-
-  const numberInput = element(doc, "input", "ch-slider-field__number");
-  numberInput.id = `${id}-number`;
-  numberInput.type = "number";
-  numberInput.min = String(min);
-  numberInput.max = String(max);
-  numberInput.step = String(step);
-  numberInput.setAttribute("aria-label", requireText(options.numberLabel, "numberLabel"));
-  controls.appendChild(numberInput);
-  if (options.unit !== undefined) {
-    controls.appendChild(element(doc, "span", "ch-slider-field__unit", options.unit));
-  }
-  root.appendChild(controls);
-
-  const state = createStateBinding(doc, root, id, options);
-  const disabled = createDisabledBinding(doc, root, id, options);
-  bindDisabledExplanation(disabled, [range, numberInput]);
-  let current = snap(options.value, min, max, step);
-
-  function blocked(): boolean {
-    return disabled.disabled || stateBlocksInteraction(state.state);
-  }
-
-  function valueText(value: number): string {
-    if (options.formatValue !== undefined) return options.formatValue(value);
-    return options.unit === undefined ? String(value) : `${value} ${options.unit}`;
-  }
-
-  function refreshValue(): void {
-    const stringValue = String(current);
-    range.value = stringValue;
-    numberInput.value = stringValue;
-    range.setAttribute("aria-valuemin", String(min));
-    range.setAttribute("aria-valuemax", String(max));
-    range.setAttribute("aria-valuenow", stringValue);
-    range.setAttribute("aria-valuetext", valueText(current));
-    const progress = (current - min) / (max - min);
-    fill.setAttribute("style", `--motion-progress:${progress}`);
-    removeAttribute(numberInput, "aria-invalid");
-  }
-
-  function refreshDisabled(): void {
-    const unavailable = blocked();
-    if (state.state === "loading") root.setAttribute("aria-busy", "true");
-    else removeAttribute(root, "aria-busy");
-    for (const target of [range, numberInput]) {
-      if (unavailable) target.setAttribute("aria-disabled", "true");
-      else removeAttribute(target, "aria-disabled");
-      target.title = disabled.disabled
-        ? requireText(disabled.reason, "disabledReason")
-        : stateBlocksInteraction(state.state)
-          ? requireText(state.label, "stateLabel")
-        : requireText(options.label, "label");
-      const baseIds = options.description === undefined ? [] : [`${id}-description`];
-      updateInteractiveDescriptions(target, state, disabled, baseIds);
-    }
-  }
-
-  function assign(value: number): void {
-    current = snap(requireFinite(value, "value"), min, max, step);
-    refreshValue();
-  }
-
-  function emitValue(value: number, commit: boolean): void {
-    assign(value);
-    options.onInput(current);
-    if (commit) options.onCommit(current);
-  }
-
-  function readNumberDraft(): number | null {
-    if (numberInput.value.trim().length === 0) return null;
-    const value = Number(numberInput.value);
-    if (!Number.isFinite(value) || value < min || value > max) return null;
-    return value;
-  }
-
-  range.addEventListener("input", () => {
-    if (blocked()) {
-      refreshValue();
-      return;
-    }
-    assign(Number(range.value));
-    options.onInput(current);
-  });
-  range.addEventListener("change", () => {
-    if (blocked()) {
-      refreshValue();
-      return;
-    }
-    assign(Number(range.value));
-    options.onCommit(current);
-  });
-  range.addEventListener("keydown", (event) => {
-    const keyboardEvent = event as KeyboardEvent;
-    let next: number | undefined;
-    const coarseStep = step * (keyboardEvent.shiftKey ? 10 : 1);
-    if (keyboardEvent.key === "ArrowRight" || keyboardEvent.key === "ArrowUp") next = current + coarseStep;
-    else if (keyboardEvent.key === "ArrowLeft" || keyboardEvent.key === "ArrowDown") next = current - coarseStep;
-    else if (keyboardEvent.key === "PageUp") next = current + (max - min) * 0.1;
-    else if (keyboardEvent.key === "PageDown") next = current - (max - min) * 0.1;
-    else if (keyboardEvent.key === "Home") next = min;
-    else if (keyboardEvent.key === "End") next = max;
-    else return;
-
-    event.preventDefault();
-    if (!blocked()) emitValue(next, true);
-  });
-  for (const eventName of ["pointerdown", "pointerup", "pointercancel"] as const) {
-    range.addEventListener(eventName, () => {
-      const dragging = eventName === "pointerdown";
-      range.setAttribute("data-dragging", dragging ? "true" : "false");
-      fill.setAttribute("data-dragging", dragging ? "true" : "false");
-    });
-  }
-
-  numberInput.addEventListener("input", () => {
-    if (blocked()) {
-      refreshValue();
-      return;
-    }
-    const draft = readNumberDraft();
-    if (draft === null) {
-      numberInput.setAttribute("aria-invalid", "true");
-      return;
-    }
-    removeAttribute(numberInput, "aria-invalid");
-    current = snap(draft, min, max, step);
-    range.value = String(current);
-    range.setAttribute("aria-valuenow", String(current));
-    range.setAttribute("aria-valuetext", valueText(current));
-    fill.setAttribute("style", `--motion-progress:${(current - min) / (max - min)}`);
-    options.onInput(current);
-  });
-
-  function commitNumber(): void {
-    if (blocked()) {
-      refreshValue();
-      return;
-    }
-    const draft = readNumberDraft();
-    if (draft === null) {
-      numberInput.setAttribute("aria-invalid", "true");
-      return;
-    }
-    assign(draft);
-    options.onCommit(current);
-  }
-
-  numberInput.addEventListener("change", commitNumber);
-  numberInput.addEventListener("keydown", (event) => {
-    const keyboardEvent = event as KeyboardEvent;
-    if (keyboardEvent.key === "Enter") {
-      event.preventDefault();
-      commitNumber();
-    } else if (keyboardEvent.key === "Escape") {
-      event.preventDefault();
-      refreshValue();
-    }
-  });
-  label.addEventListener("click", () => range.focus());
-  label.addEventListener("dblclick", () => {
-    if (!blocked()) emitValue(options.defaultValue, true);
-  });
-
-  refreshValue();
-  refreshDisabled();
-
-  return {
-    element: root,
-    label,
-    range,
-    numberInput,
-    get value() {
-      return current;
-    },
-    setValue(value) {
-      requireFinite(value, "value");
-      if (value < min || value > max) throw new Error("value must be within min and max.");
-      assign(value);
-    },
-    setState(nextState, stateLabel) {
-      applyState(root, state, nextState, stateLabel);
-      refreshDisabled();
-    },
-    setDisabled(nextDisabled, disabledReason) {
-      updateDisabledReason(disabled, nextDisabled, disabledReason);
-      refreshDisabled();
-    }
-  };
+  return mountSliderView(doc, element(doc, "div"), options);
 }
 
 export interface ChipItem {
@@ -1080,274 +598,36 @@ export function createChipGroup(doc: Document, options: ChipGroupOptions): ChipG
 
 export type OverlayCloseReason = "escape" | "backdrop" | "programmatic";
 
-export interface PopoverOptions extends ComponentStateOptions {
-  id: string;
-  label: string;
-  content: HTMLElement;
-  initialFocus?: HTMLElement;
-  onClose?(reason: OverlayCloseReason): void;
-  scheduler?: ComponentScheduler;
-}
 
-export interface PopoverController extends StatefulController {
-  readonly element: HTMLElement;
-  readonly isOpen: boolean;
-  open(origin?: HTMLElement): void;
-  close(reason?: OverlayCloseReason): void;
-  finishClose(): void;
-}
-
-function asFocusable(value: Element | null): HTMLElement | null {
-  if (value === null) return null;
-  const candidate = value as HTMLElement;
-  return typeof candidate.focus === "function" ? candidate : null;
-}
 
 export function createPopover(doc: Document, options: PopoverOptions): PopoverController {
-  const id = resolveId(options.id, "popover");
-  const root = element(doc, "section", "ch-popover");
-  root.id = id;
-  root.setAttribute("role", "dialog");
-  root.setAttribute("aria-modal", "false");
-  root.setAttribute("aria-label", requireText(options.label, "label"));
-  root.setAttribute("tabindex", "-1");
-  root.setAttribute("aria-hidden", "true");
-  root.setAttribute("data-open", "false");
-  root.setAttribute("data-motion", "preview-enter preview-exit");
-  setHidden(root, true);
-  root.appendChild(options.content);
-  const state = createStateBinding(doc, root, id, options);
-  const scheduler = options.scheduler ?? DEFAULT_SCHEDULER;
-  let opened = false;
-  let returnFocus: HTMLElement | null = null;
-  let closeTimer: unknown;
-
-  function cancelCloseTimer(): void {
-    if (closeTimer === undefined) return;
-    scheduler.clearTimeout(closeTimer);
-    closeTimer = undefined;
+  validatePopoverOptions(options);
+  const Constructor = registerMotiPopover(doc);
+  if (Constructor) {
+    let root: HTMLElement | undefined;
+    try { root = doc.createElement("moti-popover"); } catch { /* fallback */ }
+    if (root instanceof Constructor) return root.configure(options);
   }
-
-  function finishClose(): void {
-    if (opened) return;
-    cancelCloseTimer();
-    setHidden(root, true);
-    removeAttribute(root, "data-closing");
-  }
-
-  function close(reason: OverlayCloseReason = "programmatic"): void {
-    if (!opened) return;
-    opened = false;
-    root.setAttribute("data-open", "false");
-    root.setAttribute("data-closing", "true");
-    root.setAttribute("aria-hidden", "true");
-    closeTimer = scheduler.setTimeout(finishClose, 160);
-    options.onClose?.(reason);
-    const target = returnFocus;
-    returnFocus = null;
-    target?.focus();
-  }
-
-  root.addEventListener("keydown", (event) => {
-    if ((event as KeyboardEvent).key !== "Escape") return;
-    event.preventDefault();
-    close("escape");
-  });
-  root.addEventListener("animationend", (event) => {
-    if (event.target === root) finishClose();
-  });
-
-  return {
-    element: root,
-    get isOpen() {
-      return opened;
-    },
-    open(origin) {
-      cancelCloseTimer();
-      returnFocus = origin ?? asFocusable(doc.activeElement);
-      opened = true;
-      setHidden(root, false);
-      removeAttribute(root, "data-closing");
-      root.setAttribute("aria-hidden", "false");
-      root.setAttribute("data-open", "true");
-      (options.initialFocus ?? root).focus();
-    },
-    close,
-    finishClose,
-    setState(nextState, stateLabel) {
-      applyState(root, state, nextState, stateLabel);
-    }
-  };
+  return mountPopoverView(doc, element(doc, "div"), options);
 }
 
-export interface DrawerOptions extends ComponentStateOptions {
-  id: string;
-  label: string;
-  content: HTMLElement;
-  overlay: boolean;
-  initialFocus?: HTMLElement;
-  onClose?(reason: OverlayCloseReason): void;
-  scheduler?: ComponentScheduler;
-}
 
-export interface DrawerController extends StatefulController {
-  readonly element: HTMLElement;
-  readonly backdrop: HTMLElement;
-  readonly isOpen: boolean;
-  open(origin?: HTMLElement): void;
-  close(reason?: OverlayCloseReason): void;
-  finishClose(): void;
-}
-
-const FOCUSABLE_TAGS = new Set(["button", "input", "select", "textarea", "a"]);
-
-function focusableDescendants(root: HTMLElement): HTMLElement[] {
-  const found: HTMLElement[] = [];
-
-  // Percorrer a arvore uma vez preserva a ordem de leitura. Agrupar consultas
-  // por tag colocaria todos os buttons antes de todos os inputs, mesmo quando a
-  // ordem visual/DOM fosse a oposta — exatamente o tipo de trap sutil que A7.3
-  // proibe.
-  function visit(parent: HTMLElement): void {
-    for (let index = 0; index < parent.children.length; index += 1) {
-      const child = parent.children[index];
-      if (child === undefined) continue;
-      const candidate = child as HTMLElement & { disabled?: boolean };
-      const tag = candidate.tagName.toLowerCase();
-      if (
-        FOCUSABLE_TAGS.has(tag)
-        && candidate.disabled !== true
-        && candidate.getAttribute("tabindex") !== "-1"
-      ) {
-        found.push(candidate);
-      }
-      visit(candidate);
-    }
-  }
-
-  visit(root);
-  return found;
-}
 
 export function createDrawer(doc: Document, options: DrawerOptions): DrawerController {
-  const id = resolveId(options.id, "drawer");
-  const root = element(doc, "aside", "ch-drawer");
-  root.id = id;
-  root.setAttribute("role", "dialog");
-  root.setAttribute("aria-modal", options.overlay ? "true" : "false");
-  root.setAttribute("aria-label", requireText(options.label, "label"));
-  root.setAttribute("aria-hidden", "true");
-  root.setAttribute("data-open", "false");
-  root.setAttribute("data-overlay", options.overlay ? "true" : "false");
-  root.setAttribute("data-motion", "drawer-enter drawer-exit drawer-stagger");
-  root.setAttribute("tabindex", "-1");
-  setHidden(root, true);
-  root.appendChild(options.content);
-  const state = createStateBinding(doc, root, id, options);
-  const scheduler = options.scheduler ?? DEFAULT_SCHEDULER;
-
-  const backdrop = element(doc, "div", "ch-drawer-backdrop");
-  backdrop.setAttribute("aria-hidden", "true");
-  backdrop.setAttribute("data-open", "false");
-  backdrop.setAttribute("data-motion", "drawer-dimmer");
-  setHidden(backdrop, true);
-
-  let opened = false;
-  let returnFocus: HTMLElement | null = null;
-  let closeTimer: unknown;
-
-  function cancelCloseTimer(): void {
-    if (closeTimer === undefined) return;
-    scheduler.clearTimeout(closeTimer);
-    closeTimer = undefined;
+  validateDrawerOptions(options);
+  const Constructor = registerMotiDrawer(doc);
+  if (Constructor) {
+    let root: HTMLElement | undefined;
+    try { root = doc.createElement("moti-drawer"); } catch { /* fallback */ }
+    if (root instanceof Constructor) return root.configure(options);
   }
-
-  function finishClose(): void {
-    if (opened) return;
-    cancelCloseTimer();
-    setHidden(root, true);
-    setHidden(backdrop, true);
-    removeAttribute(root, "data-closing");
-  }
-
-  function close(reason: OverlayCloseReason = "programmatic"): void {
-    if (!opened) return;
-    opened = false;
-    root.setAttribute("data-open", "false");
-    root.setAttribute("data-closing", "true");
-    root.setAttribute("aria-hidden", "true");
-    backdrop.setAttribute("data-open", "false");
-    closeTimer = scheduler.setTimeout(finishClose, 220);
-    options.onClose?.(reason);
-    const target = returnFocus;
-    returnFocus = null;
-    target?.focus();
-  }
-
-  root.addEventListener("keydown", (event) => {
-    const keyboardEvent = event as KeyboardEvent;
-    if (keyboardEvent.key === "Escape") {
-      event.preventDefault();
-      close("escape");
-      return;
-    }
-    if (keyboardEvent.key !== "Tab" || !options.overlay || !opened) return;
-    const focusables = focusableDescendants(root);
-    if (focusables.length === 0) {
-      event.preventDefault();
-      root.focus();
-      return;
-    }
-    const activeIndex = focusables.indexOf(asFocusable(doc.activeElement) ?? root);
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    if (keyboardEvent.shiftKey && (activeIndex <= 0 || doc.activeElement === root)) {
-      event.preventDefault();
-      last?.focus();
-    } else if (!keyboardEvent.shiftKey && (activeIndex < 0 || activeIndex === focusables.length - 1)) {
-      event.preventDefault();
-      first?.focus();
-    }
-  });
-  root.addEventListener("animationend", (event) => {
-    if (event.target === root) finishClose();
-  });
-  backdrop.addEventListener("click", () => {
-    if (options.overlay) close("backdrop");
-  });
-
-  return {
-    element: root,
-    backdrop,
-    get isOpen() {
-      return opened;
-    },
-    open(origin) {
-      cancelCloseTimer();
-      returnFocus = origin ?? asFocusable(doc.activeElement);
-      opened = true;
-      setHidden(root, false);
-      root.setAttribute("aria-hidden", "false");
-      root.setAttribute("data-open", "true");
-      removeAttribute(root, "data-closing");
-      if (options.overlay) {
-        setHidden(backdrop, false);
-        backdrop.setAttribute("data-open", "true");
-      }
-      const initial = options.initialFocus ?? focusableDescendants(root)[0] ?? root;
-      initial.focus();
-    },
-    close,
-    finishClose,
-    setState(nextState, stateLabel) {
-      applyState(root, state, nextState, stateLabel);
-    }
-  };
+  return mountDrawerView(doc, element(doc, "div"), options);
 }
 
 export interface ComponentScheduler {
   setTimeout(callback: () => void, delay: number): unknown;
   clearTimeout(handle: unknown): void;
+  now?(): number;
 }
 
 const DEFAULT_SCHEDULER: ComponentScheduler = {
@@ -1365,14 +645,19 @@ export interface ToastAction {
   dismissOnPress?: boolean;
 }
 
+export type FeedbackTone = "default" | "destructive" | "warning" | "success" | "info";
+
 export interface ToastOptions extends ComponentStateOptions {
   message: string;
   detail?: string;
   actions?: readonly ToastAction[];
   durationMs?: number;
   recoverable?: boolean;
+  /** A mesma ocorrência retorna o handle existente, inclusive enquanto aguarda. */
+  dedupKey?: string;
   /** Reservado a erro de operacao destrutiva, conforme A7.5. */
   assertive?: boolean;
+  tone?: FeedbackTone;
 }
 
 export interface ToastHandle {
@@ -1383,27 +668,64 @@ export interface ToastHandle {
   pin(): void;
 }
 
-export interface ToastRegionOptions {
-  id: string;
+export interface ToastRegionLabels {
   label: string;
   dismissLabel: string;
+  queuedLabel?: (count: number) => string;
+  stateLabels?: Partial<Record<ComponentState, string>>;
+}
+
+export interface ToastRegionOptions extends ToastRegionLabels {
+  id: string;
   maxVisible?: number;
   scheduler?: ComponentScheduler;
 }
 
 export interface ToastRegionController {
   readonly element: HTMLElement;
+  /** Somente os avisos visíveis; no máximo maxVisible, incluindo os que saem. */
   readonly items: readonly ToastHandle[];
+  readonly pending: readonly ToastHandle[];
   push(options: ToastOptions): ToastHandle;
   dismiss(id: string): void;
+  updateLabels(labels: ToastRegionLabels): void;
   clear(): void;
+  dispose(): void;
 }
 
 interface ManagedToast {
   handle: ToastHandle;
+  view: ToastView;
+  dismissButton: HTMLButtonElement;
+  origin: HTMLElement | null;
   timer?: unknown;
   closeTimer?: unknown;
+  key?: string;
+  shown: boolean;
   closing: boolean;
+  pinned: boolean;
+  hovered: boolean;
+  focused: boolean;
+  remaining: number;
+  startedAt: number;
+}
+
+function isWithin(node: Node | null, parent: Node): boolean {
+  for (let current = node ?? null; current !== null; current = current.parentNode) {
+    if (current === parent) return true;
+  }
+  return false;
+}
+
+function createToastView(doc: Document, options: ToastViewOptions): ToastView {
+  validateToastViewOptions(options);
+  const ToastElement = registerMotiToast(doc);
+  if (ToastElement) {
+    let root: HTMLElement | undefined;
+    try { root = doc.createElement("moti-toast"); } catch { /* Partial host registry: use native fallback. */ }
+    if (root instanceof ToastElement) return root.configure(options);
+  }
+  return mountToastView(doc, element(doc, "article"), options);
 }
 
 export function createToastRegion(
@@ -1415,18 +737,46 @@ export function createToastRegion(
   if (!Number.isInteger(maxVisible) || maxVisible < 1 || maxVisible > 3) {
     throw new Error("maxVisible must be an integer from 1 to 3.");
   }
+  requireText(options.dismissLabel, "dismissLabel");
   const scheduler = options.scheduler ?? DEFAULT_SCHEDULER;
+  const now = () => scheduler.now?.() ?? Date.now();
+  let labels: ToastRegionLabels = options;
+  let disposed = false;
   const root = element(doc, "section", "ch-toast-region");
   root.id = id;
   root.setAttribute("role", "region");
-  root.setAttribute("aria-label", requireText(options.label, "label"));
+  root.setAttribute("tabindex", "-1");
+  root.setAttribute("aria-label", requireText(labels.label, "label"));
   root.setAttribute("data-empty", "true");
+  const queueButton = element(doc, "button", "ch-toast-queue");
+  queueButton.setAttribute("type", "button");
+  queueButton.setAttribute("aria-live", "polite");
+  queueButton.setAttribute("data-motion", "tile-hover tile-press");
   const managed: ManagedToast[] = [];
 
-  function cancelTimer(item: ManagedToast): void {
+  const visible = () => managed.filter((item) => item.shown);
+  const pending = () => managed.filter((item) => !item.shown && !item.closing);
+
+  function refreshQueue(): void {
+    const count = pending().length;
+    root.setAttribute("data-empty", managed.length === 0 ? "true" : "false");
+    root.setAttribute("data-pending", String(count));
+    if (count > 0) {
+      queueButton.textContent = labels.queuedLabel?.(count) ?? `+${count}`;
+      queueButton.setAttribute("aria-label", queueButton.textContent);
+      if (queueButton.parentNode !== root) root.appendChild(queueButton);
+    } else if (queueButton.parentNode === root) {
+      // Se o último aviso da fila foi aberto pelo teclado, mantenha o foco nele.
+      if (doc.activeElement === queueButton) visible()[visible().length - 1]?.dismissButton.focus();
+      root.removeChild(queueButton);
+    }
+  }
+
+  function cancelTimer(item: ManagedToast, retainRemaining = false): void {
     if (item.timer === undefined) return;
     scheduler.clearTimeout(item.timer);
     delete item.timer;
+    if (retainRemaining) item.remaining = Math.max(0, item.remaining - (now() - item.startedAt));
   }
 
   function cancelCloseTimer(item: ManagedToast): void {
@@ -1435,142 +785,315 @@ export function createToastRegion(
     delete item.closeTimer;
   }
 
+  function resume(item: ManagedToast): void {
+    if (disposed || !item.shown || item.closing || item.pinned || item.hovered || item.focused || item.timer !== undefined) return;
+    item.startedAt = now();
+    item.timer = scheduler.setTimeout(() => {
+      delete item.timer;
+      beginDismiss(item);
+    }, item.remaining);
+  }
+
+  function pump(): void {
+    if (disposed) return;
+    let available = maxVisible - visible().length;
+    for (const item of pending()) {
+      if (available <= 0) break;
+      item.shown = true;
+      item.handle.element.setAttribute("data-open", "true");
+      root.appendChild(item.handle.element);
+      resume(item);
+      available -= 1;
+    }
+    refreshQueue();
+  }
+
   function finalize(item: ManagedToast): void {
+    const index = managed.indexOf(item);
+    if (index < 0) return;
     cancelTimer(item);
     cancelCloseTimer(item);
-    const index = managed.indexOf(item);
-    if (index >= 0) managed.splice(index, 1);
+    managed.splice(index, 1);
     if (item.handle.element.parentNode === root) root.removeChild(item.handle.element);
-    root.setAttribute("data-empty", managed.length === 0 ? "true" : "false");
+    pump();
+  }
+
+  function moveFocusBeforeDismiss(item: ManagedToast): void {
+    if (!isWithin(doc.activeElement, item.handle.element)) return;
+    const next = visible().find((other) => other !== item && !other.closing);
+    if (next) next.dismissButton.focus();
+    else if (pending().length > 0) queueButton.focus();
+    else if (item.origin?.parentNode && typeof item.origin.focus === "function") item.origin.focus();
+    else root.focus();
   }
 
   function beginDismiss(item: ManagedToast): void {
-    if (item.closing) return;
+    if (disposed || item.closing || !managed.includes(item)) return;
+    moveFocusBeforeDismiss(item);
     item.closing = true;
     cancelTimer(item);
+    if (!item.shown) {
+      finalize(item);
+      return;
+    }
     item.handle.element.setAttribute("data-open", "false");
     item.handle.element.setAttribute("data-closing", "true");
     item.handle.element.setAttribute("aria-hidden", "true");
-    item.closeTimer = scheduler.setTimeout(() => finalize(item), 180);
+    item.dismissButton.setAttribute("tabindex", "-1");
+    for (const action of item.handle.actions) action.setAttribute("tabindex", "-1");
+    // UXP não garante animationend. O timeout segue toast-exit (140 ms).
+    item.closeTimer = scheduler.setTimeout(() => finalize(item), 140);
   }
 
-  function find(idToFind: string): ManagedToast | undefined {
-    return managed.find((item) => item.handle.id === idToFind);
-  }
+  queueButton.addEventListener("click", () => {
+    if (disposed || pending().length === 0) return;
+    const oldest = visible().find((item) => !item.closing);
+    if (!oldest) return;
+    cancelTimer(oldest, true);
+    oldest.shown = false;
+    oldest.hovered = false;
+    oldest.focused = false;
+    root.removeChild(oldest.handle.element);
+    managed.splice(managed.indexOf(oldest), 1);
+    managed.push(oldest);
+    pump();
+    visible()[visible().length - 1]?.dismissButton.focus();
+  });
 
   function push(toastOptions: ToastOptions): ToastHandle {
+    if (disposed) throw new Error("Cannot push a toast into a disposed region.");
     const state = toastOptions.state ?? "default";
     validateState(state, toastOptions.stateLabel);
-    if (toastOptions.assertive === true && state !== "error") {
-      throw new Error("assertive is reserved for error toasts.");
-    }
+    if (toastOptions.assertive === true && state !== "error") throw new Error("assertive is reserved for error toasts.");
     if (toastOptions.durationMs !== undefined) {
       requireFinite(toastOptions.durationMs, "durationMs");
       if (toastOptions.durationMs < 0) throw new Error("durationMs must not be negative.");
     }
     const message = requireText(toastOptions.message, "message");
+    if (toastOptions.dedupKey !== undefined) {
+      requireText(toastOptions.dedupKey, "dedupKey");
+      const existing = managed.find((item) => item.key === toastOptions.dedupKey && !item.closing);
+      if (existing) return existing.handle;
+    }
     const toastId = nextId(`${id}-toast`);
-    const toast = element(doc, "article", "ch-toast");
-    toast.id = toastId;
-    toast.setAttribute("data-state", state);
-    toast.setAttribute("data-open", "true");
-    toast.setAttribute("data-motion", "toast-enter toast-exit");
-    toast.setAttribute("role", toastOptions.assertive === true ? "alert" : "status");
-    toast.setAttribute("aria-live", toastOptions.assertive === true ? "assertive" : "polite");
-    toast.appendChild(element(doc, "div", "ch-toast__message", message));
-    if (toastOptions.detail !== undefined) {
-      toast.appendChild(element(doc, "div", "ch-toast__detail", toastOptions.detail));
-    }
-    const stateBinding = createStateBinding(doc, toast, toastId, toastOptions, false);
-    applyState(toast, stateBinding, state, toastOptions.stateLabel);
-
-    const actionRow = element(doc, "div", "ch-toast__actions");
-    const actionButtons: HTMLButtonElement[] = [];
     const declaredActions = toastOptions.actions ?? [];
-    for (const action of declaredActions) {
-      const actionButton = element(doc, "button", "ch-toast__action", requireText(action.label, "action.label"));
-      actionButton.setAttribute("type", "button");
-      actionButtons.push(actionButton);
-      actionRow.appendChild(actionButton);
-    }
-    const dismissButton = element(doc, "button", "ch-toast__dismiss", "×");
-    dismissButton.setAttribute("type", "button");
-    dismissButton.setAttribute("aria-label", requireText(options.dismissLabel, "dismissLabel"));
-    dismissButton.title = options.dismissLabel;
-    actionRow.appendChild(dismissButton);
-    toast.appendChild(actionRow);
+    const view = createToastView(doc, {
+      ...toastOptions, message, id: toastId, dismissLabel: labels.dismissLabel,
+      canInteract: () => !disposed && !item.closing && item.shown,
+      onAction: index => {
+        const action = declaredActions[index];
+        if (!action) return;
+        action.onPress();
+        if (action.dismissOnPress !== false) beginDismiss(item);
+      },
+      onDismiss: () => beginDismiss(item)
+    });
+    const toast = view.element;
+    const actionButtons = view.actions;
+    const dismissButton = view.dismissButton;
 
-    // `item` é referenciado apenas dentro dos métodos abaixo, que só rodam
-    // quando o usuário age — nunca durante a construção. Por isso a declaração
-    // pode vir depois deles, e ser `const`.
     const handle: ToastHandle = {
       id: toastId,
       element: toast,
       actions: actionButtons,
-      dismiss() {
-        beginDismiss(item);
-      },
+      dismiss() { beginDismiss(item); },
       pin() {
+        if (disposed) return;
+        item.pinned = true;
         cancelTimer(item);
         toast.setAttribute("data-pinned", "true");
+        toast.setAttribute("data-duration", "indefinite");
       }
     };
-    const item: ManagedToast = { handle, closing: false };
+    const indefinite = (toastOptions.recoverable === true && state === "error") || (state === "warning" && declaredActions.length > 0);
+    const minimum = declaredActions.length > 0 ? 8000 : 0;
+    const duration = Math.max(minimum, toastOptions.durationMs ?? (declaredActions.length > 0 ? 8000 : 3000));
+    const item: ManagedToast = {
+      handle, view, dismissButton,
+      origin: isWithin(doc.activeElement, root) ? null : doc.activeElement as HTMLElement | null,
+      shown: false, closing: false, pinned: indefinite, hovered: false, focused: false,
+      remaining: duration, startedAt: 0
+    };
+    if (toastOptions.dedupKey !== undefined) item.key = toastOptions.dedupKey;
+    toast.setAttribute("data-duration", indefinite ? "indefinite" : String(duration));
 
-    for (const [index, actionButton] of actionButtons.entries()) {
-      const action = declaredActions[index];
-      if (action === undefined) continue;
-      actionButton.addEventListener("click", () => {
-        action.onPress();
-        if (action.dismissOnPress !== false) beginDismiss(item);
-      });
-    }
-    dismissButton.addEventListener("click", () => beginDismiss(item));
-    toast.addEventListener("keydown", (event) => {
-      if ((event as KeyboardEvent).key !== "Escape") return;
-      event.preventDefault();
-      beginDismiss(item);
+    toast.addEventListener("focusin", () => {
+      item.focused = true;
+      cancelTimer(item, true);
+      toast.setAttribute("data-paused", "true");
     });
-    toast.addEventListener("focusin", handle.pin);
-    toast.addEventListener("pointerenter", handle.pin);
+    toast.addEventListener("focusout", (event) => {
+      if (isWithin((event as FocusEvent).relatedTarget as Node | null, toast)) return;
+      item.focused = false;
+      toast.setAttribute("data-paused", item.hovered ? "true" : "false");
+      resume(item);
+    });
+    toast.addEventListener("pointerenter", () => {
+      item.hovered = true;
+      cancelTimer(item, true);
+      toast.setAttribute("data-paused", "true");
+    });
+    toast.addEventListener("pointerleave", () => {
+      item.hovered = false;
+      toast.setAttribute("data-paused", item.focused ? "true" : "false");
+      resume(item);
+    });
     toast.addEventListener("animationend", (event) => {
-      if (event.target === toast && item.closing) finalize(item);
+      if (event.target === toast && item.closing && (event as AnimationEvent).animationName === "motion-toast-out") finalize(item);
     });
-
-    if (managed.length >= maxVisible) {
-      const oldest = managed[0];
-      if (oldest !== undefined) finalize(oldest);
-    }
     managed.push(item);
-    root.appendChild(toast);
-    root.setAttribute("data-empty", "false");
-
-    const indefinite = toastOptions.recoverable === true && state === "error";
-    if (indefinite) {
-      toast.setAttribute("data-duration", "indefinite");
-    } else {
-      const minimum = declaredActions.length > 0 ? 8000 : 0;
-      const fallback = declaredActions.length > 0 ? 8000 : 3000;
-      const duration = Math.max(minimum, toastOptions.durationMs ?? fallback);
-      toast.setAttribute("data-duration", String(duration));
-      item.timer = scheduler.setTimeout(() => beginDismiss(item), duration);
-    }
-
+    pump();
     return handle;
+  }
+
+  function clear(): void {
+    for (const item of managed.splice(0)) {
+      item.closing = true;
+      item.shown = false;
+      cancelTimer(item);
+      cancelCloseTimer(item);
+      if (item.handle.element.parentNode === root) root.removeChild(item.handle.element);
+    }
+    refreshQueue();
   }
 
   return {
     element: root,
-    get items() {
-      return managed.map((item) => item.handle);
-    },
+    get items() { return visible().map((item) => item.handle); },
+    get pending() { return pending().map((item) => item.handle); },
     push,
     dismiss(idToDismiss) {
-      const item = find(idToDismiss);
+      const item = managed.find((candidate) => candidate.handle.id === idToDismiss);
       if (item !== undefined) beginDismiss(item);
     },
-    clear() {
-      for (const item of [...managed]) finalize(item);
+    updateLabels(nextLabels) {
+      requireText(nextLabels.label, "label");
+      requireText(nextLabels.dismissLabel, "dismissLabel");
+      for (const item of managed) {
+        const label = nextLabels.stateLabels?.[item.view.state];
+        if (label !== undefined) validateState(item.view.state, label);
+      }
+      labels = nextLabels;
+      root.setAttribute("aria-label", requireText(labels.label, "label"));
+      for (const item of managed) {
+        item.view.updateLabels(labels.dismissLabel, labels.stateLabels?.[item.view.state]);
+      }
+      refreshQueue();
+    },
+    clear,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      clear();
+      if (root.parentNode) root.parentNode.removeChild(root);
     }
   };
+}
+
+export interface BadgeOptions {
+  label: string;
+  tone?: FeedbackTone;
+  /** O rótulo permanece visível mesmo quando o pictograma está oculto. */
+  showIcon?: boolean;
+}
+
+export interface BadgeController {
+  readonly element: HTMLElement;
+  setLabel(label: string): void;
+  setTone(tone: FeedbackTone): void;
+}
+
+export function createBadge(doc: Document, options: BadgeOptions): BadgeController {
+  validateBadgeOptions(options);
+  const Constructor = registerMotiBadge(doc);
+  if (Constructor) {
+    let root: HTMLElement | undefined;
+    try { root = doc.createElement("moti-badge"); } catch { /* fallback */ }
+    if (root instanceof Constructor) return root.configure(options);
+  }
+  return mountBadgeView(doc, element(doc, "span"), options);
+}
+
+export interface AlertOptions {
+  id?: string;
+  title: string;
+  description?: string;
+  tone?: FeedbackTone;
+  icon?: string;
+  actions?: readonly ToastAction[];
+  dismissLabel?: string;
+  onDismiss?(): void;
+  assertive?: boolean;
+  scheduler?: ComponentScheduler;
+}
+
+export interface AlertController {
+  readonly element: HTMLElement;
+  setTone(tone: FeedbackTone): void;
+  setTitle(title: string): void;
+  setDescription(description: string): void;
+  dismiss(): void;
+  dispose(): void;
+}
+
+export function createAlert(doc: Document, options: AlertOptions): AlertController {
+  validateAlertOptions(options);
+  const Constructor = registerMotiAlert(doc);
+  if (Constructor) {
+    let root: HTMLElement | undefined;
+    try { root = doc.createElement("moti-alert"); } catch { /* fallback */ }
+    if (root instanceof Constructor) return root.configure(options);
+  }
+  return mountAlertView(doc, element(doc, "div"), options);
+}
+
+export function createSpinnerContainer(doc: Document): HTMLElement {
+  const container = element(doc, "div", "ch-spinner-container");
+  container.appendChild(createSpinner(doc));
+  return container;
+}
+
+export function createSkeleton(doc: Document, width = "100%", height = "20px"): HTMLElement {
+  const root = element(doc, "div", "ch-skeleton");
+  root.style.width = width;
+  root.style.height = height;
+  return root;
+}
+
+export interface EmptyStateOptions {
+  icon: string;
+  title: string;
+  description?: string;
+  action?: { label: string; onClick: () => void };
+}
+
+export function createEmptyState(doc: Document, options: EmptyStateOptions): HTMLElement {
+  const root = element(doc, "div", "ch-empty-state");
+  root.setAttribute("data-motion", "empty-state");
+  const iconContainer = element(doc, "div", "ch-empty-state__icon");
+  iconContainer.appendChild(createIcon(doc, options.icon));
+  iconContainer.setAttribute("aria-hidden", "true");
+  root.appendChild(iconContainer);
+
+  const title = element(doc, "h3", "ch-empty-state__title", options.title);
+  root.appendChild(title);
+
+  if (options.description) {
+    const desc = element(doc, "p", "ch-empty-state__description", options.description);
+    root.appendChild(desc);
+  }
+
+  if (options.action) {
+    const btnContainer = element(doc, "div", "ch-empty-state__actions");
+    const btn = doc.createElement("button");
+    btn.setAttribute("type", "button");
+    btn.setAttribute("data-motion", "button-press");
+    btn.className = "ch-button ch-button--primary";
+    btn.textContent = options.action.label;
+    btn.addEventListener("click", options.action.onClick);
+    btnContainer.appendChild(btn);
+    root.appendChild(btnContainer);
+  }
+
+  return root;
 }

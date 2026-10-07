@@ -33,11 +33,17 @@ const dist = path.join(root, "dist");
  * hosts carregam e uma decisao, e precisa aparecer no diff. Um arquivo a mais em
  * dist/ pode ser um vazamento de fonte; um a menos e um painel que nao carrega.
  */
+// Control presets are declared by the versioned source catalog; each shipped byte is verified below.
+const presetSource = path.join(root, "apps/after-effects-cep/assets/control-presets");
+const controlCatalog = JSON.parse(await readFile(path.join(presetSource, "catalog.json"), "utf8"));
+const presetFiles = [...new Set(Object.values(controlCatalog).map(entry => entry.file))];
 const EXPECTED_DIST_FILES = [
   "BUILD_INFO.json",
 
   // After Effects: painel CEP + camada de host montada.
   "after-effects-cep/CSXS/manifest.xml",
+  "after-effects-cep/assets/control-presets/catalog.json",
+  ...presetFiles.map(file => `after-effects-cep/assets/control-presets/${file}`),
   "after-effects-cep/client/index.html",
   "after-effects-cep/client/lib/CSInterface.js",
   "after-effects-cep/client/main.js",
@@ -182,6 +188,9 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       // gerenciado divergiriam.
       "MotionEffects",
       "MotionExpressions",
+      // Internal grouped-control writer; host mutations still pass through dispatch.
+      "MotionGroupedControls",
+      // Internal catalog, shared math and preset writer; dispatch remains the only public API.
       "MotionJson",
       // Módulo interno compartilhado por `keys-cut` e `keys-delay`, no mesmo
       // estatuto de `MotionExpressions`: o ExtendScript não tem sistema de
@@ -189,16 +198,41 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       // expõe dispatch nem contorna o registry — só captura, restaura e remove
       // keyframes preservando metadata.
       "MotionKeyframes",
+      "MotionLibraryCatalog", "MotionLibraryCore",
       // Writer/reader/updater comum de Expression Controls. Continua interno:
       // comandos persistem seus registros em RigMetadata e o dispatcher segue
       // como unica superficie publica e dono do Undo Group.
       "MotionLiveControls",
+      // Integração interna de presets de expressão com os controles por layer.
+      // O módulo não expõe dispatch nem abre Undo; o comando consumidor continua
+      // passando pelo registry e pelo único grupo do dispatcher.
+      "MotionLivePreset",
+      // Disparo de comandos de menu do After Effects, para as capacidades que só
+      // existem como item de menu (Convert Audio to Keyframes, Create Shapes
+      // from Vector Layer). Módulo interno: não expõe dispatch, não abre Undo, e
+      // só é alcançado por comandos que já passaram pelo registry.
+      //
+      // Existe separado justamente porque a parte perigosa é comum: resolver o
+      // id por nome e **nunca** cravar número, restaurar a seleção, e desistir
+      // quando nada resolve. Três cópias disso divergiriam, e a que divergisse
+      // dispararia um comando de menu arbitrário no projeto do usuário.
+      "MotionMenuCommand",
+      // Internal pure Bézier geometry shared by the word morph and its tests.
+      // It never touches AE layers; all host mutations still pass through dispatch.
+      "MotionMorphGeometry",
+      "MotionPresetLibrary",
+      // Internal phase composition and ownership shared with the inspected library.
+      "MotionPresetPhases",
+      "MotionQuickEffects",
       "MotionRegistry",
       // Bloco de metadata de rig no comentario da camada. Mesmo estatuto dos
       // outros modulos internos: sem superficie de dispatch. Existe separado
       // porque Parallax e Cylinder ja precisam do mesmo bloco, e duas copias de
       // "onde comeca e onde termina" divergiriam no primeiro caso de borda.
       "MotionRigMeta",
+      // Native text outlining shared by word reveal and proximity morph.
+      // It has no dispatch surface and preserves only temporary conversion data.
+      "MotionTextGlyphOutlines",
       // Matriz de transform compartilhada. Mesmo estatuto de
       // `MotionExpressions` e `MotionKeyframes`: modulo interno, sem
       // superficie de dispatch. A composicao que ele implementa esta medida
@@ -277,4 +311,19 @@ test("BUILD_INFO declara nome e versao do package.json", async () => {
   assert.equal(buildInfo.name, pkg.name);
   assert.equal(buildInfo.version, pkg.version);
   assert.deepEqual(buildInfo.outputs.sort(), ["after-effects-cep", "premiere-uxp"]);
+});
+
+
+test("presets de controles distribuídos correspondem ao catálogo e ao checksum declarado", async () => {
+  const shippedRoot = path.join(dist, "after-effects-cep/assets/control-presets");
+  assert.equal(await readFile(path.join(shippedRoot, "catalog.json"), "utf8"),
+    await readFile(path.join(presetSource, "catalog.json"), "utf8"));
+  for (const entry of Object.values(controlCatalog)) {
+    assert.match(entry.file, /^[a-f0-9]{16}\.ffx$/);
+    const source = await readFile(path.join(presetSource, entry.file));
+    const shipped = await readFile(path.join(shippedRoot, entry.file));
+    assert.deepEqual(shipped, source, entry.file);
+    assert.equal(createHash("sha256").update(shipped).digest("hex"), entry.sha256, entry.file);
+    assert.ok(entry.labels.length > 0);
+  }
 });

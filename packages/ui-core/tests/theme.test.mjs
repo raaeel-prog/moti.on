@@ -1,6 +1,8 @@
+import { afterEach } from 'node:test';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { resolveColorToken, themeDeclarations } from "../../ui-tokens/scripts/check-contrast.mjs";
 
 const css = await readFile(new URL("../src/theme.css", import.meta.url), "utf8");
 
@@ -25,10 +27,10 @@ function contrast(foreground, background) {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-function colorToken(name) {
-  const match = css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`));
-  assert.ok(match, `token --${name} precisa existir`);
-  return match[1];
+function colorToken(name, theme = "dark") {
+  // A whole-file hex search mixed dark literal status colors with light
+  // surfaces whenever the dark declaration used var(). Resolve one theme.
+  return resolveColorToken(themeDeclarations(css, theme), name);
 }
 
 test("root e shell permitem que somente o conteudo role em painel baixo", () => {
@@ -56,7 +58,7 @@ test("movimento reduzido encurta a duracao na raiz, cobrindo toda transicao", ()
   assert.ok(declaracoes.length > 0, "o painel tem transicoes a governar");
   for (const declaracao of declaracoes) {
     assert.ok(
-      declaracao.includes("var(--ch-motion-fast)"),
+      /var\(--(?:ch-motion|dur)-/.test(declaracao),
       `transicao fora do token escapa do movimento reduzido: ${declaracao}`
     );
   }
@@ -126,4 +128,20 @@ test("o anel de foco se destaca da superficie que ele contorna", () => {
       `anel de foco sobre --${superficie} deu ${medido.toFixed(2)}:1, abaixo de 3:1`
     );
   }
+});
+
+test("aliases do shell preservam contraste e a paleta correta no tema claro", () => {
+  for (const foreground of ["ch-text-primary", "ch-text-secondary", "ch-text-muted", "ch-danger", "ch-warning", "ch-info", "ch-success"]) {
+    for (const background of SUPERFICIES) {
+      const ratio = contrast(colorToken(foreground, "light"), colorToken(background, "light"));
+      assert.ok(ratio >= 4.5, `light: ${foreground}/${background} deu ${ratio.toFixed(2)}:1`);
+    }
+  }
+  for (const background of ["ch-accent", "ch-accent-hover", "ch-accent-pressed"]) {
+    assert.ok(contrast(colorToken("ch-accent-contrast", "light"), colorToken(background, "light")) >= 4.5);
+  }
+});
+
+afterEach(() => {
+  for (const name of ["HTMLElement", "customElements", "document", "window"]) delete globalThis[name];
 });

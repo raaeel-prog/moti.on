@@ -99,7 +99,7 @@
         outEase: captureEase(property.keyOutTemporalEase(i)),
         temporalContinuous: property.keyTemporalContinuous(i),
         temporalAutoBezier: property.keyTemporalAutoBezier(i),
-        roving: property.keyRoving(i),
+        roving: spatial ? property.keyRoving(i) : false,
         selected: property.keySelected(i),
         spatial: null
       });
@@ -117,6 +117,10 @@
 
     return /** @type {MotionPropertySnapshot} */ ({
       property: property,
+      // Recreating keys can make After Effects drop the PropertyBase selection
+      // state. Keep it with the snapshot so multi-property edits restore the
+      // same selection before restoring individual key selection.
+      propertySelected: property.selected === true,
       spatial: spatial,
       supportsLabels: supportsLabels,
       keys: keys
@@ -145,6 +149,33 @@
   function removeAll(property) {
     var i;
     for (i = property.numKeys; i >= 1; i -= 1) property.removeKey(i);
+  }
+
+  /** @param {MotionPropertySnapshot[]} snapshots @returns {void} */
+  function restoreSelections(snapshots) {
+    // Recreating one property can clear selected keys on its siblings in AE.
+    // Restore all parent selections only after every property has been written,
+    // then restore the per-key selection in a second pass (also for rollback).
+    for (var p = 0; p < snapshots.length; p += 1) {
+      var selectedTarget = /** @type {MotionPropertySnapshot} */ (snapshots[p]);
+      var selectProperty = selectedTarget.propertySelected === true;
+      for (var pk = 0; pk < selectedTarget.keys.length; pk += 1) {
+        var selectedTargetKey = selectedTarget.keys[pk];
+        if (selectedTargetKey && selectedTargetKey.selected === true) {
+          selectProperty = true;
+          break;
+        }
+      }
+      if (typeof selectedTarget.propertySelected === "boolean") selectedTarget.property.selected = selectProperty;
+    }
+    for (var q = 0; q < snapshots.length; q += 1) {
+      var keyedTarget = /** @type {MotionPropertySnapshot} */ (snapshots[q]);
+      for (var qk = 0; qk < keyedTarget.keys.length; qk += 1) {
+        var keyedTargetKey = keyedTarget.keys[qk];
+        if (!keyedTargetKey) throw new Error("Snapshot de selecao incompleto.");
+        keyedTarget.property.setSelectedAtKey(qk + 1, keyedTargetKey.selected === true);
+      }
+    }
   }
 
   /**
@@ -195,6 +226,9 @@
       property.setTemporalEaseAtKey(index, restoreEase(key.inEase), restoreEase(key.outEase));
       property.setTemporalContinuousAtKey(index, key.temporalContinuous === true);
       property.setTemporalAutoBezierAtKey(index, key.temporalAutoBezier === true);
+      // AE can promote LINEAR to BEZIER when ease is written. Restore the
+      // requested interpolation last so rollback also preserves Linear/Hold.
+      property.setInterpolationTypeAtKey(index, key.inInterpolation, key.outInterpolation);
     }
 
     if (snapshot.spatial === true) {
@@ -217,7 +251,7 @@
       // Roving so e valido em keys intermediarias. Um snapshot valido nunca o
       // traz nas bordas, mas a guarda impede o host de receber uma chamada
       // invalida se uma versao antiga tiver normalizado isso de modo diferente.
-      if (i > 0 && i < keys.length - 1) {
+      if (snapshot.spatial === true && i > 0 && i < keys.length - 1) {
         var rovingKey = keys[i];
         if (!rovingKey) throw new Error("Snapshot de roving incompleto.");
         property.setRovingAtKey(i + 1, rovingKey.roving === true);
@@ -232,11 +266,7 @@
         property.setLabelAtKey(i + 1, labelKey.label);
       }
     }
-    for (i = 0; i < keys.length; i += 1) {
-      var selectedKey = keys[i];
-      if (!selectedKey) throw new Error("Snapshot de selecao incompleto.");
-      property.setSelectedAtKey(i + 1, selectedKey.selected === true);
-    }
+    restoreSelections([snapshot]);
   }
 
   /** @param {Property} property @param {number[]} indices @returns {void} */
@@ -311,12 +341,41 @@
    * @returns {{outSpeed: number, outInfluence: number, inSpeed: number, inInfluence: number}}
    */
   function curveToEase(curva, duracaoSegundos, diferencaDeValor) {
+    // Guarda de finitude, espelhando `packages/keyframe-core/src/bezier.ts`.
+    //
+    // Sem ela um NaN atravessa a funcao inteira: o teste `!== 0` da linha de
+    // baixo e VERDADEIRO para NaN, entao `unitSpeed` sai NaN, os dois speeds
+    // saem NaN, e quem chama entrega `new KeyframeEase(NaN, ...)` ao After
+    // Effects. O AE lanca la dentro, com uma mensagem que o dispatcher
+    // descarta — e o usuario ve so HOST_OPERATION_FAILED, sem nada que aponte
+    // para a causa. Foi exatamente esse o caminho do defeito de 2026-09-05 em
+    // `keys-ease.jsx`, que passava `Number([x, y, z])` como diferenca.
+    //
+    // Falhar aqui e barato e diz o que houve, ANTES de qualquer escrita.
+    /** @type {string[]} */
+    var nomes = ["x1", "y1", "x2", "y2", "duracaoSegundos", "diferencaDeValor"];
+    /** @type {number[]} */
+    var valores = [curva.x1, curva.y1, curva.x2, curva.y2, duracaoSegundos, diferencaDeValor];
+    var e;
+    for (e = 0; e < valores.length; e += 1) {
+      var valor = valores[e];
+      if (typeof valor !== "number" || isNaN(valor) || !isFinite(valor)) {
+        throw new Error(
+          "Curva de ease invalida: " + nomes[e] + " precisa ser numero finito (recebido: " + valor + ")"
+        );
+      }
+    }
+
     var outInfluence = Math.max(0.1, Math.min(curva.x1 * 100, 100));
     var inInfluence = Math.max(0.1, Math.min((1 - curva.x2) * 100, 100));
 
     var outSpeed = 0;
     var inSpeed = 0;
 
+    // Divergencia deliberada da referencia: ela LANCA quando a duracao e <= 0;
+    // aqui o segmento degenerado (dois keyframes no mesmo tempo) devolve
+    // velocidade zero. E o comportamento que camera-transition e o effector ja
+    // dependem, e nao produz valor invalido — so um segmento sem movimento.
     if (diferencaDeValor !== 0 && duracaoSegundos > 0) {
       var outSlope = curva.y1 / (outInfluence / 100);
       var inSlope = (1 - curva.y2) / (inInfluence / 100);
@@ -334,7 +393,204 @@
     };
   }
 
+  /** A reverse retraces the same Bezier geometry: swap handles, do not negate
+   * their offsets. Non-spatial temporal speed is signed; spatial speed is not.
+   * @param {MotionCapturedKey} key @param {number} time @param {boolean} reverse
+   * @returns {MotionCapturedKey} */
+  function copyKey(key, time, reverse) {
+    /** @param {MotionCapturedEase[]} source @returns {MotionCapturedEase[]} */
+    function eases(source) {
+      var result = [];
+      for (var e = 0; e < source.length; e += 1) {
+        var ease = source[e];
+        if (ease) result.push({ speed: ease.speed * (reverse && !key.spatial ? -1 : 1), influence: ease.influence });
+      }
+      return result;
+    }
+    return {
+      time: time, value: cloneValue(key.value),
+      inInterpolation: reverse ? key.outInterpolation : key.inInterpolation,
+      outInterpolation: reverse ? key.inInterpolation : key.outInterpolation,
+      inEase: eases(reverse ? key.outEase : key.inEase),
+      outEase: eases(reverse ? key.inEase : key.outEase),
+      temporalContinuous: key.temporalContinuous, temporalAutoBezier: key.temporalAutoBezier,
+      roving: key.roving, selected: key.selected, label: key.label,
+      spatial: key.spatial ? {
+        inTangent: cloneValue(reverse ? key.spatial.outTangent : key.spatial.inTangent),
+        outTangent: cloneValue(reverse ? key.spatial.inTangent : key.spatial.outTangent),
+        continuous: key.spatial.continuous, autoBezier: key.spatial.autoBezier
+      } : null
+    };
+  }
+
+  /** @param {Property} property @returns {Layer|null} */
+  function ownerLayer(property) {
+    var current = /** @type {any} */ (property);
+    for (var depth = 0; current && current.parentProperty && depth < 64; depth += 1) current = current.parentProperty;
+    return current && typeof current.inPoint === "number" ? current : null;
+  }
+
+  /** Builds every target before writing. No state survives a command.
+   * @param {CompItem} comp @param {string} operation @param {string} destination
+   * @returns {MotionKeyEditPlan} */
+  function planEdit(comp, operation, destination) {
+    /** @type {MotionPropertySnapshot[]} */
+    var originals = [];
+    var start = Infinity, end = -Infinity, count = 0, total = 0, i, j;
+    /** @param {string} code @param {string} message @param {unknown} [details] @returns {MotionKeyEditPlan} */
+    function rejected(code, message, details) {
+      return { originals: [], targets: [], error: { code: code, message: message, recoverable: true, details: typeof details === "undefined" ? null : details } };
+    }
+    try {
+      var properties = comp.selectedProperties;
+      for (i = 0; i < properties.length; i += 1) {
+        var property = /** @type {Property} */ (properties[i]);
+        if (!property || property.propertyType !== PropertyType.PROPERTY || !property.selectedKeys || !property.selectedKeys.length) continue;
+        if (!isSupportedProperty(property)) return rejected(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Selecione propriedades numericas, vetoriais ou cores.");
+        var layer = ownerLayer(property);
+        if (layer && /** @type {any} */ (layer).locked) return rejected(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie as camadas selecionadas.");
+        total += property.numKeys;
+        if (total > MAX_KEYS_PER_BATCH) return rejected(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Selecione um lote de ate 10.000 keyframes.");
+        var snapshot = captureProperty(property);
+        for (j = 0; j < snapshot.keys.length; j += 1) {
+          var key = /** @type {MotionCapturedKey} */ (snapshot.keys[j]);
+          key.selected = false;
+          for (var s = 0; s < property.selectedKeys.length; s += 1) if (property.selectedKeys[s] === j + 1) key.selected = true;
+          if (key.selected) { start = Math.min(start, key.time); end = Math.max(end, key.time); count += 1; }
+        }
+        originals.push(snapshot);
+      }
+      if (!count || (operation === "reverse" && count < 2)) return rejected(MotionContracts.ERROR.NO_SELECTION, "Selecione keyframes na timeline; para inverter, selecione ao menos dois.");
+      if (operation !== "reverse" && total + count > MAX_KEYS_PER_BATCH) return rejected(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A duplicacao excede 10.000 keyframes. Reduza a selecao.");
+      /** @type {MotionPropertySnapshot[]} */
+      var targets = [];
+      for (i = 0; i < originals.length; i += 1) {
+        var original = /** @type {MotionPropertySnapshot} */ (originals[i]);
+        var reverse = operation !== "repeat";
+        // The smoothing toolbar duplicates every selected key, including the
+        // turning point. Keep legacy mirror/after joins for existing callers;
+        // after-gap creates a separate copy one frame after the selection.
+        var anchor = end + (operation === "repeat" || destination === "after-gap" ? comp.frameDuration : 0);
+        if (destination === "cti") anchor = comp.time;
+        var layerDestination = destination === "layer-start" || destination === "layer-end";
+        var edgeDestination = layerDestination || destination === "comp-start" || destination === "comp-end" || destination === "work-area-end";
+        var boundaryStart = 0, boundaryEnd = comp.duration;
+        var localStart = start, localEnd = end;
+        if (layerDestination) {
+          var owner = ownerLayer(original.property);
+          if (!owner) return rejected(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Nao foi possivel identificar a camada de destino.");
+          // Each layer keeps the relative timing of all of its selected properties.
+          localStart = Infinity; localEnd = -Infinity;
+          for (var p = 0; p < originals.length; p += 1) {
+            var sibling = originals[p];
+            if (!sibling || ownerLayer(sibling.property) !== owner) continue;
+            for (var q = 0; q < sibling.keys.length; q += 1) {
+              var siblingKey = sibling.keys[q];
+              if (siblingKey && siblingKey.selected) { localStart = Math.min(localStart, siblingKey.time); localEnd = Math.max(localEnd, siblingKey.time); }
+            }
+          }
+          boundaryStart = Math.max(0, owner.inPoint);
+          boundaryEnd = Math.min(comp.duration, owner.outPoint);
+        } else if (destination === "work-area-end") {
+          boundaryStart = Math.max(0, comp.workAreaStart);
+          boundaryEnd = Math.min(comp.duration, comp.workAreaStart + comp.workAreaDuration);
+        }
+        var rangeStart = layerDestination ? localStart : start;
+        var rangeEnd = layerDestination ? localEnd : end;
+        if (edgeDestination) {
+          if (!isFinite(boundaryStart) || !isFinite(boundaryEnd) || boundaryEnd < boundaryStart || rangeEnd - rangeStart > boundaryEnd - boundaryStart + TIME_TOLERANCE) {
+            return rejected(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "O grupo selecionado nao cabe no intervalo visivel de destino.");
+          }
+          anchor = destination === "layer-start" || destination === "comp-start" ? boundaryStart : boundaryEnd - (rangeEnd - rangeStart);
+        }
+        var keys = [];
+        for (j = 0; j < original.keys.length; j += 1) {
+          var source = /** @type {MotionCapturedKey} */ (original.keys[j]);
+          if (operation !== "reverse" || !source.selected) {
+            var retained = copyKey(source, source.time, false);
+            if (operation !== "reverse") retained.selected = false;
+            keys.push(retained);
+          }
+        }
+        for (j = 0; j < original.keys.length; j += 1) {
+          var selected = /** @type {MotionCapturedKey} */ (original.keys[j]);
+          if (!selected.selected) continue;
+          var time = operation === "reverse" ? start + end - selected.time : anchor + (reverse ? rangeEnd - selected.time : selected.time - rangeStart);
+          if (!isFinite(time)) return rejected(MotionContracts.ERROR.INVALID_PRESET, "O tempo de destino nao e valido.");
+          var added = copyKey(selected, time, reverse);
+          added.selected = true;
+          var merged = false;
+          for (var k = 0; k < keys.length; k += 1) {
+            var existing = /** @type {MotionCapturedKey} */ (keys[k]);
+            if (Math.abs(existing.time - time) > TIME_TOLERANCE) continue;
+            // Reuse the turning point, avoiding a duplicate frame/hold at the join.
+            if (operation === "mirror" && destination === "after" && Math.abs(selected.time - end) <= TIME_TOLERANCE && Math.abs(time - end) <= TIME_TOLERANCE) {
+              existing.outInterpolation = added.outInterpolation; existing.outEase = added.outEase;
+              if (existing.spatial && added.spatial) existing.spatial.outTangent = added.spatial.outTangent;
+              existing.temporalContinuous = false; existing.temporalAutoBezier = false;
+              if (existing.spatial) { existing.spatial.continuous = false; existing.spatial.autoBezier = false; }
+              existing.selected = true; merged = true;
+            } else {
+              var occupiedBySource = false;
+              for (var c = 0; c < original.keys.length; c += 1) {
+                var conflictSource = original.keys[c];
+                if (conflictSource && conflictSource.selected && Math.abs(conflictSource.time - time) <= TIME_TOLERANCE) occupiedBySource = true;
+              }
+              var conflictOwner = ownerLayer(original.property);
+              var recovery = destination === "cti" ? "Mova o indicador para um trecho livre ou use Duplicar depois." : edgeDestination ? "O inicio ou fim escolhido ja esta ocupado. Use Duplicar depois ou escolha outro trecho." : operation === "reverse" ? "Inclua o keyframe desse instante na selecao ou selecione outro trecho." : "Escolha um trecho livre depois da selecao.";
+              return rejected(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Ja existe um keyframe no tempo de destino. " + recovery, {
+                destination: destination,
+                operation: operation,
+                time: time,
+                propertyName: original.property.name,
+                layerName: conflictOwner ? conflictOwner.name : "",
+                conflictWith: occupiedBySource ? "source" : "unselected"
+              });
+            }
+          }
+          if (!merged) keys.push(added);
+        }
+        keys.sort(function (a, b) { return a.time - b.time; });
+        var times = [];
+        for (j = 0; j < keys.length; j += 1) times.push(/** @type {MotionCapturedKey} */ (keys[j]).time);
+        validateTimes(times, keys.length);
+        targets.push({ property: original.property, propertySelected: original.propertySelected, spatial: original.spatial, supportsLabels: original.supportsLabels, keys: keys });
+      }
+      return { originals: originals, targets: targets, error: null };
+    } catch (error) {
+      return rejected(MotionContracts.ERROR.HOST_OPERATION_FAILED, "Nao foi possivel ler os keyframes selecionados.");
+    }
+  }
+
+  /** @param {MotionKeyEditPlan} plan @returns {MotionCommandResult} */
+  function applyEdit(plan) {
+    if (plan.error) {
+      var invalid = /** @type {Error & {motionCode?: string}} */ (new Error(plan.error.message));
+      invalid.motionCode = plan.error.code; throw invalid;
+    }
+    var touched = -1;
+    try {
+      for (var i = 0; i < plan.targets.length; i += 1) {
+        touched = i;
+        restoreProperty(/** @type {MotionPropertySnapshot} */ (plan.targets[i]), null);
+      }
+      restoreSelections(plan.targets);
+    } catch (error) {
+      var failed = false;
+      for (var r = touched; r >= 0; r -= 1) {
+        try { restoreProperty(/** @type {MotionPropertySnapshot} */ (plan.originals[r]), null); } catch (rollback) { failed = true; }
+      }
+      try { restoreSelections(plan.originals); } catch (selectionRollback) { failed = true; }
+      var failure = /** @type {Error & {motionCode?: string}} */ (new Error(failed ? "Falha ao restaurar keyframes. Use Desfazer." : "O host recusou a escrita; os keyframes foram restaurados."));
+      failure.motionCode = failed ? MotionContracts.ERROR.ROLLBACK_FAILED : MotionContracts.ERROR.HOST_OPERATION_FAILED;
+      throw failure;
+    }
+    return { changed: plan.targets.length > 0, warnings: [], data: { propertyCount: plan.targets.length } };
+  }
+
   global.MotionKeyframes = {
+    planEdit: planEdit,
+    applyEdit: applyEdit,
     MAX_KEYS_PER_BATCH: MAX_KEYS_PER_BATCH,
     isSupportedProperty: isSupportedProperty,
     captureProperty: captureProperty,

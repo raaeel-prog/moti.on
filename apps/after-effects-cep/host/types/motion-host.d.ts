@@ -58,6 +58,7 @@ declare const MotionContracts: {
   readonly META_CLOSE: string;
   readonly PLUGIN_VERSION?: string;
   readonly EXPRESSION_HEADER: string;
+  readonly GRADIENT: Record<string, unknown>;
 };
 
 interface MotionHostDescriptor {
@@ -112,12 +113,16 @@ declare const MotionExpressions: {
     useDuration: unknown;
   }): string;
   isManagedLoopOut(source: string): boolean;
+  renderLoopOutLive(refs: { type: string; numKeyframes: string }): string;
+  isManagedLoopOutLive(source: string): boolean;
   renderSmooth(tokens: {
     widthSeconds: unknown;
     samples: unknown;
     referenceTime: unknown;
   }): string;
   isManagedSmooth(source: string): boolean;
+  renderSmoothLive(refs: { widthSeconds: string; samples: string }): string;
+  isManagedSmoothLive(source: string): boolean;
   renderWiggle(tokens: {
     frequency: unknown;
     amplitude: unknown;
@@ -126,6 +131,9 @@ declare const MotionExpressions: {
     seed: unknown;
   }): string;
   isManagedWiggle(source: string): boolean;
+  /** Wiggle lendo Live Controls; as referencias vem de `expressionReference`. */
+  renderWiggleLive(refs: { frequency: string; amplitude: string; seed: string }): string;
+  isManagedWiggleLive(source: string): boolean;
   renderFlicker(tokens: {
     rate: unknown;
     minFactor: unknown;
@@ -133,6 +141,8 @@ declare const MotionExpressions: {
     seed: unknown;
   }): string;
   isManagedFlicker(source: string): boolean;
+  renderFlickerLive(refs: { rate: string; minFactor: string; maxFactor: string; seed: string }): string;
+  isManagedFlickerLive(source: string): boolean;
   renderTextBoxSize(tokens: { paddingX: unknown; paddingY: unknown }): string;
   isManagedTextBoxSize(source: string): boolean;
   /** Sem tokens: o centro do bounding box nao depende de padding. */
@@ -176,6 +186,11 @@ declare const MotionExpressions: {
     startMode: unknown;
   }): string;
   isManagedInertial(source: string): boolean;
+  renderInertialLive(
+    refs: { amplitude: string; frequency: string; decay: string },
+    tokens: { maxDurationFrames: unknown; startMode: unknown }
+  ): string;
+  isManagedInertialLive(source: string): boolean;
   renderLookAt(tokens: {
     targetLayerName: unknown;
     forwardAxis: unknown;
@@ -183,10 +198,18 @@ declare const MotionExpressions: {
     constrainAxes: unknown;
   }): string;
   isManagedLookAt(source: string): boolean;
+  renderLookAt2D(tokens: {
+    targetLayerName: unknown;
+    forwardAxis: unknown;
+  }): string;
+  isManagedLookAt2D(source: string): boolean;
   lookAtSupportedAxes(): readonly string[];
   renderOrbit(tokens: { radius: unknown; speed: unknown; inclination: unknown; phase: unknown }): string;
+  renderOrbitLive(tokens: { controls: MotionLiveControlRecord[]; ordinal: number; count: number; startTime: number }): string;
+  isManagedOrbitLive(source: string): boolean;
   isManagedOrbit(source: string): boolean;
   renderOrbitFacing(): string;
+  renderOrbitFacingLive(tokens: { controls: MotionLiveControlRecord[] }): string;
   isManagedOrbitFacing(source: string): boolean;
   renderWave(tokens: { amplitude: unknown; frequency: unknown; phase: unknown; direction: unknown }): string;
   isManagedWave(source: string): boolean;
@@ -196,6 +219,7 @@ declare const MotionExpressions: {
     controllerName: unknown;
     radiusEffectName: unknown;
     amountEffectName: unknown;
+    amountPropertyIndex?: number;
     falloffCurve: unknown;
     curve: unknown;
     target: unknown;
@@ -203,10 +227,39 @@ declare const MotionExpressions: {
   isManagedEffector(source: string): boolean;
   renderParallaxFocus(tokens: { targetLayerName: unknown; focusOffset: unknown }): string;
   isManagedParallaxFocus(source: string): boolean;
-  renderParallaxWiggle(tokens: { controllerName: unknown; seed: unknown }): string;
+  renderParallaxWiggle(tokens: { controllerName: unknown; seed: unknown; groupName?: string }): string;
   isManagedParallaxWiggle(source: string): boolean;
   /** Nomes dos sliders que o wiggle cria no controller, para o comando e o teste lerem do mesmo lugar. */
   parallaxWiggleSliderNames: { frequency: string; amplitude: string };
+  /**
+   * Beat por amplitude. `layerName` e `channelEffect` chegam LIDOS do projeto —
+   * ver `docs/research/after-effects-audio-amplitude.md` para o porque de nao
+   * serem cravados.
+   */
+  renderBeatAmplitude(
+    tokens: {
+      layerName: unknown;
+      layerIndex?: unknown;
+      channelEffect: unknown;
+      channelIndex?: unknown;
+      restValue?: unknown;
+      peakOffset?: unknown;
+    },
+    refs: {
+      beatMin: string;
+      beatMax: string;
+      mode: string;
+      bumpMin: string;
+      bumpMax: string;
+      shakeFreq: string;
+      shakeAmp: string;
+      intensity?: string;
+      scale?: string;
+    }
+  ): string;
+  isManagedBeatAmplitude(source: string): boolean;
+  renderBeatBpm(tokens: { restValue: unknown; peakOffset: unknown }): string;
+  isManagedBeat(source: string): boolean;
 };
 
 /** Camera nativa. Ja e 3D por natureza, e por isso o Look At a aceita sem exigir threeDLayer. */
@@ -251,6 +304,7 @@ interface MotionCapturedKey {
 
 interface MotionPropertySnapshot {
   property: Property;
+  propertySelected: boolean;
   spatial: boolean;
   supportsLabels: boolean;
   keys: MotionCapturedKey[];
@@ -293,6 +347,8 @@ interface MotionLiveControlBindingHost {
 }
 
 interface MotionLiveControlsConfig {
+  grouped?: boolean;
+  controlBudget?: number;
   rigId: string;
   tool: string;
   locale: string;
@@ -302,6 +358,7 @@ interface MotionLiveControlsConfig {
 }
 
 interface MotionLiveControlRecord extends Record<string, unknown> {
+  propertyIndex?: number;
   schemaVersion: 1;
   paramId: string;
   name: string;
@@ -381,7 +438,15 @@ declare const MotionRigMeta: {
   findMembers(comp: CompItem, controller: Layer): Layer[];
 };
 
+interface MotionKeyEditPlan {
+  originals: MotionPropertySnapshot[];
+  targets: MotionPropertySnapshot[];
+  error: MotionCommandFailure | null;
+}
+
 declare const MotionKeyframes: {
+  planEdit(comp: CompItem, operation: string, destination: string): MotionKeyEditPlan;
+  applyEdit(plan: MotionKeyEditPlan): MotionCommandResult;
   readonly MAX_KEYS_PER_BATCH: number;
   isSupportedProperty(property: Property): boolean;
   captureProperty(property: Property): MotionPropertySnapshot;
@@ -423,12 +488,74 @@ interface MotionCommandResult {
 }
 
 interface MotionCommandHandler {
-  preflight(args: Record<string, unknown>, context: Record<string, unknown>): MotionCommandFailure | null;
-  run(args: Record<string, unknown>, context: Record<string, unknown>): MotionCommandResult;
+  preflight(
+    args: Record<string, unknown>,
+    context: Record<string, unknown>,
+    options?: Record<string, unknown>
+  ): MotionCommandFailure | null;
+  /**
+   * `options` sao as do envelope — `mode`, `emitLiveControls`, `dryRun` e
+   * companhia. Sao opcionais na assinatura porque a grande maioria dos comandos
+   * nao as le; o dispatcher sempre passa um objeto, nunca `undefined`.
+   */
+  run(
+    args: Record<string, unknown>,
+    context: Record<string, unknown>,
+    options?: Record<string, unknown>
+  ): MotionCommandResult;
 }
 
 declare const MotionRegistry: {
   register(id: string, handler: MotionCommandHandler): void;
   get(id: string): MotionCommandHandler | null;
   ids(): string[];
+};
+
+/**
+ * Cola entre um comando de expressao e os Live Controls. Ver
+ * `apps/after-effects-cep/host/src/live-preset.jsx`.
+ */
+declare const MotionLivePreset: {
+  camadaDe(property: unknown): Layer | null;
+  normalizarLocale(locale: unknown): string;
+  agruparPorCamada(propriedades: unknown[]): Array<{ layer: Layer; indices: number[] }>;
+  aplicar(
+    propriedades: unknown[],
+    config: {
+      tool: string;
+      rigId: string;
+      locale: unknown;
+      bindings: MotionLiveControlBindingHost[];
+      values: Record<string, unknown>;
+    }
+  ): {
+    refsPorPropriedade: Array<Record<string, string>>;
+    avisos: Array<{ code: string; message: string; details: unknown }>;
+    desfazer(): boolean;
+  };
+};
+
+/**
+ * Disparo de comandos de menu do After Effects.
+ *
+ * `resolver` devolve `null` quando nenhum dos nomes candidatos existe nesta
+ * instalacao — e esse `null` e a resposta esperada, nao um erro: quem chama
+ * recusa a operacao com uma frase acionavel em vez de cravar um id numerico.
+ */
+declare const MotionMenuCommand: {
+  resolver(candidatos: string[]): { id: number; nome: string } | null;
+  executarComSelecao(id: number, alvo: Layer, comp: CompItem): void;
+};
+
+/** Versioned per-property numeric expressions used by the Quick contract. */
+declare const MotionQuickEffects: {
+  prepare(kind: string, args: Record<string, unknown>, options?: Record<string, unknown>): { error: MotionCommandFailure | null; items: unknown[] };
+  run(kind: string, args: Record<string, unknown>, context: Record<string, unknown>, options?: Record<string, unknown>): MotionCommandResult;
+};
+
+/** Versioned, bundled grouped parameter presets. */
+declare const MotionGroupedControls: {
+  stage(layer: Layer, config: Record<string, unknown>, legacyNames: Record<string, string>): {
+    records: MotionLiveControlRecord[]; rollback(): void; commit(): void;
+  };
 };

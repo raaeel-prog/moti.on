@@ -41,6 +41,7 @@ class FakeProperty {
     this.keys = keys;
     this.selectedKeys = selectedKeys;
     this.escritas = [];
+    this.interpolations = [];
   }
   get numKeys() {
     return this.keys.length;
@@ -66,7 +67,7 @@ class FakeProperty {
   setTemporalEaseAtKey(index, inEase, outEase) {
     this.escritas.push({ index, inEase, outEase });
   }
-  setInterpolationTypeAtKey() {}
+  setInterpolationTypeAtKey(index, incoming, outgoing) { this.interpolations.push({ index, incoming, outgoing }); }
 
   // Restante do protocolo de keyframe. O comando passou a capturar uma copia
   // intacta antes de escrever, para poder desfazer se uma das escritas falhar
@@ -161,6 +162,11 @@ async function easePeloHost(curva, duracao, diferenca) {
   );
   assert.equal(resposta.ok, true, `host recusou o pedido: ${JSON.stringify(resposta.error)}`);
 
+  if (curva.x1 === curva.y1 && curva.x2 === curva.y2) {
+    assert.deepEqual(property.interpolations, [{index: 1, incoming: 1, outgoing: 1}, {index: 2, incoming: 1, outgoing: 1}]);
+    assert.equal(property.escritas.length, 0, "Linear nativo nao recebe ease Bezier");
+    return "linear";
+  }
   // A saída do keyframe 1 e a entrada do keyframe 2 descrevem o mesmo segmento.
   const escritaKey1 = property.escritas.find((escrita) => escrita.index === 1);
   const escritaKey2 = property.escritas.find((escrita) => escrita.index === 2);
@@ -189,6 +195,8 @@ for (const caso of casos) {
 
     // Comparacao exata, e nao por tolerancia: as duas fazem a mesma conta com os
     // mesmos doubles. Qualquer divergencia aqui e divergencia de formula.
+    if (caso.nome === "linear") { assert.equal(host, "linear"); return; }
     assert.deepEqual(host, referencia, `${caso.nome} divergiu entre referencia e host`);
   });
 }
+

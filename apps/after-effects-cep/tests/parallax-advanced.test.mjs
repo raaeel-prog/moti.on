@@ -14,7 +14,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { loadHostModules } from "./host-harness.mjs";
+import { loadHostModules } from "./grouped-host-harness.mjs";
 
 const PropertyType = { PROPERTY: 1, INDEXED_GROUP: 2 };
 const PropertyValueType = { NO_VALUE: 0, OneD: 1, TwoD: 2, TwoD_SPATIAL: 3, ThreeD: 4 };
@@ -208,6 +208,9 @@ async function fixture({ comCamera = true, nomeCamera = "Qualquer nome" } = {}) 
   const layers = camera ? [controller, alvo, camera] : [controller, alvo];
   const comp = new FakeCompItem(layers, camera);
   comp.selectedLayers = [alvo];
+  comp.id = 200;
+  if (camera) camera.id = 100;
+  controller.comment = scopeParcial.MotionRigMeta.write("", JSON.stringify({rigType:"parallax.quick",schemaVersion:2,compId:200,cameraId:100}));
 
   const app = {
     project: { activeItem: comp, expressionEngine: "javascript-1.0" },
@@ -280,6 +283,7 @@ test("nenhuma das quatro operacoes abre um grupo de Undo proprio", async () => {
   responder(f.scope, "ae.parallax.auto-focus", FOCO);
   responder(f.scope, "ae.parallax.wiggle", WIGGLE);
   responder(f.scope, "ae.parallax.zoom", ZOOM);
+  f.comp.selectedLayers = [f.camera];
   responder(f.scope, "ae.parallax.bake", BAKE);
 
   const aberturas = f.calls.filter(([tipo]) => tipo === "begin");
@@ -323,8 +327,9 @@ test("amplitude zero continua zero, e nao vira o padrao", async () => {
   const resposta = responder(f.scope, "ae.parallax.wiggle", { ...WIGGLE, amplitude: 0 });
 
   assert.equal(resposta.ok, true, JSON.stringify(resposta.error ?? null));
-  const amp = f.controller.efeitos.property("Parallax Amplitude");
-  assert.equal(amp.property(1).value, 0);
+  const group = f.controller.efeitos.filhos.find(e => e.name === "Moti.on · Parallax");
+  assert.equal(group.numProperties, 2);
+  assert.equal(group.property(2).value, 0);
 });
 
 test("argumento desconhecido e recusado no preflight", async () => {
@@ -383,44 +388,41 @@ test("o wiggle remove os sliders que criou quando a expressao e recusada", async
   assert.equal(f.camera.position.expression, "");
 });
 
-test("o zoom escreve duas chaves e as encontra pelo tempo, mesmo com chaves depois", async () => {
+test("Zoom preserves existing camera keys, and writes native keys only on an empty property", async () => {
   const f = await fixture();
-  // Uma chave muito depois: "as duas ultimas" seriam as erradas.
   f.camera.zoom.setValueAtTime(10, 5000);
-
-  const resposta = responder(f.scope, "ae.parallax.zoom", ZOOM);
-
-  assert.equal(resposta.ok, true, JSON.stringify(resposta.error ?? null));
-  const t2 = 30 * f.comp.frameDuration;
-  const chaveFinal = f.camera.zoom.keys.find((k) => Math.abs(k.t - t2) < 1e-9);
-  assert.ok(chaveFinal, "a chave final foi escrita no tempo pedido");
-  assert.equal(chaveFinal.v, 2000);
-  assert.ok(chaveFinal.ease, "o ease caiu na chave nova, e nao na que ja existia");
-  assert.equal(f.camera.zoom.keys.find((k) => k.t === 10).ease, undefined);
+  const before = structuredClone(f.camera.zoom.keys);
+  assert.equal(responder(f.scope, "ae.parallax.zoom", ZOOM).ok, false);
+  assert.deepEqual(f.camera.zoom.keys, before);
+  const g = await fixture();
+  assert.equal(responder(g.scope, "ae.parallax.zoom", ZOOM).ok, true);
+  assert.equal(g.camera.zoom.numKeys, 2);
+  assert.ok(g.camera.zoom.keys[1].ease);
 });
 
 test("o bake anda na grade de quadros, sem acumular erro de ponto flutuante", async () => {
   const f = await fixture();
-  f.alvo.position.expression = "wiggle(1, 10)";
-  f.alvo.position.expressionEnabled = true;
+  f.comp.selectedLayers = [f.camera];
+  f.camera.position.expression = f.scope.MotionExpressions.renderParallaxWiggle({controllerName:f.controller.name, seed:12345});
+  f.camera.position.expressionEnabled = true;
 
   const resposta = responder(f.scope, "ae.parallax.bake", BAKE);
 
   assert.equal(resposta.ok, true, JSON.stringify(resposta.error ?? null));
 
   const quadros = Math.floor(f.comp.workAreaDuration / f.comp.frameDuration);
-  assert.equal(f.alvo.position.numKeys, quadros + 1);
+  assert.equal(f.camera.position.numKeys, quadros + 1);
 
   // Cada amostra tem de cair exatamente num quadro. Somar `frameDuration`
   // repetidamente sai da grade: no quadro 50 o erro ja e visivel.
-  for (const chave of f.alvo.position.keys) {
+  for (const chave of f.camera.position.keys) {
     const indice = chave.t / f.comp.frameDuration;
     assert.ok(
       Math.abs(indice - Math.round(indice)) < 1e-9,
       `a amostra em ${chave.t}s caiu entre dois quadros (quadro ${indice})`
     );
   }
-  assert.equal(f.alvo.position.expression, "", "a expressao foi removida depois de assada");
+  assert.equal(f.camera.position.expression, "", "a expressao foi removida depois de assada");
 });
 
 test("o bake recusa no preflight quando nao ha expressao para assar", async () => {
@@ -449,3 +451,4 @@ test("sem rig de parallax na composicao, as operacoes recusam", async () => {
     assert.equal(resposta.error.code, "INVALID_SELECTION_TYPE");
   }
 });
+

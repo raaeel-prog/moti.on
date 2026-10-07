@@ -81,3 +81,16 @@ comportamento deste bundle. Continuam `NOT RUN` no Premiere Pro real:
 - leitura efetiva por tecnologia assistiva, que não pode ser prometida porque
   a própria referência marca `aria*` como sem suporte.
 
+
+## Atualização — 28/09/2026: Custom Elements graduais
+
+| Capability | Estado | Fallback |
+|---|---|---|
+| `customElements.define/get` e `HTMLElement` no documento recebido | `SUPPORTED_BY_DOCS`, com probe local; execução Adobe `NOT RUN` | mesmo botão stateful em `span.ch-action` |
+| Registro sem DOM/defaultView/Event | `UNAVAILABLE_AT_RUNTIME` | nenhum acesso global no import; builder HTML nativo |
+| Spectrum Web Components / `enableSWCSupport` | não utilizado nesta fatia | nenhuma alteração de manifest ou CSSNextSupport |
+
+A fonte, os símbolos e as limitações estão em
+[moti-button-web-components.md](moti-button-web-components.md). Registro não
+é certificação de suporte: lifecycle, teclado e visual devem ser verificados
+no host instalado antes de expandir a adoção.

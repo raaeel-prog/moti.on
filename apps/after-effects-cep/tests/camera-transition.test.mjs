@@ -73,13 +73,14 @@ class FakeLayer {
       property: (n) => {
         if (n === "ADBE Position") return this.position;
         if (n === "ADBE Orientation") return this.orientation;
-        if (n === "ADBE Camera Zoom") return this.zoom;
         return null;
       }
     };
   }
   property(matchName) {
-    return matchName === "ADBE Transform Group" ? this.transform : null;
+    if (matchName === "ADBE Transform Group") return this.transform;
+    if (matchName === "ADBE Camera Options Group") return { property: (n) => n === "ADBE Camera Zoom" ? this.zoom : null };
+    return null;
   }
 }
 
@@ -323,3 +324,13 @@ test("X da curva fora de 0..1 e recusado", async () => {
   assert.equal(resposta.ok, false);
   assert.equal(resposta.error.details.field, "curve");
 });
+
+test('posição espacial usa um único ease temporal, como exige o AE real', async () => {
+  const {camera,comp}=comCamera();const {scope}=await fixture(comp);
+  camera.position.isSpatial=true;
+  const set=camera.position.setTemporalEaseAtKey.bind(camera.position);
+  camera.position.setTemporalEaseAtKey=(i,input,output)=>{assert.equal(input.length,1);assert.equal(output.length,1);set(i,input,output);};
+  const response=JSON.parse(scope.MotionAE.dispatch(request({...baseArgs,preset:'truckRight'})));
+  assert.equal(response.ok,true,JSON.stringify(response));assert.equal(camera.position.numKeys,2);
+});
+

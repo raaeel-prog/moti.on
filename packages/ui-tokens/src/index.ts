@@ -7,6 +7,8 @@ export interface UiThemeTokens {
   readonly bg2: string;
   readonly bg3: string;
   readonly bg4: string;
+  readonly surfaceRaised: string;
+  readonly surfaceHover: string;
   readonly lineHairline: string;
   readonly lineStrong: string;
   readonly textPrimary: string;
@@ -30,24 +32,26 @@ export interface UiThemeTokens {
  * de 4.5:1 em superficies permitidas; a acessibilidade normativa prevalece.
  */
 export const DARK_THEME_TOKENS = Object.freeze({
-  bg0: "#0E1013",
-  bg1: "#141619",
-  bg2: "#1A1D21",
-  bg3: "#22262B",
-  bg4: "#2A2F35",
-  lineHairline: "#2C3137",
-  lineStrong: "#707880",
-  textPrimary: "#E9ECEF",
-  textSecondary: "#AAB2BB",
-  textTertiary: "#8E97A0",
-  accent: "#7C8CFF",
-  accentHover: "#9AA6FF",
-  accentPress: "#6472F0",
-  accentOn: "#0E1013",
-  success: "#43B77A",
-  warning: "#D9A441",
-  danger: "#F76750",
-  info: "#4CC2E0"
+  bg0: "#1D1D1D",
+  bg1: "#1D1D1D",
+  bg2: "#1D1D1D",
+  bg3: "#262626",
+  bg4: "#303030",
+  surfaceRaised: "#262626",
+  surfaceHover: "#303030",
+  lineHairline: "#454545",
+  lineStrong: "#B5B5B5",
+  textPrimary: "#F7F7F7",
+  textSecondary: "#B5B5B5",
+  textTertiary: "#B5B5B5",
+  accent: "#FFFFFF",
+  accentHover: "#F7F7F7",
+  accentPress: "#E0E0E0",
+  accentOn: "#1D1D1D",
+  success: "#75D5A1",
+  warning: "#EFC16C",
+  danger: "#FF9C8F",
+  info: "#9BD8E8"
 } satisfies UiThemeTokens);
 
 export const LIGHT_THEME_TOKENS = Object.freeze({
@@ -56,14 +60,16 @@ export const LIGHT_THEME_TOKENS = Object.freeze({
   bg2: "#F1F2F4",
   bg3: "#E7E9EC",
   bg4: "#FFFFFF",
+  surfaceRaised: "#FFFFFF",
+  surfaceHover: "#E7E9EC",
   lineHairline: "#DCDFE3",
   lineStrong: "#767E86",
   textPrimary: "#16181B",
   textSecondary: "#4E555C",
   textTertiary: "#626A72",
-  accent: "#4A57D8",
-  accentHover: "#3A46C4",
-  accentPress: "#2F3AAC",
+  accent: "#343A40",
+  accentHover: "#212529",
+  accentPress: "#495057",
   accentOn: "#FFFFFF",
   success: "#146C43",
   warning: "#8A5A00",

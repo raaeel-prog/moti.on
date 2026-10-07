@@ -399,3 +399,4 @@ test("Ease com handle vertical pede velocidade, e nao pausa", async () => {
   assert.ok(escrita.outEase[0].speed > 0, `velocidade de saida deveria ser positiva, veio ${escrita.outEase[0].speed}`);
   assert.equal(escrita.outEase[0].influence, 0.1);
 });
+

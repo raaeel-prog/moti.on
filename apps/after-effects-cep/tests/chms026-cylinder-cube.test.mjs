@@ -41,20 +41,25 @@ class FakeLayer {
   constructor(opcoes = {}) {
     this.name = opcoes.name ?? "Camada";
     this.index = opcoes.index ?? 1;
-    this.parent = null;
+    this._parent = null;
     this.comment = opcoes.comment ?? "";
-    this.threeDLayer = false;
+    this.threeDLayer = opcoes.threeDLayer ?? false;
+    this.locked = false;
     this.removido = false;
     this.width = opcoes.width ?? 500;
     this.height = opcoes.height ?? 500;
+    this.bounds = opcoes.bounds ?? null;
     this.duplicadas = 0;
     this.comp = opcoes.comp ?? null;
+    this.selected = false;
     this.position = new FakeProperty("ADBE Position", opcoes.position ?? [960, 540]);
+    this.anchor = new FakeProperty("ADBE Anchor Point", opcoes.anchor ?? [this.width / 2, this.height / 2]);
     this.orientation = new FakeProperty("ADBE Orientation", [0, 0, 0]);
     this.scale = new FakeProperty("ADBE Scale", [100, 100, 100]);
     this.transform = {
       property: (n) => {
         if (n === "ADBE Position") return this.position;
+        if (n === "ADBE Anchor Point") return this.anchor;
         if (n === "ADBE Orientation") return this.orientation;
         if (n === "ADBE Scale") return this.scale;
         return null;
@@ -64,6 +69,21 @@ class FakeLayer {
   property(matchName) {
     return matchName === "ADBE Transform Group" ? this.transform : null;
   }
+  sourceRectAtTime() {
+    return this.bounds ?? { left: 0, top: 0, width: this.width, height: this.height };
+  }
+  get parent() { return this._parent; }
+  set parent(next) {
+    // AE `parent =` preserva o mundo e reescreve Position. Um fake que apenas
+    // atribui o ponteiro mascara o bug de geometria local dos rigs.
+    const old = this._parent?.position.value ?? [0, 0, 0];
+    const novo = next?.position.value ?? [0, 0, 0];
+    const value = [...this.position.value];
+    while (value.length < 3) value.push(0);
+    this.position.value = value.map((v, i) => v + (old[i] ?? 0) - (novo[i] ?? 0));
+    this._parent = next;
+  }
+  setParentWithJump(next) { this._parent = next; }
   duplicate() {
     this.duplicadas += 1;
     const copia = new FakeLayer({
@@ -71,9 +91,18 @@ class FakeLayer {
       index: 99,
       comp: this.comp,
       width: this.width,
-      height: this.height
+      height: this.height,
+      bounds: this.bounds
     });
-    if (this.comp) this.comp.todas.push(copia);
+    copia.position.value = clone(this.position.value);
+    copia.anchor.value = clone(this.anchor.value);
+    copia.orientation.value = clone(this.orientation.value);
+    copia.scale.value = clone(this.scale.value);
+    copia.threeDLayer = this.threeDLayer;
+    if (this.comp) {
+      this.comp.todas.push(copia);
+      this.comp.selectedLayers = [copia];
+    }
     return copia;
   }
   remove() {
@@ -102,17 +131,24 @@ class FakeCompItem {
       addNull: () => {
         const n = new FakeLayer({ name: "Null 1", index: this.todas.length + 1, comp: this });
         this.todas.push(n);
+        this.selectedLayers = [n];
         return n;
       },
       addCamera: (nome) => {
         const c = new FakeCameraLayer({ name: nome, index: this.todas.length + 1, comp: this });
         this.todas.push(c);
+        this.selectedLayers = [c];
         return c;
       }
     };
   }
   get numLayers() {
     return this.todas.length;
+  }
+  get selectedLayers() { return this.todas.filter((l) => l.selected); }
+  set selectedLayers(layers) {
+    for (const layer of this.todas) layer.selected = false;
+    for (const layer of layers) layer.selected = true;
   }
   layer(i) {
     return this.todas[i - 1] ?? null;
@@ -194,6 +230,7 @@ test("num arco fechado as camadas ficam uniformemente distribuidas, sem duas no 
     return Math.round(g);
   });
   assert.deepEqual(angulos.sort((a, b) => a - b), [0, 45, 90, 135, 180, 225, 270, 315]);
+  assert.deepEqual(comp.selectedLayers, [camada], "selecao original preservada");
   assert.deepEqual(calls, [["begin", "Moti.on: montar cilindro"], ["end"]]);
 });
 
@@ -276,6 +313,50 @@ test("com rig existente o cilindro ajusta em vez de recriar", async () => {
   }
 });
 
+test("Cylinder recusa count diferente no Adjust, em vez de ignora-lo", async () => {
+  const comp = new FakeCompItem([new FakeLayer({ name: "Origem" })]);
+  const { scope, calls } = await fixture(comp, CYLINDER);
+  assert.equal(JSON.parse(scope.MotionAE.dispatch(request("ae.3d.cylinder", { ...cylArgs, count: 3 }))).ok, true);
+  const antes = comp.numLayers;
+  const resposta = JSON.parse(scope.MotionAE.dispatch(request("ae.3d.cylinder", { ...cylArgs, count: 5 })));
+  assert.equal(resposta.ok, false);
+  assert.equal(resposta.error.code, "INVALID_PRESET");
+  assert.equal(comp.numLayers, antes);
+  assert.equal(calls.length, 2, "Adjust recusado nao abre Undo");
+});
+
+test("Cylinder valida toda a selecao antes de abrir Undo", async () => {
+  const a = new FakeLayer({ name: "A" });
+  const b = new FakeLayer({ name: "B" });
+  b.locked = true;
+  const comp = new FakeCompItem([a, b]);
+  const { scope, calls } = await fixture(comp, CYLINDER);
+  const resposta = JSON.parse(scope.MotionAE.dispatch(request("ae.3d.cylinder", { ...cylArgs, count: 2 })));
+  assert.equal(resposta.ok, false);
+  assert.equal(resposta.error.code, "INVALID_SELECTION_TYPE");
+  assert.deepEqual(calls, []);
+  assert.equal(comp.numLayers, 2);
+});
+
+test("Cylinder restaura a camada se o write falhar depois do novo parent", async () => {
+  const origem = new FakeLayer({ name: "A", position: [200, 300] });
+  const comp = new FakeCompItem([origem]);
+  const { scope } = await fixture(comp, CYLINDER);
+  const original = origem.position.setValue.bind(origem.position);
+  let falhar = true;
+  origem.position.setValue = (valor) => {
+    if (falhar) { falhar = false; throw new Error("falha simulada"); }
+    original(valor);
+  };
+  const resposta = JSON.parse(scope.MotionAE.dispatch(request("ae.3d.cylinder", { ...cylArgs, count: 1 })));
+  assert.equal(resposta.ok, false);
+  assert.equal(resposta.error.code, "HOST_OPERATION_FAILED");
+  assert.equal(comp.numLayers, 1);
+  assert.equal(origem.parent, null);
+  assert.equal(origem.threeDLayer, false);
+  assert.deepEqual(origem.position.value, [200, 300]);
+});
+
 /* ------------------------------------------------------------------ Cube */
 
 const cubeArgs = {
@@ -356,6 +437,24 @@ test("faceFit escala a camada para ela ter exatamente a aresta do cubo", async (
   }
 });
 
+test("Cube usa os limites visiveis de uma shape, nao o tamanho da composicao", async () => {
+  const camada = new FakeLayer({
+    name: "Moti.on Shape", width: 1920, height: 1080, anchor: [0, 0],
+    bounds: { left: -160, top: -90, width: 320, height: 180 }
+  });
+  const comp = new FakeCompItem([camada]);
+  const { scope } = await fixture(comp, CUBE);
+  const resposta = JSON.parse(scope.MotionAE.dispatch(request("ae.3d.cube", cubeArgs)));
+  assert.equal(resposta.ok, true);
+  const faces = comp.todas.filter(l => l.name.startsWith("MOTION | CUBE "));
+  assert.equal(faces.length, 6);
+  for (const face of faces) {
+    assert.equal(face.scale.value[0], 125);
+    assert.ok(Math.abs(face.scale.value[1] - 400 / 180 * 100) < 0.0001);
+  }
+  assert.equal(camada.threeDLayer, false, "a fonte original permanece intacta");
+});
+
 test("as faces sao filhas do controller, que gira o conjunto como unidade", async () => {
   const camada = new FakeLayer({ name: "Face" });
   const comp = new FakeCompItem([camada]);
@@ -399,6 +498,29 @@ test("faceFit sem tamanho de origem e recusado antes de criar o rig", async () =
   assert.deepEqual(calls, []);
 });
 
+test("Cube recusa Anchor Point descentralizado antes de mutar", async () => {
+  const camada = new FakeLayer({ name: "Face", width: 400, height: 400, anchor: [0, 0] });
+  const comp = new FakeCompItem([camada]);
+  const { scope, calls } = await fixture(comp, CUBE);
+  const resposta = JSON.parse(scope.MotionAE.dispatch(request("ae.3d.cube", cubeArgs)));
+  assert.equal(resposta.ok, false);
+  assert.equal(resposta.error.code, "INVALID_SELECTION_TYPE");
+  assert.deepEqual(calls, []);
+  assert.equal(comp.numLayers, 1);
+});
+
+test("Cube preserva keyframes existentes ao recusar antes do Undo", async () => {
+  const camada = new FakeLayer({ name: "Face" });
+  camada.position.keys = [{ time: 0, value: [1, 2] }];
+  const comp = new FakeCompItem([camada]);
+  const { scope, calls } = await fixture(comp, CUBE);
+  const resposta = JSON.parse(scope.MotionAE.dispatch(request("ae.3d.cube", cubeArgs)));
+  assert.equal(resposta.ok, false);
+  assert.equal(resposta.error.code, "KEYFRAME_CONFLICT");
+  assert.equal(camada.position.numKeys, 1);
+  assert.deepEqual(calls, []);
+});
+
 test("a metadata do rig entra no comentario do controller", async () => {
   const camada = new FakeLayer({ name: "Face" });
   const comp = new FakeCompItem([camada]);
@@ -410,3 +532,66 @@ test("a metadata do rig entra no comentario do controller", async () => {
   assert.ok(controller.comment.includes('"rigType":"cube"'));
   assert.ok(controller.comment.includes("[MOTION_META_V1]"));
 });
+
+test("keepSources=true deixa a origem intacta e duplica as seis faces", async () => {
+  const origem = new FakeLayer({ name: "Arte original", position: [50, 60] });
+  origem.comment = "comentario do usuario";
+  const comp = new FakeCompItem([origem]);
+  const { scope } = await fixture(comp, CUBE);
+  const resposta = JSON.parse(scope.MotionAE.dispatch(request("ae.3d.cube", cubeArgs)));
+  assert.equal(resposta.ok, true);
+  assert.equal(comp.numLayers, 8);
+  assert.equal(origem.name, "Arte original");
+  assert.equal(origem.comment, "comentario do usuario");
+  assert.equal(origem.parent, null);
+  assert.deepEqual(origem.position.value, [50, 60]);
+  assert.deepEqual(comp.selectedLayers, [origem], "selecao original preservada");
+});
+
+test("keepSources=false usa a origem como primeira face", async () => {
+  const origem = new FakeLayer({ name: "Arte original" });
+  const comp = new FakeCompItem([origem]);
+  const { scope } = await fixture(comp, CUBE);
+  const resposta = JSON.parse(scope.MotionAE.dispatch(request("ae.3d.cube", { ...cubeArgs, keepSources: false })));
+  assert.equal(resposta.ok, true);
+  assert.equal(comp.numLayers, 7);
+  assert.equal(origem.name, "MOTION | CUBE front");
+  assert.ok(origem.parent);
+});
+
+test("Cube Adjust preserva papel de cada face mesmo apos reordenar a timeline", async () => {
+  const comp = new FakeCompItem([new FakeLayer({ name: "Arte" })]);
+  const { scope } = await fixture(comp, CUBE);
+  assert.equal(JSON.parse(scope.MotionAE.dispatch(request("ae.3d.cube", cubeArgs))).ok, true);
+  const front = comp.todas.find((l) => l.name === "MOTION | CUBE front");
+  const back = comp.todas.find((l) => l.name === "MOTION | CUBE back");
+  comp.todas.reverse();
+  const resposta = JSON.parse(scope.MotionAE.dispatch(request("ae.3d.cube", { ...cubeArgs, size: 600, controllerOrientation: [10, 20, 30] })));
+  assert.equal(resposta.ok, true);
+  assert.deepEqual(front.position.value, [0, 0, -300]);
+  assert.deepEqual(back.position.value, [0, 0, 300]);
+  assert.deepEqual(comp.todas.find((l) => l.name === "MOTION | CUBE").orientation.value, [10, 20, 30]);
+});
+
+test("Cube restaura nome, parent, comentario e transform se uma face falhar", async () => {
+  const origem = new FakeLayer({ name: "Arte", position: [10, 20] });
+  origem.comment = "meu comentario";
+  const comp = new FakeCompItem([origem]);
+  const { scope } = await fixture(comp, CUBE);
+  const original = origem.orientation.setValue.bind(origem.orientation);
+  let falhar = true;
+  origem.orientation.setValue = (valor) => {
+    if (falhar) { falhar = false; throw new Error("falha simulada"); }
+    original(valor);
+  };
+  const resposta = JSON.parse(scope.MotionAE.dispatch(request("ae.3d.cube", { ...cubeArgs, keepSources: false })));
+  assert.equal(resposta.ok, false);
+  assert.equal(resposta.error.code, "HOST_OPERATION_FAILED");
+  assert.equal(comp.numLayers, 1);
+  assert.equal(origem.name, "Arte");
+  assert.equal(origem.comment, "meu comentario");
+  assert.equal(origem.parent, null);
+  assert.equal(origem.threeDLayer, false);
+  assert.deepEqual(origem.position.value, [10, 20]);
+});
+

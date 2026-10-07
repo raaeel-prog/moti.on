@@ -32,10 +32,10 @@ const SPEC_URL = new URL("../docs/MASTER_BUILD_SPEC.md", import.meta.url);
  * vira um item que ninguém sabe se é dívida ou escopo descartado.
  */
 const CATALOGADOS_SEM_IMPLEMENTACAO = new Map([
-  [
-    "ae.audio.beat",
-    "P5. Exige o native audio analyzer (CHMS-036/037), que ainda não existe; a spec proíbe explicitamente contornar isso com app.executeCommand."
-  ]
+  // Vazia. `ae.audio.beat` foi implementado em 2026-09-05 lendo a camada de
+  // amplitude que o assistente nativo do After Effects gera, e não o native
+  // audio analyzer que o §13 exige — que depende do CHMS-036/037 e não existe.
+  // A divergência está registrada no §13 e a escolha foi do dono do produto.
 ]);
 
 /**
@@ -44,7 +44,13 @@ const CATALOGADOS_SEM_IMPLEMENTACAO = new Map([
  * catalogado, e listá-los inflaria a tabela sem informar ninguém.
  */
 const IMPLEMENTADOS_FORA_DO_CATALOGO = new Map([
+  ["ae.quick-tools.apply", "Atalhos migrados do FX Studio a pedido do usuario em 2026-09-14; contrato em docs/research/fx-studio-quick-actions.md."],
+  ["ae.quick-tools.save-frame", "Exportacao PNG do FX Studio, separada por nao alterar o projeto nem criar Undo; contrato em docs/research/fx-studio-quick-actions.md."],
+  ["ae.effect.gradient.read", "Leitura auxiliar dos controles, selecao e capacidades de Gradientes; consumida pelo editor."],
   ["ae.context.read", "Leitura de contexto que o painel faz sozinho; não é uma ferramenta."],
+  ["ae.text.vertical-pulse.read", "Leitura auxiliar do Pulso selecionado, com controles, geometria, migração e estado de atualização; consumida pelo painel ao abrir ou ajustar."],
+  ["ae.text.word-reveal.read", "Leitura auxiliar dos controles da revelação selecionada; consumida pelo painel ao abrir ou reaplicar a ferramenta."],
+  ["ae.text.variable-morph.read", "Leitura auxiliar do morph selecionado, com controles, capacidades e estado de atualização; consumida pelo painel e pelo cartão rápido."],
   ["ae.capability.probe", "Sonda de capacidades do host; não é uma ferramenta."],
   ["ae.diagnostics.echo", "Eco de diagnóstico usado pelo System Check."],
   ["ae.layer.list", "Leitura auxiliar consumida pelos seletores de camada do painel."],
@@ -56,6 +62,10 @@ const IMPLEMENTADOS_FORA_DO_CATALOGO = new Map([
   ["ae.keys.ease.apply", "Editor de curva da §15, coberto lá."],
   ["ae.anchor.align", "Alinhador de âncora da §14, coberto lá."],
   ["ae.camera.transition", "Transições de câmera da §17, cobertas lá."],
+  ["ae.parallax.create", "Nucleo Parallax v2 solicitado em MOTION_PARALLAX_IMPLEMENTACAO_IA.md, setembro de 2026."],
+  ["ae.parallax.adjust", "Nucleo Parallax v2 solicitado em MOTION_PARALLAX_IMPLEMENTACAO_IA.md, setembro de 2026."],
+  ["ae.parallax.move", "Nucleo Parallax v2 solicitado em MOTION_PARALLAX_IMPLEMENTACAO_IA.md, setembro de 2026."],
+  ["ae.parallax.remove", "Nucleo Parallax v2 solicitado em MOTION_PARALLAX_IMPLEMENTACAO_IA.md, setembro de 2026."],
   ["ae.parallax.auto-focus", "Parallax avançado da §16, coberto lá."],
   ["ae.parallax.zoom", "Parallax avançado da §16, coberto lá."],
   ["ae.parallax.wiggle", "Parallax avançado da §16, coberto lá."],
@@ -142,6 +152,63 @@ test("toda pendência e toda exceção trazem o motivo escrito", () => {
     ...CATALOGADOS_SEM_IMPLEMENTACAO,
     ...IMPLEMENTADOS_FORA_DO_CATALOGO
   ]) {
+    assert.ok(
+      typeof motivo === "string" && motivo.length > 20,
+      `${id}: a justificativa está vazia ou curta demais para explicar a decisão.`
+    );
+  }
+});
+
+/**
+ * O §17.1 cataloga onze transições de câmera por id. Elas não são comandos —
+ * são presets dentro de `ae.camera.transition` — então o teste de catálogo
+ * acima não as alcança, e por isso a divergência ficou invisível até uma
+ * auditoria manual em 2026-09-04.
+ *
+ * `ae.camera.transition` registra onze presets, mas são **movimentos** de
+ * câmera, não as transições do §17.1. Os dois conjuntos têm onze itens por
+ * coincidência — foi essa coincidência que fez o comentário do comando afirmar
+ * que o critério de aceite do CHMS-024 estava cumprido.
+ */
+const TRANSICOES_SEM_IMPLEMENTACAO = new Map();
+
+/** Ids do catálogo do §17.1, lidos dos blocos de código da seção. */
+async function catalogoDeTransicoes() {
+  const texto = await readFile(SPEC_URL, "utf8");
+  const inicio = texto.indexOf("### 17.1 Catálogo");
+  assert.ok(inicio > 0, "o §17.1 sumiu do MASTER_BUILD_SPEC.");
+  const fim = texto.indexOf("### 17.2", inicio);
+  assert.ok(fim > inicio, "o fim do §17.1 não foi encontrado.");
+
+  const ids = [...texto.slice(inicio, fim).matchAll(/^(camera\.[a-z-]+)$/gm)].map((m) => m[1]);
+  assert.equal(ids.length, 11, `o §17.1 rendeu ${ids.length} ids; o parser da seção quebrou.`);
+  return ids;
+}
+
+test("o parser lê o catálogo do §17.1, e não prosa da seção", async () => {
+  const ids = await catalogoDeTransicoes();
+  assert.ok(ids.includes("camera.blur-lens"), "um id conhecido do §17.1 não foi lido.");
+  assert.ok(
+    !ids.includes("camera.transition"),
+    "o parser leu algo que não é um id do catálogo."
+  );
+  assert.deepEqual([...new Set(ids)], ids, "o §17.1 tem id repetido.");
+});
+
+test("toda transição do §17.1 está implementada ou declarada pendente, com motivo", async () => {
+  const ids = await catalogoDeTransicoes();
+  const { MOTION_LIBRARY_CAMERA_PRESETS } = await import("../packages/contracts/dist/motion-library-camera.js");
+  const executaveis = new Set(MOTION_LIBRARY_CAMERA_PRESETS.map(p => p.cameraSpec?.id).filter(Boolean));
+  const implementados = ids.filter(id => executaveis.has(id));
+  const pendentes = ids.filter((id) => !implementados.includes(id));
+
+  assert.deepEqual(
+    pendentes.slice().sort(),
+    [...TRANSICOES_SEM_IMPLEMENTACAO.keys()].sort(),
+    "a lista de transições pendentes do §17.1 saiu de sincronia com a implementação"
+  );
+
+  for (const [id, motivo] of TRANSICOES_SEM_IMPLEMENTACAO) {
     assert.ok(
       typeof motivo === "string" && motivo.length > 20,
       `${id}: a justificativa está vazia ou curta demais para explicar a decisão.`

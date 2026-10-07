@@ -1,17 +1,212 @@
+## 2026-10-06 — Impacto e tremor: dez transições de corte
+
+- Novo filtro **Impacto e tremor** em Transições, com Punch de impacto, Impacto de luz, Onda de choque, Zoom com tremor, Tremor sísmico, Câmera na mão, Chicote lateral, Torção de impacto, Batida dupla e Impacto cinematográfico. Cada uma combina um estilo de tremor com punch, zoom in/out, flash com glow, onda e desfoque, usando só efeitos nativos do AE, sobre a mesma pré-comp de ajuste com marcador CUT.
+- O golpe atinge o pico exatamente no frame do CUT e assenta como mola amortecida, com motion blur real do Transform. A cobertura de escala mantém os cantos cobertos sem ampliar além do necessário; bordas da janela idênticas ao original; textura atenuada perto do Nyquist para não estroboscopiar a 24 fps. Variação por instância evita tremores iguais em cortes vizinhos.
+- Check **2.139/2.144**: as 5 falhas são as da linha de base, anteriores a esta entrega (Pulse gradient e text-style-swap). AE **26.5x89/macOS 27.2.0**: **33/33 PASS** com aplicar, 16/32 bpc, ajuste, mover CUT, um Undo, seleção preservada e salvar/reabrir; 141 renders com bordas opacas na intensidade padrão e primeiro frame idêntico ao bypass. Painel em Chromium PASS em 280/360/480/720 px. Resíduo de 1/255 de alfa em 5 px a 160 % no Zoom com tremor. Instalação PASS com backup (`artifacts/install-backups/ae-20261006-213256/previous`), 43/43 arquivos conferidos por SHA-256 e os 10 presets aplicados pelo host instalado; cliques no painel instalado NOT RUN. [Entrega e limites](docs/implementation/2026-10-06-impact-shake/entrega-e-validacao.md).
+
+## 2026-10-06 — Gradientes: efeito próprio CPU/Metal e editor
+
+- Nova ferramenta Gradientes em Efeitos, com dois a oito pontos em slots permanentes, oito presets originais, biblioteca pessoal, modos linear/radial/angular, relevo, turbulência, brilho, difusão por foco, grain e loop periódico. Aplicar mantém textos/vetores editáveis; Criar fundo usa dimensões, duração e PAR da composição. Editor Onyx em português/inglês, com atualizações ao concluir gestos, leitura por foco, valores mistos e proteção de expressões.
+- MotionCore 1.4.0 adiciona `Moti.on Gradient` sem alterar as identidades de Glitch, Wave e Native Transition. CPU 8/16/32 bpc e Metal float compartilham matemática, parâmetros e sementes; suporte de região/halos, HDR e opção sRGB linear explícita. Contrato `GradientSettingsV1`, leitura e ações granulares, keyframes preservados, preflight do lote e rollback.
+- A paleta agora repete por ida/volta e dobra a coordenada angular, eliminando o reinício brusco entre último/primeiro ponto na matemática CPU/Metal. Aurora ganhou uma receita óptica explícita com difusão suave; os defaults continuam estáticos com difusão desligada. A versão interna somente de Gradient avançou de 524289 para 524290 para invalidar pixels antigos reaproveitados pelo cache, sem mudar o ABI ou apagar caches globais. Confirmação visual da nova rodada ainda pendente.
+- Check **PASS: 2.125/2.125**; CTest nativo **PASS: 5/5**; CPU/Metal e ASan/UBSan **PASS** no Apple M5, incluindo regressões de continuidade espacial/HDR/temporal e angular. Navegador **PASS** em 280/360/480/720 px na matriz PT/EN registrada. AE **26.5x89/macOS arm64**: oito cenários de comandos **PASS**, aplicação em dez camadas em cinco chamadas de 57–72 ms, excluindo render. Medidas standalone 1080p/4K e memória anteriores à revisão da paleta estão no relatório, sem comparar velocidade entre fixtures diferentes.
+- Lifecycle no AE **PASS: 12/12**: Undo/Redo nativos de aplicar/atualizar/remover/criar fundo, alterações no CTI com 53 slots intactos, remoção preservando texto/efeitos/comentário e salvar/reabrir com 54 parâmetros, keys/easing, expressões, metadata e IDs conservados. A consolidação atual de render nativo e AE MFR permanece **NOT RUN** neste registro enquanto a revisão principal executa essa bateria. Restauração do bundle comum após QA instrumentado e cliques no editor CEP também pendentes. Intel runtime, outras versões, Windows e Premiere não qualificados. [Implementação, evidências e limites](docs/implementation/2026-10-05-gradientes.md).
+
+## 2026-10-05 — Pulso: morph tipográfico e cinco presets
+
+- **Pulso / Pulse** encurta o nome da ferramenta e adiciona Impacto, Elétrico, Plasma, Líquido e Ruptura, com contornos nativos que se deformam, matéria fluida localizada, glow e descargas vetoriais. O texto original continua editável; Atualizar reconstrói a geometria, Bake converte a área de trabalho e Remover restaura a origem. Chamadas antigas mantêm o legado e V1/V2/V3 migram somente por Update explícito.
+- Check PASS: **2.088/2.088**; Chromium PASS em cinco grupos e 16 PNGs. **AE 26.5x89/macOS 27.2.0**: oito cenários principais em bateria anterior, 60/60 combinações visuais e 300 PNGs, 60 pares de pixels sem diferença RGBA, legado 9/9 e Undo/Redo de Apply, Update e Bake PASS. Falhas injetadas: três PASS e dois SKIPPED porque Layer.remove não é substituível no host. Instalação conferida em 43 arquivos por SHA-256.
+- Undo de Remove restaurou IDs, geometria, keys e expressões, mas a primeira comparação ficou **FAIL**: CTI de 0,5 → 1,0666666667 s e duas leituras animadas avaliadas no novo instante. A comparação posterior no mesmo CTI não prosseguiu por sessão QA inativa; Redo de Remove e Undo de cleanup instrumentado permanecem **NOT RUN**. Isso não estabelece uma regra geral de CTI. Os 14 testes de lifecycle com doubles incluem falhas de backups. **Persistência live/baked PASS**, com salvar/fechar/reabrir real e Remove após reabrir. **Demo/vídeo PASS**, `.aep` editável e MP4 nativo de 4 s/1080p30, com 120 quadros decodificados sem erro. Operações por clique no CEP instalado NOT RUN (sem janela disponível após observar a biblioteca); outras versões e Windows continuam NOT RUN. [Entrega e limites](docs/implementation/2026-10-04-pulso-v4.md) · [Evidências](artifacts/pulse-v4-20261004/verification.md).
+
+## 2026-10-04 — Morph por proximidade: fontes comuns e variáveis
+
+- O mesmo nulo agora controla contornos de fontes comuns ou eixos reais de fontes variáveis, com modo Automático, oito presets, suavidade, deformações individuais e varredura em quatro direções. O texto original permanece editável.
+- Aplicar/Ajustar lê e reutiliza os controles do rig; Atualizar reconstrói texto e medição sem perder nulo, trajetória, easing ou expressões. Bake por glifo, Remover, proteção de controles animados e compatibilidade v1 integrados.
+- Check PASS: baseline 2.008/2.008 e final 2.053/2.053. AE 26.5x89/macOS PASS: nove cenários principais, nove adicionais, quatro guards, 32 presets inspecionados, 12 comparações de pixels/live-Bake, Undo e salvar/reabrir a demo. Persistência baked PASS nos dois motores, com 18 propriedades no vetor e 17 no variável; troca Arial → Times e Inter Tight Regular 400 → Bold 700 reconstruiu a base dos eixos e preservou nulo/easing. Revelação preservada em 52 PNGs idênticos em RGBA.
+- Chromium PASS: PT em 280/360/480/720 px e EN em 360 px, 20 capturas sem overflow; transporte CEP simulado. Painel CEP instalado PASS: sete operações reais, incluindo aplicação automática nos dois motores, varredura de 48 quadros, Bake, atualização com nulo e trajetória preservados e remoção nos dois modos. [Registro e revisão do painel](artifacts/proximity-morph-20261004/installed-panel-review.md). Instalação PASS: 43 arquivos conferidos por SHA-256, com [backup da extensão anterior](artifacts/install-backups/ae-20261004-141459/previous/) e [log da instalação final com novo backup](artifacts/proximity-morph-20261004/install-final.log). Projeto `.aep` e vídeo exportados PASS; vídeo com 180 quadros decodificados e três instantes inspecionados. Bake de 128 glifos variáveis passou em dois quadros; seis quadros foram recusados pelo orçamento de 120.000 amostras. [Entrega, demo e limites](docs/implementation/2026-10-04-proximity-morph.md).
+
+## 2026-10-04 — Revelação com caixas: morph vetorial
+
+- A caixa agora se transforma nos contornos nativos das letras, com origem inferior por padrão, direção, duração, suavidade, formação, pausa, deslocamento, ordem, progresso manual e cores editáveis.
+- Atualizar mantém o controlador animado e cores por ocorrência de palavra; original preservado, compatibilidade legado, Remover e Bake integrados.
+- Check PASS: 2.008 testes; Chromium PASS: quatro grupos; CEP real PASS: sete cenários. AE 26.5x89 validou geometria, vazados, endpoints por pixels, lifecycle/rollback, migração, Bake pequeno, Undo e salvar/reabrir controles animados. Instalação conferida em 43 arquivos; 23 presets antigos extras preservados, sem referências no host atual. Bake de lote grande não foi aprovado como prova de desempenho. [Entrega, demo e evidências](docs/implementation/2026-10-04-word-box-morph.md).
+
+## 2026-10-03 — Órbita em um clique
+
+- Órbita aplica diretamente no Quick, com oito presets de anel/esfera e perspectivas diferentes; todos aplicam ao clicar.
+- Um nulo 3D concentra nove controles para ajustar todas as camadas. Reaplicar preserva ajustes manuais/animados e reutiliza o conjunto. Corrigida a recriação nativa do Dropdown Menu Control.
+- Check PASS: 1.961 testes; Chromium PASS: dez grupos; AE 26.5x89 PASS: nove cenários e dois de rollback; instalação PASS: 43 arquivos. Preview/clique após recarga e Undo nativo NOT RUN por bloqueio do Mac. [Entrega e limites](docs/implementation/2026-10-03-orbit-controller.md).
+
+## 2026-10-03 — Encarar com alvo no nulo
+
+- O olhinho aplica diretamente no Quick: um único nulo com seletor compartilhado, rotação 2D com correção de 90° e Orientation 3D, sem converter seguidores 2D.
+- Reaplicar mantém o alvo e reutiliza metadata; locks/expressões do usuário são preservados e falhas restauram o lote. Corrigido acesso inválido a vetor 2D no AE real.
+- Check PASS: 1.913 testes; Chromium PASS: quatro cenários; AE 26.5x89 PASS: oito cenários; instalação PASS: 43 arquivos. Undo nativo NOT RUN. [Entrega e limites](docs/implementation/2026-10-03-look-at-controller.md).
+
+## 2026-10-02 — Correções da Suavização e layout simplificado
+
+## 2026-10-03 — Onyx e Web Components
+
+Tema e espelhos consolidados; catálogo de vetores por família com gestos breves; botões de ação migrados para factories Light DOM; Suavização recuperada em 3×2 com diagramas legíveis; dicas externas e Configurações/Ajuda organizadas. Estado do GM e instalação anterior preservados. Check da integração visual PASS (1.906 testes); último check do workspace aponta uma falha independente após alteração de Encarar. Evidência e limites de host: [entrega Onyx](docs/implementation/2026-10-03-onyx-components.md).
+
+- Duplicar copia todos os keyframes no cursor; duplicar e inverter cria todas as cópias após a seleção. Corrigido falso conflito ao mover keys e adicionadas explicações para destinos realmente ocupados.
+- Os seis botões superiores mostram nome e descrição ao passar o mouse. Foram removidos os modos Aplicar à seleção/Criar animação e a linha Mover seleção; curva, coordenadas e biblioteca ficaram mais compactas.
+- Check PASS: 1.891 testes; interface PASS: 24 cenários; AE 26.5x89 PASS: 11 cenários e três provas de Desfazer. [Entrega e evidências](docs/implementation/2026-10-02-smoothing-repair.md).
+
+## 2026-10-02 — Suavização e ações de keyframes
+
+- Suavização tem entrada própria fora do Quick, com clonar/inverter/duplicar invertido e destinos início/fim no topo, mantendo o gráfico arrastável.
+- Corrigida perda de seleção em várias propriedades, inclusive após falha e restauração; Aplicar mantém o editor aberto e avisos não cobrem o rodapé. Colisões e destinos inválidos são recusados antes da edição.
+- Check PASS: 1.881 testes; interface PASS: 21 cenários; AE 26.5x89 PASS: 17 cenários e dois testes de Desfazer. Instalação atualizada com backup e 43 arquivos conferidos. [Entrega e limites](docs/implementation/2026-10-02-smoothing-tool.md).
+
+## 2026-10-02 — Preset e posição da biblioteca preservados
+
+- Aplicar e depois remover retorna a Navegar com o mesmo preset, filtros e posição da lista. Remover a última fase volta à biblioteca após inspeção confirmada; manter outra fase ou falhar conserva Editar.
+- Galerias remontadas não sobrescrevem o scroll com zero. Recentes mantém a ordem exibida durante aplicar/editar/remover e atualiza ao reabrir o filtro. Revelar/Mostrar na biblioteca preserva o contexto e sobrevive à troca rápida de abas; uma nova escolha explícita cancela a revelação anterior.
+- Check completo PASS: 1.857/1.857 testes, sem falhas ou skips. Chromium PASS: 20/20, 14 capturas revisadas. Instalação de desenvolvimento atualizada com backup e 43 arquivos comparados ao build. After Effects real ainda NOT RUN. [Entrega e evidências](docs/implementation/2026-10-01-preset-scroll.md).
+
+## 2026-09-29 — Avisos, slider e sobreposições como Web Components
+
+- `createAlert`, `createBadge`, `createSliderField`, `createPopover` e `createDrawer` usam `moti-alert`, `moti-badge`, `moti-slider`, `moti-popover` e `moti-drawer` em Light DOM, preservando as factories, os controladores e o fallback nativo. Alertas e badges existentes nos painéis continuam com as mesmas chamadas.
+- Validação antes de montar ou registrar, atualização de atributos sem mutação parcial, bloqueio de controles desconectados, limpeza de timers/backdrop e restauração de foco nos overlays. Os componentes iniciados nas etapas 6 e 7 receberam testes e correções de ciclo de vida.
+- `npm run check` PASS: 1.820/1.820 testes, 0 falhas, 0 skips; build, lint, tipos, validação, contraste e skills PASS. Chromium: 13/13 nos componentes, 32/32 no dropdown e 45/45 nos bundles dos painéis. Hosts Adobe reais ainda NOT RUN. Outros builders de `components.ts` seguem para etapas futuras; [evidência e limites das etapas 5–7](docs/implementation/2026-09-28-web-components/etapas5-7-entrega.md).
+
+## 2026-09-29 — Seletores como Web Component
+
+- `selectField` agora cria `moti-dropdown` em Light DOM, preservando as telas e o fallback nativo. Rótulo, valor, descrição e desabilitação reativos mantêm os controles existentes.
+- Menu compartilhado por documento: limpeza ao remover ou redesenhar o campo, bloqueio de opções antigas, correção de fechamento ao redimensionar e de posicionamento na reabertura.
+- Foco após troca de idioma/tema volta ao botão visível, priorizando `data-focus-key` sobre o ID do select oculto.
+- Evidências e limites em [entrega da etapa 4](docs/implementation/2026-09-28-web-components/etapa4-entrega.md). Hosts Adobe reais ainda NOT RUN.
+
+## 2026-09-29 — Notificações como Web Component
+
+- `createToastRegion` passa a criar `moti-toast` em Light DOM com fallback nativo. O feedback existente do After Effects adota o componente, preservando fila, tempo restante, pausa por foco/hover, deduplicação e fechamento.
+- Apresentação isolada em `elements/toast-view.ts`; texto, detalhe, tom e rótulos reativos preservam controles e foco. Validação de traduções acontece antes de mudar notificações existentes.
+- Build, 72 testes focados e 126 verificações Chromium PASS. Hosts Adobe reais permanecem NOT RUN; [evidência e limites da etapa 3](docs/implementation/2026-09-28-web-components/etapa3-entrega.md).
+
+## 2026-09-29 — Sistema e Diagnóstico na nova estrutura
+
+- As telas Sistema e Diagnóstico de After Effects e Premiere passam a usar `moti-button`, com fallback nativo. Sistema foi separado dos arquivos principais; Diagnóstico compartilha apresentação sem compartilhar executores de host.
+- Ações antigas ficam inativas após navegação/redesenho ou fechamento do painel. Operações pendentes bloqueiam ações concorrentes com motivo acessível; foco de teclado é preservado no rodapé.
+- Feedback no After Effects acompanha a altura real das ações. Abas longas no Premiere rolam dentro da navegação, sem deslocar o painel inteiro.
+- Compilação e 151 testes focados PASS. Validação Adobe real NOT RUN; [evidências e limitações da etapa 2](docs/implementation/2026-09-28-web-components/etapa2-entrega.md).
+
+## 2026-09-28 — Primeira etapa da migração para Web Components
+
+- `createActionButton` usa `moti-button` em Light DOM quando há suporte, preservando estados, callback, botão nativo, teclado, tooltips e descrições. Fallback nativo usa a mesma implementação; import sem DOM deixa de falhar.
+- Registro explícito por documento, montagem antes da conexão e reconexão sem duplicação. Propriedades e atributos reativos usam o contrato atual; `success` permite repetir a ação e `loading`/`unsupported` bloqueiam.
+- Corrigido seletor da geometria compartilhada dos botões fora dos filtros. `shell.button` e outros componentes seguem para etapas posteriores. Hosts Adobe ainda `NOT RUN`; [verificação e limites](docs/implementation/2026-09-28-web-components/entrega.md).
+
+## 2026-09-28 — Pulso vertical de texto
+
+- Ferramentas → Efeitos ganhou **Pulso vertical de texto**, inspirado no vídeo fornecido: expansão cíclica, halo âmbar e bordas cromáticas deformadas. O texto original permanece editável; reaplicar ajusta e Remover restaura o original.
+- Build completo passou com 1.702 testes. No After Effects 26.5x89, aplicação, reajuste, remoção e renderização passaram. Após a instalação e reinicialização, o efeito apareceu como primeiro cartão de Ferramentas → Efeitos; o editor abriu, Aplicar criou três ecos, um único Desfazer restaurou o original e Remover efeito funcionou pelo painel. Salvar/reabrir e outras versões permanecem sem verificação. [Evidências](docs/implementation/2026-09-28-vertical-text-pulse.md).
+
+## 2026-09-27 — Redesign dos painéis Moti.on
+
+- Painéis After Effects e Premiere alinhados à base `#212529`, com temas claro/escuro, ações principais brancas, controles compactos e foco visível.
+- Ferramentas e Presets Navegar/Editar ganharam estados vazios recuperáveis, validação junto aos campos e proteção de rascunhos, foco e seleção desatualizada. O Premiere deixa explícitas as ações ainda indisponíveis.
+- Check completo: 1.695/1.695 testes e 88 pares de contraste; navegador: 24/24 verificações, 103 layouts/escalas. AE 26.5.0.89/macOS: build final reiniciado, painel conectado em pt-BR/Escuro, telas, idiomas e temas observados. Premiere 26.5.1.1: Moti.on 0.1.0 instalado e habilitado; diálogo de cobrança da Adobe impediu a abertura do painel. Comandos mutantes seguem sem verificação nesta revisão. [Entrega](artifacts/product-ui-20260927/ENTREGA.md).
+
+## 2026-09-25/26 — Biblioteca, fases e timing de presets
+
+- Aplicação bem-sucedida abre Editar com inspeção nova; Navegar/Editar visíveis; Entrada/Saída/Ambos no controle principal com teclado; restaurar padrões no editor sem aplicação automática.
+- Copiar uma receita aplicada para o cache da sessão e colar na seleção com fase escolhida, usando as validações existentes do host.
+- Variações próprias com nome persistem localmente: carregar/aplicar, renomear, duplicar, atualizar a partir do preset aplicado, excluir e desfazer. Backup JSON validado e aditivo permite transferência manual. Mostrar na biblioteca revela a categoria/item do preset aplicado.
+- Edição conjunta de até 50 camadas com mesma receita, mesmas opções e controles estáticos, revalidando a identidade/fingerprint de cada alvo.
+- Valores numéricos ajustáveis por arraste, teclas e digitação, com Shift fino, Alt/Option amplo, reset individual e percentuais decimais; tema existente preservado.
+- Marcadores gerenciados para fim da entrada e início da saída, com arraste, preservação de cues do usuário, conflito prévio e rollback.
+- Organizar entrada e saída desloca, alinha ao cursor ou escalona os marcadores próprios de uma fase em até 50 camadas; intervalo em frames, ordem da timeline nos dois sentidos ou aleatória reproduzível por semente e validação prévia de conflitos, sem mover os limites das camadas.
+- Minha biblioteca amplia referências locais para imagens, áudio, vídeo e `.aep`, além de `.ffx`; mídia entra no tempo atual e projetos são importados sem substituir o projeto aberto.
+- Auditoria local do Animation Composer 4.2.6 documentada; permanecem 165 receitas próprias, sem clone do catálogo comercial. Primeira fatia: check com 1.586 testes, 14 cenários no AE 26.5x89, Undo da aplicação e conferência de 43 arquivos instalados PASS. Continuação: quatro cenários de organização de markers PASS, anteriores à ordem aleatória; interação numérica, edição conjunta, fluxo após aplicar e gerenciamento/backup/revelação de variações permanecem NOT RUN; novo check, Undo específico, QA final e nova instalação permanecem pendentes. Testes adicionais adiados a pedido do usuário para avançar nas funcionalidades. [Entrega e limites](docs/implementation/2026-09-25-composer-parity/entrega.md).
+
+## 2026-09-24 — Três efeitos de texto com aplicação rápida
+
+- Revelação com caixas por palavra, morph de fonte variável por proximidade e troca de estilos por caractere/palavra, com botões separados em Ferramentas → Animação.
+- Morph cria e seleciona um nulo sobre o texto; movê-lo controla os eixos reais da fonte. Reaplicar ajusta o mesmo efeito; remover restaura os originais.
+- Troca de estilos cria e seleciona um nulo à esquerda do texto; sua posição controla a passagem entre os estilos mesmo com o tempo parado. Montagens anteriores recebem esse controle ao reaplicar, sem duplicação.
+- Controles nativos, mensagens de compatibilidade em português/inglês e integração com o quadro de aplicação rápida existente. [Uso e limites](docs/implementation/2026-09-24-text-effects/usage.md), [validação](docs/implementation/2026-09-24-text-effects/verification.md).
+
+## 2026-09-21 — Lote nativo Glitch/Wave e receitas RGB
+
+- MotionCore 1.2.0 universal: Glitch preservado, Wave com fase, amostragem RGBA e bordas corretas; removidos registros nativos ainda vazios.
+- Novos presets RGB preciso, Revelação cromática, Letras cromáticas e Título digital com texto editável e renderer nativo; receitas anteriores preservadas.
+- Texture importa mídia real, reutiliza footage e cancela sem mutações. Corrigidos carregamento ExtendScript e IDs de parâmetros Wave medidos no host.
+- Validação real de render, Apply/Adjust/Remove, Undo e save/reopen. Suíte geral ainda tem oito falhas de UI; detalhes em `docs/implementation/2026-09-20-native-core/entrega-2026-09-21.md`.
+
 # Changelog
 
+## 2026-09-17 — Ajustes da galeria e transições de câmera
+
+- Menu de direção ancorado à miniatura, prévia preservada, parâmetros extras recolhidos e molduras cinzas removidas; nomes e favoritos ficaram compactos.
+- Aba Câmera separada entre Transições e Movimentos 3D, com oito presets originais de fade, giro, zoom, distorção e shake amortecido.
+- AE 26.5x89: 8/8 transições aplicadas, ajustadas e removidas; 37/37 testes focados. Check geral: 1.230/1.252, mesmas 22 falhas preexistentes. [Evidências](docs/implementation/2026-09-17-video-fixes/entrega-e-validacao.md).
+
+## 2026-09-16 — Navegador, edição e biblioteca pessoal
+
+- Pastas hierárquicas com etiquetas de cor, Navegar/Editar, autoplay visível com pausa e tamanho de miniaturas ajustável.
+- In/Out/Ambos e duplo clique aplicam presets; direção e restauração de padrão no menu de ajustes.
+- Editor de presets aplicados lê controles nativos, detecta seleção/valores desatualizados e preserva controles animados.
+- Minha biblioteca adiciona referências de pastas .ffx, mostra subpastas e aplica presets nativos sem copiar arquivos. Ferramentas renovada com todos os atalhos preservados.
+- AE 26.5x89: 17/17 casos nativos e Undo do ajuste aprovados. UI em quatro larguras aprovada. 1.227/1.249 testes, mesmas 22 falhas anteriores. [Evidências e limites](docs/implementation/2026-09-16-design-review/entrega-e-validacao.md).
+
+## 2026-09-16 — Entradas invisíveis e galeria ajustável
+
+- Categorias laterais com divisor arrastável/teclado; ajustes de direção e parâmetros em sobreposição pelo botão ≡ do preset.
+- Miniaturas legíveis em repouso e demonstração completa do início, com tempo de visualização maior e pausa entre ciclos.
+- 15 transições antigas passam a usar fade; os primeiros frames das 59 transições foram renderizados no AE e têm alfa zero no padrão. Opacidade da transição separada da oscilação de movimento.
+- 88/88 presets e 4 migrações aprovados no AE 26.5x89. Suíte: 1215/1237, mesmas 22 falhas anteriores. Undo desta revisão e inspeção da UI no CEP ainda sem confirmação. [Evidências](docs/implementation/2026-09-15-preset-preview-fix/entrega-e-validacao.md).
+
+## 2026-09-15 — Coleção Studio
+
+- 32 presets originais novos: 24 de texto e 8 de motion. Biblioteca agora com 88 receitas e galeria com 105 itens, preservando os 56 presets anteriores.
+- Padrões individuais, entradas e saídas com velocidade nula nas extremidades, elasticidade amortecida, ordens de texto e foco por unidade. Sobreposição preserva tempo de movimento mesmo em textos longos.
+- Filtro Studio · Novos, refinamento de elasticidade/sobreposição/velocidade conforme a receita, restauração de padrão e botão Aplicar sempre visível em painel estreito.
+- 88/88 presets verificados no After Effects 26.5x89, 11 grupos de ciclo de vida e Undo de texto Studio aprovados. Suíte geral: 1210/1232; mesmas 22 falhas preexistentes, sem novas falhas. [Evidências](docs/implementation/2026-09-15-studio-presets/entrega-e-validacao.md).
+
+## 2026-09-15 — Biblioteca de presets
+
+- 56 presets originais de motion 2D/3D, efeitos e texto, com opções de entrada/saída, duração, intensidade e divisão do texto.
+- Galeria organizada, miniaturas individuais, nomes visíveis em painel estreito e ponto da curva alinhado ao gráfico.
+- Aplicar/ajustar/remover com identificação dos elementos gerenciados, preservação de keyframes e rollback de criação. Bake de motion em keyframes.
+- Validação nativa dos 56 presets no AE 26.5x89; evidências e limitações em `docs/implementation/2026-09-14-animation-composer/entrega-e-validacao.md`.
+
+## 2026-09-14 — Dicas junto às ferramentas
+
+- Dicas e menu de opções ancorados à biblioteca, eliminando o deslocamento causado pelo conteúdo animado. Distância de 6 px, contenção nas bordas e inversão para cima quando faltar espaço.
+- Dicas com escala suave de 0,96 a 1 na entrada e retorno na saída, 140 ms, origem no botão e movimento reduzido preservado. Não interceptam cliques.
+- Build e 8 testes focados PASS; prévia visual em 280/360/480/720 px PASS. Verificação controlada no AE ainda pendente. [Evidências](docs/evidence/TOOLTIP_ANCHOR_2026-09-14.md).
+
+## 2026-09-13 — Motion Flow
+
+- Editor de Suavização abre no clique e permite arrastar curva, hastes e alças no CEP. Ajuste numérico e enquadramento para ultrapassagem.
+- 28 curvas adaptadas do FxFlow do usuário, prévia animada, favoritos e curvas pessoais. Criação rápida de animações por propriedade e duração.
+- Aplicação corrigida para propriedades não espaciais, interpolação Linear, lados externos dos segmentos e restauração após falha.
+- Build, 37 testes focados e 29 verificações no AE 26.5x89 passaram. O check geral permanece com falhas externas à correção; veja `docs/research/fxflow-motion.md`.
+
+
 ## Não lançado
+
+### 2026-09-10 — continuação no Mac e interface de trabalho
+
+- Home do AE deixou de cair por engano no diagnóstico: abre contexto resumido e catálogo pesquisável.
+- Favoritos com estrela independente da seleção do host; filtro dedicado e armazenamento local. Recentes guardam as últimas oito ferramentas abertas em Advanced ou aplicadas com sucesso em Quick; lista ordenada e ação para limpar.
+- Botão visível de ajustes em cada ferramenta, além de Alt+clique. Quick continua no catálogo; Advanced navega para a ferramenta sem executar uma aplicação adicional.
+- Tema escuro/claro e espaçamento confortável/compacto em Settings dos dois painéis. Preferências versionadas, leitura tolerante a dados inválidos e indicação de sessão quando storage não está disponível. Apenas IDs e preferências são gravados.
+- Grade com 2/3/4 colunas nas faixas do Addendum, rótulos com quebra de linha e controles de favorito/ajustes fora do botão de aplicação.
+- Instalador dev do Premiere para macOS via UPIA e correção do requisito Node para corresponder ao ESLint instalado. Dependências reinstaladas para arm64, preservando as alterações locais anteriores.
+- Verificação desta última etapa: `npm run build` PASS. Por orientação do responsável, não foi rodada nova suíte nem matriz visual após as adições. O PASS anterior de 1155 testes não comprova estas novas preferências/grades. Detalhes no checkpoint macOS.
 
 Fase P0 (fundação) conforme `docs/MASTER_BUILD_SPEC.md` §39. Ainda não é release: o package raiz, os dois packages de host e os dois manifests continuam em `0.1.0`. `BUILD_INFO.json` deriva do package raiz, mas a sincronização automática dos demais campos de versão continua pendente; a versão só sobe quando houver um release para numerar.
 
 ### Estado de verificação deste worktree
 
-- `PASS` automatizado final: em **2026-09-04**, `npm run check` no branch `Codex`/worktree integrado concluiu lint, typecheck, build, validate, contraste, **981/981 testes** e skills validate.
+- `PASS` automatizado no checkpoint de **2026-09-05**: `npm.cmd run check` no branch `Codex`/worktree compartilhado concluiu lint, typecheck, build, validate, contraste, **1102/1102 testes** e skills validate. Novas alterações paralelas posteriores exigem nova execução.
 - `PASS` no After Effects real: build Moti.on carregado no **After Effects 26.3x87**, CEP **12.0.1**, Windows 11; estado ocioso correto da verificação de sistema, contexto, capability probe, round-trip Unicode, criação da composição de teste, rótulo localizado de Undo e Undo em um passo foram observados.
 - `FAIL` corrigido no After Effects real: o `<ScriptPath>` produziu modal de erro de sintaxe na linha 1. Depois de removê-lo e reinstalar o mesmo bundle, uma inicialização limpa abriu sem modal e o bootstrap oficial por `$.evalFile` passou.
 - `NOT RUN`: carregamento deste build no Premiere Pro, transação/Undo Premiere, exportação pelo picker UXP e matriz visual/acessível completa nos hosts.
 - `NOT RUN`: revisão visual no browser. Nenhuma captura ou interação de browser foi executada neste ciclo.
-- `NOT RUN`: CHMS-UX-007 (Live Controls no Premiere). O módulo está incompleto e vive no branch `wip/premiere-live-controls`, fora do `Codex`; ver a seção abaixo.
+- `PARTIAL`: CHMS-UX-007 (Live Controls no Premiere). O runtime do rascunho foi retomado localmente; 37/37 testes focados passam. Integração com renderer/Inspector e Premiere real continuam pendentes; ver `docs/evidence/CHMS-UX-007_TDD_EVIDENCE.md` para os checkpoints e o check global mais recente.
 
 O vocabulário acima é literal: `PASS` significa executado e aprovado, `FAIL` significa executado e reprovado, e `NOT RUN` significa que o item não foi executado no escopo declarado para o build atual. Pesquisa de API e teste com doubles não viram `PASS` de host.
 
@@ -121,32 +316,108 @@ deste worktree passaram; o gate completo terminou com 966/966 testes. AE 25/26
 reais, hosts localizados, Undo de um comando consumidor e os orçamentos de 300 ms
 para criação/40 ms para leitura permanecem `NOT RUN`.
 
-### CHMS-UX-007 — Live Controls no Premiere: **não implementado**
+### Premiere — respostas antigas não sobrevivem à remontagem
 
-O módulo `apps/premiere-uxp/host/src/live-controls.ts` foi escrito até a
-validação de bindings e parou aí: `createPremiereLiveControls`, que a suíte de
-testes importa, nunca chegou a existir. No estado em que está, o arquivo reprova
-lint, typecheck e build.
+O estado do painel passou a pertencer a cada montagem. Contexto, verificação de
+sistema, autoteste e exportação usam tickets que invalidam resultados antigos
+em `show`/`destroy`; callbacks obsoletos não repopulam dados nem liberam o busy
+da operação atual. Eventos repetidos são recusados antes de novo dispatch.
 
-Para não deixar o `Codex` vermelho, o rascunho e a suíte que o acompanha vivem
-no branch `wip/premiere-live-controls`, e não nesta linha. O manifesto
-versionado que mapeia identidade lógica para matchName, ordem, índice e rótulo
-já está desenhado ali, porque `ComponentParam` não expõe `paramId`; falta o
-runtime que lê e escreve por esse mapa.
+Três falhas reproduzidas no bundle viraram testes de regressão: 8/8 jornadas
+do painel e 11/11 do escopo de requests passam. Isso não cancela operações de
+host/arquivo já autorizadas, nem implementa polling ou Inspector de UX-008.
+Status: `IMPLEMENTED_NOT_HOST_VERIFIED`; smoke Premiere permanece `NOT RUN`.
+Evidência: `docs/evidence/PREMIERE_PANEL_ASYNC_LIFETIME.md`.
 
-Status: `NOT IMPLEMENTED`.
+O gate de marcadores de trabalho inacabado também deixou de confundir palavras
+como `TODOS`/`MÉTODO` com `TODO`; três testes mantêm o bloqueio de marcadores
+reais em comentários e literais, sem desativar a validação.
 
-### CHMS-UX-008 — grade de ferramentas e o filtro da busca
+### CHMS-UX-007 — Live Controls no Premiere: ponte interna parcial
 
-`tileVisiveis` prometia os ladrilhos visíveis da grade e devolvia todos,
-ignorando a célula que o filtro tinha escondido. Como o roving focus e as setas
-liam essa lista, escondê-la pelo filtro podia deixar a âncora `tabindex="0"` num
-ladrilho invisível — e aí a grade inteira saía da ordem de Tab, com todos os
-visíveis em `-1` e o único alcançável escondido. As setas, pelo mesmo motivo,
-moviam o foco para o que o usuário tinha acabado de filtrar.
+O rascunho arquivado no branch `wip/premiere-live-controls` foi retomado em
+2026-09-05. `createPremiereLiveControls` agora inspeciona, lê e ajusta parâmetros
+reais de MOGRT/efeito por manifesto versionado; não cria controles só no painel.
+
+- Paridade de ids/ordem/rótulos, rejeição de matchName ambíguo e fallback
+  `CONTROLS_HOST_UNSUPPORTED` com a frase normativa e seleção do item.
+- Updates exigem fingerprint, preservam animação recusando escrita em streams
+  animados e são serializados por Project. Mudança de componente durante a
+  leitura aborta antes da transação; no-op não gera Undo.
+- Keyframes/Actions são construídos dentro de transação síncrona sob lock.
+  O retorno relê valores reais, informa clamp e distingue falha após commit.
+- `Sequence.setSelection` aguarda tanto Promise anterior a 26.3 quanto boolean
+  atual. Selecionar o item não significa abrir/focar Essential Graphics.
+- 37/37 testes focados; cobertura de 90,91 % linhas, 82,25 % branches e 98,04 %
+  funções. Pesquisa e checkpoints em `docs/research/premiere-live-controls.md`
+  e `docs/evidence/CHMS-UX-007_TDD_EVIDENCE.md`.
+
+Status: `PARTIAL`. Faltam renderer/fixtures CHMS-045, verificação de identidade
+e versão do item, dispatcher/Inspector e sincronização UX-008. O módulo não é
+consumido pelo painel distribuído; Premiere real, Undo e performance continuam
+`NOT RUN`. Point usa authoring X/Y escalar; PointF nativo não é convertido.
+
+### Navegador de ferramentas: busca, categorias e teclado
+
+> **Correção de registro.** Uma versão anterior desta entrada tinha o título
+> `CHMS-UX-008` — que no Addendum é "Sincronização painel ↔ host com polling
+> governado", outro assunto — e descrevia `tileVisiveis` como um defeito
+> corrigido: "prometia os ladrilhos visíveis e devolvia todos". Esse defeito
+> **nunca existiu em código commitado**. `git log -S` mostra um único commit
+> com `tileVisiveis`, e nele a guarda está presente. O que existiu foi uma
+> mutação temporária, injetada de propósito por alguns minutos para verificar
+> que o teste de roving realmente falhava sem a guarda, e observada por outro
+> agente nessa janela. O parágrafo abaixo descreve o que de fato foi entregue.
+
+O painel tinha 47 ferramentas numa grade plana, sem busca nem estrutura, e sem
+navegação por teclado: chegar ao que vinha depois da grade custava 47 tabuladas.
+
+- **Busca** por nome e descrição, com contagem, estado vazio e a consulta
+  preservada no estado do painel para sobreviver à ida e volta de uma
+  ferramenta. O filtro **não redesenha a tela**: um `rerender()` por tecla
+  recriaria o próprio campo e mataria o foco no meio da digitação.
+- **Sete categorias** tituladas, na ordem de uso. A categorização vive num
+  `Record<ToolId, ToolCategory>` exaustivo, então ferramenta nova sem categoria
+  é erro de compilação — e não um ladrilho que some da grade em silêncio.
+- **Roving focus**: a grade é uma parada de Tab, com ←/→ e Home/End andando
+  entre os ladrilhos **visíveis**. `syncToolGridRoving` reposiciona a âncora
+  depois de cada filtragem; sem isso, esconder o ladrilho que carrega
+  `tabindex="0"` tiraria a grade da ordem de Tab.
+- O componente foi extraído para `@motion/ui-core` como `createToolBrowser`.
+  Enquanto morava em `main.ts` — que monta o shell no import — a única
+  verificação possível era ler o próprio código-fonte com expressão regular.
+  Agora são 14 testes de comportamento contra o DOM falso, e o `main.ts` ficou
+  com um adaptador.
+
+Duas guardas foram verificadas por mutação: invertendo o filtro
+(`hidden = casa`) e trocando o separador ` ` entre nome e descrição por
+um espaço. As duas mutações derrubam testes, e as duas foram revertidas.
 
 Status: `IMPLEMENTED_NOT_HOST_VERIFIED`. Coberto por teste; o comportamento com
-leitor de tela dentro de AE/Premiere reais permanece `NOT RUN`.
+leitor de tela e a aparência das sete seções em 280/360/480/720 px dentro de
+AE/Premiere reais permanecem `NOT RUN`.
+
+### Quatro faixas de acoplamento, no lugar de três
+
+`resolveWidthClass` tinha três faixas com todas as fronteiras erradas —
+`compact` até 359, uma faixa "standard" até 559 e `wide` a partir de 560 — e
+sem a faixa Comfort. O Addendum, que supersede o §22.3, define quatro: Compact
+280–339, Default 340–479, Comfort 480–719, Wide 720+. Na prática um painel em
+340 px recebia o layout compacto inteiro quando já devia ter o rail lateral, e a
+partir de 560 px entrava no layout mais largo, reservado para 720. O teste que
+existia chamava-se "as quatro larguras" e verificava três classes: ele fixava as
+fronteiras erradas.
+
+A largura de leitura limitada do §22.3 passou a valer desde 480 px; antes
+começava em 560 só porque era ali que a faixa errada começava.
+
+**Ainda divergente:** o Addendum pede grid de 2 colunas em Compact e o código usa
+1. A conta fecha, mas a mesma linha do Addendum descreve barra inferior de 44 px,
+Inspector e dock de recentes, que este shell não tem — a contagem de colunas
+pertence à CHMS-UX-013. Registrado em `docs/UI_FOUNDATION.md`.
+
+Status: `IMPLEMENTED_NOT_HOST_VERIFIED`. Fronteiras cobertas por teste nos dois
+lados de cada uma; a aparência de cada faixa dentro dos hosts é `NOT RUN`.
 
 ### CHMS-003 — JSON Schemas e validadores standalone
 
@@ -866,3 +1137,18 @@ Removido o ramo `if (!app.project) { app.newProject(); }` de `createDemoComposit
 - Starter Premiere Pro UXP funcional para leitura do projeto e da sequência ativa.
 - Starter After Effects CEP/ExtendScript funcional para leitura do contexto e criação de composição de teste.
 - Contrato compartilhado de respostas, build sem dependências, validação, testes e CI.
+
+
+### 26/09/2026 — continuação de presets (validação funcional adiada)
+
+- Edição parcial em até 50 camadas da mesma receita com campos Vários e preservação de opções não alteradas.
+- Suavização de transições configurável e duração explícita de entrada ou saída.
+- Prévia local de imagem, áudio e vídeo por token de biblioteca, seek/loop e reprodução ajustável; importação continua usando o arquivo original.
+- Arraste no próprio número também no componente de controles CEP; variações, backup e abertura automática de Editar integrados.
+- Pacote compilado e instalação atualizada com backup. Testes/host QA da continuação adiados a pedido do usuário.
+
+
+### 2026-09-26 — Correção do arraste numérico
+- Captura imediata do ponteiro e bloqueio do drag nativo de texto durante o gesto; fallback mouse com deduplicação.
+- Clique sem arraste seleciona o valor para digitação. Limites, frames inteiros, modificadores e cancelamento preservados.
+- Build/lint focado e 18 testes PASS; arraste confirmado na prévia de navegador. CEP/check completo pendentes.

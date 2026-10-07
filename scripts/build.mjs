@@ -1,7 +1,9 @@
+import { syncThemeTokens } from "./sync-theme.mjs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { generateMotionLibrary } from "./build-motion-library.mjs";
 import { buildExtendScript } from "./build-extendscript.mjs";
 import { buildAeClient, buildPremiereClient } from "./build-client.mjs";
 import { renderModule as renderContractsModule, GENERATED_PATH as CONTRACTS_ES5_PATH } from "../packages/contracts/scripts/gen-extendscript.mjs";
@@ -12,6 +14,14 @@ const root = path.resolve(scriptDir, "..");
 const apps = path.join(root, "apps");
 const packages = path.join(root, "packages");
 const dist = path.join(root, "dist");
+const controlPresetRoot = path.join(apps, "after-effects-cep", "assets", "control-presets");
+const controlCatalog = JSON.parse(await readFile(path.join(controlPresetRoot, "catalog.json"), "utf8"));
+const controlPresetFiles = new Set(["catalog.json"]);
+for (const entry of Object.values(controlCatalog)) {
+  if (!/^[a-f0-9]{16}\.ffx$/.test(entry.file)) throw new Error("Invalid bundled control preset filename");
+  await readFile(path.join(controlPresetRoot, entry.file));
+  controlPresetFiles.add(entry.file);
+}
 
 /**
  * Nomes de arquivo e diretorio que existem na arvore fonte por razoes de
@@ -48,6 +58,8 @@ const EXCLUDED_BASENAMES = new Set([
   "generated"
 ]);
 
+await generateMotionLibrary();
+
 const pkg = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
 
 await rm(dist, { recursive: true, force: true });
@@ -63,9 +75,16 @@ if (process.argv.includes("--clean-only")) {
  * de movimento; isso evita `@import`, que nao e uma dependencia segura nos dois
  * runtimes, sem duplicar o catalogo nos fontes.
  */
+await syncThemeTokens();
+
 const SHARED_THEME_SOURCES = [
   path.join(packages, "ui-core", "src", "theme.css"),
   path.join(packages, "ui-core", "src", "components.css"),
+  path.join(packages, "ui-core", "src", "control-refinement.css"),
+  path.join(packages, "ui-core", "src", "library-refinement.css"),
+  path.join(packages, "ui-core", "src", "design-system.css"),
+  path.join(packages, "ui-core", "src", "preset-approved.css"),
+  path.join(packages, "ui-core", "src", "scrubbable-number.css"),
   path.join(packages, "ui-motion", "src", "motion.css")
 ];
 
@@ -76,6 +95,8 @@ async function copyAppShell(appName, outputName) {
     recursive: true,
     filter: (source) => {
       const base = path.basename(source);
+      // Ship only the current catalog; obsolete authoring variants stay in source.
+      if (path.dirname(source) === controlPresetRoot && !controlPresetFiles.has(base)) return false;
       if (EXCLUDED_BASENAMES.has(base)) return false;
       // Artefatos do compilador: tsc -b grava .tsbuildinfo ao lado do tsconfig.
       // Prefixo, e nao lista de nomes: tsconfig.client.json vazou para dist/

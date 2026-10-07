@@ -445,7 +445,12 @@
       //    proposito: nao faz sentido validar argumentos de uma operacao que o
       //    usuario nao autorizou.
       var options = request.options || {};
-      if (descriptor.destructive && options.allowDestructive !== true) {
+      // Clean has a read-only scan phase under the same command ID. A scan is
+      // not a destructive operation and must not require consent or create an
+      // empty Undo entry. Removal still follows the ordinary destructive path.
+      var cleanScan = request.command === "ae.project.clean" &&
+        request.args && request.args.removeConfirmed === false;
+      if (descriptor.destructive && !cleanScan && options.allowDestructive !== true) {
         return respond(
           requestId, false, null, [],
           makeError(
@@ -494,24 +499,34 @@
       }
 
       // 5. Preflight: TODA a validacao, com o projeto ainda intacto.
-      preflightError = command.preflight(request.args || {}, request.context || {});
+      preflightError = command.preflight(
+        request.args || {},
+        request.context || {},
+        request.options || {}
+      );
       if (preflightError) {
         return respond(requestId, false, null, [], normalizeError(preflightError), startedAt, startedMs);
       }
 
+      // As `options` do envelope chegam como TERCEIRO argumento, e nao dentro de
+      // `context`. Ate 2026-09-05 elas eram validadas aqui e descartadas: o
+      // cliente ja mandava `mode: "quick"` e `emitLiveControls: true` por padrao
+      // e nenhum comando conseguia le-los, entao a corrente do Quick/Live
+      // Controls terminava no dispatcher. Comando que nao declara o terceiro
+      // parametro simplesmente o ignora.
       // 6. Execucao. Grupo de Undo apenas quando o comando muta: abrir um grupo
       //    para uma leitura poluiria o historico do usuario com entradas que nao
       //    desfazem nada.
-      if (descriptor.mutates) {
+      if (descriptor.mutates && !cleanScan) {
         var undoLabel = MotionDescriptors.__undoLabelFor(
           descriptor,
           request.context ? request.context.locale : null
         );
         result = MotionUndo.withUndoGroup(undoLabel, function () {
-          return command.run(request.args || {}, request.context || {});
+          return command.run(request.args || {}, request.context || {}, request.options || {});
         });
       } else {
-        result = command.run(request.args || {}, request.context || {});
+        result = command.run(request.args || {}, request.context || {}, request.options || {});
       }
 
       if (!result || typeof result !== "object") {
@@ -530,7 +545,7 @@
       //    changed: false responde ok: false, exceto quando o descriptor declara
       //    explicitamente um no-op idempotente como sucesso observavel.
       if (
-        descriptor.mutates &&
+        descriptor.mutates && !cleanScan &&
         result.changed !== true &&
         descriptor.allowsNoopSuccess !== true
       ) {

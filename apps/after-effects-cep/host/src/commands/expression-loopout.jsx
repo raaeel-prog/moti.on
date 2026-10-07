@@ -196,7 +196,8 @@
       if (
         beforeExpression !== "" &&
         beforeExpression !== desired &&
-        !MotionExpressions.isManagedLoopOut(beforeExpression)
+        !MotionExpressions.isManagedLoopOut(beforeExpression) &&
+        !MotionExpressions.isManagedLoopOutLive(beforeExpression)
       ) {
         return {
           error: failure(
@@ -228,14 +229,90 @@
     property.expressionEnabled = item.beforeEnabled === true;
   }
 
+  /** Espelha LOOPOUT_LIVE_TYPES do template. As duas ordens sao a mesma. */
+  var TIPOS_LIVE = ["cycle", "pingpong", "offset", "continue"];
+
+  /** Os controles que o LoopOut expoe no Effect Controls. */
+  var LIVE_BINDINGS = /** @type {MotionLiveControlBindingHost[]} */ ([
+    {
+      paramId: "type",
+      label: { "pt-BR": "Tipo", "en-US": "Type" },
+      help: {
+        "pt-BR": "Ciclo repete, vaivém alterna, deslocamento acumula.",
+        "en-US": "Cycle repeats, ping-pong alternates, offset accumulates."
+      },
+      control: "dropdown",
+      target: "layer",
+      order: 1,
+      options: [
+        { value: 1, label: { "pt-BR": "Ciclo", "en-US": "Cycle" } },
+        { value: 2, label: { "pt-BR": "Vaivém", "en-US": "Ping-pong" } },
+        { value: 3, label: { "pt-BR": "Deslocamento", "en-US": "Offset" } },
+        { value: 4, label: { "pt-BR": "Continuar", "en-US": "Continue" } }
+      ]
+    },
+    {
+      paramId: "numKeyframes",
+      label: { "pt-BR": "Keyframes", "en-US": "Keyframes" },
+      help: {
+        "pt-BR": "Quantos keyframes entram no laço. Zero usa todos.",
+        "en-US": "How many keyframes join the loop. Zero uses all."
+      },
+      control: "slider",
+      target: "layer",
+      order: 2,
+      min: 0,
+      max: 100
+    }
+  ]);
   MotionRegistry.register("ae.expression.loopout", {
-    preflight: function (args) {
+    preflight: function (args, context, options) {
+      if (options && options.emitLiveControls === true) return validateArgs(args) || MotionQuickEffects.prepare("loopout", args, options).error;
       return prepare(args).error;
     },
 
-    run: function (args) {
+    /**
+     * @param {Record<string, unknown>} args
+     * @param {Record<string, unknown>} context
+     * @param {Record<string, unknown>} [options]
+     * @returns {MotionCommandResult}
+     */
+    run: function (args, context, options) {
+      if (options && options.emitLiveControls === true) return MotionQuickEffects.run("loopout", args, context, options);
       var prepared = prepare(args);
       if (prepared.error) throw new Error("LoopOut ficou invalido depois do preflight.");
+
+      // Live Controls: controles na camada em vez de valores cravados.
+      var live = !!(options && options.emitLiveControls === true);
+      var preset = null;
+      var vivo;
+      if (live && prepared.items.length > 0) {
+        var propriedades = [];
+        for (vivo = 0; vivo < prepared.items.length; vivo += 1) {
+          var origem = prepared.items[vivo];
+          if (origem) propriedades.push(origem.property);
+        }
+        preset = MotionLivePreset.aplicar(propriedades, {
+          tool: "LoopOut",
+          rigId: "ae.expression.loopout",
+          locale: context ? context.locale : null,
+          bindings: LIVE_BINDINGS,
+          values: {
+            type: TIPOS_LIVE.indexOf(String(args.type)) + 1,
+            numKeyframes: args.numKeyframes
+          }
+        });
+        for (vivo = 0; vivo < prepared.items.length; vivo += 1) {
+          var alvoVivo = prepared.items[vivo];
+          var refs = preset.refsPorPropriedade[vivo];
+          if (!alvoVivo || !refs) continue;
+          alvoVivo.desired = MotionExpressions.renderLoopOutLive(
+            /** @type {{type: string, numKeyframes: string}} */ (refs)
+          );
+          alvoVivo.changed =
+            alvoVivo.beforeExpression !== alvoVivo.desired || alvoVivo.beforeEnabled !== true;
+        }
+      }
 
       var touched = [];
       var appliedCount = 0;
@@ -271,6 +348,8 @@
             rollbackFailed = true;
           }
         }
+        // Os controles criados saem junto: sliders orfaos sao pior que nada.
+        if (preset && !preset.desfazer()) rollbackFailed = true;
         if (rollbackFailed) {
           var rollbackError = /** @type {Error & {motionCode?: string}} */ (
             new Error("Rollback LoopOut falhou.")
@@ -283,7 +362,7 @@
 
       return {
         changed: appliedCount > 0,
-        warnings: [],
+        warnings: preset ? preset.avisos : [],
         data: {
           appliedCount: appliedCount,
           unchangedCount: unchangedCount

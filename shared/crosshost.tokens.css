@@ -1,41 +1,119 @@
-/*
- * Moti.on UI tokens — CHMS-UX-001 e fundacao de CHMS-UX-002.
- *
- * O bloco e duplicado deliberadamente em @motion/ui-core/theme.css porque CEP
- * e UXP precisam receber uma folha autocontida. O teste de drift impede que as
- * copias divirjam. `--bg-host` preserva a base #1D1D1D exigida pelo projeto;
- * as demais superficies seguem o Addendum A.
- *
- * Ajustes AA documentados: --txt-3 e --danger foram deslocados minimamente
- * onde os valores ilustrativos do addendum nao atingiam o proprio gate de
- * contraste em superficies permitidas.
+/* Moti.on product tokens. Canonical source for CEP and UXP.
+ * Onyx Premium business theme. High contrast, sharp edges.
+ * Mirrors are checked for drift; layout never owns palette values.
  */
 :root {
   color-scheme: dark;
 
-  --bg-host: #1d1d1d;
-  --bg-0: #0e1013;
-  --bg-1: #141619;
-  --bg-2: #1a1d21;
-  --bg-3: #22262b;
-  --bg-4: #2a2f35;
-  --line-hairline: #2c3137;
-  --line-strong: #707880;
-  --txt-1: #e9ecef;
-  --txt-2: #aab2bb;
-  --txt-3: #8e97a0;
+  /* Premium Onyx Palette */
+  --gray-950: #101010;
+  --gray-900: #171717;
+  --gray-800: #262626;
+  --gray-700: #404040;
+  --gray-500: #A3A3A3;
+  --white: #F5F5F5;
 
-  --accent: #7c8cff;
-  --accent-hover: #9aa6ff;
-  --accent-press: #6472f0;
-  --accent-on: #0e1013;
-  --accent-wash: rgba(124, 140, 255, 0.12);
-  --accent-glow: rgba(124, 140, 255, 0.28);
-  --ok: #43b77a;
-  --warn: #d9a441;
-  --danger: #f76750;
-  --info: #4cc2e0;
+  /* Semantic surfaces */
+  --bg-base: var(--bg-host);
+  --surface-deep: #101010;
+  --surface-raised: #1A1A1A;
+  --bg-elevated: #212121;
+  --surface-hover: #2E2E2E;
+  --surface-active: #383838;
+  --surface-section: #1A1A1A;
+  --border-control: #858585;
+  --disabled-opacity: 0.55;
+  --border-subtle: #2A2A2A;
+  --border-muted: rgba(255, 255, 255, 0.08);
+  --overlay-surface: rgba(16, 16, 16, 0.96);
+  --text-primary: var(--white);
+  --text-secondary: var(--gray-500);
+  /* AA on the elevated surface. */
+  --text-muted: var(--gray-500);
+  --accent: var(--white);
 
+  /* Tool identity is separate from semantic feedback. */
+  --icon-keyframes: #B4C7F1;
+  --icon-layers: #B7CFBD;
+  --icon-animation: #D7BAE7;
+  --icon-spatial: #91CAD3;
+  --icon-shapes: #D7C58B;
+  --icon-effects: #DEA6AA;
+  --icon-project: #B8BCCC;
+  --icon-utilities: var(--text-secondary);
+
+  /* Flat surfaces; elevation is reserved for transient overlays. */
+  --glow-subtle: none;
+
+  /* PRD Motion */
+  --motion-instant: 90ms;
+  --motion-fast: 200ms;
+  --motion-standard: 200ms;
+  --motion-panel: 260ms;
+  --motion-large: 320ms;
+  --ease-standard: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-emphasized: cubic-bezier(0.25, 1, 0.25, 1);
+
+  /* PRD Radius - Sharp & Solid */
+  --radius-small: 2px;
+  --radius-medium: 4px;
+  --radius-large: 6px;
+  --radius-input: var(--radius-small);
+  --radius-button: var(--radius-small);
+  --radius-dropdown: var(--radius-small);
+  --radius-popover: var(--radius-medium);
+  --radius-modal: var(--radius-large);
+  --radius-tooltip: var(--radius-small);
+
+  /* PRD Spacing */
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-48: 48px;
+  --space-64: 64px;
+
+  /* PRD Typography */
+  --font-family-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-caption: 11px;
+  --font-label: 12px;
+  --font-body: 13px;
+  --font-title: 14px;
+  --font-display: 14px;
+  --line-body: 1.5;
+  --line-label: 1.35;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-strong: 600;
+  --control-height: 28px;
+  --target-min: 24px;
+
+  /* Compatibility tokens still consumed by components and motion.css. */
+  --bg-host: #121212;
+  --bg-0: #101010;
+  --bg-1: #121212;
+  --bg-2: #1A1A1A;
+  --bg-3: #212121;
+  --bg-4: #2E2E2E;
+  --line-hairline: #303030;
+  --line-strong: #858585;
+  --txt-1: #F0F0F0;
+  --txt-2: #9E9E9E;
+  --txt-3: #A3A3A3;
+  --accent-hover: #FFFFFF;
+  --accent-press: #E0E0E0;
+  --accent-on: #0A0A0A;
+  --accent-wash: rgba(255, 255, 255, 0.04);
+  --accent-glow: rgba(255, 255, 255, 0.08);
+  --ok: #75D5A1;
+  --warn: #FFB74D;
+  --danger: #FF9C8F;
+  --info: #81D4FA;
+  --value-editable: #FFFFFF;
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
@@ -45,73 +123,136 @@
   --s7: 32px;
   --s8: 40px;
   --r-chip: 2px;
-  --r-ctl: 6px;
-  --r-tile: 10px;
-  --r-pop: 14px;
+  --r-ctl: 2px;
+  --r-tile: 2px;
+  --r-pop: 4px;
   --r-pill: 999px;
-  --e1: 0 1px 2px rgba(0, 0, 0, 0.24), 0 0 0 1px var(--line-hairline);
-  --e2: 0 8px 24px rgba(0, 0, 0, 0.36), 0 0 0 1px var(--line-hairline);
-  --e3: 0 16px 48px rgba(0, 0, 0, 0.48), 0 0 0 1px var(--line-hairline);
-
-  --dur-1: 90ms;
-  --dur-2: 140ms;
-  --dur-3: 200ms;
-  --dur-4: 280ms;
-  --dur-5: 420ms;
-  --dur-press: 60ms;
-  --dur-popover-out: 120ms;
-  --dur-drawer-out: 170ms;
-  --dur-ripple: 380ms;
-  --dur-live-pulse: 600ms;
-  --dur-live-reduced: 1200ms;
-  --dur-skeleton: 1200ms;
+  --e1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--line-hairline);
+  --e2: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--line-hairline);
+  --e3: 0 16px 48px rgba(0, 0, 0, 0.8), 0 0 0 1px var(--line-hairline);
+  --dur-1: 200ms;
+  --dur-2: 200ms;
+  --dur-3: 240ms;
+  --dur-4: 260ms;
+  --dur-5: 320ms;
+  --dur-icon: 320ms;
+  --dur-press: 90ms;
+  --dur-popover-out: 200ms;
+  --dur-drawer-out: 200ms;
+  --dur-ripple: 260ms;
+  --dur-live-pulse: 320ms;
+  --dur-live-reduced: 1ms;
+  --dur-skeleton: 320ms;
   --dur-progress: 0ms;
   --dur-progress-reduced: 200ms;
   --dur-reduced: 1ms;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in: cubic-bezier(0.4, 0, 1, 1);
-  --ease-std: cubic-bezier(0.2, 0, 0, 1);
-  --ease-pop: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+  --ease-std: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-pop: var(--ease-out);
   --ease-linear: linear;
   --ease-step-end: steps(1, end);
-  --stagger: 22ms;
+  --stagger: 20ms;
   --delay-none: 0ms;
-  --delay-tooltip: 600ms;
+  --delay-tooltip: 500ms;
   --delay-preview: 2000ms;
-  --delay-spinner: 180ms;
+  --delay-spinner: 150ms;
   --delay-applied: 700ms;
-
   --focus-ring: 2px solid var(--txt-1);
-  --focus-offset: 2px;
+  --focus-offset: 1px;
+  /* Compatibility API: aliases only; no second palette. */
+  --ch-surface-canvas: var(--bg-base);
+  --ch-surface-panel: var(--bg-base);
+  --ch-surface-raised: var(--surface-raised);
+  --ch-surface-control: var(--bg-elevated);
+  --ch-surface-hover: var(--surface-hover);
+  --ch-surface-pressed: var(--surface-active);
+  --ch-border-subtle: var(--border-muted);
+  --ch-border-default: var(--border-subtle);
+  --ch-border-strong: var(--line-strong);
+  --ch-border-focus: var(--txt-1);
+  --ch-text-primary: var(--text-primary);
+  --ch-text-secondary: var(--text-secondary);
+  --ch-text-muted: var(--text-muted);
+  --ch-text-disabled: var(--text-muted);
+  --ch-accent: var(--accent);
+  --ch-accent-hover: var(--accent-hover);
+  --ch-accent-pressed: var(--accent-press);
+  --ch-accent-contrast: var(--accent-on);
+  --ch-danger: var(--danger);
+  --ch-warning: var(--warn);
+  --ch-info: var(--info);
+  --ch-success: var(--ok);
+  --ch-space-1: var(--space-4);
+  --ch-space-2: var(--space-8);
+  --ch-space-3: var(--space-12);
+  --ch-space-4: var(--space-16);
+  --ch-space-5: var(--space-20);
+  --ch-space-6: var(--space-24);
+  --ch-radius-control: var(--radius-button);
+  --ch-radius-panel: var(--radius-popover);
+  --ch-radius-round: 9999px;
+  --ch-size-control: var(--control-height);
+  --ch-size-tool-tile: 44px;
+  --ch-font-family: var(--font-family-sans);
+  --ch-font-sm: var(--font-label);
+  --ch-font-md: var(--font-body);
+  --ch-font-lg: var(--font-title);
+  --ch-motion-fast: var(--motion-fast);
 }
 
 [data-theme="light"] {
   color-scheme: light;
+  --gray-900: #343A40;
+  --surface-deep: #E9ECEF;
+  --icon-keyframes: #3E5889;
+  --icon-layers: #3D664A;
+  --icon-animation: #745180;
+  --icon-spatial: #276974;
+  --icon-shapes: #76632F;
+  --icon-effects: #87444E;
+  --icon-project: #565F78;
 
-  --bg-host: #f7f8f9;
-  --bg-0: #ffffff;
-  --bg-1: #f7f8f9;
-  --bg-2: #f1f2f4;
-  --bg-3: #e7e9ec;
-  --bg-4: #ffffff;
-  --line-hairline: #dcdfe3;
-  --line-strong: #767e86;
-  --txt-1: #16181b;
-  --txt-2: #4e555c;
-  --txt-3: #626a72;
+  /* Semantic aliases must follow the selected theme, not inherit dark colors. */
+  --bg-base: var(--bg-host);
+  --surface-raised: var(--bg-4);
+  --bg-elevated: var(--bg-2);
+  --surface-hover: var(--bg-3);
+  --surface-active: var(--bg-2);
+  --surface-section: var(--bg-3);
+  --border-control: #767E86;
+  --border-subtle: var(--line-hairline);
+  --border-muted: var(--line-hairline);
+  --overlay-surface: rgba(255, 255, 255, 0.96);
+  --text-primary: var(--txt-1);
+  --text-secondary: var(--txt-2);
+  --text-muted: var(--txt-3);
 
-  --accent: #4a57d8;
-  --accent-hover: #3a46c4;
-  --accent-press: #2f3aac;
-  --accent-on: #ffffff;
-  --accent-wash: rgba(74, 87, 216, 0.1);
-  --accent-glow: rgba(74, 87, 216, 0.22);
-  --ok: #146c43;
-  --warn: #8a5a00;
-  --danger: #be382a;
-  --info: #0f6e8c;
+  --bg-host: #F8F9FA;
+  --bg-0: #FFFFFF;
+  --bg-1: #F8F9FA;
+  --bg-2: #F1F3F5;
+  --bg-3: #E9ECEF;
+  --bg-4: #FFFFFF;
+  --line-hairline: #DEE2E6;
+  --line-strong: #767E86;
+  --txt-1: #212529;
+  --txt-2: #495057;
+  --txt-3: #5A6268;
 
-  --e1: 0 1px 2px rgba(16, 24, 40, 0.06), 0 0 0 1px var(--line-hairline);
-  --e2: 0 8px 24px rgba(16, 24, 40, 0.1), 0 0 0 1px var(--line-hairline);
-  --e3: 0 16px 48px rgba(16, 24, 40, 0.14), 0 0 0 1px var(--line-hairline);
+  --accent: #212529;
+  --accent-hover: #121416;
+  --accent-press: #343A40;
+  --accent-on: #FFFFFF;
+  --accent-wash: rgba(33, 37, 41, 0.04);
+  --accent-glow: rgba(33, 37, 41, 0.08);
+  --ok: #146C43;
+  --warn: #8A4D00;
+  --danger: #C92A2A;
+  --info: #0B7285;
+  --value-editable: #212529;
+
+  --e1: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 1px var(--line-hairline);
+  --e2: 0 8px 24px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--line-hairline);
+  --e3: 0 16px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--line-hairline);
 }

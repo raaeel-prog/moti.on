@@ -360,3 +360,4 @@ test("Start maior ou igual a End e recusado antes de tocar o projeto", async () 
   assert.equal(trimDe(layer.contents), null);
   assert.deepEqual(calls, []);
 });
+

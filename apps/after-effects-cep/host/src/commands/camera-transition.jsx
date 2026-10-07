@@ -1,12 +1,33 @@
 /**
  * Transicoes de camera (`ae.camera.transition`, CHMS-024).
  *
- * ## Onze presets, nenhuma dependencia externa
+ * ## ATENCAO: isto NAO e o catalogo do §17
  *
- * O criterio de aceite e "11 presets sem dependencia externa". Cada preset e uma
- * linha da tabela abaixo: qual propriedade da camera anda, e quanto. Tudo sai de
- * keyframes na camera nativa — nenhum plug-in de terceiro, nenhum efeito que
- * possa nao existir na instalacao do usuario.
+ * Este comando implementa onze **movimentos de camera** — push, truck, crane,
+ * pan, tilt, zoom — como keyframes na camera nativa. O §17.1 da spec cataloga
+ * outros onze itens, que sao **transicoes** visuais entre planos:
+ * `camera.blur-lens`, `camera.blur-gaussian`, `camera.fade-dark`,
+ * `camera.fade-light`, `camera.fade-dark-blur-lens`,
+ * `camera.fade-light-blur-lens`, `camera.exposure-light`, `camera.distort`,
+ * `camera.distort-rotation`, `camera.distort-shake` e
+ * `camera.distort-rotation-shake`.
+ *
+ * Os dois conjuntos tem onze itens por coincidencia, e o comentario anterior
+ * deste arquivo dizia que o criterio de aceite do CHMS-024 ("11 presets sem
+ * dependencia externa") estava cumprido. Nao esta: nenhuma das onze transicoes
+ * do §17.1 existe. O §17.3 pede solid/adjustment layer, camada com a duracao
+ * exata da transicao, efeitos resolvidos por matchName e fallback de Lens Blur
+ * para Gaussian com aviso visivel — nada disso acontece aqui.
+ *
+ * A divergencia esta registrada no §17 da spec e presa por
+ * `tests/catalogo-de-comandos.test.mjs`. O painel ja e honesto sobre o que
+ * entrega: a descricao dele diz "onze movimentos de camera".
+ *
+ * ## O que este comando faz bem
+ *
+ * Cada preset e uma linha da tabela abaixo: qual propriedade da camera anda, e
+ * quanto. Tudo sai de keyframes na camera nativa — nenhum plug-in de terceiro,
+ * nenhum efeito que possa nao existir na instalacao do usuario.
  *
  * ## A curva
  *
@@ -170,7 +191,7 @@
 
   /** @param {unknown} layer @param {string} matchName @returns {Property|null} */
   function transformProperty(layer, matchName) {
-    var grupo = /** @type {any} */ (layer).property(MN.transform);
+    var grupo = /** @type {any} */ (layer).property(matchName === MN.zoom ? "ADBE Camera Options Group" : MN.transform);
     if (!grupo) return null;
     var property = grupo.property(matchName);
     return property instanceof Property ? property : null;
@@ -193,6 +214,7 @@
       // direita" deixa de ser para a direita na composicao.
       return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camera tem pai; a transicao sairia torta.", null);
     }
+    if (/** @type {any} */ (camera).locked) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie a camera antes de aplicar.", null);
 
     var preset = /** @type {Record<string, unknown>} */ (PRESETS[/** @type {string} */ (args.preset)]);
     var property = transformProperty(camera, /** @type {string} */ (preset.propriedade));
@@ -201,9 +223,10 @@
         property: preset.propriedade
       });
     }
-    if (property.expression !== "" && property.expressionEnabled === true) {
+    if (property.expression !== "") {
       return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A propriedade da camera tem expressao ativa.", null);
     }
+    if (/** @type {any} */ (property).dimensionsSeparated === true) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camera usa dimensoes separadas. Reuna a posicao antes de aplicar.", null);
     if (property.numKeys > 0) {
       return failure(
         MotionContracts.ERROR.KEYFRAME_CONFLICT,
@@ -265,6 +288,13 @@
       // A curva do editor vira o ease dos dois keyframes, dimensao a dimensao.
       var easeSaida = [];
       var easeEntrada = [];
+      // Spatial Position has ONE speed, in px/s, even though its value has 3
+      // components. AE rejects a three-entry temporal ease array here.
+      if (/** @type {any} */ (property).isSpatial === true) {
+        var distanceSquared = 0;
+        for (var axis = 0; axis < diferencas.length; axis += 1) distanceSquared += Number(diferencas[axis]) * Number(diferencas[axis]);
+        diferencas = [Math.sqrt(distanceSquared)];
+      }
       var d;
       for (d = 0; d < diferencas.length; d += 1) {
         var convertido = MotionKeyframes.curveToEase(curva, duracaoSegundos, /** @type {number} */ (diferencas[d]));

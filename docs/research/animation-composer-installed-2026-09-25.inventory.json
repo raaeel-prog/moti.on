@@ -1,0 +1,183 @@
+{
+  "date": "2026-09-25",
+  "status": "PARTIAL",
+  "method": "Readable manifest/plist, filesystem counts, official public documentation, own Moti.on code. No proprietary code/assets copied or binary formats decoded.",
+  "installed": {
+    "cepVersion": "4.2.6",
+    "nativeVersion": "4.2.6",
+    "nativeMacOSMinimum": "11.5",
+    "manifestHost": "AEFT 22.0",
+    "runtime": "CSXS 11.0",
+    "officialMinimum": "After Effects 2025",
+    "panels": [
+      {
+        "id": "com.misterhorse.animationcomposer.browser",
+        "menu": "Animation Composer",
+        "type": "Panel"
+      },
+      {
+        "id": "com.misterhorse.animationcomposer.browser.edit",
+        "menu": "Animation Composer - Edit",
+        "type": "Panel"
+      },
+      {
+        "id": "com.misterhorse.animationcomposer.browser.alt2",
+        "menu": "Animation Composer (2)",
+        "type": "Panel"
+      },
+      {
+        "id": "com.misterhorse.animationcomposer.browser.alt3",
+        "menu": "Animation Composer (3)",
+        "type": "Panel"
+      },
+      {
+        "id": "com.misterhorse.animationcomposer.browser.alt4",
+        "menu": "Animation Composer (4)",
+        "type": "Panel"
+      },
+      {
+        "id": "com.misterhorse.animationcomposer.wingman",
+        "menu": "AC Keyframe Wingman",
+        "type": "Panel"
+      },
+      {
+        "id": "com.misterhorse.animationcomposer.kf-actions",
+        "menu": "AC Keyframe Actions",
+        "type": "Panel"
+      },
+      {
+        "id": "com.misterhorse.animationcomposer.anchor-mover",
+        "menu": "AC Anchor Point Mover",
+        "type": "Panel"
+      },
+      {
+        "id": "com.misterhorse.animationcomposer.shifter",
+        "menu": "AC Transition Shifter",
+        "type": "Panel"
+      },
+      {
+        "id": "com.misterhorse.animationcomposer.welcome",
+        "menu": null,
+        "type": "Modeless"
+      },
+      {
+        "id": "com.misterhorse.animationcomposer.tests",
+        "menu": null,
+        "type": "Custom"
+      }
+    ]
+  },
+  "localContent": [
+    {
+      "productDirectory": "1",
+      "readableProductName": null,
+      "itemFiles": 0,
+      "previewFiles": 0,
+      "supportItemFiles": 0,
+      "metadataFormat": "binary Product.mhprodmeta, not decoded"
+    },
+    {
+      "productDirectory": "3283",
+      "readableProductName": null,
+      "itemFiles": 341,
+      "previewFiles": 341,
+      "supportItemFiles": 0,
+      "metadataFormat": "binary Product.mhprodmeta, not decoded"
+    },
+    {
+      "productDirectory": "3300",
+      "readableProductName": null,
+      "itemFiles": 471,
+      "previewFiles": 471,
+      "supportItemFiles": 168,
+      "metadataFormat": "binary Product.mhprodmeta, not decoded"
+    }
+  ],
+  "publicCatalog": {
+    "motion": {
+      "source": "https://misterhorse.com/products/the-most-handy-motion-presets/43",
+      "total": 1892,
+      "categories": {
+        "Effects": 82,
+        "2D Transitions": 792,
+        "3D Transitions": 1018
+      }
+    },
+    "text": {
+      "source": "https://misterhorse.com/products/text-presets/42",
+      "total": 1414,
+      "categories": {
+        "Effects": 143,
+        "Transitions - Lines": 253,
+        "Transitions - Words": 392,
+        "Transitions - Characters": 626
+      }
+    },
+    "transitions": {
+      "source": "https://misterhorse.com/products/transitions-for-after-effects/3266",
+      "browserTotal": 468,
+      "marketingClaim": "600+ presets",
+      "discrepancyUnresolved": true,
+      "categories": {
+        "Light Leaks": 20,
+        "Creative": 13,
+        "Glitch": 54,
+        "Camera Pan": 48,
+        "Camera Zoom": 27,
+        "Shapes": 101,
+        "Camera Pan & Rotate": 42,
+        "Split": 18,
+        "Blurs & Fades": 11,
+        "Matte Transitions": 54,
+        "Camera Zoom & Rotate": 17,
+        "Camera Zoom & Twirl": 20,
+        "Camera Rotate": 19,
+        "Camera Roll": 14,
+        "Camera Shake": 10
+      }
+    }
+  },
+  "motionBaseline": {
+    "kind": "compiled snapshot before integration of this task",
+    "recipeCount": 165,
+    "galleryAdditionalEase": 6,
+    "galleryAdditionalCamera": 11,
+    "galleryTotal": 182,
+    "categories": {
+      "motion-2d": 25,
+      "motion-3d": 19,
+      "motion-effects": 54,
+      "text-characters": 25,
+      "text-words": 19,
+      "text-lines": 13,
+      "text-effects": 10
+    },
+    "collections": {
+      "original": 56,
+      "studio": 51,
+      "gemini": 24,
+      "premium": 30,
+      "native": 4
+    }
+  },
+  "unknown": [
+    "Full installed item names and categories",
+    "Readable product identity for 3283 and 3300",
+    "Licensed and visible item count",
+    "Per-item timing and controls",
+    "Complete observed UI workflow",
+    "Exact visual/functional parity"
+  ],
+  "priorVideoReference": {
+    "source": "docs/implementation/2026-09-14-animation-composer/catalogo-referencia.json",
+    "count": 56,
+    "groups": {
+      "Motion — transições 2D": 9,
+      "Motion — transições 3D": 7,
+      "Motion — efeitos": 20,
+      "Texto — transições por caracteres, palavras e linhas": 15,
+      "Texto — efeitos": 5
+    },
+    "isCompleteInstalledInventory": false
+  }
+}
