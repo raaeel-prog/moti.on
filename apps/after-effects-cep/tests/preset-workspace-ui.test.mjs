@@ -8,7 +8,7 @@ import { createFakeWindow } from '../../../packages/ui-core/tests/fake-dom.mjs';
 const built=await build({entryPoints:[fileURLToPath(new URL('../client/src/preset-workspace.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
 const {createPresetWorkspace}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 const options={phase:'in',direction:'bottom',durationFrames:40,intensity:100,staggerFrames:2,unit:'preset',elasticity:35,overlap:70,speed:100};
-async function fixture(t,{failRead=false,holdAdjust=false,storage,locale='pt-BR',inspectionState='ready',phases=0,phaseActionFailure=false,favorites=[],recent=[],cache={personal:{roots:[],folders:[],items:[]}},navigation={view:'edit',category:'studio',query:'',scope:'all',scroll:0}}={}){
+async function fixture(t,{failRead=false,holdAdjust=false,storage,locale='pt-BR',inspectionState='ready',phases=0,phaseActionFailure=false,favorites=[],recent=[],cache={personal:{roots:[],folders:[],items:[]}},navigation={view:'edit',category:'studio',query:'',scope:'all',scroll:0},watchInspection}={}){
   const saved={window:globalThis.window,requestAnimationFrame:globalThis.requestAnimationFrame,cancelAnimationFrame:globalThis.cancelAnimationFrame};globalThis.window=createFakeWindow();const win=globalThis.window;
   globalThis.requestAnimationFrame=()=>1;globalThis.cancelAnimationFrame=()=>{};
   const doc=createCepDocument(),calls=[],context={hasComp:true,selectionCount:1,selectedKeys:0};let readFailure=failRead,adjustFailure=false,holdRead=false,applyFailure=false,timingFailure=false;
@@ -29,7 +29,7 @@ async function fixture(t,{failRead=false,holdAdjust=false,storage,locale='pt-BR'
   const state={state:'ready',message:'',layerName:'Title',presetId:'studio-letter-silk-rise',target:{compId:1,layerId:2,instance:'one',fingerprint:'a'},options:{...options}};
   if(phases)state.phases=['in','out'].slice(0,phases).map(phase=>({phase,presetId:state.presetId,instance:`one-${phase}`,markerTime:1,options:{...options,phase},controls:[]}));
   if(inspectionState==='no-comp'){state.state='no-comp';state.message='Abra uma composição.';delete state.target;delete state.options;}
-  const workspace=createPresetWorkspace(doc,{locale,navigation,cache,context:()=>context,busy:false,apply(){},edit(){},preferences:{snapshot:()=>({favorites,recent,folderColors:{},collapsedFolders:[],presetAutoplay:false,presetSize:200})},
+  const workspace=createPresetWorkspace(doc,{locale,navigation,cache,...(watchInspection?{watchInspection}:{}),context:()=>context,busy:false,apply(){},edit(){},preferences:{snapshot:()=>({favorites,recent,folderColors:{},collapsedFolders:[],presetAutoplay:false,presetSize:200})},
     async execute(command,args){calls.push({command,args});if(command==='ae.presets.inspect'){
       if(readFailure)return {ok:false,error:{message:'Falha na leitura'}};
       if(holdRead){holdRead=false;const copy=structuredClone(state);return await new Promise(resolve=>{resolveRead=()=>resolve({ok:true,data:copy});});}
@@ -432,4 +432,41 @@ test('workspace recreation preserves only session drafts for their original targ
   const cache={personal:{roots:[],folders:[],items:[]}};
   await t.test('save before disposal',async child=>{const f=await fixture(child,{cache});f.change(123);});
   await t.test('restore from a fresh host inspection',async child=>{const f=await fixture(child,{cache});assert.equal(f.intensity().value,'123');assert.equal(f.button('Aplicar ajustes').disabled,false);});
+});
+
+test('the shared watcher refreshes Edit while Adobe has focus and does no reads in Browse',async t=>{
+  let watcher,stops=0;
+  const f=await fixture(t,{watchInspection(read,enabled){watcher={read,enabled};return()=>{stops++;};}});
+  assert.equal(watcher.enabled(),true);f.win.emit('blur');f.state.layerName='Timeline selection';f.state.target.layerId=23;
+  await watcher.read();assert.match(f.workspace.element.allText,/Timeline selection/);
+  f.button('Navegar').click();assert.equal(watcher.enabled(),false);const count=f.calls.length;
+  await watcher.read();assert.equal(f.calls.length,count,'Browse does not inspect host selection');
+  f.workspace.dispose();assert.equal(stops,1);
+});
+
+test('pointer cancellation releases the deferred selection without executing the old action',async t=>{
+  const f=await fixture(t,{phases:1}),remove=f.button('Remover');
+  f.doc.emit('pointerdown',{target:remove});f.state.target.layerId=15;f.state.layerName='Next layer';
+  f.win.emit('focus');await setImmediate();assert.equal(f.button('Remover'),remove);
+  f.doc.emit('pointercancel',{target:remove});await new Promise(resolve=>setTimeout(resolve,5));
+  assert.match(f.workspace.element.allText,/Next layer/);assert.notEqual(f.button('Remover'),remove);
+  assert.equal(f.calls.some(call=>call.command==='ae.presets.phase-action'),false);
+});
+
+test('phase drafts and a pending timecode survive workspace recreation without host writes',async t=>{
+  const cache={personal:{roots:[],folders:[],items:[]}};
+  await t.test('save local phase controls',async child=>{
+    const f=await fixture(child,{cache,phases:1});
+    const amount=f.workspace.element.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Entrada · Intensidade · %');
+    amount.value='155';amount.emit('input');
+    const offset=f.workspace.element.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Entrada · Deslocamento em frames');
+    offset.value='12';offset.emit('input');
+  });
+  await t.test('restore after a fresh read',async child=>{
+    const f=await fixture(child,{cache,phases:1});
+    const inputs=f.workspace.element.getElementsByTagName('input');
+    assert.equal(inputs.find(node=>node.getAttribute('aria-label')==='Entrada · Intensidade · %').value,'155');
+    assert.equal(inputs.find(node=>node.getAttribute('aria-label')==='Entrada · Deslocamento em frames').value,'12');
+    assert.equal(f.calls.some(call=>call.command!=='ae.presets.inspect'),false);
+  });
 });

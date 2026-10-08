@@ -441,7 +441,7 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
         reveal:revealPreset,
         copy:phase=>{options.cache.copied={presetId:phase.presetId,options:{...phase.options}};transferStatus=pt?"Fase copiada. Selecione a camada de destino e cole.":"Phase copied. Select the destination layer and paste.";updateTransferContext();},
         execute:(command,args)=>{void phaseCommand(command,args);},onDirty:value=>{dirty=value;updateTransferContext();},
-        ...(gestures.available()&&data.target&&!data.targets?.length?{live:{start:(phase,key)=>{if(isBusy()||stale||options.canMutate?.()===false)return false;const hostValue=Number(phase.options[key as keyof MotionLibraryOptions]);if(!Number.isFinite(hostValue))return false;gestures.start(data.target!,phase,key,hostValue);return liveActive;},update:value=>gestures.update(value),finish:(canceled,value)=>{void gestures.finish(canceled,value);}}}: {})});retainedPhaseEditor=undefined;restoredPhases=undefined;
+        ...(gestures.available()&&data.target&&!data.targets?.length?{live:{start:(phase,key)=>{if(isBusy()||stale||dirty||options.canMutate?.()===false)return false;const hostValue=Number(phase.options[key as keyof MotionLibraryOptions]);if(!Number.isFinite(hostValue))return false;gestures.start(data.target!,phase,key,hostValue);return liveActive;},update:value=>gestures.update(value),finish:(canceled,value)=>{void gestures.finish(canceled,value);}}}: {})});retainedPhaseEditor=undefined;restoredPhases=undefined;
       content.appendChild(phaseEditor.element);
       drawLayerSections(data);drawUtilities();updateNotice();return;
     }
@@ -595,5 +595,5 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
   const polling=stopWatch?undefined:focusedPoll(doc,()=>{void inspect();},750,()=>nav.view==="edit");
   nav.view??="browse";switchView(nav.view,true);
   if(!options.cache.personal&&nav.view==="browse")void personal("list");
-  return {element,updateContext(){gallery?.updateContext();updateTransferContext();timingControls?.updateContext();},dispose(){rememberDraft();disposed=true;clearTimeout(pointerRelease);doc.removeEventListener("pointerdown",pressPointer,true);doc.removeEventListener("pointerup",releasePointer,true);doc.removeEventListener("pointercancel",releasePointer,true);window.removeEventListener("blur",releasePointer);disposeTools?.();gestures.dispose();disposeNumbers();epoch++;noticeAlert?.dispose();gallery?.dispose();polling?.dispose();stopWatch?.();}};
+  return {element,updateContext(){gallery?.updateContext();updateTransferContext();timingControls?.updateContext();},dispose(){if(disposed)return;rememberDraft();disposed=true;clearTimeout(pointerRelease);doc.removeEventListener("pointerdown",pressPointer,true);doc.removeEventListener("pointerup",releasePointer,true);doc.removeEventListener("pointercancel",releasePointer,true);window.removeEventListener("blur",releasePointer);disposeTools?.();gestures.dispose();disposeNumbers();epoch++;noticeAlert?.dispose();gallery?.dispose();polling?.dispose();stopWatch?.();}};
 }
