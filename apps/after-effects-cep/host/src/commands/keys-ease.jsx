@@ -29,13 +29,143 @@
     return typeof value === "number" && isFinite(value);
   }
 
+  var EXTRA_ARGS = { build: true, points: true, bake: true };
+  var POINT_FIELDS = ["x", "y", "inX", "inY", "outX", "outY"];
+  var OSCILLATION_FIELDS = ["amp", "freq", "decay", "start"];
+  var CURVE_FIELDS = ["x1", "y1", "x2", "y2"];
+  var MAX_POINTS = 16;
+  var MIN_POINT_GAP = 0.01;
+  var MAX_BAKE_FRAMES_PER_SEGMENT = 3600;
+  var MAX_BAKE_KEYS_TOTAL = 10000;
+
+  /** @param {string[]} allowed @param {Record<string, unknown>} obj @returns {string|null} primeira chave desconhecida */
+  function unknownKey(allowed, obj) {
+    var key;
+    var i;
+    var known;
+    for (key in obj) {
+      if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+      known = false;
+      for (i = 0; i < allowed.length; i += 1) if (allowed[i] === key) known = true;
+      if (!known) return key;
+    }
+    return null;
+  }
+
+  /** @param {unknown} value @returns {boolean} */
+  function isPlainObject(value) {
+    return !!value && typeof value === "object" && !(value instanceof Array);
+  }
+
+  /**
+   * Pontos interiores da curva: x estritamente crescente dentro de (0,1) com
+   * folga minima, y e alcas dentro da faixa do editor, alcas presas ao proprio
+   * no (`inX <= x <= outX`).
+   *
+   * @param {unknown} points
+   * @returns {MotionCommandFailure|null}
+   */
+  function validatePoints(points) {
+    var i;
+    var f;
+    var p;
+    var previous = 0;
+    var ultimo;
+    var value;
+    if (!(points instanceof Array) || points.length < 1 || points.length > MAX_POINTS) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Pontos da curva invalidos (1 a 16).", { field: "points", index: -1 });
+    }
+    for (i = 0; i < points.length; i += 1) {
+      p = /** @type {Record<string, unknown>} */ (points[i]);
+      if (!isPlainObject(p) || unknownKey(POINT_FIELDS, p) !== null) {
+        return failure(MotionContracts.ERROR.INVALID_PRESET, "Ponto da curva com formato desconhecido.", { field: "points", index: i });
+      }
+      for (f = 0; f < POINT_FIELDS.length; f += 1) {
+        value = p[String(POINT_FIELDS[f])];
+        if (!isNumber(value)) {
+          return failure(MotionContracts.ERROR.INVALID_PRESET, "Ponto da curva precisa de numeros finitos.", { field: "points", index: i });
+        }
+      }
+      ultimo = i === points.length - 1;
+      if (!(Number(p.x) > 0 && Number(p.x) < 1) || Number(p.x) - previous < MIN_POINT_GAP || (ultimo && 1 - Number(p.x) < MIN_POINT_GAP)) {
+        return failure(MotionContracts.ERROR.INVALID_PRESET, "Pontos da curva precisam crescer em x, dentro de 0 e 1.", { field: "points", index: i });
+      }
+      if (Number(p.y) < -1 || Number(p.y) > 2 || Number(p.inY) < -1 || Number(p.inY) > 2 || Number(p.outY) < -1 || Number(p.outY) > 2) {
+        return failure(MotionContracts.ERROR.INVALID_PRESET, "Valor do ponto fora da faixa -1..2.", { field: "points", index: i });
+      }
+      if (Number(p.inX) < 0 || Number(p.inX) > 1 || Number(p.outX) < 0 || Number(p.outX) > 1 || Number(p.inX) > Number(p.x) || Number(p.outX) < Number(p.x)) {
+        return failure(MotionContracts.ERROR.INVALID_PRESET, "Alcas do ponto fora do segmento.", { field: "points", index: i });
+      }
+      previous = Number(p.x);
+    }
+    return null;
+  }
+
+  /** @param {unknown} curve @param {string} field @returns {MotionCommandFailure|null} */
+  function validateHalfCurve(curve, field) {
+    var c = /** @type {Record<string, unknown>} */ (curve);
+    var i;
+    if (!isPlainObject(c) || unknownKey(CURVE_FIELDS, c) !== null) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Curva de metade invalida.", { field: field });
+    }
+    for (i = 0; i < CURVE_FIELDS.length; i += 1) {
+      if (!isNumber(c[String(CURVE_FIELDS[i])])) return failure(MotionContracts.ERROR.INVALID_PRESET, "Curva de metade precisa de numeros finitos.", { field: field });
+    }
+    if (Number(c.x1) < 0 || Number(c.x1) > 1 || Number(c.x2) < 0 || Number(c.x2) > 1 || Number(c.y1) < -1 || Number(c.y1) > 2 || Number(c.y2) < -1 || Number(c.y2) > 2) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Curva de metade fora da faixa.", { field: field });
+    }
+    return null;
+  }
+
+  /** @param {unknown} osc @param {string} field @returns {MotionCommandFailure|null} */
+  function validateOscillation(osc, field) {
+    var o = /** @type {Record<string, unknown>} */ (osc);
+    var i;
+    if (!isPlainObject(o) || unknownKey(OSCILLATION_FIELDS, o) !== null) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Parametros de oscilacao invalidos.", { field: field });
+    }
+    for (i = 0; i < OSCILLATION_FIELDS.length; i += 1) {
+      if (!isNumber(o[String(OSCILLATION_FIELDS[i])])) return failure(MotionContracts.ERROR.INVALID_PRESET, "Parametros de oscilacao precisam de numeros finitos.", { field: field });
+    }
+    if (Number(o.amp) < 0 || Number(o.amp) > 4 || Number(o.freq) < 0.1 || Number(o.freq) > 20 || Number(o.decay) < 0 || Number(o.decay) > 30 || Number(o.start) < 0 || Number(o.start) > 0.99) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Parametro de oscilacao fora da faixa.", { field: field });
+    }
+    return null;
+  }
+
+  /** @param {unknown} bake @returns {MotionCommandFailure|null} */
+  function validateBake(bake) {
+    var b = /** @type {Record<string, unknown>} */ (bake);
+    var error;
+    if (!isPlainObject(b) || unknownKey(["mode", "direction", "in", "out", "inCurve", "outCurve"], b) !== null) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Parametros de easing assado invalidos.", { field: "bake" });
+    }
+    if (b.mode !== "elastic" && b.mode !== "bounce") return failure(MotionContracts.ERROR.INVALID_PRESET, "Modo de easing desconhecido.", { field: "bake.mode" });
+    if (b.direction !== "in" && b.direction !== "out" && b.direction !== "inOut") return failure(MotionContracts.ERROR.INVALID_PRESET, "Direcao de easing desconhecida.", { field: "bake.direction" });
+    error = validateOscillation(b["in"], "bake.in");
+    if (error) return error;
+    error = validateOscillation(b.out, "bake.out");
+    if (error) return error;
+    if (Object.prototype.hasOwnProperty.call(b, "inCurve") && b.inCurve !== null) {
+      error = validateHalfCurve(b.inCurve, "bake.inCurve");
+      if (error) return error;
+    }
+    if (Object.prototype.hasOwnProperty.call(b, "outCurve") && b.outCurve !== null) {
+      error = validateHalfCurve(b.outCurve, "bake.outCurve");
+      if (error) return error;
+    }
+    return null;
+  }
+
   /** @param {Record<string, unknown>} args @returns {MotionCommandFailure|null} */
   function validateArgs(args) {
     var key;
+    var modes = 0;
+    var error;
     for (key in args) {
       if (
         Object.prototype.hasOwnProperty.call(args, key) &&
-        key !== "build" && !Object.prototype.hasOwnProperty.call(REQUIRED_ARGS, key)
+        !Object.prototype.hasOwnProperty.call(EXTRA_ARGS, key) && !Object.prototype.hasOwnProperty.call(REQUIRED_ARGS, key)
       ) {
         return failure(MotionContracts.ERROR.INVALID_PRESET, "Argumento de Ease desconhecido.", { field: key });
       }
@@ -48,8 +178,22 @@
         return failure(MotionContracts.ERROR.INVALID_PRESET, "Argumento de Ease ausente.", { field: key });
       }
     }
+    for (key in EXTRA_ARGS) {
+      if (Object.prototype.hasOwnProperty.call(EXTRA_ARGS, key) && Object.prototype.hasOwnProperty.call(args, key)) modes += 1;
+    }
+    if (modes > 1) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Use apenas um de build, points ou bake.", null);
+    }
     if (Object.prototype.hasOwnProperty.call(args, "build") && (!args.build || typeof args.build !== "object")) {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Parametros de animacao invalidos.", null);
+    }
+    if (Object.prototype.hasOwnProperty.call(args, "points")) {
+      error = validatePoints(args.points);
+      if (error) return error;
+    }
+    if (Object.prototype.hasOwnProperty.call(args, "bake")) {
+      error = validateBake(args.bake);
+      if (error) return error;
     }
     if (!isNumber(args.x1) || !isNumber(args.y1) || !isNumber(args.x2) || !isNumber(args.y2)) {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Curva de Ease invalida (deve ser numero).", null);
@@ -59,7 +203,7 @@
     if (x1 < 0 || x1 > 1 || x2 < 0 || x2 > 1) {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Handles X devem estar entre 0 e 1.", null);
     }
-    if (!args.build && args.applyIn === false && args.applyOut === false) {
+    if (!args.build && !args.bake && args.applyIn === false && args.applyOut === false) {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Ative Entrada ou Saida.", null);
     }
     if (typeof args.applyIn !== "boolean" || typeof args.applyOut !== "boolean") {
@@ -135,8 +279,15 @@
     return isNaN(escalar) ? 0 : escalar;
   }
 
+  /** @typedef {{x1: number, y1: number, x2: number, y2: number}} EaseCurve */
+
+  /** @param {EaseCurve} curva @returns {boolean} */
+  function curvaLinear(curva) {
+    return Math.abs(curva.x1 - curva.y1) < 0.000001 && Math.abs(curva.x2 - curva.y2) < 0.000001;
+  }
+
   /**
-   * Escreve a curva num keyframe.
+   * Escreve uma curva por lado num keyframe. `null` deixa o lado como esta.
    *
    * **Precondicao:** `MotionKeyframes.isSupportedProperty(property)` e
    * verdadeiro. Quem chama e o `run`, e e la que a allowlist mora — junto do
@@ -145,28 +296,29 @@
    * guarda que nenhum teste alcanca pelo dispatcher, e guarda inalcancavel e
    * falsa seguranca, nao seguranca dobrada.
    *
+   * Cada lado decide sozinho se e linear (`x1 == y1 && x2 == y2` da PROPRIA
+   * curva): um no interior da curva multiponto pode ter entrada curva e saida
+   * reta.
+   *
    * @param {Property} property
    * @param {number} keyIndex
-   * @param {number} x1
-   * @param {number} y1
-   * @param {number} x2
-   * @param {number} y2
-   * @param {boolean} applyIn
-   * @param {boolean} applyOut
-   * @returns {boolean} true quando o keyframe recebeu a curva.
+   * @param {EaseCurve|null} inCurve
+   * @param {EaseCurve|null} outCurve
+   * @returns {boolean} true quando o keyframe recebeu curva.
    */
-  function applyEaseToKeyframe(property, keyIndex, x1, y1, x2, y2, applyIn, applyOut) {
+  function applyEaseSides(property, keyIndex, inCurve, outCurve) {
     var numKeys = property.numKeys;
-    applyIn = applyIn && keyIndex > 1;
-    applyOut = applyOut && keyIndex < numKeys;
+    var applyIn = !!inCurve && keyIndex > 1;
+    var applyOut = !!outCurve && keyIndex < numKeys;
     if (!applyIn && !applyOut) return false;
-    var linear = Math.abs(x1 - y1) < 0.000001 && Math.abs(x2 - y2) < 0.000001;
-    var interpolation = linear ? KeyframeInterpolationType.LINEAR : KeyframeInterpolationType.BEZIER;
+    var linearIn = applyIn ? curvaLinear(/** @type {EaseCurve} */ (inCurve)) : true;
+    var linearOut = applyOut ? curvaLinear(/** @type {EaseCurve} */ (outCurve)) : true;
+    var linear = linearIn && linearOut;
 
     var currentInEase = property.keyInTemporalEase(keyIndex);
     var currentOutEase = property.keyOutTemporalEase(keyIndex);
-    var inType = applyIn ? interpolation : property.keyInInterpolationType(keyIndex);
-    var outType = applyOut ? interpolation : property.keyOutInterpolationType(keyIndex);
+    var inType = applyIn ? (linearIn ? KeyframeInterpolationType.LINEAR : KeyframeInterpolationType.BEZIER) : property.keyInInterpolationType(keyIndex);
+    var outType = applyOut ? (linearOut ? KeyframeInterpolationType.LINEAR : KeyframeInterpolationType.BEZIER) : property.keyOutInterpolationType(keyIndex);
 
     // Quantos `KeyframeEase` o After Effects espera de volta. Vem do proprio
     // ease atual, que e a unica fonte confiavel: numa propriedade espacial e 1
@@ -178,14 +330,14 @@
     var d;
 
     // In Ease (segmento anterior: keyIndex - 1 ate keyIndex)
-    if (applyIn && keyIndex > 1) {
+    if (applyIn) {
       var inDuration = property.keyTime(keyIndex) - property.keyTime(keyIndex - 1);
       var inVal1 = property.keyValue(keyIndex - 1);
       var inVal2 = property.keyValue(keyIndex);
 
       for (d = 0; d < dimensions; d++) {
         var diffIn = diferencaDeValor(property, inVal1, inVal2, d);
-        var easeInResult = MotionKeyframes.curveToEase({ x1: x1, y1: y1, x2: x2, y2: y2 }, inDuration, diffIn);
+        var easeInResult = MotionKeyframes.curveToEase(/** @type {EaseCurve} */ (inCurve), inDuration, diffIn);
         newInEase.push(new KeyframeEase(easeInResult.inSpeed, easeInResult.inInfluence));
       }
     } else {
@@ -193,14 +345,14 @@
     }
 
     // Out Ease (segmento proximo: keyIndex ate keyIndex + 1)
-    if (applyOut && keyIndex < numKeys) {
+    if (applyOut) {
       var outDuration = property.keyTime(keyIndex + 1) - property.keyTime(keyIndex);
       var outVal1 = property.keyValue(keyIndex);
       var outVal2 = property.keyValue(keyIndex + 1);
 
       for (d = 0; d < dimensions; d++) {
         var diffOut = diferencaDeValor(property, outVal1, outVal2, d);
-        var easeOutResult = MotionKeyframes.curveToEase({ x1: x1, y1: y1, x2: x2, y2: y2 }, outDuration, diffOut);
+        var easeOutResult = MotionKeyframes.curveToEase(/** @type {EaseCurve} */ (outCurve), outDuration, diffOut);
         newOutEase.push(new KeyframeEase(easeOutResult.outSpeed, easeOutResult.outInfluence));
       }
     } else {
@@ -227,6 +379,196 @@
       property.setInterpolationTypeAtKey(keyIndex, inType, outType);
     }
     return true;
+  }
+
+  /**
+   * Mesma curva nos dois lados, ligados por flag. Casca fina sobre
+   * `applyEaseSides` que preserva a assinatura historica do comando.
+   *
+   * @param {Property} property
+   * @param {number} keyIndex
+   * @param {number} x1
+   * @param {number} y1
+   * @param {number} x2
+   * @param {number} y2
+   * @param {boolean} applyIn
+   * @param {boolean} applyOut
+   * @returns {boolean} true quando o keyframe recebeu a curva.
+   */
+  function applyEaseToKeyframe(property, keyIndex, x1, y1, x2, y2, applyIn, applyOut) {
+    var curva = { x1: x1, y1: y1, x2: x2, y2: y2 };
+    return applyEaseSides(property, keyIndex, applyIn ? curva : null, applyOut ? curva : null);
+  }
+
+  /**
+   * Desfaz o que ja foi escrito e lanca o erro que o dispatcher traduz.
+   * HOST_OPERATION_FAILED quando tudo voltou; ROLLBACK_FAILED quando ao menos
+   * uma propriedade nao pode ser restaurada (o painel pede Desfazer).
+   *
+   * @param {MotionPropertySnapshot[]} intactos
+   * @returns {never}
+   */
+  function rollback(intactos) {
+    var rollbackFailed = false;
+    var r;
+    for (r = intactos.length - 1; r >= 0; r -= 1) {
+      try {
+        var intacto = intactos[r];
+        if (intacto) MotionKeyframes.restoreProperty(intacto, null);
+      } catch (restoreError) {
+        rollbackFailed = true;
+      }
+    }
+    if (rollbackFailed) {
+      var rollbackError = /** @type {Error & {motionCode?: string}} */ (
+        new Error("Ease falhou e o estado anterior nao pode ser restaurado.")
+      );
+      rollbackError.motionCode = MotionContracts.ERROR.ROLLBACK_FAILED;
+      throw rollbackError;
+    }
+    var failErr = /** @type {Error & {motionCode?: string}} */ (new Error("Ease falhou."));
+    failErr.motionCode = MotionContracts.ERROR.HOST_OPERATION_FAILED;
+    throw failErr;
+  }
+
+  /**
+   * Propriedade ignorada vira aviso, e nao silencio.
+   *
+   * O comando declara `allowsNoopSuccess: true`, entao uma selecao inteira de
+   * propriedades sem curva responderia `ok: true` — e o painel diria "curva
+   * aplicada" sobre zero keyframes. O aviso e a contagem real sao o que
+   * impede essa mentira; o cliente le `appliedCount` e mostra o numero.
+   *
+   * @param {number} ignoradas
+   * @param {number} semSegmento
+   * @returns {Array<{code: string, message: string, details: unknown}>}
+   */
+  function avisosDeSelecao(ignoradas, semSegmento) {
+    var avisos = [];
+    if (ignoradas > 0) {
+      avisos.push({
+        code: "EASE_PROPERTY_SKIPPED",
+        message:
+          ignoradas +
+          " propriedade(s) selecionada(s) nao aceitam curva de velocidade e ficaram como estavam.",
+        details: { properties: ignoradas }
+      });
+    }
+    if (semSegmento > 0) {
+      avisos.push({
+        code: "EASE_NO_SELECTED_SEGMENT",
+        message:
+          semSegmento +
+          " propriedade(s) sem segmento para suavizar. Selecione keyframes consecutivos ou um keyframe com vizinho no lado Entrada/Saida ativado.",
+        details: { properties: semSegmento }
+      });
+    }
+    return avisos;
+  }
+
+  /** @param {number} time @param {number} frameDuration @returns {number} */
+  function snapToFrame(time, frameDuration) {
+    return Math.round(time / frameDuration) * frameDuration;
+  }
+
+  /**
+   * @typedef {{ k: number, t0: number, t1: number, times: number[] }} SegmentPair
+   * @typedef {{ property: Property, pairs: SegmentPair[] }} SegmentPlanItem
+   * @typedef {{ error: MotionCommandFailure|null, items: SegmentPlanItem[], ignoradas: number, semSegmento: number }} SegmentPlan
+   */
+
+  /**
+   * Planeja pontos/bake sem escrever nada. Para cada propriedade suportada com
+   * keys selecionadas, pares (k, k+1) de keys selecionadas vizinhas por indice.
+   * `times` sao os tempos dos novos keyframes de cada par, ja ajustados ao
+   * quadro da composicao. `preflight` e `run` chamam os dois; nada sobrevive
+   * entre as chamadas.
+   *
+   * @param {CompItem} comp
+   * @param {Record<string, unknown>} args
+   * @returns {SegmentPlan}
+   */
+  function planSegments(comp, args) {
+    var fd = comp.frameDuration;
+    var tolerance = fd / 2;
+    var points = /** @type {Array<Record<string, number>>|null} */ (args.points instanceof Array ? args.points : null);
+    var selectedProps = comp.selectedProperties;
+    /** @type {SegmentPlanItem[]} */
+    var items = [];
+    var ignoradas = 0;
+    var semSegmento = 0;
+    var totalNovos = 0;
+    var p;
+    var k;
+    var i;
+    var j;
+    var n;
+    /** @param {string} code @param {string} message @param {unknown} details @returns {SegmentPlan} */
+    function rejected(code, message, details) {
+      return { error: failure(code, message, details), items: [], ignoradas: 0, semSegmento: 0 };
+    }
+    for (p = 0; p < selectedProps.length; p += 1) {
+      var propRaw = selectedProps[p];
+      if (!propRaw || !("canVaryOverTime" in propRaw)) continue;
+      var prop = /** @type {Property} */ (propRaw);
+      var selectedKeys = prop.selectedKeys;
+      if (!selectedKeys || selectedKeys.length === 0) continue;
+      if (!MotionKeyframes.isSupportedProperty(prop)) {
+        ignoradas += 1;
+        continue;
+      }
+      /** @type {SegmentPair[]} */
+      var pairs = [];
+      var encontrouPar = false;
+      for (k = 0; k < selectedKeys.length; k += 1) {
+        var keyIndex = selectedKeys[k];
+        if (typeof keyIndex !== "number" || !containsKey(selectedKeys, keyIndex + 1)) continue;
+        if (keyIndex < 1 || keyIndex + 1 > prop.numKeys) continue;
+        encontrouPar = true;
+        var t0 = prop.keyTime(keyIndex);
+        var t1 = prop.keyTime(keyIndex + 1);
+        if (!(t1 - t0 > 0)) {
+          semSegmento += 1;
+          continue;
+        }
+        /** @type {number[]} */
+        var times = [];
+        if (points) {
+          for (i = 0; i < points.length; i += 1) {
+            var ponto = /** @type {Record<string, number>} */ (points[i]);
+            var t = snapToFrame(t0 + Number(ponto.x) * (t1 - t0), fd);
+            var colide = Math.abs(t - t0) <= tolerance || Math.abs(t - t1) <= tolerance;
+            for (j = 0; j < times.length && !colide; j += 1) if (Math.abs(Number(times[j]) - t) <= tolerance) colide = true;
+            for (j = 1; j <= prop.numKeys && !colide; j += 1) if (Math.abs(prop.keyTime(j) - t) <= tolerance) colide = true;
+            if (colide) {
+              return rejected(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Ja existe um keyframe no quadro de um ponto da curva. Afaste o ponto ou use um segmento mais longo.", {
+                propertyName: prop.name || prop.matchName || "Property",
+                time: t,
+                point: i
+              });
+            }
+            times.push(t);
+          }
+        } else {
+          for (n = 1; t0 + n * fd < t1 - tolerance; n += 1) {
+            if (n > MAX_BAKE_FRAMES_PER_SEGMENT) {
+              return rejected(MotionContracts.ERROR.INVALID_PRESET, "Segmento longo demais para assar (maximo de 3600 quadros).", { propertyName: prop.name || prop.matchName || "Property" });
+            }
+            times.push(t0 + n * fd);
+          }
+        }
+        totalNovos += times.length;
+        if (totalNovos > MAX_BAKE_KEYS_TOTAL) {
+          return rejected(MotionContracts.ERROR.INVALID_PRESET, "A operacao criaria mais de 10.000 keyframes. Reduza a selecao.", null);
+        }
+        pairs.push({ k: keyIndex, t0: t0, t1: t1, times: times });
+      }
+      if (!encontrouPar) {
+        return rejected(MotionContracts.ERROR.NO_SELECTION, "Selecione dois keyframes vizinhos por propriedade.", { propertyName: prop.name || prop.matchName || "Property" });
+      }
+      if (pairs.length > 0) items.push({ property: prop, pairs: pairs });
+    }
+    return { error: null, items: items, ignoradas: ignoradas, semSegmento: semSegmento };
   }
 
   /**
@@ -268,6 +610,10 @@
       return failure(MotionContracts.ERROR.NO_SELECTION, "Nenhum keyframe selecionado.", null);
     }
 
+    if (args.points || args.bake) {
+      return planSegments(comp, args).error;
+    }
+
     return null;
   }
 
@@ -277,6 +623,8 @@
    */
   function run(args) {
     if (args.build) return runBuild(args);
+    if (args.points) return runPoints(args);
+    if (args.bake) return runBake(args);
     var x1 = /** @type {number} */ (args.x1);
     var y1 = /** @type {number} */ (args.y1);
     var x2 = /** @type {number} */ (args.x2);
@@ -327,58 +675,200 @@
     }
 
     } catch (easeError) {
-      var rollbackFailed = false;
-      var r;
-      for (r = intactos.length - 1; r >= 0; r -= 1) {
-        try {
-          var intacto = intactos[r];
-          if (intacto) MotionKeyframes.restoreProperty(intacto, null);
-        } catch (restoreError) {
-          rollbackFailed = true;
-        }
-      }
-      if (rollbackFailed) {
-        var rollbackError = /** @type {Error & {motionCode?: string}} */ (
-          new Error("Ease falhou e o estado anterior nao pode ser restaurado.")
-        );
-        rollbackError.motionCode = MotionContracts.ERROR.ROLLBACK_FAILED;
-        throw rollbackError;
-      }
-      var failErr = /** @type {Error & {motionCode?: string}} */ (new Error("Ease falhou."));
-      failErr.motionCode = MotionContracts.ERROR.HOST_OPERATION_FAILED;
-      throw failErr;
-    }
-
-    // Propriedade ignorada vira aviso, e nao silencio.
-    //
-    // O comando declara `allowsNoopSuccess: true`, entao uma selecao inteira de
-    // propriedades sem curva responderia `ok: true` — e o painel diria "curva
-    // aplicada" sobre zero keyframes. O aviso e a contagem real sao o que
-    // impede essa mentira; o cliente le `appliedCount` e mostra o numero.
-    var avisos = [];
-    if (ignoradas > 0) {
-      avisos.push({
-        code: "EASE_PROPERTY_SKIPPED",
-        message:
-          ignoradas +
-          " propriedade(s) selecionada(s) nao aceitam curva de velocidade e ficaram como estavam.",
-        details: { properties: ignoradas }
-      });
-    }
-    if (semSegmento > 0) {
-      avisos.push({
-        code: "EASE_NO_SELECTED_SEGMENT",
-        message:
-          semSegmento +
-          " propriedade(s) sem segmento para suavizar. Selecione keyframes consecutivos ou um keyframe com vizinho no lado Entrada/Saida ativado.",
-        details: { properties: semSegmento }
-      });
+      rollback(intactos);
     }
 
     return {
       changed: appliedCount > 0,
-      warnings: avisos,
+      warnings: avisosDeSelecao(ignoradas, semSegmento),
       data: { appliedCount: appliedCount, skippedCount: ignoradas + semSegmento }
+    };
+  }
+
+  /** @param {SegmentPlan} plan @returns {void} lanca o erro do plano com motionCode. */
+  function throwPlanError(plan) {
+    if (!plan.error) return;
+    var invalid = /** @type {Error & {motionCode?: string}} */ (new Error(plan.error.message));
+    invalid.motionCode = plan.error.code;
+    throw invalid;
+  }
+
+  /**
+   * Valor interpolado `v0 + fracao * (v1 - v0)`, componente a componente para
+   * vetores (inclusive espaciais) e direto para escalares.
+   *
+   * @param {unknown} v0
+   * @param {unknown} v1
+   * @param {number} fracao
+   * @returns {unknown}
+   */
+  function valorNaCorda(v0, v1, fracao) {
+    var a = /** @type {number[]} */ (v0);
+    var b = /** @type {number[]} */ (v1);
+    var out;
+    var c;
+    if (a && b && typeof a.length === "number" && typeof b.length === "number") {
+      out = [];
+      for (c = 0; c < a.length; c += 1) out.push(Number(a[c]) + fracao * (Number(b[c]) - Number(a[c])));
+      return out;
+    }
+    return Number(v0) + fracao * (Number(v1) - Number(v0));
+  }
+
+  /**
+   * Keyframe recem-criado numa propriedade espacial nasce com tangente
+   * automatica; zera-la mantem a trajetoria na corda, e roving desligado
+   * mantem o tempo onde foi escrito. Cada chamada e opcional no host.
+   *
+   * @param {Property} property
+   * @param {number} idx
+   * @returns {void}
+   */
+  function fixarEspacial(property, idx) {
+    var value = /** @type {number[]} */ (property.keyValue(idx));
+    var zeros = [];
+    var c;
+    if (!ehEspacial(property) || !value || typeof value.length !== "number") return;
+    for (c = 0; c < value.length; c += 1) zeros.push(0);
+    try { property.setSpatialTangentsAtKey(idx, zeros, zeros); } catch (tangentError) { /* host sem suporte */ }
+    try { property.setSpatialAutoBezierAtKey(idx, false); } catch (autoBezierError) { /* host sem suporte */ }
+    try { if (typeof property.setRovingAtKey === "function") property.setRovingAtKey(idx, false); } catch (rovingError) { /* host sem suporte */ }
+  }
+
+  /** @param {Property} property @param {number} time @returns {number} */
+  function indiceNoTempo(property, time) {
+    return /** @type {Property & {nearestKeyIndex(time: number): number}} */ (property).nearestKeyIndex(time);
+  }
+
+  /**
+   * Curva multiponto: insere um keyframe por ponto, no valor da corda, e liga
+   * os segmentos com a curva local de cada um.
+   *
+   * @param {Record<string, unknown>} args
+   * @returns {MotionCommandResult}
+   */
+  function runPoints(args) {
+    var comp = /** @type {CompItem} */ (app.project.activeItem);
+    var plan = planSegments(comp, args);
+    throwPlanError(plan);
+    var points = /** @type {Array<{x: number, y: number, inX: number, inY: number, outX: number, outY: number}>} */ (args.points);
+    var curva = { x1: Number(args.x1), y1: Number(args.y1), x2: Number(args.x2), y2: Number(args.y2) };
+    var applyIn = /** @type {boolean} */ (args.applyIn);
+    var applyOut = /** @type {boolean} */ (args.applyOut);
+    var segments = MotionKeyframes.normalizeCurveSegments(curva, points).segments;
+    var appliedCount = 0;
+    /** @type {MotionPropertySnapshot[]} */
+    var intactos = [];
+    var i;
+    var q;
+    var n;
+    try {
+      for (i = 0; i < plan.items.length; i += 1) {
+        var item = plan.items[i];
+        if (!item) throw new Error("Plano incompleto.");
+        var prop = item.property;
+        intactos.push(MotionKeyframes.captureProperty(prop));
+        // Do ultimo par para o primeiro: inserir keys num par nao desloca os
+        // indices dos pares ainda nao processados.
+        for (q = item.pairs.length - 1; q >= 0; q -= 1) {
+          var pair = item.pairs[q];
+          if (!pair) throw new Error("Plano incompleto.");
+          var v0 = prop.keyValue(pair.k);
+          var v1 = prop.keyValue(pair.k + 1);
+          for (n = 0; n < pair.times.length; n += 1) {
+            var pontoN = /** @type {{y: number}} */ (points[n]);
+            prop.setValueAtTime(Number(pair.times[n]), valorNaCorda(v0, v1, Number(pontoN.y)));
+          }
+          /** @type {number[]} */
+          var indices = [indiceNoTempo(prop, pair.t0)];
+          for (n = 0; n < pair.times.length; n += 1) {
+            var idx = indiceNoTempo(prop, Number(pair.times[n]));
+            fixarEspacial(prop, idx);
+            indices.push(idx);
+          }
+          indices.push(indiceNoTempo(prop, pair.t1));
+          for (n = 0; n < indices.length; n += 1) {
+            var inCurve = n === 0 ? null : /** @type {EaseCurve} */ (segments[n - 1]);
+            var outCurve = n === indices.length - 1 ? null : /** @type {EaseCurve} */ (segments[n]);
+            if (n === 0 && !applyOut) outCurve = null;
+            if (n === indices.length - 1 && !applyIn) inCurve = null;
+            if (applyEaseSides(prop, Number(indices[n]), inCurve, outCurve)) appliedCount += 1;
+          }
+        }
+      }
+    } catch (pointsError) {
+      rollback(intactos);
+    }
+    return {
+      changed: appliedCount > 0,
+      warnings: avisosDeSelecao(plan.ignoradas, plan.semSegmento),
+      data: { appliedCount: appliedCount, skippedCount: plan.ignoradas + plan.semSegmento }
+    };
+  }
+
+  /**
+   * Easing assado: um keyframe linear por quadro entre os dois selecionados,
+   * com o valor da funcao elastica/bounce. Os keyframes das pontas ficam, so o
+   * lado voltado para dentro vira Linear.
+   *
+   * @param {Record<string, unknown>} args
+   * @returns {MotionCommandResult}
+   */
+  function runBake(args) {
+    var comp = /** @type {CompItem} */ (app.project.activeItem);
+    var plan = planSegments(comp, args);
+    throwPlanError(plan);
+    var bake = /** @type {Record<string, unknown>} */ (args.bake);
+    var mode = String(bake.mode);
+    var direction = String(bake.direction);
+    var params = {
+      "in": bake["in"],
+      out: bake.out,
+      inCurve: bake.inCurve ? bake.inCurve : null,
+      outCurve: bake.outCurve ? bake.outCurve : null
+    };
+    var LINEAR = KeyframeInterpolationType.LINEAR;
+    var bakedKeys = 0;
+    /** @type {MotionPropertySnapshot[]} */
+    var intactos = [];
+    var i;
+    var q;
+    var n;
+    try {
+      for (i = 0; i < plan.items.length; i += 1) {
+        var item = plan.items[i];
+        if (!item) throw new Error("Plano incompleto.");
+        var prop = item.property;
+        intactos.push(MotionKeyframes.captureProperty(prop));
+        for (q = item.pairs.length - 1; q >= 0; q -= 1) {
+          var pair = item.pairs[q];
+          if (!pair) throw new Error("Plano incompleto.");
+          var v0 = prop.keyValue(pair.k);
+          var v1 = prop.keyValue(pair.k + 1);
+          for (n = 0; n < pair.times.length; n += 1) {
+            var tempo = Number(pair.times[n]);
+            var u = (tempo - pair.t0) / (pair.t1 - pair.t0);
+            prop.setValueAtTime(tempo, valorNaCorda(v0, v1, MotionKeyframes.easingValue(mode, /** @type {any} */ (params), direction, u)));
+          }
+          for (n = 0; n < pair.times.length; n += 1) {
+            var idx = indiceNoTempo(prop, Number(pair.times[n]));
+            prop.setInterpolationTypeAtKey(idx, LINEAR, LINEAR);
+            fixarEspacial(prop, idx);
+            bakedKeys += 1;
+          }
+          var idx0 = indiceNoTempo(prop, pair.t0);
+          var idx1 = indiceNoTempo(prop, pair.t1);
+          prop.setInterpolationTypeAtKey(idx0, prop.keyInInterpolationType(idx0), LINEAR);
+          prop.setInterpolationTypeAtKey(idx1, LINEAR, prop.keyOutInterpolationType(idx1));
+        }
+      }
+    } catch (bakeError) {
+      rollback(intactos);
+    }
+    return {
+      changed: bakedKeys > 0,
+      warnings: avisosDeSelecao(plan.ignoradas, plan.semSegmento),
+      data: { appliedCount: bakedKeys, skippedCount: plan.ignoradas + plan.semSegmento }
     };
   }
 

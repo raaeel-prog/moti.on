@@ -132,6 +132,11 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
     // cada ferramenta, essas sim, sao traduzidas — e o teste as cobre.
     "tool.loopOut.name",
     "tool.smooth.name",
+    // Nomes dos modos e parametros do editor de curva: mesma grafia dos
+    // editores de easing conhecidos, nos dois idiomas.
+    "ease.mode.back", "ease.mode.elastic", "ease.mode.bounce",
+    "ease.direction.in", "ease.direction.out", "ease.direction.inOut",
+    "ease.amp", "ease.freq", "ease.decay", "ease.param.start", "ease.overshoot",
     "tool.wiggle.name",
     "tool.flicker.name",
     // Simbolo de unidade e nome de parametro iguais nos dois idiomas.

@@ -12,7 +12,8 @@
     "./components.css": "./src/components.css"
   },
   "dependencies": {
-    "@motion/asset-sdk": "0.1.0"
+    "@motion/asset-sdk": "0.1.0",
+    "@motion/keyframe-core": "0.1.0"
   },
   "license": "MIT"
 }

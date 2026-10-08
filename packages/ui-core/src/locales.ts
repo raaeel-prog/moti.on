@@ -764,6 +764,41 @@ const ptBR = {
   "message.pasteKeysInstructions": "Selecione a propriedade de destino e cole. O que não casar é informado por propriedade, em vez de colar pela metade em silêncio.",
   "ease.curve.outHandle": "Alça de saída",
   "ease.curve.inHandle": "Alça de entrada",
+  "ease.mode": "Tipo de curva",
+  "ease.mode.bezier": "Bézier",
+  "ease.mode.back": "Back",
+  "ease.mode.elastic": "Elastic",
+  "ease.mode.bounce": "Bounce",
+  "ease.direction": "Direção",
+  "ease.direction.in": "In",
+  "ease.direction.out": "Out",
+  "ease.direction.inOut": "InOut",
+  "ease.view.speed": "Gráfico de velocidade",
+  "ease.view.value": "Gráfico de valor",
+  "ease.reset": "Restaurar curva padrão",
+  "ease.live": "Aplicar ao vivo",
+  "ease.liveOn": "Ao vivo: cada ajuste é aplicado aos keyframes selecionados.",
+  "ease.liveOff": "Ao vivo desligado. Use Aplicar para gravar a curva.",
+  "ease.addPointHint": "⌘ clique: adicionar ponto",
+  "ease.addPointHintCtrl": "Ctrl+clique: adicionar ponto",
+  "ease.point": "Ponto da curva",
+  "ease.pointIn": "Alça de entrada do ponto",
+  "ease.pointOut": "Alça de saída do ponto",
+  "ease.speedLeft": "Influência de saída",
+  "ease.speedRight": "Influência de entrada",
+  "ease.peak": "Velocidade máxima",
+  "ease.amp": "amp",
+  "ease.freq": "freq",
+  "ease.decay": "decay",
+  "ease.param.start": "start",
+  "ease.overshoot": "overshoot",
+  "ease.inHalf": "Entrada",
+  "ease.outHalf": "Saída",
+  "ease.needsPair": "Selecione dois keyframes vizinhos por propriedade para usar esta curva.",
+  "ease.conflict.points": "Já existe um keyframe no tempo de um dos pontos. Mova o ponto ou libere esse tempo.",
+  "ease.conflict.bake": "Há keyframes entre as chaves selecionadas. Selecione só as duas pontas do trecho.",
+  "ease.bakeHint": "Elastic e Bounce gravam um keyframe por quadro entre as duas chaves selecionadas.",
+  "ease.liveApplied": "Curva aplicada ao vivo em {count} keyframe(s).",
   "tool.copyKeys.name": "Copiar chaves",
   "tool.copyKeys.description": "Copia e cola keyframes com ease e tangentes.",
   "inertial.amplitude": "Amplitude",
@@ -1477,6 +1512,41 @@ export type MessageKey =
   | "message.easeNoActiveComp"
   | "ease.applyIn"
   | "ease.applyOut"
+  | "ease.mode"
+  | "ease.mode.bezier"
+  | "ease.mode.back"
+  | "ease.mode.elastic"
+  | "ease.mode.bounce"
+  | "ease.direction"
+  | "ease.direction.in"
+  | "ease.direction.out"
+  | "ease.direction.inOut"
+  | "ease.view.speed"
+  | "ease.view.value"
+  | "ease.reset"
+  | "ease.live"
+  | "ease.liveOn"
+  | "ease.liveOff"
+  | "ease.addPointHint"
+  | "ease.addPointHintCtrl"
+  | "ease.point"
+  | "ease.pointIn"
+  | "ease.pointOut"
+  | "ease.speedLeft"
+  | "ease.speedRight"
+  | "ease.peak"
+  | "ease.amp"
+  | "ease.freq"
+  | "ease.decay"
+  | "ease.param.start"
+  | "ease.overshoot"
+  | "ease.inHalf"
+  | "ease.outHalf"
+  | "ease.needsPair"
+  | "ease.conflict.points"
+  | "ease.conflict.bake"
+  | "ease.bakeHint"
+  | "ease.liveApplied"
   | "message.easeInstructions"
   | "status.applyingEase"
   | "message.easeApplied"
@@ -2417,6 +2487,41 @@ const enUS: Record<MessageKey, string> = {
   "message.pasteKeysInstructions": "Select the target property and paste. Anything that does not match is reported per property, rather than silently pasting half of it.",
   "ease.curve.outHandle": "Out handle",
   "ease.curve.inHandle": "In handle",
+  "ease.mode": "Curve type",
+  "ease.mode.bezier": "Bezier",
+  "ease.mode.back": "Back",
+  "ease.mode.elastic": "Elastic",
+  "ease.mode.bounce": "Bounce",
+  "ease.direction": "Direction",
+  "ease.direction.in": "In",
+  "ease.direction.out": "Out",
+  "ease.direction.inOut": "InOut",
+  "ease.view.speed": "Speed graph",
+  "ease.view.value": "Value graph",
+  "ease.reset": "Reset to default curve",
+  "ease.live": "Live apply",
+  "ease.liveOn": "Live: every change is applied to the selected keyframes.",
+  "ease.liveOff": "Live apply is off. Use Apply to write the curve.",
+  "ease.addPointHint": "⌘ click: add a point",
+  "ease.addPointHintCtrl": "Ctrl+click: add a point",
+  "ease.point": "Curve point",
+  "ease.pointIn": "Point in handle",
+  "ease.pointOut": "Point out handle",
+  "ease.speedLeft": "Out influence",
+  "ease.speedRight": "In influence",
+  "ease.peak": "Peak speed",
+  "ease.amp": "amp",
+  "ease.freq": "freq",
+  "ease.decay": "decay",
+  "ease.param.start": "start",
+  "ease.overshoot": "overshoot",
+  "ease.inHalf": "In",
+  "ease.outHalf": "Out",
+  "ease.needsPair": "Select two neighbouring keyframes per property to use this curve.",
+  "ease.conflict.points": "A keyframe already sits at one of the point times. Move the point or free that time.",
+  "ease.conflict.bake": "There are keyframes between the selected keys. Select only the two ends of the segment.",
+  "ease.bakeHint": "Elastic and Bounce write one keyframe per frame between the two selected keys.",
+  "ease.liveApplied": "Curve applied live to {count} keyframe(s).",
   "tool.copyKeys.name": "Copy keys",
   "tool.copyKeys.description": "Copy and paste keyframes with eases and tangents.",
   "inertial.amplitude": "Amplitude",
