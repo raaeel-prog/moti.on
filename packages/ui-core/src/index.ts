@@ -67,6 +67,10 @@ export {
 } from "./shell.js";
 
 export { bezierEditor, type BezierEditorOptions } from "./bezier.js";
+export {
+  CURVE_PAD, CURVE_PLOT, createCurveEditor, curveToPlot, plotToCurve, speedPathD, valuePathD,
+  type CurveCommitReason, type CurveEditor, type CurveEditorLabels, type CurveEditorModel, type CurveEditorOptions, type PlotRange
+} from "./curve-editor.js";
 
 export {
   COMPONENT_STATES,

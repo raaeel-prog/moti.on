@@ -393,6 +393,188 @@
     };
   }
 
+  // --- Espelho ES3 de packages/keyframe-core/src/easing.ts -------------------
+  //
+  // A mesma aritmetica, na mesma ordem. `easing-paridade.test.mjs` compara as
+  // duas implementacoes numa tabela com tolerancia 1e-12; qualquer divergencia
+  // aparece la antes de chegar ao After Effects.
+
+  /** @param {number} value @param {number} min @param {number} max @returns {number} */
+  function clampNumber(value, min, max) {
+    if (typeof value !== "number" || !isFinite(value)) return min;
+    return value < min ? min : value > max ? max : value;
+  }
+
+  /** @param {number} t @param {number} p1 @param {number} p2 @returns {number} */
+  function bezierPoint(t, p1, p2) {
+    var u = 1 - t;
+    return 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t;
+  }
+
+  /**
+   * Parametro t cujo x(t) e igual a `x`, por bissecao.
+   * @param {{x1: number, y1: number, x2: number, y2: number}} curva
+   * @param {number} x
+   * @returns {number}
+   */
+  function bezierTForX(curva, x) {
+    var lo = 0;
+    var hi = 1;
+    var i;
+    var mid;
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    for (i = 0; i < 30; i += 1) {
+      mid = (lo + hi) / 2;
+      if (bezierPoint(mid, curva.x1, curva.x2) < x) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+
+  /**
+   * Valor y da curva em x absoluto (0..1).
+   * @param {{x1: number, y1: number, x2: number, y2: number}} curva
+   * @param {number} x
+   * @returns {number}
+   */
+  function bezierValueAt(curva, x) {
+    return bezierPoint(bezierTForX(curva, x), curva.y1, curva.y2);
+  }
+
+  /** @param {number} t @param {{amp: number, freq: number, decay: number, start: number}} p @returns {number} */
+  function elasticRaw(t, p) {
+    var e = Math.exp(-p.decay * t);
+    var phase = 2 * Math.PI * p.freq * t;
+    return 1 - (1 - p.start) * e * Math.cos(phase) + (p.amp - 1) * e * Math.sin(phase);
+  }
+
+  /** @param {number} t @param {{amp: number, freq: number, decay: number, start: number}} p @returns {number} */
+  function elasticOut(t, p) {
+    var u = clampNumber(t, 0, 1);
+    return elasticRaw(u, p) - (elasticRaw(1, p) - 1) * u;
+  }
+
+  /** @param {number} t @param {{amp: number, freq: number, decay: number, start: number}} p @returns {number} */
+  function bounceOut(t, p) {
+    var u = clampNumber(t, 0, 1);
+    var n = clampNumber(Math.round(p.freq), 0, 8);
+    var heights = [];
+    var durations = [1];
+    var total = 1;
+    var elapsed = 0;
+    var i;
+    var h;
+    var d;
+    var local;
+    for (i = 1; i <= n; i += 1) {
+      h = clampNumber(p.amp * Math.exp(-p.decay * (i - 1)), 0, 1);
+      heights.push(h);
+      d = Math.sqrt(h);
+      durations.push(d);
+      total += d;
+    }
+    for (i = 0; i < durations.length; i += 1) {
+      d = Number(durations[i]) / total;
+      if (u <= elapsed + d || i === durations.length - 1) {
+        local = d <= 0 ? 1 : clampNumber((u - elapsed) / d, 0, 1);
+        if (i === 0) return p.start + (1 - p.start) * local * local;
+        return 1 - Number(heights[i - 1]) * 4 * local * (1 - local);
+      }
+      elapsed += d;
+    }
+    return 1;
+  }
+
+  /** @param {string} mode @param {number} t @param {{amp: number, freq: number, decay: number, start: number}} p @returns {number} */
+  function halfOut(mode, t, p) {
+    return mode === "bounce" ? bounceOut(t, p) : elasticOut(t, p);
+  }
+
+  /**
+   * Valor (escala 0..1) de um easing assado em tempo normalizado `t`.
+   *
+   * @param {string} mode "elastic" | "bounce"
+   * @param {{in: {amp: number, freq: number, decay: number, start: number}, out: {amp: number, freq: number, decay: number, start: number}, inCurve?: {x1: number, y1: number, x2: number, y2: number}|null, outCurve?: {x1: number, y1: number, x2: number, y2: number}|null}} params
+   * @param {string} direction "in" | "out" | "inOut"
+   * @param {number} t
+   * @returns {number}
+   */
+  function easingValue(mode, params, direction, t) {
+    var u = clampNumber(t, 0, 1);
+    var local;
+    var value;
+    if (direction === "out") return halfOut(mode, u, params.out);
+    if (direction === "in") return 1 - halfOut(mode, 1 - u, params["in"]);
+    if (u < 0.5) {
+      local = u * 2;
+      value = params.inCurve ? bezierValueAt(params.inCurve, local) : 1 - halfOut(mode, 1 - local, params["in"]);
+      return 0.5 * value;
+    }
+    local = u * 2 - 1;
+    value = params.outCurve ? bezierValueAt(params.outCurve, local) : halfOut(mode, local, params.out);
+    return 0.5 + 0.5 * value;
+  }
+
+  /**
+   * Divide a curva absoluta (extremos (0,0) e (1,1) com alcas x1..y2 mais pontos
+   * interiores) em curvas cubicas locais, cada uma normalizada na propria caixa
+   * 0..1, para `curveToEase` valer por segmento.
+   *
+   * @param {{x1: number, y1: number, x2: number, y2: number}} curva
+   * @param {Array<{x: number, y: number, inX: number, inY: number, outX: number, outY: number}>} points
+   * @returns {{knots: Array<{x: number, y: number}>, segments: Array<{x1: number, y1: number, x2: number, y2: number}>}}
+   */
+  function normalizeCurveSegments(curva, points) {
+    /** @type {Array<{x: number, y: number}>} */
+    var knots = [{ x: 0, y: 0 }];
+    var segments = [];
+    var i;
+    /** @type {{x: number, y: number}} */
+    var a;
+    /** @type {{x: number, y: number}} */
+    var b;
+    /** @type {{x: number, y: number}} */
+    var p1;
+    /** @type {{x: number, y: number}} */
+    var p2;
+    /** @type {{x: number, y: number, inX: number, inY: number, outX: number, outY: number}} */
+    var ponto;
+    var dx;
+    var dy;
+    var flat;
+    for (i = 0; i < points.length; i += 1) {
+      ponto = /** @type {{x: number, y: number, inX: number, inY: number, outX: number, outY: number}} */ (points[i]);
+      knots.push({ x: ponto.x, y: ponto.y });
+    }
+    knots.push({ x: 1, y: 1 });
+    for (i = 0; i < knots.length - 1; i += 1) {
+      a = /** @type {{x: number, y: number}} */ (knots[i]);
+      b = /** @type {{x: number, y: number}} */ (knots[i + 1]);
+      if (i === 0) {
+        p1 = { x: curva.x1, y: curva.y1 };
+      } else {
+        ponto = /** @type {{x: number, y: number, inX: number, inY: number, outX: number, outY: number}} */ (points[i - 1]);
+        p1 = { x: ponto.outX, y: ponto.outY };
+      }
+      if (i === knots.length - 2) {
+        p2 = { x: curva.x2, y: curva.y2 };
+      } else {
+        ponto = /** @type {{x: number, y: number, inX: number, inY: number, outX: number, outY: number}} */ (points[i]);
+        p2 = { x: ponto.inX, y: ponto.inY };
+      }
+      dx = b.x - a.x;
+      dy = b.y - a.y;
+      flat = Math.abs(dy) < 1e-9;
+      segments.push({
+        x1: dx <= 0 ? 0 : clampNumber((p1.x - a.x) / dx, 0, 1),
+        y1: flat ? 0 : (p1.y - a.y) / dy,
+        x2: dx <= 0 ? 1 : clampNumber((p2.x - a.x) / dx, 0, 1),
+        y2: flat ? 1 : (p2.y - a.y) / dy
+      });
+    }
+    return { knots: knots, segments: segments };
+  }
+
   /** A reverse retraces the same Bezier geometry: swap handles, do not negate
    * their offsets. Non-spatial temporal speed is signed; spatial speed is not.
    * @param {MotionCapturedKey} key @param {number} time @param {boolean} reverse
@@ -600,6 +782,9 @@
     restoreProperty: restoreProperty,
     removeIndicesDescending: removeIndicesDescending,
     describeProperty: describeProperty,
-    curveToEase: curveToEase
+    curveToEase: curveToEase,
+    bezierValueAt: bezierValueAt,
+    easingValue: easingValue,
+    normalizeCurveSegments: normalizeCurveSegments
   };
 }($.global));

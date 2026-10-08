@@ -1221,6 +1221,9 @@ export interface CubicBezierCurve {
 - inputs numéricos;
 - grid e preview de movimento;
 - presets: Linear, Ease, Ease In, Ease Out, Ease In Out, Expo, Back, Elastic aproximado;
+- modos de curva: **Bezier** (gráfico de valor com pontos intermediários via ⌘/Ctrl+clique, e gráfico de velocidade arrastável com rótulo `×N` da velocidade máxima), **Back** (overshoot, vira Bézier comum), **Elastic** e **Bounce** (amp, freq, decay, start) com direção In / InOut / Out; em InOut cada metade tem seus parâmetros e a metade de entrada aceita alças Bézier;
+- aplicação ao vivo opcional (`((•))` no cabeçalho): cada ajuste concluído é um `ae.keys.ease.apply` e, portanto, um Undo;
+- curva anterior desenhada tracejada durante o arrasto; botão de restaurar por modo;
 - histórico Undo/Redo apenas da UI;
 - salvar preset local e sincronizar com conta opcionalmente;
 - acessível por teclado.
@@ -1251,6 +1254,20 @@ Regras:
 - roving keyframes são preservados;
 - propriedades discretas são recusadas;
 - selecionar um único keyframe aplica easing de entrada/saída conforme contexto e UI.
+
+Argumentos adicionais de `ae.keys.ease.apply` (mutuamente exclusivos entre si e com `build`):
+
+```text
+points: [{ x, y, inX, inY, outX, outY }]   // pontos intermediários normalizados ao segmento (1..16)
+bake:   { mode: "elastic"|"bounce", direction: "in"|"out"|"inOut",
+          in: { amp, freq, decay, start }, out: { amp, freq, decay, start },
+          inCurve?: { x1, y1, x2, y2 }, outCurve?: { x1, y1, x2, y2 } }
+```
+
+- `points` e `bake` exigem dois keyframes selecionados vizinhos por propriedade; sem par → `NO_SELECTION`;
+- `points` insere um keyframe por ponto (valor ao longo da corda) e aplica a curva local de cada segmento; colisão com keyframe existente → `KEYFRAME_CONFLICT` antes de escrever;
+- `bake` grava um keyframe por quadro entre as duas chaves, com interpolação LINEAR (amostragem por quadro não perde forma visível); trecho com keyframes no meio → `KEYFRAME_CONFLICT`;
+- tudo passa pelo snapshot/rollback do comando: uma falha restaura a propriedade inteira.
 
 ### 15.5 Operações de keyframe
 
@@ -1328,7 +1345,8 @@ lugar para operações compostas.
 - operações no primeiro/último frame;
 - nenhum key perdido por colisão sem warning;
 - preview de curva corresponde visualmente ao easing aplicado;
-- um Undo por operação.
+- um Undo por operação;
+- segmento com pontos intermediários, Elastic e Bounce gravados por quadro, aplicação ao vivo com um Undo por ajuste concluído.
 
 ---
 

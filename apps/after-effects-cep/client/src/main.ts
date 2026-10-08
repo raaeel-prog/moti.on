@@ -34,6 +34,8 @@ import { createSelectionCoordinator, type SelectionReader } from "./selection-co
 import { renderManagedTools } from "./managed-tools-editor.js";
 import { focusedPoll } from "./focused-poll.js";
 import { createGradientEditor } from "./gradient-editor.js";
+import { DEFAULT_EASE, cloneEaseDraft, easeCommandArgs, easeNeedsPair, type EaseDraft } from "./ease-args.js";
+import { readEaseLive, writeEaseLive } from "./ease-library.js";
 import type { GradientReadData } from "@motion/contracts";
 import {
   anchorGrid,
@@ -524,14 +526,6 @@ const DEFAULT_SMOOTH: SmoothDraft = {
 };
 
 
-interface EaseDraft {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  applyIn: boolean;
-  applyOut: boolean;
-}
 
 
 type TimeControllerApplyTo = "layer" | "properties";
@@ -1056,14 +1050,6 @@ const DEFAULT_TIME_MARKER_LOOP: TimeMarkerLoopDraft = {
   clampToLayer: true
 };
 
-const DEFAULT_EASE: EaseDraft = {
-  x1: 0.25,
-  y1: 0.1,
-  x2: 0.25,
-  y2: 1.0,
-  applyIn: true,
-  applyOut: true
-};
 
 
 interface AiToVectorDraft { keepOriginal: boolean; }
@@ -1515,7 +1501,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: easeDisabledReason,
     apply: applyEase,
     reset: () => {
-      state.ease = { ...DEFAULT_EASE };
+      state.ease = { ...cloneEaseDraft(DEFAULT_EASE), live: state.ease.live };
     }
   },
   {
@@ -2015,7 +2001,7 @@ const state: {
   cutKeys: { ...DEFAULT_CUT_KEYS },
   delay: { ...DEFAULT_DELAY },
   anchor: { ...DEFAULT_ANCHOR },
-  ease: { ...DEFAULT_EASE },
+  ease: cloneEaseDraft(DEFAULT_EASE),
   aiToVector: { ...DEFAULT_AI_TO_VECTOR },
   textToVector: { ...DEFAULT_TEXT_TO_VECTOR },
   particles: { ...DEFAULT_PARTICLES },
@@ -2529,7 +2515,7 @@ function operationQuickProfile(id: ToolId): Pick<QuickProfile, "derive" | "liveC
     verticalPulse: context => ({ ...pulsePresetArgs("impact", context.fps) }),
     styleSwap: context => ({ ...STYLE_SWAP_DEFAULTS, durationFrames: Math.max(1, Math.min(300, Math.round(context.fps * 0.8))) }),
     parallax: () => ({ ...DEFAULT_PARALLAX }),
-    ease: () => ({ ...DEFAULT_EASE, x1: 0.333, y1: 0, x2: 0.667, y2: 1 }),
+    ease: () => ({ ...cloneEaseDraft(DEFAULT_EASE), x1: 0.333, y1: 0, x2: 0.667, y2: 1 }),
     delay: () => delayArgs({ ...DEFAULT_DELAY, shiftMode: "keyframes" }),
     lookAt: () => ({ ...DEFAULT_LOOK_AT, upAxis: "+y", offsetOrientation: [...DEFAULT_LOOK_AT.offsetOrientation], constrainAxes: { ...DEFAULT_LOOK_AT.constrainAxes } }),
     orbit: context => ({ ...deriveOrbitPreset(context) }),
@@ -2628,7 +2614,7 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
       edit: preset => {
         if (!state.context) return;
         const args = presetArgs(preset, quickContextFromState(state.context));
-        if (preset.category === "ease") { state.ease = { ...DEFAULT_EASE, ...preset.curve }; state.activeTool = "ease"; }
+        if (preset.category === "ease") { state.ease = { ...cloneEaseDraft(DEFAULT_EASE), ...preset.curve, live: state.ease.live }; state.activeTool = "ease"; }
         else {
           state.cameraTransition = { ...DEFAULT_CAMERA_TRANSITION, preset: args.preset as CameraTransitionPreset,
             amount: Number(args.amount), durationFrames: Number(args.durationFrames), curve: { ...preset.curve } };
@@ -6206,6 +6192,7 @@ function easeDisabledReason(i18n: I18n): string | null {
   if (!state.context?.isComposition) return i18n.t("message.easeNoActiveComp");
   if (!state.ease.applyIn && !state.ease.applyOut) return i18n.t("ease.needsSide");
   if (state.context.selectionSelectedKeyCount < 1) return i18n.t("message.quickNeedsKeys");
+  if (easeNeedsPair(state.ease) && state.context.selectionSelectedKeyCount < 2) return i18n.t("ease.needsPair");
   return null;
 }
 
@@ -6220,12 +6207,22 @@ function renderEase(regions: RenderRegions, i18n: I18n): void {
   });
   regions.content.appendChild(actions.element);
   refreshToolContext = () => actions.update(easeActionsDisabledReason(i18n));
+  let easeStorage: Storage | undefined;
+  try { easeStorage = window.localStorage; } catch { /* live flag simply is not remembered */ }
+  state.ease.live = readEaseLive(easeStorage);
   const editor = createEaseEditor(document, {
-    i18n, curve: state.ease, busy: state.busy,
-    onChange: curve => { Object.assign(state.ease, curve); },
+    i18n, draft: state.ease, busy: state.busy,
+    platformMeta: /mac/i.test(typeof navigator === "undefined" ? "" : navigator.platform ?? ""),
+    onChange: draft => { state.ease = draft; },
+    onCommit: draft => { state.ease = draft; if (state.ease.live) scheduleLiveApply(regions.shell, i18n); },
+    onLiveToggle: live => {
+      state.ease.live = live; writeEaseLive(easeStorage, live);
+      regions.shell.setStatus(i18n.t(live ? "ease.liveOn" : "ease.liveOff"), "ok");
+      if (!live) cancelLiveApply();
+    },
     onApply: () => { if (wiringAtual && !easeDisabledReason(i18n)) void applyEase(regions.shell, i18n, wiringAtual.logger, wiringAtual.client); }
   });
-  disposeView = () => { actions.dispose(); editor.dispose(); };
+  disposeView = () => { actions.dispose(); editor.dispose(); cancelLiveApply(); };
   regions.content.appendChild(editor.element);
   const sides = createElement(document, "div", "ch-ease-sides");
   sides.appendChild(checkboxField(document, { id: "ease-apply-in", label: i18n.t("ease.applyIn"), checked: state.ease.applyIn,
@@ -6272,25 +6269,59 @@ async function applyEaseAction(action: EaseAction, shell: Shell, i18n: I18n, log
   } finally { setBusy(shell, false); }
 }
 
-async function applyEase(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+let liveApplyTimer: ReturnType<typeof setTimeout> | undefined;
+let liveApplyPending = false;
+
+function cancelLiveApply(): void {
+  if (liveApplyTimer) clearTimeout(liveApplyTimer);
+  liveApplyTimer = undefined; liveApplyPending = false;
+}
+
+/**
+ * Live apply: one host call per completed change, debounced so a drag with
+ * many commits in a row does not queue up, and deferred while another call runs.
+ * The quiet path keeps the editor mounted: `setBusy` would rerender the view.
+ */
+function scheduleLiveApply(shell: Shell, i18n: I18n): void {
+  if (liveApplyTimer) clearTimeout(liveApplyTimer);
+  liveApplyTimer = setTimeout(() => {
+    liveApplyTimer = undefined;
+    if (!wiringAtual || !state.ease.live) return;
+    if (state.busy) { liveApplyPending = true; return; }
+    if (easeDisabledReason(i18n)) return;
+    void applyEase(shell, i18n, wiringAtual.logger, wiringAtual.client, { quiet: true });
+  }, 150);
+}
+
+async function applyEase(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client, options: { quiet?: boolean } = {}): Promise<void> {
   if (state.busy) return;
   const invalid = document.querySelector<HTMLInputElement>(".ch-ease-editor [aria-invalid='true']");
   if (invalid) { invalid.focus(); return; }
-  const args = { ...state.ease };
+  const args = easeCommandArgs(state.ease);
   state.lastError = null;
-  setBusy(shell, true, i18n.t("status.applyingEase"));
+  if (options.quiet) { state.busy = true; shell.setBusy(true); }
+  else setBusy(shell, true, i18n.t("status.applyingEase"));
   shell.setStatus(i18n.t("status.applyingEase"), "busy");
   try {
-    const response = await client.execute<{ appliedCount: number; skippedCount: number }>("ae.keys.ease.apply", args);
+    const response = await client.execute<{ appliedCount: number; skippedCount: number }>("ae.keys.ease.apply", args, { preserveSelection: true });
     logger.recordResponse("ae.keys.ease.apply", response);
     if (response.warnings.length) reportHostWarnings(response.warnings);
     if (response.ok && (response.data?.appliedCount ?? 0) > 0) {
-      shell.setStatus(i18n.t("message.easeApplied", { count: response.data!.appliedCount }), "ok");
-    } else if (!response.ok) reportFailure(shell, i18n, response);
+      shell.setStatus(i18n.t(options.quiet ? "ease.liveApplied" : "message.easeApplied", { count: response.data!.appliedCount }), "ok");
+    } else if (!response.ok) {
+      if (response.error?.code === "KEYFRAME_CONFLICT") {
+        state.lastError = i18n.t(state.ease.mode === "bezier" ? "ease.conflict.points" : "ease.conflict.bake");
+        shell.setStatus(state.lastError, "error");
+      } else reportFailure(shell, i18n, response);
+    }
     else shell.setStatus(i18n.t("ease.noChange"), "error");
   } catch {
     shell.setStatus(i18n.t("message.failureWithoutReason"), "error");
-  } finally { setBusy(shell, false); }
+  } finally {
+    if (options.quiet) { state.busy = false; shell.setBusy(false); }
+    else setBusy(shell, false);
+    if (liveApplyPending) { liveApplyPending = false; scheduleLiveApply(shell, i18n); }
+  }
 }
 
 function reverseKeysDisabledReason(i18n: I18n): string | null {

@@ -63,3 +63,11 @@ export const DEFAULT_EASE_BUILD = { durationFrames: 15, useOpacity: true, opacit
   useScale: false, scaleFrom: 86, scaleTo: 100, useRotation: false, rotationFrom: -8, rotationTo: 0,
   usePosition: false, posFromX: 0, posFromY: 80, posToX: 0, posToY: 0 };
 export type EaseBuild = typeof DEFAULT_EASE_BUILD;
+/** Live apply flag, persisted per panel (preferences drafts are overwritten wholesale elsewhere). */
+export const EASE_LIVE_KEY = "motion.ease.live.v1";
+export function readEaseLive(storage: Pick<Storage, "getItem"> | undefined): boolean {
+  try { return storage?.getItem(EASE_LIVE_KEY) === "1"; } catch { return false; }
+}
+export function writeEaseLive(storage: Pick<Storage, "getItem" | "setItem"> | undefined, live: boolean): boolean {
+  return protectedWrite(storage, EASE_LIVE_KEY, live ? "1" : "0", raw => raw === "1" || raw === "0");
+}

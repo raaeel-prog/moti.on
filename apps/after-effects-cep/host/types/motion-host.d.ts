@@ -475,6 +475,26 @@ declare const MotionKeyframes: {
     duracaoSegundos: number,
     diferencaDeValor: number
   ): { outSpeed: number; outInfluence: number; inSpeed: number; inInfluence: number };
+  /** Espelho ES3 de packages/keyframe-core/src/easing.ts. */
+  bezierValueAt(curva: { x1: number; y1: number; x2: number; y2: number }, x: number): number;
+  easingValue(
+    mode: string,
+    params: {
+      in: { amp: number; freq: number; decay: number; start: number };
+      out: { amp: number; freq: number; decay: number; start: number };
+      inCurve?: { x1: number; y1: number; x2: number; y2: number } | null;
+      outCurve?: { x1: number; y1: number; x2: number; y2: number } | null;
+    },
+    direction: string,
+    t: number
+  ): number;
+  normalizeCurveSegments(
+    curva: { x1: number; y1: number; x2: number; y2: number },
+    points: Array<{ x: number; y: number; inX: number; inY: number; outX: number; outY: number }>
+  ): {
+    knots: Array<{ x: number; y: number }>;
+    segments: Array<{ x1: number; y1: number; x2: number; y2: number }>;
+  };
   describeProperty(comp: CompItem, property: Property): {
     id: string;
     layerIndex: number;

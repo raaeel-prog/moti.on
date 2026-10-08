@@ -65,3 +65,33 @@ export type {
 } from "./types.js";
 
 export { curveToTemporalEase, applyCurveToDimensions } from "./bezier.js";
+
+export {
+  DEFAULT_BACK_OVERSHOOT,
+  DEFAULT_BOUNCE,
+  DEFAULT_ELASTIC,
+  DEFAULT_HALF_CURVE,
+  backCurve,
+  bezierDerivative,
+  bezierPoint,
+  bezierSpeedAt,
+  bezierTForX,
+  bezierValueAt,
+  bounceOut,
+  clamp,
+  constrainCurveEnds,
+  constrainCurvePoint,
+  easingValue,
+  elasticOut,
+  fitRange,
+  insertCurvePoint,
+  multiPointValueAt,
+  normalizeCurveSegments,
+  peakSpeed,
+  sampleBezierSpeed,
+  sampleEasing,
+  sortedPointsValid,
+  speedDragToCurve
+} from "./easing.js";
+
+export type { CurvePoint, EasingDirection, EasingMode, EasingParams, OscillationParams } from "./easing.js";
