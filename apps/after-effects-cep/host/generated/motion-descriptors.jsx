@@ -12,6 +12,19 @@
   var DEFAULT_LOCALE = "en-US";
 
   var table = {
+    "ae.tools.adjust": {
+      id: "ae.tools.adjust",
+      requirements: ["hasProject", "hasActiveComp"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: true,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.tools.adjust",
+      undoLabels: {
+        "en-US": "Moti.on: adjust tool",
+        "pt-BR": "Moti.on: ajustar ferramenta"
+      }
+    },
     "ae.text.word-reveal.read": {
       id: "ae.text.word-reveal.read",
       requirements: ["hasProject", "hasActiveComp"],
