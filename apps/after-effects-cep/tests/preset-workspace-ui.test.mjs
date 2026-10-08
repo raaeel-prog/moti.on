@@ -135,14 +135,16 @@ test('preset editor exposes initial read failure and reload recovers',async t=>{
 test('active Edit tab does not erase a pending draft',async t=>{
   const f=await fixture(t);f.change(135.5);f.button('Editar').click();await setImmediate();assert.equal(f.intensity().value,'135.5');assert.equal(f.button('Aplicar ajustes').disabled,false);
 });
-test('different composition with identical layer id and fingerprint keeps draft and requires reload',async t=>{
+test('different composition with identical layer id and fingerprint keeps independent drafts',async t=>{
   const f=await fixture(t);f.change(130);f.state.target.compId=2;f.win.emit('focus');await setImmediate();
-  assert.equal(f.intensity().value,'130');assert.equal(f.button('Aplicar ajustes').disabled,true);assert.match(f.workspace.element.allText,/Seus ajustes foram mantidos/);
-  f.button('Recarregar').click();await setImmediate();assert.equal(f.intensity().value,'100');
+  assert.equal(f.intensity().value,'100');assert.equal(f.button('Aplicar ajustes').disabled,true);
+  f.change(170);f.state.target.compId=1;f.win.emit('focus');await setImmediate();assert.equal(f.intensity().value,'130');
+  f.state.target.compId=2;f.win.emit('focus');await setImmediate();assert.equal(f.intensity().value,'170');
 });
 test('selection becoming empty does not discard local values',async t=>{
-  const f=await fixture(t);f.change(145);f.state.state='empty';delete f.state.target;delete f.state.options;f.win.emit('focus');await setImmediate();
-  assert.equal(f.intensity().value,'145');assert.equal(f.button('Aplicar ajustes').disabled,true);
+  const f=await fixture(t);const original=structuredClone(f.state);f.change(145);f.state.state='empty';delete f.state.target;delete f.state.options;f.win.emit('focus');await setImmediate();
+  assert.equal(f.intensity(),undefined);
+  Object.assign(f.state,original);f.win.emit('focus');await setImmediate();assert.equal(f.intensity().value,'145');assert.equal(f.button('Aplicar ajustes').disabled,false);
 });
 test('late inspection is rejected while an adjustment runs',async t=>{
   const f=await fixture(t,{holdAdjust:true});f.change(140);f.holdRead();f.win.emit('focus');await setImmediate();f.button('Aplicar ajustes').click();f.releaseRead();await setImmediate();
@@ -192,14 +194,14 @@ test('invalid numeric draft remains visible and blocks host mutation until corre
   assert.equal(f.intensity().value,'401');assert.equal(f.intensity().getAttribute('aria-invalid'),'true');
   assert.match(f.workspace.element.allText,/Use um número entre 0 e 300/);
   f.button('Aplicar ajustes').click();await setImmediate();assert.equal(f.calls.some(c=>c.command==='ae.presets.adjust'),false);
-  f.state.target.compId=5;f.win.emit('focus');await setImmediate();assert.equal(f.intensity().value,'401');
+  f.state.target.fingerprint='external-change';f.win.emit('focus');await setImmediate();assert.equal(f.intensity().value,'401');
   f.change(151.5);assert.equal(f.intensity().getAttribute('aria-invalid'),'false');assert.equal(f.button('Aplicar ajustes').disabled,true,'changed selection still needs an explicit reload');
   f.button('Recarregar').click();await setImmediate();assert.equal(f.intensity().value,'100');
   f.change(151.5);f.button('Aplicar ajustes').click();await setImmediate();await setImmediate();assert.equal(f.state.options.intensity,151.5);
 });
 
 test('stale preset notice stays mounted across repeated context polls',async t=>{
-  const f=await fixture(t);f.change(120);f.state.target.compId=3;f.win.emit('focus');await setImmediate();
+  const f=await fixture(t);f.change(120);f.state.target.fingerprint='external-change';f.win.emit('focus');await setImmediate();
   const banner=f.workspace.element.getElementsByTagName('div').find(n=>n.className==='ch-alert ch-alert--warning');
   assert.ok(banner);assert.match(banner.allText,/A seleção mudou/);assert.match(banner.allText,/Recarregar descarta os ajustes/);
   f.win.emit('focus');await setImmediate();assert.equal(f.workspace.element.getElementsByTagName('div').find(n=>n.className==='ch-alert ch-alert--warning'),banner);
@@ -382,4 +384,52 @@ test('workspace dispatches timing for multiple layers and refreshes inspection a
 test('workspace timing protects unsaved drafts and exposes host collision failures',async t=>{
  const f=await fixture(t);f.change(123);assert.equal(f.button('Alinhar marcadores').disabled,true);f.button('Alinhar marcadores').click();assert.equal(f.calls.some(c=>c.command==='ae.presets.timing'),false);
  f.button('Descartar ajustes').click();await setImmediate();f.failTiming();f.button('Alinhar marcadores').click();await setImmediate();assert.match(f.workspace.element.allText,/Destino ocupado/);assert.equal(f.intensity().value,'100');
+});
+
+test('phase drafts follow their layer and return with invalid text intact',async t=>{
+  const f=await fixture(t,{phases:1});
+  const input=()=>f.workspace.element.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Entrada · Intensidade · %');
+  input().value='401';input().emit('input');assert.equal(input().getAttribute('aria-invalid'),'true');
+  f.state.target.layerId=3;f.state.target.instance='two';f.state.layerName='Another layer';f.win.emit('focus');await setImmediate();
+  assert.equal(input().value,'100');assert.match(f.workspace.element.allText,/Another layer/);
+  f.state.target.layerId=2;f.state.target.instance='one';f.state.layerName='Title';f.win.emit('focus');await setImmediate();
+  assert.equal(input().value,'401');assert.equal(input().getAttribute('aria-invalid'),'true');assert.equal(f.button('Aplicar ajustes').disabled,true);
+  input().value='125';input().emit('input');assert.equal(f.button('Aplicar ajustes').disabled,false);
+});
+
+test('returning to a changed managed instance preserves its draft but requires explicit reload',async t=>{
+  const f=await fixture(t);f.change(139);f.state.target.layerId=3;f.win.emit('focus');await setImmediate();
+  f.state.target.layerId=2;f.state.target.fingerprint='changed-at-host';f.state.options.intensity=80;f.win.emit('focus');await setImmediate();
+  assert.equal(f.intensity().value,'139');assert.equal(f.button('Aplicar ajustes').disabled,true);assert.match(f.workspace.element.allText,/Seus ajustes foram mantidos/);
+  f.button('Recarregar').click();await setImmediate();assert.equal(f.intensity().value,'80');
+});
+
+test('a held Remove control survives a completed focus read and removes on its first click',async t=>{
+  const f=await fixture(t,{phases:1}),remove=f.button('Remover');
+  f.doc.emit('pointerdown',{target:remove});
+  f.state.target.fingerprint='updated-controls';f.holdRead();f.win.emit('focus');await setImmediate();
+  f.releaseRead();await setImmediate();assert.equal(f.button('Remover'),remove,'inspection cannot replace the pressed node');
+  f.doc.emit('pointerup',{target:remove});remove.click();await setImmediate();await new Promise(resolve=>setTimeout(resolve,5));await setImmediate();
+  const writes=f.calls.filter(call=>call.command==='ae.presets.phase-action');assert.equal(writes.length,1);assert.equal(writes[0].args.target.fingerprint,'updated-controls');
+  assert.equal(f.navigation.view,'browse');
+});
+
+test('Remove never retargets a stale button to a newly selected layer',async t=>{
+  const f=await fixture(t,{phases:1}),remove=f.button('Remover');
+  f.state.target.layerId=99;remove.click();await setImmediate();await setImmediate();
+  assert.equal(f.calls.filter(call=>call.command==='ae.presets.phase-action').length,0);
+  assert.match(f.workspace.element.allText,/Nada foi removido/);
+});
+
+test('double activation queues one removal and an old read cannot restore its deleted phase',async t=>{
+  const f=await fixture(t,{phases:1}),remove=f.button('Remover');
+  f.holdRead();f.win.emit('focus');await setImmediate();remove.click();remove.click();
+  await setImmediate();f.releaseRead();await setImmediate();await setImmediate();
+  assert.equal(f.calls.filter(call=>call.command==='ae.presets.phase-action').length,1);assert.equal(f.navigation.view,'browse');
+});
+
+test('workspace recreation preserves only session drafts for their original target',async t=>{
+  const cache={personal:{roots:[],folders:[],items:[]}};
+  await t.test('save before disposal',async child=>{const f=await fixture(child,{cache});f.change(123);});
+  await t.test('restore from a fresh host inspection',async child=>{const f=await fixture(child,{cache});assert.equal(f.intensity().value,'123');assert.equal(f.button('Aplicar ajustes').disabled,false);});
 });

@@ -3,14 +3,20 @@ import type {PresetInspection, PresetPhaseInspection} from "@motion/contracts";
 import {defaultLibraryOptions, GALLERY_PRESETS, gallerySequenceControls, presetEasingChoices} from "./preset-gallery.js";
 import {formatPresetOffset,parsePresetOffset} from "./preset-timecode.js";
 
+/** Session-only drafts; property and layer references never leave the host. */
+export interface PresetPhaseDraft { options: PresetPhaseInspection["options"]; numbers: Record<string,string>; offset: string; }
+export type PresetPhaseDrafts = Record<string,PresetPhaseDraft>;
+
 export function createPresetPhaseEditor(doc:Document, options:{
   locale:string; inspection:PresetInspection; busy:boolean;
   reveal(id:string):void; copy(phase:PresetPhaseInspection):void;
   execute(command:string,args:Record<string,unknown>):void;
   onDirty(dirty:boolean):void;
+  drafts?:PresetPhaseDrafts;
   live?:{start(phase:PresetPhaseInspection,key:string,initial:number):boolean;update(value:number):void;finish(canceled:boolean,value:number):void};
-}):{element:HTMLElement;setBlocked(blocked:boolean,busy?:boolean):void;dispose():void} {
+}):{element:HTMLElement;drafts():PresetPhaseDrafts;setBlocked(blocked:boolean,busy?:boolean):void;dispose():void} {
   const cleanups:Array<()=>void>=[],dirtyPhases=new Set<string>(),pendingOffsets=new Set<string>();
+  const draftReaders:Array<()=>[string,PresetPhaseDraft]>=[];
   const hostActions:HTMLButtonElement[]=[],refreshers:Array<()=>void>=[];
   let blocked=false,blockedBusy=false,disposed=false;
   const i18n=createI18n({locale:options.locale}),pt=i18n.locale()==="pt-BR",data=options.inspection;
@@ -28,7 +34,7 @@ export function createPresetPhaseEditor(doc:Document, options:{
     title.appendChild(createElement(doc,"span","ch-phase-title",`${phase.phase==="in"?(pt?"Entrada":"In"):(pt?"Saída":"Out")}: ${preset.name[pt?"pt-BR":"en-US"]}`));
     row.appendChild(title);section.appendChild(row);
     const actions=createElement(doc,"div","ch-phase-actions");row.appendChild(actions);
-    const command=(action:"remove"|"reset"):void=>options.execute("ae.presets.phase-action",{target:data.target,phase:phase.phase,action});
+    const command=(action:"remove"|"reset"):void=>{if(!disposed&&!options.busy&&!blocked)options.execute("ae.presets.phase-action",{target:data.target,phase:phase.phase,action});};
     for(const [label,variant,onClick] of [
       [pt?"Revelar":"Reveal","tertiary",()=>options.reveal(phase.presetId)],
       [pt?"Copiar":"Copy","tertiary",()=>options.copy(phase)],
@@ -37,7 +43,7 @@ export function createPresetPhaseEditor(doc:Document, options:{
     ] as const){const action=button(doc,{label,variant,disabled:options.busy,onClick});action.classList.add("ch-phase-link");actions.appendChild(action);if(variant==="destructive"||label===(pt?"Restaurar":"Reset"))hostActions.push(action);}
     const body=createElement(doc,"div","ch-phase-parameters");row.appendChild(body);
     const dragHint=createElement(doc,"p","ch-preset-hint");dragHint.hidden=true;body.appendChild(dragHint);
-    const draft={...phase.options},valid=new Map<string,boolean>();let dirty=false;
+    const saved=options.drafts?.[phase.phase],draft={...(saved?.options??phase.options)},valid=new Map<string,boolean>(),numberInputs=new Map<string,HTMLInputElement>();let dirty=false;
     const applyLabel=pt?"Aplicar ajustes":"Apply changes",unchangedReason=pt?"Altere um parâmetro para aplicar.":"Change a parameter to apply.";
     const applyControl=createActionButton(doc,{id:`phase-${phase.instance}-${phase.phase}-apply`,label:applyLabel,variant:"primary",disabled:true,disabledReason:unchangedReason,onPress:()=>{
       if(!disposed&&!options.busy&&!blocked)options.execute("ae.presets.phase-adjust",{target:data.target,phase:phase.phase,presetId:phase.presetId,options:draft});
@@ -55,7 +61,7 @@ export function createPresetPhaseEditor(doc:Document, options:{
     const numeric=(key:"durationFrames"|"intensity"|"staggerFrames"|"elasticity"|"overlap"|"seed",label:string,min:number,max:number,integer=true):void=>{
       const field=createElement(doc,"label","ch-phase-field");field.appendChild(createElement(doc,"span","",label));
       const input=doc.createElement("input");input.id=`phase-${phase.instance}-${phase.phase}-${key}`;input.type="text";input.inputMode=integer?"numeric":"decimal";input.value=String(draft[key]??defaultLibraryOptions(preset)[key]??0);input.setAttribute("aria-label",`${phase.phase==="in"?(pt?"Entrada":"In"):(pt?"Saída":"Out")} · ${label}`);input.disabled=options.busy;
-      input.min=String(min);input.max=String(max);input.step=integer?"1":"0.1";
+      input.min=String(min);input.max=String(max);input.step=integer?"1":"0.1";numberInputs.set(key,input);if(saved?.numbers[key]!==undefined)input.value=saved.numbers[key];
       const error=createElement(doc,"p","ch-field__error");error.id=`${input.id}-error`;error.hidden=true;error.setAttribute("aria-live","polite");error.setAttribute("aria-atomic","true");
       const live=options.live&&phase.controls.some(control=>control.key===key);
       input.title=live?(pt?"Clique para digitar. Arraste para ajustar; Shift: fino, Alt: amplo.":"Click to type. Drag to adjust; Shift: fine, Alt: coarse."):(pt?"Clique para digitar. Arraste ao vivo ainda indisponível.":"Click to type. Live dragging is currently unavailable.");
@@ -69,6 +75,7 @@ export function createPresetPhaseEditor(doc:Document, options:{
         update();
       };
       input.addEventListener("input",validate);input.addEventListener("change",validate);field.appendChild(input);body.appendChild(field);body.appendChild(error);
+      if(saved)validate();
       if(live){let dragging=false;field.classList.add("ch-phase-scrub-row");cleanups.push(attachScrubbableNumber(input,{hitTarget:field,onGestureStart:value=>{dragging=options.live!.start(phase,key,value);if(!dragging){dragHint.textContent=pt?"O arraste ao vivo não pôde começar nesta seleção.":"Live dragging could not start for this selection.";dragHint.hidden=false;}else dragHint.hidden=true;return dragging;},onInput:value=>{if(dragging)options.live!.update(value);},onGestureEnd:(value,canceled)=>{if(!dragging)return;dragging=false;options.live!.finish(canceled,value);}}));}
       else cleanups.push(attachCompactNumberEditing(input));
     };
@@ -101,6 +108,8 @@ export function createPresetPhaseEditor(doc:Document, options:{
     };
     controls.appendChild(shiftButton(-1));
     const zero=formatPresetOffset(0,data.frameRate??24,data.dropFrame),amount=doc.createElement("input");amount.id=`phase-${phase.instance}-${phase.phase}-offset`;amount.type="text";amount.value=zero;amount.disabled=options.busy;amount.setAttribute("aria-label",`${phase.phase==="in"?(pt?"Entrada":"In"):(pt?"Saída":"Out")} · ${pt?"Deslocamento em frames":"Frame offset"}`);amount.title=pt?"Digite frames relativos ou HH:MM:SS:FF e pressione Enter. As setas movem um frame. Arraste ao vivo indisponível neste controle.":"Enter relative frames or HH:MM:SS:FF and press Enter. Arrows move one frame. Live dragging is unavailable on this control.";
+    if(saved)amount.value=saved.offset;
+    draftReaders.push(()=>[phase.phase,{options:{...draft},numbers:Object.fromEntries([...numberInputs].map(([key,input])=>[key,input.value])),offset:amount.value}]);
     const offsetError=createElement(doc,"p","ch-field__error");offsetError.id=`${amount.id}-error`;offsetError.hidden=true;offsetError.setAttribute("aria-live","polite");offsetError.setAttribute("aria-atomic","true");
     const validateOffset=():number|undefined=>{
       const frames=parsePresetOffset(amount.value,data.frameRate??24,data.dropFrame),ok=frames!==undefined&&Math.abs(frames)<=600;
@@ -110,6 +119,7 @@ export function createPresetPhaseEditor(doc:Document, options:{
       return ok?frames:undefined;
     };
     amount.addEventListener("input",()=>{if(!options.busy&&!blocked)validateOffset();});
+    if(saved)validateOffset();
     amount.addEventListener("keydown",event=>{
       if(options.busy||blocked||event.isComposing)return;
       if(event.key==="Enter"){
@@ -121,5 +131,5 @@ export function createPresetPhaseEditor(doc:Document, options:{
     controls.appendChild(shiftButton(1));body.appendChild(timing);body.appendChild(offsetError);
     const footer=createElement(doc,"div","ch-phase-adjust-actions");footer.appendChild(button(doc,{label:pt?"Descartar":"Discard",variant:"tertiary",disabled:options.busy,onClick:()=>{options.onDirty(false);options.execute("ae.presets.inspect",{});}}));footer.appendChild(applyControl.element);body.appendChild(footer);update();
   }
-  return {element,setBlocked(value,busy=false){blocked=value;blockedBusy=busy;for(const action of hostActions){action.disabled=options.busy||blocked;action.title=blocked?(busy?i18n.t("phaseEditor.wait"):i18n.t("phaseEditor.reloadSelection")):action.getAttribute("aria-label")??action.textContent??"";}for(const input of Array.from(element.getElementsByTagName("input")))input.disabled=options.busy||blocked;for(const select of Array.from(element.getElementsByTagName("select")))select.disabled=options.busy||blocked;for(const refresh of refreshers)refresh();},dispose(){disposed=true;for(const cleanup of cleanups)cleanup();}};
+  return {element,drafts:()=>Object.fromEntries(draftReaders.map(read=>read())),setBlocked(value,busy=false){blocked=value;blockedBusy=busy;for(const action of hostActions){action.disabled=options.busy||blocked;action.title=blocked?(busy?i18n.t("phaseEditor.wait"):i18n.t("phaseEditor.reloadSelection")):action.getAttribute("aria-label")??action.textContent??"";}for(const input of Array.from(element.getElementsByTagName("input")))input.disabled=options.busy||blocked;for(const select of Array.from(element.getElementsByTagName("select")))select.disabled=options.busy||blocked;for(const refresh of refreshers)refresh();},dispose(){disposed=true;for(const cleanup of cleanups)cleanup();}};
 }
