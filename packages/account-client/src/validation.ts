@@ -3,7 +3,7 @@ import type { AccountConfig, AccountUser, LeaseClaims, SignedLease, SyncKind, Sy
 export const MAX_LEASE_MS = 7 * 24 * 60 * 60 * 1000;
 export function object(value: unknown): value is Record<string, unknown> { return !!value && typeof value === "object" && !Array.isArray(value); }
 export function identifier(value: unknown): value is string { return typeof value === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,119}$/.test(value); }
-const names = (value: unknown): value is string => typeof value === "string" && value.trim() === value && value.length > 0 && value.length <= 80 && !/[\u0000-\u001f\u007f]/u.test(value);
+const names = (value: unknown): value is string => typeof value === "string" && value.trim() === value && value.length > 0 && value.length <= 80 && ![...value].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
 const recipes = new Set(MOTION_LIBRARY_PRESETS.map(item => item.id));
 export function validConfig(config: AccountConfig | undefined): config is AccountConfig {
   return !!config && /^https:\/\/[a-z0-9][a-z0-9.-]+(?::443)?$/i.test(config.url) && !config.url.includes("..")

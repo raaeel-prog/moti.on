@@ -344,6 +344,7 @@ export function createAeHostAdapter(logger: {
   const transport: Transport = {
     async send(serialized, onResult) {
       const request = readLocalRequestMetadata(serialized);
+      try {
       if (request.mutates) {
         let allowed = false; try { allowed = await authorizeMutation(); } catch { /* Fail closed. */ }
         if (!allowed) {
@@ -425,6 +426,7 @@ export function createAeHostAdapter(logger: {
         }
         dispatch(call, request, onResult, true, false);
       });
+      } catch { sendTransportFailure(request, onResult, "INTERNAL_ERROR", "O host não conseguiu concluir o pedido.", { reason: "HOST_TRANSPORT_FAILED", mayHaveMutated: request.mutates }); }
     }
   };
 

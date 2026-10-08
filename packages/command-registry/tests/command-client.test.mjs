@@ -363,6 +363,8 @@ test("sucesso sem mudanca e opt-in e somente para comando mutante idempotente", 
     // camada ja parenteada ao alvo pedido nao e reescrita, porque reescrever
     // faria o After Effects recalcular o transform e acumular arredondamento.
     [
+      // Ajustar um controle gerenciado para o valor que ele ja tem nao e falha.
+      "ae.tools.adjust",
       // Reuse the native effect already created by a Quick shortcut, preserving edits.
       "ae.text.word-reveal",
       "ae.text.variable-morph",

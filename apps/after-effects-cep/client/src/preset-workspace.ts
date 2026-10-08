@@ -1,4 +1,4 @@
-import { attachScrubbableNumber, button, createActionButton, type ActionButtonController, clearNode, createElement, createAlert, createBadge, createI18n, selectField, type AlertController } from "@motion/ui-core";
+import { isColorPickerOpen, hasColorDraft, attachScrubbableNumber, button, createActionButton, type ActionButtonController, clearNode, createElement, createAlert, createBadge, createI18n, selectField, type AlertController } from "@motion/ui-core";
 import { isMotionLibraryOptions, type CommandResponse, type MotionLibraryOptions, type PersonalPresetCatalog, type PersonalPresetPreview, type PresetInspection, type PresetTarget, type PresetTimingArgs } from "@motion/contracts";
 import { createPresetGallery, createPresetPhaseControl, defaultLibraryOptions, GALLERY_PRESETS, gallerySequenceControls, presetEasingChoices } from "./preset-gallery.js";
 import { focusedPoll } from "./focused-poll.js";
@@ -163,6 +163,7 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
   }
   function sameTarget(a?:PresetTarget,b?:PresetTarget):boolean{return Boolean(a&&b&&a.compId===b.compId&&a.layerId===b.layerId&&a.instance===b.instance);}
   function acceptInspection(next:PresetInspection,force=false):void {
+    if(isColorPickerOpen(doc)||hasColorDraft(doc))return;
     if(pointerHeld){deferredInspection={data:next,force,epoch};return;}
     options.onInspection?.(next);
     if(!force&&snapshot?.state===next.state&&snapshot?.target?.fingerprint===next.target?.fingerprint&&(sameTarget(next.target,snapshot?.target)||(!next.target&&!snapshot?.target))&&snapshot?.message===next.message&&snapshot?.presetId===next.presetId&&snapshot?.frameRate===next.frameRate&&snapshot?.dropFrame===next.dropFrame&&JSON.stringify(snapshot?.phases)===JSON.stringify(next.phases)&&JSON.stringify(snapshot?.targets)===JSON.stringify(next.targets)&&JSON.stringify(snapshot?.mixedKeys)===JSON.stringify(next.mixedKeys)&&JSON.stringify(snapshot?.colorTarget)===JSON.stringify(next.colorTarget)&&JSON.stringify(snapshot?.selection)===JSON.stringify(next.selection)&&JSON.stringify(snapshot?.tools)===JSON.stringify(next.tools)){needsInspection=false;updateNotice();return;}
@@ -190,11 +191,11 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
   doc.addEventListener("pointerdown",pressPointer,true);doc.addEventListener("pointerup",releasePointer,true);doc.addEventListener("pointercancel",releasePointer,true);
   window.addEventListener("blur",releasePointer);
   async function inspect(force=false):Promise<void>{
-    if(disposed||isBusy()||numberPressed()||(!force&&numberHovered())||activeRead||nav.view!=="edit"||doc.hidden)return;
+    if(disposed||isBusy()||isColorPickerOpen(doc)||hasColorDraft(doc)||numberPressed()||(!force&&numberHovered())||activeRead||nav.view!=="edit"||doc.hidden)return;
     const token=epoch,readId=++readSequence;activeRead=readId;content.setAttribute("aria-busy","true");updateNotice();
     try{
       const response=await options.execute("ae.presets.inspect",{});
-      if(disposed||token!==epoch||numberPressed()||(!force&&numberHovered())||nav.view!=="edit")return;
+      if(disposed||token!==epoch||isColorPickerOpen(doc)||hasColorDraft(doc)||numberPressed()||(!force&&numberHovered())||nav.view!=="edit")return;
       if(!response.ok||!response.data){showError(hostError(response,pt?"Não foi possível ler a seleção.":"Unable to read selection."));return;}
       acceptInspection(response.data as PresetInspection,force);
     }catch{if(!disposed&&token===epoch)showError(pt?"A leitura falhou. Tente novamente.":"Reading failed. Try again.");}

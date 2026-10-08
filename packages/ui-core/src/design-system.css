@@ -87,7 +87,8 @@
 .ch-settings-section { margin:0 0 20px; padding:0; border:0; }
 .ch-settings-section > h3 { margin:0 0 12px; color:var(--text-secondary); font-size:var(--font-label); font-weight:var(--weight-strong); }
 .ch-settings-section + .ch-settings-section { padding-top:16px; border-top:1px solid var(--border-muted); }
-.ch-settings-help { display:flex; flex-direction:column; align-items:stretch; gap:4px; }
+.ch-settings-help { display:flex; flex-direction:column; flex-wrap:nowrap; align-items:stretch; gap:4px; }
+.ch-settings-help > .ch-section-title { flex:0 0 auto; }
 .ch-settings-help-action { width:100%; }
 .ch-settings-help-action .ch-action-button { width:100%; justify-content:flex-start; text-align:left; }
 [data-density="compact"] .ch-tool-tile > .ch-action:first-child,

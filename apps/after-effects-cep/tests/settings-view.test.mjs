@@ -1,0 +1,22 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import {fileURLToPath} from 'node:url';
+import {createCepDocument} from './cep-dom.mjs';
+import {createPanelPreferences,createI18n} from '../../../packages/ui-core/dist/index.js';
+const built=await build({entryPoints:[fileURLToPath(new URL('../client/src/views/settings-view.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
+const {createAeSettingsView}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+for(const locale of ['pt-BR','en-US'])test(`local settings organize five groups and reset only the named data (${locale})`,()=>{
+ const doc=createCepDocument(),values=new Map(),preferences=createPanelPreferences(doc.documentElement,{getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)});
+ preferences.toggleFavorite('wiggle');preferences.recordColor('#abcdef');preferences.recordUse('neon');preferences.setTheme('light');preferences.setPresetAutoplay(false);
+ const locales=[],navigations=[],motions=[];let refreshes=0;
+ const view=createAeSettingsView(doc,{i18n:createI18n({locale}),preferences,motionPreference:{snapshot:()=>({internal:false,system:true,effective:true,storage:'available'}),setInternal:value=>motions.push(value)},onLocale:value=>locales.push(value),onRefresh:()=>refreshes++,onNavigate:value=>navigations.push(value)});
+ const control=id=>view.element.getElementsByTagName('button').find(node=>node.id===id);
+ assert.equal(view.element.getElementsByTagName('section').length,5);
+ assert.match(view.element.allText,locale==='pt-BR'?/sistema está reduzindo/:/system is reducing/);
+ control('settings-clear-colors').click();assert.deepEqual(preferences.snapshot().recentColors,[]);assert.deepEqual(preferences.snapshot().favorites,['wiggle']);assert.deepEqual(preferences.snapshot().recent,['neon']);
+ control('settings-reset-preview').click();assert.equal(preferences.snapshot().presetAutoplay,true);assert.equal(preferences.snapshot().theme,'light');assert.equal(refreshes,1);
+ control('settings-reset-interface').click();assert.equal(preferences.snapshot().theme,'dark');assert.deepEqual(locales,['host']);assert.deepEqual(preferences.snapshot().favorites,['wiggle']);
+ control('settings-help-diagnostics').click();assert.deepEqual(navigations,['diagnostics']);
+ view.dispose();control('settings-clear-favorites').click();assert.deepEqual(preferences.snapshot().favorites,['wiggle']);
+});

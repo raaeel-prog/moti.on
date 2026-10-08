@@ -1,3 +1,4 @@
+import { attachLicensedAccount } from "./licensed-account-fixture.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -49,6 +50,7 @@ async function mountPanel(commandData, { holdWrites = false, holdCommands = [] }
       else callback(response);
     }
   }
+  attachLicensedAccount(window, CSInterface);
   runInNewContext(bundle, { document, window, CSInterface,
     SystemPath: { EXTENSION: "extension" },
     requestAnimationFrame: () => 1, cancelAnimationFrame() {}, performance: { now: () => 0 },
@@ -64,10 +66,10 @@ test("AE bundle: icon-only tools, fixed anchor and no diagnostic actions on Home
   const f = await mountPanel();
   assert.ok(f.mount.getElementsByTagName("input").some(node => node.type === "search"));
   const tiles = f.buttons().filter(node => node.id.startsWith("library-tool-"));
-  assert.equal(tiles.length, 47);
+  assert.equal(tiles.length, 44);
   assert.ok(tiles.every(node => node.allText === "" && node.getAttribute("aria-label")));
   assert.equal(f.mount.getElementsByRole("radio").length, 9);
-  assert.doesNotMatch(f.mount.allText, /Export diagnostics|Apply$/);
+  assert.doesNotMatch(f.mount.allText, /Export diagnostics|Apply$|Tool options|Opções das ferramentas/);
 });
 
 test("AE bundle: vertical text pulse appears in the Effects tool category", async () => {
@@ -408,7 +410,7 @@ test("AE bundle: gallery preview does not call host; named action applies the re
   const f = await mountPanel(); f.nav("Presets").click(); await setImmediate();
   const cards = f.mount.getElementsByTagName("article");
   assert.ok(cards.length > 30, "the default gallery includes every collection");
-  assert.ok(cards.some(card => card.id === "builtin.ease.balanced"));
+  assert.ok(!cards.some(card => card.id.startsWith("builtin.ease.")));
   assert.ok(cards.some(card => card.id === "builtin.camera.pushIn"));
   const before = f.requests.length;
   const preview = f.buttons().find(n => n.className === "ch-preset-preview");

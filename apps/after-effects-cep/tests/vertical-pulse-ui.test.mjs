@@ -1,3 +1,4 @@
+import { attachLicensedAccount } from "./licensed-account-fixture.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
@@ -166,6 +167,7 @@ async function mountPulsePanel(data = empty(), { holdRead = false } = {}) {
       if (command === 'ae.text.vertical-pulse.read' && qa.holdRead) qa.pending.push(() => callback(response)); else callback(response);
     }
   }
+  attachLicensedAccount(window, CSInterface);
   runInNewContext(mainBundle, { document, window, CSInterface, SystemPath: { EXTENSION: 'extension' },
     requestAnimationFrame: () => 1, cancelAnimationFrame() {}, performance: { now: () => 0 },
     setTimeout: () => 1, clearTimeout() {}, setInterval: () => 1, clearInterval() {} });

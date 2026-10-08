@@ -42,6 +42,8 @@ const EXPECTED_DIST_FILES = [
 
   // After Effects: painel CEP + camada de host montada.
   "after-effects-cep/CSXS/manifest.xml",
+  // Fronteira Node da conta: carregada via cep_node.require por client/src/account.ts.
+  "after-effects-cep/account/runtime.cjs",
   "after-effects-cep/assets/control-presets/catalog.json",
   ...presetFiles.map(file => `after-effects-cep/assets/control-presets/${file}`),
   "after-effects-cep/client/index.html",

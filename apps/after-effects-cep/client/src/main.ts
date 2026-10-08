@@ -2440,13 +2440,6 @@ function renderToolBrowser(
     ...quickOptions(), onAction: action => { void applyQuickAction(action, shell, i18n, logger, client); }
   });
   anchor.appendChild(quickActions);
-  const fullOptions = document.createElement("details");
-  fullOptions.appendChild(createElement(document, "summary", "ch-phase-link", i18n.locale() === "pt-BR" ? "Opções das ferramentas" : "Tool options"));
-  for (const id of ["anchor", "createNull", "flip"]) {
-    const tool = TOOLS.find(item => item.id === id);
-    if (tool) fullOptions.appendChild(button(document, { label: i18n.t(tool.nameKey), onClick: () => edit(tool) }));
-  }
-  anchor.appendChild(fullOptions);
   const dock = createQuickDock(document, {
     content: anchor, locale: i18n.locale(), pinned: panelPreferences.snapshot().quickDockPinned,
     onPinChange: pinned => panelPreferences.setQuickDockPinned(pinned),
@@ -3362,7 +3355,7 @@ function renderSettings(
     onNavigate: viewId => regions.shell.navigate(viewId)
   });
   const account = createAccountView(document, i18n.locale());
-  view.element.prepend(account.element);
+  regions.content.appendChild(account.element);
   regions.content.appendChild(view.element);
   disposeView = () => { account.dispose(); view.dispose(); };
 }

@@ -217,3 +217,7 @@
 .ch-preset-illustrative { color:var(--ch-text-secondary); font-size:11px; line-height:1.45; margin:6px 0 0; }
 .ch-preset-card { position:relative; }
 .ch-preset-core-badge { position:absolute; top:6px; left:6px; padding:1px 5px; border-radius:var(--ch-radius-round); background:var(--ch-surface-raised); color:var(--ch-text-secondary); font-size:9px; line-height:14px; pointer-events:auto; }
+
+/* Selected preset controls must respect hidden beneath the library layout rules. */
+.ch-shell[data-layout="library"] .ch-preset-editor[hidden],
+.ch-shell[data-layout="library"] .ch-preset-applybar[hidden] { display:none; }

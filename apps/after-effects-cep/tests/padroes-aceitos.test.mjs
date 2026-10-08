@@ -51,6 +51,7 @@ const {DEFAULT_ORBIT} = await import(`data:text/javascript;base64,${Buffer.from(
  * repositório.
  */
 const NAO_AVALIAVEL = new Map([
+  ["ae.tools.adjust", "os argumentos sao montados pelo managed-tools-editor a partir dos controles gerenciados lidos do host; nao existe padrao do painel para verificar"],
   ["ae.ui.color-picker", "o argumento é a cor atual do seletor do painel e o resultado vem de um diálogo modal do sistema; color-picker.test.mjs cobre o fluxo e o host valida #rrggbb no preflight"],
   ["ae.effect.gradient", "o editor dedicado monta settings e changedKeys a partir da leitura e do gesto; gradient-ui.test.mjs, gradient.test.mjs e contratos/gradient.test.mjs verificam os valores padrao, schema e preflight"],
   ["ae.text.vertical-pulse", "o padrão depende do FPS da composição; vertical-pulse-ui e text-vertical-pulse verificam o payload e o preflight"],

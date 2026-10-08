@@ -45,6 +45,8 @@ export default [
   },
 
   js.configs.recommended,
+  { files: ["apps/after-effects-cep/account/*.cjs"], languageOptions: { globals: globals.node } },
+  { files: ["apps/after-effects-cep/tests/*.browser.mjs"], languageOptions: { globals: { ...globals.browser, testUi: "readonly", current: "readonly" } } },
 
   // TypeScript. Sem checagem com informacao de tipo (projectService) de
   // proposito: `npm run typecheck` roda o tsc completo e e a autoridade sobre

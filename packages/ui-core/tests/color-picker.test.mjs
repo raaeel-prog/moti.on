@@ -240,3 +240,42 @@ test("recent colors render as chips that preview without committing", () => {
   control.close(true);
   assert.deepEqual(commits, ["#445566"]);
 });
+
+test('native failures preserve the draft and surface an actionable error', async () => {
+  const { doc, find } = overlayDocument();
+  configureColorPickers(doc, { native: { pick() { throw new Error('Native dialog failed'); } } });
+  const { control, commits } = picker(doc);
+  control.open();
+  find('ch-color-hex-input').value = '#336699'; find('ch-color-hex-input').emit('input');
+  find('ch-color-native').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(control.isOpen, true);
+  assert.equal(find('ch-color-native-error').textContent, 'Native dialog failed');
+  assert.equal(find('ch-color-native-error').hidden, false);
+  assert.equal(find('ch-color-hex-input').value, '#336699');
+  assert.deepEqual(commits, []);
+  control.close(true); assert.deepEqual(commits, ['#336699']);
+});
+
+test('a native answer belongs to its original session, never a reopened picker', async () => {
+  const { doc, find } = overlayDocument();
+  let resolve;
+  configureColorPickers(doc, { native: { pick: () => new Promise(done => { resolve = done; }) } });
+  const { control, commits } = picker(doc);
+  control.open(); find('ch-color-native').click(); await Promise.resolve();
+  control.close(false); control.open(); resolve('#123abc');
+  await new Promise(done => setImmediate(done));
+  assert.equal(control.isOpen, true); assert.equal(find('ch-color-hex-input').value, '#FF0000');
+  assert.deepEqual(commits, []); control.dispose(); assert.equal(control.isOpen, false);
+});
+
+test('disposed and detached controls cannot reopen or commit a retained callback', async () => {
+  const { doc, find } = overlayDocument(), transitions = [];
+  const { control, commits } = picker(doc, { onOpenChange: open => transitions.push(open) });
+  control.open(); find('ch-color-hex-input').value = '#123abc'; find('ch-color-hex-input').emit('input');
+  control.close(true, true); control.dispose(); await Promise.resolve();
+  control.open(); assert.equal(control.isOpen, false); assert.deepEqual(commits, []);
+  assert.deepEqual(transitions, [true, false]);
+  const other = picker(doc); other.control.trigger.isConnected = false;
+  other.control.open(); assert.equal(other.control.isOpen, false);
+});

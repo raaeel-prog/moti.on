@@ -22,7 +22,7 @@ const i18n=core.createI18n({locale:'pt-BR'});
 function root(){dispose();dispose=()=>{};core.closeOpenColorPicker(document);document.body.innerHTML='<div class="ch-shell" data-layout="library" id="root"></div>';return document.querySelector('#root');}
 function prefs(){return core.createPanelPreferences(document.documentElement);}
 window.testUi={core,
- gradient(){const el=root();let data={settings:cloneGradientSettings(),selectionToken:'comp1/layer1',selectionCount:1,appliedCount:1,instances:[],mixedKeys:[],lockedKeys:[],capabilities:{nativeAvailable:true}};data.instances=[{layerId:1,layerName:'Shape',effectIndex:1,settings:data.settings,lockedKeys:[]}];
+ gradient(){const el=root();core.configureColorPickers(document,{recent:{list:()=>['#ff0000','#336699','#123abc','#00ffaa','#112233','#445566','#778899','#aabbcc'],record(){}},native:{pick:async()=>null}});let data={settings:cloneGradientSettings(),selectionToken:'comp1/layer1',selectionCount:1,appliedCount:1,instances:[],mixedKeys:[],lockedKeys:[],capabilities:{nativeAvailable:true}};data.instances=[{layerId:1,layerName:'Shape',effectIndex:1,settings:data.settings,lockedKeys:[]}];
  let reads=0;const calls=[];const editor=createGradientEditor(document,{i18n,context:()=>({isComposition:true,signature:'comp1/layer1'}),read:async()=>{reads++;return response(data);},execute:async args=>{calls.push(args);data={...data,settings:args.settings??data.settings};return response({});},error:()=> 'error'});
  el.append(editor.element,editor.actions);dispose=()=>editor.dispose();return window.current={editor,calls,get reads(){return reads;},change(){data.settings={...data.settings,angle:120};},root:el};},
  picker(){const el=root(),commits=[],states=[];let finish;core.configureColorPickers(document,{native:{pick:()=>new Promise(resolve=>{finish=resolve;})}});const picker=core.createColorPicker(document,{id:'standalone-color',label:'Cor',value:'#ff0000',onCommit:v=>commits.push(v),onOpenChange:v=>states.push(v)});el.append(picker.trigger);dispose=()=>picker.dispose();return window.current={picker,commits,states,resolve:v=>finish(v)};},
@@ -45,7 +45,7 @@ try {
   const before=await page.evaluate(()=>current.reads);await page.evaluate(async()=>{current.change();await current.editor.refresh();});
   assert.equal(await page.evaluate(()=>current.reads),before,'no host read while choosing a color');
   assert.equal(await page.locator('.ch-color-hex-input').inputValue(),'#123abc');
-  await page.screenshot({path:resolve(output,`gradient-color-${width}x${height}.png`)});
+  await page.waitForTimeout(360);await page.screenshot({path:resolve(output,`gradient-color-${width}x${height}.png`)});
   await page.locator('.ch-color-hex-input').press('Enter');
   assert.equal(await page.evaluate(()=>current.calls.length),1);assert.deepEqual(await page.evaluate(()=>current.calls[0].changedKeys),['stops.0.color']);
   assert.equal(await page.evaluate(()=>document.activeElement.id),'gradient-stop-0-color');
@@ -53,7 +53,7 @@ try {
  }
  await page.setViewportSize({width:360,height:720});
  await page.evaluate(()=>testUi.picker());await page.locator('#standalone-color').click();await page.locator('.ch-color-native').click();
- await page.locator('.ch-color-surface').press('Escape');await page.locator('#standalone-color').click();
+ await page.locator('.ch-color-area').focus();await page.keyboard.press('Escape');await page.locator('#standalone-color').click();
  await page.evaluate(()=>current.resolve('#abcdef'));await page.waitForTimeout(30);
  assert.equal(await page.locator('.ch-color-hex-input').inputValue(),'#FF0000');assert.equal(await page.evaluate(()=>current.commits.length),0);check('old native response cannot mutate a reopened session');
  await page.evaluate(()=>{current.picker.close(false);testUi.core.configureColorPickers(document,{native:{pick:()=>{throw new Error('Falha de conexão');}}});current.picker.open();});
@@ -65,9 +65,16 @@ try {
  await page.locator('.ch-color-hex').press('Escape');assert.equal(await page.locator('.ch-color-hex').inputValue(),'#336699');assert.equal(await page.evaluate(()=>testUi.core.hasColorDraft(document)),false);check('hex blur and Enter deduplicate; invalid drafts remain protected; Escape restores');
  const row=await page.locator('.ch-color-list .ch-color-row').boundingBox();const trigger=await page.locator('.ch-color-swatch-trigger').boundingBox();assert.ok(row.height>=trigger.height+16);check('final stylesheet separates list rows and picker rows');
  await page.evaluate(()=>testUi.gallery());assert.equal(await page.locator('[id^="builtin.ease."]').count(),0);
- const previews=page.locator('.ch-preset-preview');await previews.nth(0).click();const id=await page.evaluate(()=>current.navigation.selectedId);await previews.nth(1).focus();
+ assert.equal(await page.locator('.ch-preset-editor').isVisible(),false);assert.equal(await page.locator('.ch-preset-applybar').isVisible(),false);
+ const previews=page.locator('.ch-preset-preview');await previews.nth(0).click();assert.equal(await page.locator('.ch-preset-editor').isVisible(),true);assert.equal(await page.locator('.ch-preset-applybar').isVisible(),true);const id=await page.evaluate(()=>current.navigation.selectedId);await previews.nth(1).focus();
  assert.equal(await page.locator('.ch-preset-card[data-selected="true"]').count(),1);assert.equal(await page.evaluate(()=>current.navigation.selectedId),id);await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>current.navigation.selectedId),id);
- assert.equal(await previews.nth(0).evaluate(el=>getComputedStyle(el).outlineStyle),'none');assert.equal(await previews.nth(1).evaluate(el=>getComputedStyle(el).outlineStyle),'dashed');await page.screenshot({path:resolve(output,'gallery-selection.png')});check('one persistent selected card, distinct keyboard focus, no Curves');
- await page.evaluate(()=>testUi.settings());assert.deepEqual(await page.locator('.ch-settings-section > h3').allTextContents(),['Interface','Prévias','Acessibilidade','Dados locais','Ajuda']);await page.screenshot({path:resolve(output,'settings.png')});check('five local settings groups and effective system motion');
+ assert.equal(await previews.nth(0).evaluate(el=>getComputedStyle(el).outlineStyle),'none');assert.equal(await previews.nth(1).evaluate(el=>getComputedStyle(el).outlineStyle),'dashed');await page.waitForTimeout(360);await page.screenshot({path:resolve(output,'gallery-selection.png')});check('one persistent selected card, distinct keyboard focus, no Curves');
+ for(const [width,height] of [[280,640],[360,720],[480,800],[720,900]]){
+  await page.setViewportSize({width,height});await page.evaluate(()=>testUi.settings());
+  assert.deepEqual(await page.locator('.ch-settings-section > .ch-section-title').allTextContents(),['Interface','Prévias','Acessibilidade','Dados locais','Ajuda']);
+  const overflow=await page.locator('#root').evaluate(el=>({width:el.clientWidth,scroll:el.scrollWidth,nodes:[...el.querySelectorAll('*')].map(node=>({tag:node.tagName,id:node.id,cls:node.className,box:node.getBoundingClientRect().toJSON()})).filter(node=>node.box.right>innerWidth)}));
+  assert.ok(overflow.scroll<=overflow.width,JSON.stringify(overflow));
+  await page.waitForTimeout(360);await page.screenshot({path:resolve(output,`settings-${width}x${height}.png`)});check(`five settings groups, effective system motion, no overflow ${width}x${height}`);
+ }
  assert.deepEqual(errors,[]);await writeFile(resolve(output,'browser-results.json'),JSON.stringify({status:'PASS',checks,errors},null,2));console.log(JSON.stringify({status:'PASS',checks:checks.length,output}));
 } finally { await browser.close(); }

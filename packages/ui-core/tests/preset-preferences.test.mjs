@@ -61,3 +61,24 @@ test('recent colors keep eight unique lowercase hex values and ignore anything e
   const saved=createPanelPreferences(root,storage).snapshot().recentColors;
   assert.deepEqual(saved,['#abcdef','#555555','#999999','#888888','#777777','#666666','#444444','#333333']);
 });
+
+test('selective resets preserve personal libraries, drafts and unrelated preferences',()=>{
+  const records=new Map([
+    ['motion.panel.preferences.v1',JSON.stringify({version:1,theme:'light',density:'compact',locale:'en-US',favorites:['wiggle'],recent:['neon'],recentColors:['#123abc'],presetAutoplay:false,presetSize:280,drafts:{gradient:{angle:30}},gallery:{category:'text',scope:'all',query:'reveal',presetId:'builtin.motion.arc-arrival'}})],
+    ['motion.ease.library.v1','personal curves'],['motion.gradient.library.v1','personal gradient'],['motion.auth','account']
+  ]);
+  const preferences=createPanelPreferences(root,{getItem:key=>records.get(key)??null,setItem:(key,value)=>records.set(key,value)});
+  preferences.clearRecentColors();assert.deepEqual(preferences.snapshot().recentColors,[]);assert.deepEqual(preferences.snapshot().recent,['neon']);
+  preferences.resetPreviews();assert.equal(preferences.snapshot().presetSize,200);assert.equal(preferences.snapshot().presetAutoplay,true);assert.equal(preferences.snapshot().theme,'light');
+  preferences.resetInterface();assert.equal(preferences.snapshot().theme,'dark');assert.equal(preferences.snapshot().locale,'host');assert.deepEqual(preferences.snapshot().favorites,['wiggle']);
+  assert.deepEqual(preferences.snapshot().drafts,{gradient:{angle:30}});assert.equal(preferences.snapshot().gallery.query,'reveal');
+  assert.equal(records.get('motion.ease.library.v1'),'personal curves');assert.equal(records.get('motion.gradient.library.v1'),'personal gradient');assert.equal(records.get('motion.auth'),'account');
+  preferences.clearFavorites();assert.deepEqual(preferences.snapshot().favorites,[]);assert.deepEqual(preferences.snapshot().recent,['neon']);
+});
+
+test('retired gallery Curves state migrates without deleting saved curve data or favorites',()=>{
+  const raw=JSON.stringify({version:1,gallery:{category:'ease',scope:'favorites',query:'',presetId:'builtin.ease.balanced'},favorites:['builtin.ease.balanced','wiggle'],drafts:{'custom.curve':{intensity:20}}});
+  const p=createPanelPreferences(root,{getItem:()=>raw,setItem(){}});
+  assert.deepEqual(p.snapshot().gallery,{category:'all',scope:'favorites',query:'',presetId:''});
+  assert.deepEqual(p.snapshot().favorites,['builtin.ease.balanced','wiggle']);assert.deepEqual(p.snapshot().drafts,{'custom.curve':{intensity:20}});
+});

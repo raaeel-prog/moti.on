@@ -8,7 +8,7 @@ export function createAccountView(doc: Document, locale: string): { element: HTM
   body.textContent = pt ? "Carregando conta…" : "Loading account…";
   let disposed = false, stop: (() => void) | undefined, busy = false;
   function render(client: AccountClient, snapshot: AccountSnapshot): void {
-    if (disposed) return; body.replaceChildren();
+    if (disposed) return; while (body.firstChild) body.removeChild(body.firstChild);
     const text = (value: string): void => { body.appendChild(createElement(doc, "p", "ch-hint", value)); };
     const action = (label: string, work: () => Promise<unknown>): void => { body.appendChild(button(doc, { label, disabled: busy, onClick: () => {
       if (busy || disposed) return; busy = true; render(client, client.snapshot());
