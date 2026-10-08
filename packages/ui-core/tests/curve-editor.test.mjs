@@ -140,19 +140,16 @@ test("overlay toggles the view only in bezier mode without points", () => {
   assert.equal(back.overlay.title, labels.reset);
 });
 
-test("speed markers step the influence: ArrowDown = more, ArrowUp = less", () => {
+test("speed view exposes one smoothing slider: ArrowDown = smoother, ArrowUp = more linear", () => {
   const { byRole, commits } = mount({ view: "speed" });
   const markers = byRole("slider").filter(s => s.getAttribute("class") === "ch-curve__marker");
-  assert.equal(markers.length, 2);
+  assert.equal(markers.length, 1);
   markers[0].keydown("ArrowDown");
   assert.equal(commits.at(-1).reason, "keyboard");
-  assert.equal(commits.at(-1).model.curve.x1, 0.26, "ArrowDown raises x1 (more out influence)");
+  const down = commits.at(-1).model.curve;
+  assert.ok(down.x1 > 0.25 && down.x2 < 0.75, "both influences rise");
   markers[0].keydown("ArrowUp");
-  assert.equal(commits.at(-1).model.curve.x1, 0.25, "ArrowUp lowers x1");
-  markers[1].keydown("ArrowDown");
-  assert.equal(commits.at(-1).model.curve.x2, 0.24, "ArrowDown lowers x2 (more in influence: 1 - x2 up)");
-  markers[1].keydown("ArrowUp", { shiftKey: true });
-  assert.equal(commits.at(-1).model.curve.x2, 0.34, "Shift steps by 0.1");
+  assert.ok(commits.at(-1).model.curve.x1 < down.x1, "ArrowUp lowers them again");
 });
 
 test("plain click on the hit path adds a point and Delete on it removes the point", () => {

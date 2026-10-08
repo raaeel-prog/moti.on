@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_BOUNCE, DEFAULT_ELASTIC, backCurve, bezierSpeedAt, bezierValueAt, bounceOut, constrainCurveEnds, constrainCurvePoint,
   easingValue, elasticOut, insertCurvePoint, multiPointValueAt, normalizeCurveSegments, peakSpeed, sampleBezierSpeed,
-  sortedPointsValid, speedDragToCurve, fitRange, MAX_CURVE_POINTS
+  sortedPointsValid, speedDragToCurve, SPEED_INFLUENCE_MAX, fitRange, MAX_CURVE_POINTS
 } from "../dist/index.js";
 
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) <= eps, `${a} ≉ ${b}`);
@@ -21,14 +21,34 @@ test("bezier value and speed: linear is identity with speed 1, vertical handle s
   assert.equal(samples.length, 33); assert.equal(samples[0].x, 0); assert.equal(samples.at(-1).x, 1);
 });
 
-test("speed drag: centre raises both influences, edge changes one side, down reverses", () => {
+test("speed drag: one symmetric control, exponential and bounded", () => {
   const start = { x1: 0.25, y1: 0, x2: 0.75, y2: 1 };
-  const centre = speedDragToCurve(start, 0.5, 0.2);
-  assert.deepEqual(centre, { x1: 0.35, y1: 0, x2: 0.65, y2: 1 });
-  assert.ok(peakSpeed(centre) > peakSpeed(start));
-  assert.deepEqual(speedDragToCurve(start, 0.1, 0.2), { x1: 0.45, y1: 0, x2: 0.75, y2: 1 });
-  assert.deepEqual(speedDragToCurve(start, 0.9, 0.2), { x1: 0.25, y1: 0, x2: 0.55, y2: 1 });
-  assert.deepEqual(speedDragToCurve(start, 0.5, -0.5), { x1: 0, y1: 0, x2: 1, y2: 1 });
+  const down = speedDragToCurve(start, 0.2);
+  assert.ok(down.x1 > start.x1 && 1 - down.x2 > 1 - start.x2, "pulling down raises both influences");
+  near(down.x1, 1 - 0.75 * Math.exp(-0.6), 0.001);
+  near(down.x1, 1 - down.x2, 1e-6);
+  assert.ok(peakSpeed(down) > peakSpeed(start));
+  assert.deepEqual(speedDragToCurve(start, -1), { x1: 0, y1: 0, x2: 1, y2: 1 }, "far up reaches linear");
+  const far = speedDragToCurve(start, 5);
+  assert.equal(far.x1, SPEED_INFLUENCE_MAX); assert.ok(Number.isFinite(peakSpeed(far)));
+  const asym = speedDragToCurve({ x1: 0.1, y1: 0, x2: 0.5, y2: 1 }, 0.1);
+  assert.ok(asym.x1 > 0.1 && 1 - asym.x2 > 0.5, "asymmetric ease moves both ends");
+});
+
+test("speed drag scales each handle along its slope: the keyframe speed is kept, never a spike", () => {
+  const tilted = { x1: 0.4, y1: 0.2, x2: 0.6, y2: 0.9 };
+  const up = speedDragToCurve(tilted, -0.05);
+  near(up.y1 / up.x1, 0.5, 0.01); near((1 - up.y2) / (1 - up.x2), 0.25, 0.01);
+  const linearish = speedDragToCurve(tilted, -0.4);
+  assert.ok(peakSpeed(linearish) < 3, `peak stays finite and small (${peakSpeed(linearish)})`);
+});
+
+test("speed drag: equal steps feel equal, no jump near the limit", () => {
+  let curve = { x1: 0, y1: 0, x2: 1, y2: 1 };
+  const deltas = [];
+  for (let i = 0; i < 20; i++) { const next = speedDragToCurve(curve, 0.05); deltas.push(next.x1 - curve.x1); curve = next; }
+  for (let i = 1; i < deltas.length; i++) assert.ok(deltas[i] <= deltas[i - 1] + 0.002, "steps never grow");
+  assert.ok(curve.x1 <= SPEED_INFLUENCE_MAX);
 });
 
 test("normalizeCurveSegments: one mid point gives hand-computed locals; a flat segment maps to 0/1", () => {
@@ -117,16 +137,3 @@ test("insertCurvePoint refuses once MAX_CURVE_POINTS (16) interior points exist"
   assert.notEqual(refused.points, state.points, "returns copies");
 });
 
-test("speedDragToCurve: a downward (positive) drag at the centre raises both influences", () => {
-  const next = speedDragToCurve(EASE, 0.5, 0.1);
-  assert.ok(next.x1 > EASE.x1, "x1 up");
-  assert.ok(1 - next.x2 > 1 - EASE.x2, "1 - x2 up");
-  near(next.x1, 0.3); near(next.x2, 0.2);
-  assert.equal(next.y1, EASE.y1); assert.equal(next.y2, EASE.y2);
-  const up = speedDragToCurve(EASE, 0.5, -0.1);
-  assert.ok(up.x1 < EASE.x1 && up.x2 > EASE.x2, "upward drag lowers both");
-  const left = speedDragToCurve(EASE, 0.1, 0.1);
-  assert.equal(left.x2, EASE.x2, "x≈0.1 leaves x2 alone");
-  const right = speedDragToCurve(EASE, 0.9, 0.1);
-  assert.equal(right.x1, EASE.x1, "x≈0.9 leaves x1 alone");
-});

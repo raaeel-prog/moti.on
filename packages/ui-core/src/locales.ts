@@ -779,11 +779,16 @@ const ptBR = {
   "ease.live": "Aplicar ao vivo",
   "ease.liveOn": "Ao vivo: cada ajuste é aplicado aos keyframes selecionados.",
   "ease.liveOff": "Ao vivo desligado. Use Aplicar para gravar a curva.",
-  "ease.addPointHint": "Clique na linha para inserir um ponto · Shift: ajuste fino · Esc: cancela",
-  "ease.addPointHintCtrl": "Clique na linha para inserir um ponto · Shift: ajuste fino · Esc: cancela",
+  "ease.addPointHint": "Clique na linha ou tecle +: novo ponto · Shift: ajuste fino · Esc: cancela",
+  "ease.addPointHintCtrl": "Clique na linha ou tecle +: novo ponto · Shift: ajuste fino · Esc: cancela",
   "ease.point": "Ponto da curva",
   "ease.pointIn": "Alça de entrada do ponto",
   "ease.pointOut": "Alça de saída do ponto",
+  "ease.smoothing": "Suavização (arraste para cima ou para baixo)",
+  "ease.speedHint": "Arraste para baixo: mais suave · para cima: mais linear",
+  "ease.pointAdded": "Ponto adicionado, {n} no total",
+  "ease.pointRemoved": "Ponto removido, restam {n}",
+  "ease.pointRefused": "Não cabe outro ponto aqui",
   "ease.speedLeft": "Influência de saída",
   "ease.speedRight": "Influência de entrada",
   "ease.peak": "Velocidade máxima",
@@ -1569,6 +1574,11 @@ export type MessageKey =
   | "ease.point"
   | "ease.pointIn"
   | "ease.pointOut"
+  | "ease.smoothing"
+  | "ease.speedHint"
+  | "ease.pointAdded"
+  | "ease.pointRemoved"
+  | "ease.pointRefused"
   | "ease.speedLeft"
   | "ease.speedRight"
   | "ease.peak"
@@ -2561,11 +2571,16 @@ const enUS: Record<MessageKey, string> = {
   "ease.live": "Live apply",
   "ease.liveOn": "Live: every change is applied to the selected keyframes.",
   "ease.liveOff": "Live apply is off. Use Apply to write the curve.",
-  "ease.addPointHint": "Click the line to insert a point · Shift: fine adjust · Esc: cancel",
-  "ease.addPointHintCtrl": "Click the line to insert a point · Shift: fine adjust · Esc: cancel",
+  "ease.addPointHint": "Click the line or press +: new point · Shift: fine adjust · Esc: cancel",
+  "ease.addPointHintCtrl": "Click the line or press +: new point · Shift: fine adjust · Esc: cancel",
   "ease.point": "Curve point",
   "ease.pointIn": "Point in handle",
   "ease.pointOut": "Point out handle",
+  "ease.smoothing": "Smoothing (drag up or down)",
+  "ease.speedHint": "Drag down: smoother · up: more linear",
+  "ease.pointAdded": "Point added, {n} in total",
+  "ease.pointRemoved": "Point removed, {n} left",
+  "ease.pointRefused": "No room for another point here",
   "ease.speedLeft": "Out influence",
   "ease.speedRight": "In influence",
   "ease.peak": "Peak speed",

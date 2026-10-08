@@ -1602,8 +1602,9 @@ body,
 .ch-curve__reference { stroke: var(--ch-text-muted); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.5; }
 /* The visible path never animates: it follows the pointer directly. Presses land on the invisible hit band. */
 .ch-curve__value { fill: none; stroke: var(--curve-path); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; transition-property: none; }
-.ch-curve__hit { fill: none; stroke: transparent; stroke-width: 12; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: crosshair; touch-action: none; }
-.ch-curve[data-view="speed"] .ch-curve__hit { cursor: grab; }
+.ch-curve__hit { fill: none; stroke: transparent; stroke-width: 20; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: crosshair; touch-action: none; }
+/* Speed view: the whole plot is one vertical control. */
+.ch-curve[data-view="speed"] .ch-curve__svg, .ch-curve[data-view="speed"] .ch-curve__hit, .ch-curve[data-view="speed"] .ch-curve__marker { cursor: ns-resize; }
 .ch-curve[data-mode="back"] .ch-curve__hit, .ch-curve[data-mode="elastic"] .ch-curve__hit, .ch-curve[data-mode="bounce"] .ch-curve__hit { pointer-events: none; }
 .ch-curve__value--faint { stroke: var(--curve-faint); stroke-width: 1.5; opacity: 0.45; pointer-events: none; cursor: default; }
 .ch-curve__value--hidden { stroke: transparent; }
@@ -1617,7 +1618,7 @@ body,
 .ch-curve__chip-bg { fill: var(--ch-surface-control); stroke: var(--ch-border-default); stroke-width: 1; }
 .ch-curve__chip-path { fill: none; stroke: var(--curve-path); stroke-width: 1.5; }
 .ch-curve__stem { stroke: var(--curve-handle); stroke-width: 1; opacity: 0.8; }
-/* Dots: r=5 plus a 16 px transparent, non-scaling stroke → a ≥20 CSS px target at any dock width. */
+/* Dots: r=5 plus a 16 px transparent stroke; a press up to HANDLE_CAPTURE_PX (24 px) away still grabs the nearest dot. */
 .ch-curve__handle, .ch-curve__point, .ch-curve__marker { fill: var(--curve-handle); stroke: transparent; stroke-width: 16; vector-effect: non-scaling-stroke; paint-order: stroke fill; cursor: grab; pointer-events: all; touch-action: none; transition: fill var(--ch-motion-fast) var(--ease-std); }
 .ch-curve__marker { fill: var(--surface-deep); }
 .ch-curve__handle:hover, .ch-curve__point:hover, .ch-curve__marker:hover { fill: var(--ch-text-primary); }

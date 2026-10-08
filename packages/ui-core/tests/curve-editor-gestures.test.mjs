@@ -9,8 +9,9 @@ import assert from "node:assert/strict";
 
 import { createFakeDocument, createFakeWindow } from "./fake-dom.mjs";
 import {
-  CURVE_PAD, CURVE_PLOT, DRAG_THRESHOLD_PX, FINE_DRAG_FACTOR, createCurveEditor
+  CURVE_PAD, CURVE_PLOT, DRAG_THRESHOLD_PX, FINE_DRAG_FACTOR, HANDLE_CAPTURE_PX, createCurveEditor
 } from "../dist/index.js";
+import { speedDragToCurve } from "../../keyframe-core/dist/index.js";
 
 const labels = {
   graph: "Easing graph", modeMenu: "Mode",
@@ -68,7 +69,8 @@ function mountGestures(overrides = {}) {
   const knots = () => byRole("slider").filter(s => s.getAttribute("aria-label") === labels.point);
   const handles = label => byRole("slider").filter(s => s.getAttribute("aria-label") === label);
   const markers = () => byRole("slider").filter(s => s.getAttribute("class") === "ch-curve__marker");
-  return { doc, win: doc.defaultView, editor, root, inputs, commits, cancels: () => cancels, byRole, hit, knots, handles, markers };
+  const status = () => root.getElementsByRole("status")[0];
+  return { doc, win: doc.defaultView, editor, root, svg, status, inputs, commits, cancels: () => cancels, byRole, hit, knots, handles, markers };
 }
 
 /** Client coordinates of curve point (x, y) in the unit range. */
@@ -115,26 +117,61 @@ test("press + drag >= 3 px on the hit path inserts and moves the knot in one ges
   assert.equal(editor.getModel().points.length, 1);
 });
 
-test("refused insertion (gap too small, or 16 points) starts no gesture and commits nothing", () => {
+test("a press on the line near a dot grabs the dot instead of inserting", () => {
   const near = mountGestures({ points: [{ ...POINT }] });
   press(near.hit(), client(0.505, 0.5));
   move(near.hit(), client(0.6, 0.5));
   release(near.hit(), client(0.6, 0.5));
-  assert.equal(near.commits.length, 0);
-  assert.equal(near.inputs.length, 0);
-  assert.equal(near.editor.getModel().points.length, 1);
+  assert.equal(near.editor.getModel().points.length, 1, "no insertion");
+  assert.equal(near.editor.getModel().points[0].x, 0.595, "the knot followed the drag from where the press landed");
+  assert.equal(near.commits.at(-1).reason, "gesture");
+});
 
+test("tolerance: a press anywhere within HANDLE_CAPTURE_PX of a dot drags it; farther away does nothing", () => {
+  const { svg, handles, inputs, commits, doc } = mountGestures();
+  const [out] = handles("Out handle");
+  const cx = Number(out.getAttribute("cx")), cy = Number(out.getAttribute("cy"));
+  const at = { clientX: cx + HANDLE_CAPTURE_PX - 2, clientY: cy };
+  press(svg, at);
+  assert.equal(doc.activeElement, out, "the grabbed dot takes focus");
+  move(svg, { clientX: at.clientX, clientY: at.clientY - 32 });
+  assert.equal(inputs.at(-1).curve.y1, 0.2, "relative drag: no jump to the press position");
+  release(svg, { clientX: at.clientX, clientY: at.clientY - 32 });
+  assert.equal(commits.at(-1).reason, "gesture");
+
+  const far = mountGestures();
+  press(far.svg, { clientX: CURVE_PAD + CURVE_PLOT * 0.9, clientY: CURVE_PAD + CURVE_PLOT * 0.9 });
+  move(far.svg, { clientX: CURVE_PAD + CURVE_PLOT * 0.9, clientY: CURVE_PAD + CURVE_PLOT * 0.5 });
+  assert.equal(far.inputs.length, 0);
+  assert.equal(far.commits.length, 0);
+});
+
+test("refused insertion (16 points) is announced and commits nothing", () => {
   const points = Array.from({ length: 16 }, (_, i) => {
     const x = (i + 1) / 17;
     return { x, y: x, inX: x - 0.01, inY: x - 0.01, outX: x + 0.01, outY: x + 0.01 };
   });
   const full = mountGestures({ points });
-  press(full.hit(), client(0.5 / 17 + 0.5, 0.5));
-  move(full.hit(), client(0.9, 0.5));
-  release(full.hit(), client(0.9, 0.5));
+  full.knots()[3].keydown("+");
   assert.equal(full.commits.length, 0);
-  assert.equal(full.inputs.length, 0);
   assert.equal(full.editor.getModel().points.length, 16);
+  assert.match(full.status().textContent, /room/i);
+});
+
+test("+ on a dot inserts a point halfway to the next knot, focused and announced; Delete announces the removal", () => {
+  const { handles, knots, commits, editor, doc, status } = mountGestures();
+  handles("Out handle")[0].keydown("+");
+  assert.equal(editor.getModel().points.length, 1);
+  assert.equal(editor.getModel().points[0].x, 0.5);
+  assert.equal(commits.at(-1).reason, "point");
+  assert.equal(doc.activeElement, knots()[0]);
+  assert.match(status().textContent, /1/);
+  knots()[0].keydown("=");
+  assert.equal(editor.getModel().points.length, 2);
+  assert.equal(editor.getModel().points[1].x, 0.75);
+  knots()[1].keydown("Delete");
+  assert.equal(editor.getModel().points.length, 1);
+  assert.match(status().textContent, /removed/i);
 });
 
 test("knot click selects; drag moves point and handles together; Delete removes only the focused knot", () => {
@@ -182,53 +219,39 @@ test("handles edit tangents mirrored; Alt breaks the mirror", () => {
   assert.equal(p.outX, 0.7); assert.equal(p.outY, 0.5, "Alt keeps the other handle");
 });
 
-test("speed view: drag down on the hit path = more influence, up = less; edges touch one side", () => {
-  const centre = mountGestures({ view: "speed" });
-  const start = { clientX: CURVE_PAD + CURVE_PLOT * 0.5, clientY: CURVE_PAD + CURVE_PLOT * 0.5 };
-  press(centre.hit(), start);
-  move(centre.hit(), { clientX: start.clientX, clientY: start.clientY + 32 });
-  // Centre weights are 0.5 each side: 32 px = 0.1 normalized → ±0.05 on both.
-  assert.equal(centre.inputs.at(-1).curve.x1, 0.3, "down moves x1 up");
-  assert.equal(centre.inputs.at(-1).curve.x2, 0.2, "down moves 1 - x2 up");
-  move(centre.hit(), { clientX: start.clientX, clientY: start.clientY - 32 });
-  assert.equal(centre.inputs.at(-1).curve.x1, 0.2, "computed from the gesture-start curve, not accumulated per move");
-  assert.equal(centre.inputs.at(-1).curve.x2, 0.3);
-  release(centre.hit(), { clientX: start.clientX, clientY: start.clientY - 32 });
-  assert.equal(centre.commits.at(-1).reason, "gesture");
-  assert.deepEqual(centre.commits.at(-1).model.curve, { x1: 0.2, y1: 0.1, x2: 0.3, y2: 1 });
-
-  const left = mountGestures({ view: "speed" });
-  const lx = { clientX: CURVE_PAD + CURVE_PLOT * 0.1, clientY: 200 };
-  press(left.hit(), lx);
-  move(left.hit(), { clientX: lx.clientX, clientY: lx.clientY + 32 });
-  assert.equal(left.inputs.at(-1).curve.x1, 0.35);
-  assert.equal(left.inputs.at(-1).curve.x2, 0.25, "x≈0.1 touches only x1");
-
-  const right = mountGestures({ view: "speed" });
-  const rx = { clientX: CURVE_PAD + CURVE_PLOT * 0.9, clientY: 200 };
-  press(right.hit(), rx);
-  move(right.hit(), { clientX: rx.clientX, clientY: rx.clientY + 32 });
-  assert.equal(right.inputs.at(-1).curve.x1, 0.25, "x≈0.9 touches only x2");
-  assert.equal(right.inputs.at(-1).curve.x2, 0.15);
+test("speed view: one control anywhere on the plot; down = smoother, up = more linear, from the gesture start", () => {
+  const start = { x1: 0.25, y1: 0.1, x2: 0.25, y2: 1 };
+  for (const x of [0.1, 0.5, 0.9]) {
+    const editor = mountGestures({ view: "speed" });
+    const at = { clientX: CURVE_PAD + CURVE_PLOT * x, clientY: CURVE_PAD + CURVE_PLOT * 0.7 };
+    press(editor.svg, at);
+    move(editor.svg, { clientX: at.clientX, clientY: at.clientY + 32 });
+    assert.deepEqual(editor.inputs.at(-1).curve, speedDragToCurve(start, 0.1), `same result wherever the press lands (x=${x})`);
+    assert.ok(editor.inputs.at(-1).curve.x1 > start.x1 && editor.inputs.at(-1).curve.x2 < start.x2, "both ends smoother");
+    move(editor.svg, { clientX: at.clientX, clientY: at.clientY - 32 });
+    assert.deepEqual(editor.inputs.at(-1).curve, speedDragToCurve(start, -0.1), "computed from the start curve, not accumulated");
+    release(editor.svg, { clientX: at.clientX, clientY: at.clientY - 32 });
+    assert.equal(editor.commits.at(-1).reason, "gesture");
+  }
 });
 
-test("speed markers drag like the path and step with ArrowDown (more) / ArrowUp (less)", () => {
+test("speed view has a single marker at the peak: drags like the plot, arrows step both ends", () => {
   const { markers, inputs, commits } = mountGestures({ view: "speed" });
-  const [left, right] = markers();
-  const at = { clientX: Number(left.getAttribute("cx")), clientY: Number(left.getAttribute("cy")) };
-  press(left, at);
-  move(left, { clientX: at.clientX, clientY: at.clientY + 64 });
-  assert.equal(inputs.at(-1).curve.x1, 0.45);
-  assert.equal(inputs.at(-1).curve.x2, 0.25, "left marker sits at x1 = 0.25: only x1 changes");
-  release(left, { clientX: at.clientX, clientY: at.clientY + 64 });
-  assert.equal(commits.at(-1).model.curve.x1, 0.45);
-
-  right.keydown("ArrowDown");
-  assert.equal(commits.at(-1).model.curve.x2, 0.24);
-  right.keydown("ArrowUp");
-  assert.equal(commits.at(-1).model.curve.x2, 0.25);
-  left.keydown("ArrowUp");
-  assert.equal(commits.at(-1).model.curve.x1, 0.44);
+  assert.equal(markers().length, 1);
+  const [marker] = markers();
+  assert.match(marker.getAttribute("aria-valuetext"), /^×\d/);
+  assert.ok(Number(marker.getAttribute("aria-valuenow")) > 1);
+  const at = { clientX: Number(marker.getAttribute("cx")), clientY: Number(marker.getAttribute("cy")) };
+  press(marker, at);
+  move(marker, { clientX: at.clientX, clientY: at.clientY + 64 });
+  assert.deepEqual(inputs.at(-1).curve, speedDragToCurve({ x1: 0.25, y1: 0.1, x2: 0.25, y2: 1 }, 0.2));
+  release(marker, { clientX: at.clientX, clientY: at.clientY + 64 });
+  const before = commits.at(-1).model.curve;
+  marker.keydown("ArrowDown");
+  assert.equal(commits.at(-1).reason, "keyboard");
+  assert.ok(commits.at(-1).model.curve.x1 > before.x1 && commits.at(-1).model.curve.x2 < before.x2, "ArrowDown: smoother");
+  marker.keydown("ArrowUp", { shiftKey: true });
+  assert.ok(commits.at(-1).model.curve.x1 < before.x1, "Shift+ArrowUp: a coarse step towards linear");
 });
 
 test("Shift scales the integrated delta by 0.2 with no jump when pressed or released", () => {

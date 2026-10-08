@@ -111,6 +111,8 @@ export function createEaseEditor(doc: Document, options: EaseEditorOptions): Eas
       outHandle: t("ease.curve.outHandle"), inHandle: t("ease.curve.inHandle"),
       point: t("ease.point"), pointIn: t("ease.pointIn"), pointOut: t("ease.pointOut"),
       speedLeft: t("ease.speedLeft"), speedRight: t("ease.speedRight"), peak: t("ease.peak"),
+      smoothing: t("ease.smoothing"), speedHint: t("ease.speedHint"),
+      pointAdded: t("ease.pointAdded"), pointRemoved: t("ease.pointRemoved"), pointRefused: t("ease.pointRefused"),
       amp: t("ease.amp"), freq: t("ease.freq"), decay: t("ease.decay"), start: t("ease.param.start"), overshoot: t("ease.overshoot"),
       inHalf: t("ease.inHalf"), outHalf: t("ease.outHalf")
     },

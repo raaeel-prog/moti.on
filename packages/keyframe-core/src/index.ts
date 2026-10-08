@@ -92,7 +92,9 @@ export {
   sampleBezierSpeed,
   sampleEasing,
   sortedPointsValid,
-  speedDragToCurve
+  speedDragToCurve,
+  SPEED_INFLUENCE_MAX,
+  SPEED_DRAG_RATE
 } from "./easing.js";
 
 export type { CurvePoint, EasingDirection, EasingMode, EasingParams, OscillationParams } from "./easing.js";

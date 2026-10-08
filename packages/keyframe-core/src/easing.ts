@@ -89,23 +89,44 @@ export function peakSpeed(curve: CubicBezierCurve, samples = 129): number {
   return peak;
 }
 
-/**
- * Drag on the speed graph. `px` is the normalized x where the drag started and
- * `dyNorm` the drag amount as a fraction of the plot height: positive means
- * MORE influence (more smoothing, towards ease), negative means less (towards
- * linear). The caller maps a plot drag DOWN to a positive `dyNorm`, so pulling
- * the speed curve down flattens it. Near the left edge only the out influence
- * (x1) changes, near the right edge only the in influence (1 - x2); in the
- * middle both change.
- */
-export function speedDragToCurve(start: CubicBezierCurve, px: number, dyNorm: number): CubicBezierCurve {
-  const wL = clamp((0.65 - px) / 0.3, 0, 1);
-  const wR = clamp((px - 0.35) / 0.3, 0, 1);
-  const a = clamp(start.x1 + dyNorm * wL, 0, 1);
-  const b = clamp((1 - start.x2) + dyNorm * wR, 0, 1);
-  return { x1: round3(a), y1: start.y1, x2: round3(1 - b), y2: start.y2 };
-}
+/** Upper bound of a speed-graph influence: keeps the peak finite (about ×10). */
+export const SPEED_INFLUENCE_MAX = 0.95;
+/** Exponential rate of `speedDragToCurve`: a full plot height takes an ease from 0.33 to about 0.95. */
+export const SPEED_DRAG_RATE = 3;
+/** Handle y offsets stay within the editor's -1..2 value range. */
+const SPEED_HANDLE_Y_MIN = -1;
+const SPEED_HANDLE_Y_MAX = 2;
 
+/**
+ * One control on the speed graph, wherever the drag starts. `dyNorm` is the
+ * drag as a fraction of the plot height: positive (pulling DOWN) means more
+ * influence on both ends (sharper peak, softer start and stop), negative means
+ * less (towards linear). Both ends move together so an asymmetric ease keeps
+ * its proportion.
+ *
+ * Like After Effects' influence, each handle is scaled along its own direction:
+ * the speed at the keyframe (the handle slope) is kept and only its reach
+ * changes, so pulling up never produces an infinite speed spike.
+ *
+ * The step is exponential on the remaining room `1 - influence`, so the same
+ * drag distance feels the same near linear and near the limit: no jump at the
+ * edges, and the influence approaches `SPEED_INFLUENCE_MAX` instead of hitting
+ * it. Pulling up far enough reaches 0 (the handle sits on its keyframe).
+ */
+export function speedDragToCurve(start: CubicBezierCurve, dyNorm: number): CubicBezierCurve {
+  const factor = Math.exp(-SPEED_DRAG_RATE * dyNorm);
+  const step = (influence: number): number => clamp(1 - (1 - clamp(influence, 0, 1)) * factor, 0, SPEED_INFLUENCE_MAX);
+  /** Scales handle offset (dx, dy) so its horizontal reach becomes the stepped influence. */
+  const scale = (dx: number, dy: number): { dx: number; dy: number } => {
+    const next = step(dx);
+    if (dx <= 1e-6) return { dx: next, dy };
+    const k = next / dx;
+    return { dx: next, dy: clamp(dy * k, SPEED_HANDLE_Y_MIN, SPEED_HANDLE_Y_MAX) };
+  };
+  const out = scale(start.x1, start.y1);
+  const into = scale(1 - start.x2, 1 - start.y2);
+  return { x1: round3(out.dx), y1: round3(out.dy), x2: round3(1 - into.dx), y2: round3(1 - into.dy) };
+}
 function round3(value: number): number { return Math.round(value * 1000) / 1000; }
 
 // --- multi-point curve ------------------------------------------------------

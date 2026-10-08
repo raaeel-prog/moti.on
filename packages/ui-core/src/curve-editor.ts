@@ -15,6 +15,12 @@
  * on a virtual pointer so toggling Shift mid-drag never jumps. Escape,
  * `pointercancel`, `setModel` and `dispose` restore the pre-press snapshot and
  * report `onCancel`; release, lost capture and window blur commit "gesture".
+ *
+ * Tolerance: a press anywhere on the plot grabs the nearest visible dot within
+ * `HANDLE_CAPTURE_PX`, so a dot never has to be hit exactly. In the speed view
+ * the whole plot is one control (drag down = smoother, up = more linear) with
+ * a single marker at the peak for the keyboard. Point additions, removals and
+ * refusals are announced through a polite live region.
  */
 import {
   DEFAULT_BACK_OVERSHOOT,
@@ -72,6 +78,14 @@ export interface CurveEditorLabels {
   pointOut: string;
   speedLeft: string;
   speedRight: string;
+  /** The single speed-graph control (falls back to `speedLeft`). */
+  smoothing?: string;
+  /** Hint shown in the speed view. */
+  speedHint?: string;
+  /** Live-region messages; `{n}` is the point count. */
+  pointAdded?: string;
+  pointRemoved?: string;
+  pointRefused?: string;
   peak: string;
   amp: string;
   freq: string;
@@ -123,7 +137,12 @@ export const DRAG_THRESHOLD_PX = 3;
 /** Shift scales pointer motion by this factor (fine adjustment). */
 export const FINE_DRAG_FACTOR = 0.2;
 /** Invisible stroke around the curve that accepts presses (CSS `.ch-curve__hit`). */
-export const HIT_BAND_PX = 12;
+export const HIT_BAND_PX = 20;
+/** A press this close (CSS px) to a visible dot grabs it, wherever it lands on the plot. */
+export const HANDLE_CAPTURE_PX = 24;
+/** Speed-graph keyboard step, as a fraction of the plot height (Shift: coarse). */
+const SPEED_KEY_STEP = 0.04;
+const SPEED_KEY_COARSE = 0.15;
 /** Minimum hit target of a dot in CSS px at any dock width (r=5 plus a 16 px transparent stroke). */
 export const DOT_TARGET_PX = 20;
 
@@ -416,6 +435,14 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   // --- plot ----------------------------------------------------------------------
   const plot = createElement(doc, "div", "ch-curve__plot");
   container.appendChild(plot);
+  const status = createElement(doc, "div", "ch-visually-hidden ch-curve__status");
+  status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite");
+  container.appendChild(status);
+  function announce(text: string | undefined, count = model.points.length): void {
+    if (!text) return;
+    status.textContent = "";
+    status.textContent = text.replace("{n}", String(count));
+  }
   const fields = createElement(doc, "div", "ch-curve__fields");
   container.appendChild(fields);
 
@@ -457,7 +484,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   chip.appendChild(chipPath);
   const stems = [0, 1, 2, 3].map(() => svgEl("line", "ch-curve__stem", { "aria-hidden": "true" }));
   const peakText = svgEl("text", "ch-curve__peak", {
-    x: String(CURVE_PAD + CURVE_PLOT - 4), y: String(CURVE_PAD + 14), "text-anchor": "end", "aria-label": labels.peak
+    x: String(CURVE_PAD + 6), y: String(CURVE_PAD + 14), "text-anchor": "start", "aria-label": labels.peak
   });
   for (const node of [axis, reference, ghost, faint, main, hit, halfIn, halfOut, join, ...stems]) svg.appendChild(node);
 
@@ -470,12 +497,12 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     return svgEl("circle", `ch-curve__ring ch-curve__ring--${kind}`, { r: "7", "aria-hidden": "true" });
   }
   const endHandles = [slider(labels.outHandle), slider(labels.inHandle)];
-  const speedMarkers = [slider(labels.speedLeft, "ch-curve__marker"), slider(labels.speedRight, "ch-curve__marker")];
-  const markerRings = [ring("marker"), ring("marker")];
+  const speedMarker = slider(labels.smoothing ?? labels.speedLeft, "ch-curve__marker");
+  const markerRing = ring("marker");
   const halfHandles = [slider(labels.outHandle), slider(labels.inHandle)];
   const pointsGroup = svgEl("g", "ch-curve__points");
   svg.appendChild(pointsGroup);
-  for (const node of [...endHandles, ...halfHandles, markerRings[0]!, speedMarkers[0]!, markerRings[1]!, speedMarkers[1]!, peakText, chip]) svg.appendChild(node);
+  for (const node of [...endHandles, ...halfHandles, markerRing, speedMarker, peakText, chip]) svg.appendChild(node);
   plot.appendChild(svg);
 
   const overlay = createElement(doc, "button", "ch-button ch-curve__overlay") as HTMLButtonElement;
@@ -493,7 +520,9 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   function halves(): boolean { return (model.mode === "elastic" || model.mode === "bounce") && model.direction === "inOut"; }
   function inHalfCurve(): CubicBezierCurve { return paramsOf(model).inCurve ?? DEFAULT_HALF_CURVE; }
   function fit(): void {
-    if (gesture) return;
+    // The range is frozen during a drag so the plot does not slide under the pointer;
+    // a speed drag is relative to the plot height, so its range may follow the peak.
+    if (gesture && gesture.kind !== "speed") return;
     if (speedView()) { range = { low: 0, high: Math.max(2, peakSpeed(model.curve) * 1.1) }; return; }
     const values: number[] = [];
     if (model.mode === "bezier") {
@@ -533,6 +562,8 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     const p = curveToPlot(x, y, range);
     node.setAttribute("cx", fmt(p.x)); node.setAttribute("cy", fmt(p.y));
     node.setAttribute("aria-valuetext", text ?? `${round3(x)}, ${round3(y)}`);
+    node.setAttribute("aria-valuenow", String(round3(y)));
+    node.setAttribute("aria-valuemin", String(Y_MIN)); node.setAttribute("aria-valuemax", String(Y_MAX));
     if (ringNode) { ringNode.setAttribute("cx", fmt(p.x)); ringNode.setAttribute("cy", fmt(p.y)); }
   }
   function stem(node: SVGElement, ax: number, ay: number, bx: number, by: number): void {
@@ -542,22 +573,55 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   }
 
   // --- gestures -----------------------------------------------------------------
+  /** Every draggable dot and how it starts a drag: the plot-level press reuses these. */
+  const begins = new Map<Element, BeginDrag>();
   function bindDrag(node: Element, begin: BeginDrag): void {
+    begins.set(node, begin);
+    // A gesture belongs to the node that started it; the same event bubbling to the plot is ignored.
+    const mine = (e: Event): boolean => Boolean(gesture && gesture.pointerId !== null && gesture.pointerId === (e as PointerEvent).pointerId
+      && ((e.currentTarget ?? e.target) as Element | null) === gesture.target);
     node.addEventListener("pointerdown", e => { pointerSeen = true; startDrag(e as PointerEvent, true, begin); });
     node.addEventListener("mousedown", e => { if (pointerSeen) return; startDrag(e as MouseEvent, false, begin); });
-    node.addEventListener("pointermove", e => {
-      const pe = e as PointerEvent;
-      if (gesture && gesture.pointerId !== null && gesture.pointerId === pe.pointerId) moveEvent(pe);
+    node.addEventListener("pointermove", e => { if (mine(e)) moveEvent(e as PointerEvent); });
+    node.addEventListener("pointerup", e => { if (mine(e)) finishGesture(true); });
+    node.addEventListener("pointercancel", e => { if (mine(e)) cancelGesture(); });
+    node.addEventListener("lostpointercapture", e => {
+      if (gesture && gesture.pointerId !== null && ((e.currentTarget ?? e.target) as Element | null) === gesture.target) finishGesture(false);
     });
-    node.addEventListener("pointerup", e => {
-      const pe = e as PointerEvent;
-      if (gesture && gesture.pointerId !== null && gesture.pointerId === pe.pointerId) finishGesture(true);
-    });
-    node.addEventListener("pointercancel", e => {
-      const pe = e as PointerEvent;
-      if (gesture && gesture.pointerId !== null && gesture.pointerId === pe.pointerId) cancelGesture();
-    });
-    node.addEventListener("lostpointercapture", () => { if (gesture && gesture.pointerId !== null) finishGesture(false); });
+  }
+  /**
+   * A dot follows the pointer RELATIVELY: grabbing it off-centre (anywhere in
+   * its tolerance) never makes it jump to the cursor. Speed and line gestures
+   * are already relative.
+   */
+  function anchored(start: GestureStart, node: Element, event: MouseEvent): GestureStart {
+    if (start.kind === "speed" || start.kind === "line" || node.getAttribute("role") !== "slider") return start;
+    const cx = Number(node.getAttribute("cx")), cy = Number(node.getAttribute("cy"));
+    const p = plotPoint(event);
+    if (!p || !Number.isFinite(cx) || !Number.isFinite(cy)) return start;
+    const dx = cx - p.x, dy = cy - p.y;
+    return { ...start, move: (q, e) => start.move({ x: q.x + dx, y: q.y + dy }, e) };
+  }
+  /** CSS px per viewBox unit (1 when the host cannot measure). */
+  function pxPerUnit(): number {
+    if (typeof svg.getBoundingClientRect !== "function") return 1;
+    const box = svg.getBoundingClientRect();
+    return box && box.width > 0 && box.height > 0 ? Math.min(box.width, box.height) / SIZE : 1;
+  }
+  /** Nearest visible dot within `HANDLE_CAPTURE_PX` of plot point `p`. */
+  function nearestDot(p: Pt): Element | null {
+    const limit = HANDLE_CAPTURE_PX / pxPerUnit();
+    let best: Element | null = null, bestDistance = limit;
+    for (const node of begins.keys()) {
+      if (node === hit || node === svg || node.getAttribute("role") !== "slider") continue;
+      if (node.getAttribute("display") === "none" || node.parentNode === null) continue;
+      if (node.parentNode === pointsGroup && pointsGroup.getAttribute("display") === "none") continue;
+      const cx = Number(node.getAttribute("cx")), cy = Number(node.getAttribute("cy"));
+      if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
+      const distance = Math.hypot(cx - p.x, cy - p.y);
+      if (distance <= bestDistance) { best = node; bestDistance = distance; }
+    }
+    return best;
   }
   function startDrag(event: MouseEvent, pointer: boolean, begin: BeginDrag): void {
     if (disposed || event.button !== 0 || gesture) return;
@@ -566,8 +630,11 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     clearPop();
     // Snapshot before `begin`: a line press inserts a point that a cancel must undo.
     const snapshot = cloneModel(model);
-    const start = begin(event);
-    if (!start) return;
+    const begun = begin(event);
+    if (!begun) return;
+    const start = anchored(begun, target, event);
+    // Pressing a dot gives it keyboard focus, so arrows continue where the pointer stopped.
+    if (target.getAttribute?.("role") === "slider") (target as unknown as HTMLElement).focus?.();
     const at = { x: event.clientX, y: event.clientY };
     gesture = {
       kind: start.kind, pointerId: pointer ? (event as PointerEvent).pointerId : null, target,
@@ -617,6 +684,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     const p = clientToPlot(g.virtual.x, g.virtual.y);
     if (!p) return;
     g.move(p, event);
+    if (g.kind === "speed") fit();
     render();
     emitInput();
   }
@@ -724,7 +792,21 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     syncPoints(); setActivePoint(null); fit(); render();
     const focusTarget = pointNodes[Math.min(index, pointNodes.length - 1)]?.knot ?? endHandles[0];
     focusTarget?.focus?.();
+    announce(labels.pointRemoved ?? "Point removed, {n} left");
     emitCommit("point");
+  }
+  /** Keyboard insertion: halfway to the next knot (or the end) after `after` (-1 = the start). */
+  function insertAfter(after: number): void {
+    const from = after < 0 ? 0 : model.points[after]?.x ?? 0;
+    const to = model.points[after + 1]?.x ?? 1;
+    const index = insertPoint((from + to) / 2);
+    if (index < 0) { announce(labels.pointRefused ?? "No room for another point"); return; }
+    setActivePoint(index); fit(); render();
+    pointNodes[index]?.knot.focus?.();
+    announce(labels.pointAdded ?? "Point added, {n} in total");
+    emitCommit("point");
+  }
+  function isInsertKey(event: KeyboardEvent): boolean { return event.key === "+" || event.key === "=" || event.key === "Insert";
   }
   function setMode(mode: EasingMode): void {
     if (mode === model.mode) return;
@@ -761,6 +843,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     bindDrag(node, () => ({ kind: "end", move: p => { const c = toCurve(p); moveEnd(index, c.x, c.y); } }));
     node.addEventListener("keydown", e => {
       const event = e as KeyboardEvent;
+      if (model.mode === "bezier" && isInsertKey(event)) { event.preventDefault(); insertAfter(index === 0 ? -1 : model.points.length - 1); return; }
       const delta = keyDelta(event);
       if (!delta) {
         if (event.key === "Home") moveEnd(index, 0, index ? model.curve.y2 : model.curve.y1);
@@ -787,45 +870,55 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
       afterKey(event);
     });
   });
-  // Speed markers: vertical drag edits the influence (down = more smoothing); keys step it the same way.
+  // Speed view: ONE control. A vertical drag anywhere on the plot (or on the
+  // peak marker) smooths both ends together: down = sharper peak, up = linear.
   function speedDrag(start: Pt): GestureStart {
     const startCurve = { ...model.curve };
-    const px = clamp(plotToCurve(start.x, start.y, range).x, 0, 1);
-    return { kind: "speed", move: p => { model.curve = speedDragToCurve(startCurve, px, (p.y - start.y) / CURVE_PLOT); } };
+    return { kind: "speed", move: p => { model.curve = speedDragToCurve(startCurve, (p.y - start.y) / CURVE_PLOT); } };
   }
-  speedMarkers.forEach((node, i) => {
-    bindDrag(node, event => { const p = plotPoint(event); return p ? speedDrag(p) : null; });
-    node.addEventListener("keydown", e => {
-      const event = e as KeyboardEvent;
-      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
-      const amount = (event.key === "ArrowDown" ? 1 : -1) * stepOf(event);
-      if (i === 0) model.curve = { ...model.curve, x1: round3(clamp(model.curve.x1 + amount, 0, 1)) };
-      else model.curve = { ...model.curve, x2: round3(clamp(model.curve.x2 - amount, 0, 1)) };
-      afterKey(event);
-    });
+  bindDrag(speedMarker, event => { const p = plotPoint(event); return p ? speedDrag(p) : null; });
+  speedMarker.addEventListener("keydown", e => {
+    const event = e as KeyboardEvent;
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    const amount = (event.key === "ArrowDown" ? 1 : -1) * (event.shiftKey ? SPEED_KEY_COARSE : SPEED_KEY_STEP);
+    model.curve = speedDragToCurve(model.curve, amount);
+    afterKey(event);
   });
-  // The curve itself (invisible hit band): in speed view it is a speed drag; in
-  // value view a press inserts a point (de Casteljau keeps the shape) that the
-  // same gesture then drags. A plain click commits "point"; a drag commits
-  // "gesture" including the insertion. Back/elastic/bounce: not interactive.
-  bindDrag(hit, event => {
-    if (model.mode !== "bezier") return null;
+  /**
+   * A press on the plot (or on the invisible band around the curve). Order:
+   * speed view → the single speed control; a dot within `HANDLE_CAPTURE_PX` →
+   * drag that dot; on the curve band in value view → insert a point (de
+   * Casteljau keeps the shape) that the same gesture drags. A plain click
+   * commits "point"; a drag commits "gesture" including the insertion.
+   * Back/elastic/bounce only have their half handles.
+   */
+  function pressPlot(event: MouseEvent, onLine: boolean): GestureStart | null {
     const p = plotPoint(event);
     if (!p) return null;
-    if (speedView()) return speedDrag(p);
+    if (speedView()) { (speedMarker as unknown as HTMLElement).focus?.(); return speedDrag(p); }
+    const dot = nearestDot(p);
+    if (dot) {
+      (dot as unknown as HTMLElement).focus?.();
+      const begun = begins.get(dot)?.(event);
+      return begun ? anchored(begun, dot, event) : null;
+    }
+    if (!onLine || model.mode !== "bezier") return null;
     const index = insertPoint(toCurve(p).x);
-    if (index < 0) return null;
+    if (index < 0) { announce(labels.pointRefused ?? "No room for another point"); return null; }
     const nodes = pointNodes[index]!;
     nodes.knot.setAttribute("data-pop", "true"); nodes.ring.setAttribute("data-pop", "true");
     setActivePoint(index);
     render();
     nodes.knot.focus?.();
+    announce(labels.pointAdded ?? "Point added, {n} in total");
     return {
       kind: "line",
       move: q => { const d = toCurve(q); movePoint(index, { x: d.x, y: d.y }, false); },
       onClick: () => emitCommit("point")
     };
-  });
+  }
+  bindDrag(hit, event => pressPlot(event, true));
+  bindDrag(svg, event => pressPlot(event, event.target === hit));
 
   function syncPoints(): void {
     while (pointNodes.length > model.points.length) {
@@ -852,6 +945,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
       nodes.knot.addEventListener("keydown", e => {
         const event = e as KeyboardEvent;
         if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); removePoint(index); return; }
+        if (isInsertKey(event)) { event.preventDefault(); insertAfter(index); return; }
         const delta = keyDelta(event);
         const point = model.points[index];
         if (!delta || !point) return;
@@ -980,7 +1074,8 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     if (!canSvg) return;
     const speed = speedView();
     setOverlay(model.mode === "bezier" && model.points.length === 0 ? "view" : "reset");
-    hideHtml(hint, !(model.mode === "bezier" && !speed));
+    hint.textContent = speed ? labels.speedHint ?? "" : labels.addPointHint;
+    hideHtml(hint, !(model.mode === "bezier" && (!speed || Boolean(labels.speedHint))));
     // Axes and reference.
     const o = curveToPlot(0, 0, range), top = curveToPlot(0, 1, range), right = curveToPlot(1, 0, range), end = curveToPlot(1, 1, range);
     axis.setAttribute("d", `M ${fmt(top.x)},${fmt(top.y)} L ${fmt(o.x)},${fmt(o.y)} L ${fmt(right.x)},${fmt(right.y)}`);
@@ -1017,15 +1112,16 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
       stem(nodes.stemOut, p.x, p.y, p.outX, p.outY);
     });
     // Speed view.
-    speedMarkers.forEach(node => show(node, speed));
-    markerRings.forEach(node => show(node, speed));
+    show(speedMarker, speed); show(markerRing, speed);
     show(peakText, speed);
     if (speed) {
-      const samples = sampleBezierSpeed(model.curve, 129);
-      const at = (x: number): number => samples[Math.round(clamp(x, 0, 1) * (samples.length - 1))]!.speed;
-      place(speedMarkers[0]!, model.curve.x1, at(model.curve.x1), `${round3(model.curve.x1)}`, markerRings[0]);
-      place(speedMarkers[1]!, model.curve.x2, at(model.curve.x2), `${round3(1 - model.curve.x2)}`, markerRings[1]);
-      peakText.textContent = `×${peakSpeed(model.curve).toFixed(1)}`;
+      let top = { x: 0.5, speed: 0 };
+      for (const sample of sampleBezierSpeed(model.curve, 129)) if (sample.speed > top.speed) top = sample;
+      const peak = peakSpeed(model.curve);
+      place(speedMarker, top.x, top.speed, `×${peak.toFixed(1)}`, markerRing);
+      speedMarker.setAttribute("aria-valuenow", String(round3(peak)));
+      speedMarker.setAttribute("aria-valuemin", "1"); speedMarker.setAttribute("aria-valuemax", "10");
+      peakText.textContent = `×${peak.toFixed(1)}`;
     }
     // InOut halves of elastic/bounce.
     const split = halves();
