@@ -21,6 +21,7 @@ export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 export const DEFAULT_LOCALE: SupportedLocale = "en-US";
 
 export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
+  "undo.ae.tools.adjust": {"pt-BR": "Moti.on: ajustar ferramenta", "en-US": "Moti.on: adjust tool"},
   "undo.ae.presets.phase-apply": {"pt-BR": "Moti.on: aplicar fase", "en-US": "Moti.on: apply phase"},
   "undo.ae.presets.phase-adjust": {"pt-BR": "Moti.on: ajustar fase", "en-US": "Moti.on: adjust phase"},
   "undo.ae.presets.phase-action": {"pt-BR": "Moti.on: editar fase", "en-US": "Moti.on: edit phase"},

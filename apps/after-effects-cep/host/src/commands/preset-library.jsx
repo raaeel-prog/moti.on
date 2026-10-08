@@ -204,12 +204,13 @@
   /** @param {any} args @param {string} action @param {boolean=} migration @param {any[]=} selectedOverride @param {any=} phaseOwner @returns {MotionCommandFailure|null} */
   function preflight(args, action, migration, selectedOverride, phaseOwner) {
     if (action === "apply") { var validation = validate(args); if (validation) return validation; }
-    else { for (var k in args) if (Object.prototype.hasOwnProperty.call(args,k)) return fail(MotionContracts.ERROR.INVALID_PRESET,"Esta ação não recebe parâmetros."); }
+    else { for (var k in args) if (Object.prototype.hasOwnProperty.call(args,k)&&!(action==="remove"&&(k==="target"||k==="targets"))) return fail(MotionContracts.ERROR.INVALID_PRESET,"Esta ação não recebe esse parâmetro."); }
     var comp = app.project && app.project.activeItem;
     if (!comp || !(comp instanceof CompItem)) return fail(MotionContracts.ERROR.NO_ACTIVE_COMP,"Abra uma composição.");
     var layers = selectedOverride || comp.selectedLayers;
     if (!layers.length) return fail(MotionContracts.ERROR.NO_SELECTION,"Selecione uma camada na composição.");
     if (layers.length > 50) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Aplique a até 50 camadas por vez.");
+    if(action==="remove"&&(Object.prototype.hasOwnProperty.call(args,"target")||Object.prototype.hasOwnProperty.call(args,"targets"))){var targetError=removeTargetPreflight(args);if(targetError)return targetError;}
     if (cameraTransition && cameraTransition.hasSelected(comp)) {
       if (action !== "apply") return cameraTransition.selectionPreflight(action);
       return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Selecione as camadas de conteúdo para aplicar este preset diretamente. Para editar a pré-comp de transição, use Editar.");
@@ -659,12 +660,27 @@
     var prepared=prepareAdjustOptions(args);if(prepared.error)throw new Error(prepared.error.message);
     return apply(adjustArgs(args),context,prepared.options);
   }
-  MotionRegistry.register("ae.presets.inspect",{preflight:function(args){for(var key in args)if(Object.prototype.hasOwnProperty.call(args,key))return fail(MotionContracts.ERROR.INVALID_PRESET,"A leitura não recebe parâmetros.");return null;},run:function(){var data=inspect(),library=/** @type {any} */ (global).MotionPresetLibrary;if(library.decorateColors)library.decorateColors(data);return {changed:false,data:data,warnings:[]};}});
+  MotionRegistry.register("ae.presets.inspect",{preflight:function(args){for(var key in args)if(Object.prototype.hasOwnProperty.call(args,key))return fail(MotionContracts.ERROR.INVALID_PRESET,"A leitura não recebe parâmetros.");return null;},run:function(args,context){var data=inspect(),library=/** @type {any} */ (global).MotionPresetLibrary;if(library.decorateColors)library.decorateColors(data);var contextReader=MotionRegistry.get("ae.context.read");if(contextReader)data.context=contextReader.run({},context).data;var toolReader=/** @type {any} */ (global).MotionToolControls;if(toolReader)data.tools=toolReader.inspect();return {changed:false,data:data,warnings:[]};}});
   MotionRegistry.register("ae.presets.adjust",{preflight:adjustPreflight,run:adjustRun});
   // The dispatcher calls run(args, context, options); apply's third parameter is
   // the per-layer Adjust map, so the request options must never reach it.
   MotionRegistry.register("ae.presets.apply",{preflight:function(args){return preflight(args,"apply");},run:function(args,context){return apply(args,context);}});
-  MotionRegistry.register("ae.presets.remove",{preflight:function(args){return preflight(args,"remove");},run:function(){return cameraTransition && cameraTransition.hasSelected(app.project.activeItem)?cameraTransition.remove():remove();}});
+  /** Validate the captured editor selection again immediately before removing.
+   * @param {any} args @returns {MotionCommandFailure|null} */
+  function removeTargetPreflight(args){
+    var current=inspect(),keys=/** @type {Record<string,boolean>} */ ({compId:true,layerId:true,instance:true,fingerprint:true});
+    /** @param {any} expected @param {any} actual @returns {boolean} */
+    function matches(expected,actual){
+      if(!expected||!actual||typeof expected!=="object")return false;
+      for(var key in expected)if(Object.prototype.hasOwnProperty.call(expected,key)&&!keys[key])return false;
+      return expected.compId===actual.compId&&expected.layerId===actual.layerId&&expected.instance===actual.instance&&expected.fingerprint===actual.fingerprint;
+    }
+    if(current.state!=="ready"||!matches(args.target,current.target))return fail(MotionContracts.ERROR.INVALID_PRESET,"A seleção ou o preset mudou. Nada foi removido.");
+    var expected=args.targets,actual=current.targets;
+    if(expected||actual){if(!(expected instanceof Array)||!(actual instanceof Array)||expected.length!==actual.length)return fail(MotionContracts.ERROR.INVALID_PRESET,"A seleção de camadas mudou. Nada foi removido.");for(var i=0;i<actual.length;i++)if(!matches(expected[i],actual[i]))return fail(MotionContracts.ERROR.INVALID_PRESET,"A seleção de camadas mudou. Nada foi removido.");}
+    return null;
+  }
+  MotionRegistry.register("ae.presets.remove",{preflight:function(args){return preflight(args,"remove");},run:function(args){var error=preflight(args,"remove");if(error){var invalid=/** @type {any} */ (new Error(error.message));invalid.motionCode=error.code;throw invalid;}return cameraTransition && cameraTransition.hasSelected(app.project.activeItem)?cameraTransition.remove():remove();}});
   MotionRegistry.register("ae.presets.bake",{preflight:function(args){return preflight(args,"bake");},run:function(){return cameraTransition && cameraTransition.hasSelected(app.project.activeItem)?cameraTransition.bake():bake();}});
   global.MotionPresetLibrary={validate:validate,metadata:metadata,requiredEffects:requiredEffects,header:header,markerState:markerState,verifyOwnership:verifyOwnership,definition:definition,preflight:preflight,applyLayer:applyLayer,removeLayer:removeLayer,inspectLayer:inspectLayer,locate:locate,child:child,snapshot:snapshot,restore:restore,saveMetadata:saveMetadata,snapshotMarkers:snapshotMarkers,restoreMarkers:restoreMarkers,removeMarkers:removeMarkers};
 }($.global));

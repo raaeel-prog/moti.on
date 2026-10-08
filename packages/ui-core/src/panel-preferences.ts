@@ -71,6 +71,8 @@ export function createPanelPreferences(root: HTMLElement, storage?: PreferenceSt
     if (typeof data["scope"] === "string" && GALLERY_SCOPES.includes(data["scope"])) next.scope = data["scope"];
     if (typeof data["query"] === "string" && data["query"].length <= 120 && !Array.from(data["query"]).some(character => character.charCodeAt(0) < 32)) next.query = data["query"];
     if (typeof data["presetId"] === "string" && ids([data["presetId"]], 1).length === 1) next.presetId = data["presetId"];
+    if (next.category === "ease") next.category = "all";
+    if (next.presetId.startsWith("builtin.ease.")) next.presetId = "";
     return next;
   };
   let readable = true;
@@ -169,7 +171,13 @@ export function createPanelPreferences(root: HTMLElement, storage?: PreferenceSt
       if (!/^#[0-9a-f]{6}$/.test(value)) return;
       recentColors = hexes([value, ...recentColors.filter((item) => item !== value)], 8); save();
     },
-    clearRecent() { recent = []; save(); }
+    clearRecent() { recent = []; save(); },
+    clearRecentColors() { recentColors = []; save(); },
+    clearFavorites() { favorites = []; save(); },
+    clearDrafts() { drafts = {}; save(); },
+    /** Presentation only: libraries, saved recipes, account and favorites remain. */
+    resetInterface() { theme = "dark"; density = "default"; locale = "host"; quickDockPinned = false; apply(); save(); },
+    resetPreviews() { presetAutoplay = true; presetSize = 200; save(); }
   };
 }
 

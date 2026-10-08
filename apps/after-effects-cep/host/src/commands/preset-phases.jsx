@@ -76,10 +76,10 @@
   function read(layer,comp,root){
     var phases=/** @type {any[]} */ ([]),current=cues(layer,root),byRole=/** @type {any} */ ({});
     for(var i=0;i<ROLES.length;i++){var role=ROLES[i],s=root.slots[role];if(!s)continue;var value=lib.inspectLayer(layer,comp,s.meta);if(value.state!=="ready")return value;
-      byRole[role]=value.options;phases.push({phase:role,presetId:s.presetId,instance:s.meta.instance,options:value.options,controls:controls(s.meta),markerTime:role==="in"?current.inTime:current.outTime});
+      byRole[role]={presetId:s.presetId,instance:s.meta.instance,options:value.options,controls:controls(s.meta)};phases.push({phase:role,presetId:s.presetId,instance:s.meta.instance,options:value.options,controls:byRole[role].controls,markerTime:role==="in"?current.inTime:current.outTime});
     }
     if(!phases.length)return {state:"conflict",message:"Nenhuma fase válida foi encontrada."};
-    var fp=MotionJson.stringify({instance:root.instance,phases:byRole,inPoint:layer.inPoint,outPoint:layer.outPoint,markers:current});
+    var fp=MotionJson.stringify({instance:root.instance,phases:byRole,inPoint:layer.inPoint,outPoint:layer.outPoint,markers:current,frameRate:comp.frameRate,dropFrame:!!comp.dropFrame});
     return {state:"ready",message:"",layerName:layer.name,presetId:phases[0]&&phases[0].presetId,options:phases[0]&&phases[0].options,phases:phases,frameRate:comp.frameRate,dropFrame:comp.dropFrame,target:{compId:comp.id,layerId:layer.id,instance:root.instance,fingerprint:fp}};
   }
   /** @param {any} meta @returns {any[]} */
@@ -141,6 +141,7 @@
     var prepared=prepare(args,action!=="apply");if(prepared.error)return prepared.error;
     for(var i=0;i<prepared.batch.length;i++){var q=prepared.batch[i],slots=q.root?q.root.slots:null,legacyPhase=q.old?q.old.options.phase:null;
       if(action!=="apply"&&!((slots&&slots[args.phase])||(q.old&&(legacyPhase===args.phase||legacyPhase==="both"))))return fail("Essa fase não está aplicada à camada.");
+      if(action==="adjust"&&args.presetId!==(slots?slots[args.phase].presetId:q.old.presetId))return fail("A receita da fase mudou. Recarregue antes de ajustar.");
       var options=action==="apply"?clone(args):action==="adjust"?clone(args.options):action==="action"&&args.action==="reset"?defaults(slots?slots[args.phase].presetId:q.old.presetId,args.phase):null;if(options&&action!=="action")options.presetId=args.presetId;
       if(options){var owner={prefixes:q.root?[prefix(q.root)]:q.old?["// Moti.on preset v1:"+q.old.instance+"\n"]:[]};var e=lib.preflight(options,"apply",true,[q.layer],owner);if(e)return e;}
       var times={inTime:q.state.inTime,outTime:q.state.outTime},fd=prepared.comp.frameDuration;

@@ -81,6 +81,13 @@ const DEFAULT_TIMEOUT_MS = 15_000;
  */
 export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
   {
+    id: "ae.tools.adjust", hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false, mutates: true, allowsNoopSuccess: true,
+    supportsDryRun: false, supportsCancel: false,
+    undoLabelKey: "undo.ae.tools.adjust", timeoutMs: 15_000
+  },
+  {
     id: "ae.text.word-reveal.read", hosts: ["after-effects"],
     requirements: ["hasProject", "hasActiveComp"],
     destructive: false, mutates: false, allowsNoopSuccess: false,

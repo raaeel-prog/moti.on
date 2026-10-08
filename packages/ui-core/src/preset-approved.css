@@ -28,6 +28,9 @@
 .ch-shell[data-layout="library"] .ch-preset-stage .ch-preset-grid--personal { display:flex; }
 .ch-shell[data-layout="library"] .ch-preset-card { position:relative; border:1px solid transparent; border-radius:var(--radius-medium); background:transparent; overflow:hidden; padding:0; align-self:start; }
 .ch-shell[data-layout="library"] .ch-preset-card[data-selected="true"] { border-color:var(--ch-border-default); }
+/* Selection belongs to the whole card; keyboard focus marks only the control. */
+.ch-shell[data-layout="library"] .ch-preset-card[data-selected="true"] > .ch-preset-preview { outline:none; }
+.ch-shell[data-layout="library"] .ch-preset-card button:focus-visible { outline:1px dashed var(--ch-text-primary); outline-offset:-4px; }
 .ch-shell[data-layout="library"] .ch-preset-preview { width:100%; height:auto; aspect-ratio:16/9; min-height:0; padding:0; margin:0; border:0; border-radius:0; background:var(--bg-elevated); box-shadow:none; color:var(--ch-text-primary); overflow:hidden; }
 .ch-shell[data-layout="library"] .ch-preset-preview svg { width:100%; height:100%; aspect-ratio:auto; }
 .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-actions { display:flex; align-items:center; padding:0 4px 0 0; gap:2px; min-height:26px; background:transparent; }

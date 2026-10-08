@@ -26,8 +26,12 @@ import { renderVerticalPulse, resetVerticalPulse, validVerticalPulse, verticalPu
   verticalPulseReadDisabledReason, verticalPulseRevision } from "./vertical-pulse.js";
 import { WORD_REVEAL_DEFAULTS, PROXIMITY_MORPH_DEFAULTS, STYLE_SWAP_DEFAULTS, pulsePresetArgs, isMotionLibraryOptions, type MotionLibraryOptions } from "@motion/contracts";
 import { createAeSystemView } from "./views/system-view.js";
+import { createAccountView } from "./views/account-view.js";
+import { authorizeCreativeOperation, accountCanMutate } from "./account.js";
 import { createAeSettingsView } from "./views/settings-view.js";
 import { groupToolSections } from "./views/tool-sections.js";
+import { createSelectionCoordinator, type SelectionReader } from "./selection-coordinator.js";
+import { renderManagedTools } from "./managed-tools-editor.js";
 import { focusedPoll } from "./focused-poll.js";
 import { createGradientEditor } from "./gradient-editor.js";
 import type { GradientReadData } from "@motion/contracts";
@@ -42,6 +46,7 @@ import {
   checkboxField,
   colorField,
   configureColorPickers,
+  isColorPickerOpen, hasColorDraft,
   attachActionOverflow,
   createI18n,
   createDiagnosticsView,
@@ -98,6 +103,8 @@ let disposeView: (() => void) | null = null;
 let refreshLibrary: (() => void) | null = null;
 /** Tile feedback of the mounted tool library (A6.4); null outside the library view. */
 let quickTileFeedback: ((id: string, state: TileFeedback) => void) | null = null;
+let selectionCoordinator: ReturnType<typeof createSelectionCoordinator> | null = null;
+const selectionReaders = new Set<SelectionReader>();
 let refreshToolContext: (() => void) | null = null;
 let refreshPresetContext: (() => void) | null = null;
 let orbitAdvancedOpen = false;
@@ -2081,7 +2088,7 @@ function start(): void {
   const adapter = createAeHostAdapter(logger, () => {
     const locale = panelPreferences.snapshot().locale;
     return locale === "host" ? undefined : locale;
-  });
+  }, authorizeCreativeOperation);
 
   if (adapter) {
     // "pt_BR", com underscore — formato medido no After Effects 26.3, não
@@ -2447,6 +2454,13 @@ function renderToolBrowser(
     ...quickOptions(), onAction: action => { void applyQuickAction(action, shell, i18n, logger, client); }
   });
   anchor.appendChild(quickActions);
+  const fullOptions = document.createElement("details");
+  fullOptions.appendChild(createElement(document, "summary", "ch-phase-link", i18n.locale() === "pt-BR" ? "Opções das ferramentas" : "Tool options"));
+  for (const id of ["anchor", "createNull", "flip"]) {
+    const tool = TOOLS.find(item => item.id === id);
+    if (tool) fullOptions.appendChild(button(document, { label: i18n.t(tool.nameKey), onClick: () => edit(tool) }));
+  }
+  anchor.appendChild(fullOptions);
   const dock = createQuickDock(document, {
     content: anchor, locale: i18n.locale(), pinned: panelPreferences.snapshot().quickDockPinned,
     onPinChange: pinned => panelPreferences.setQuickDockPinned(pinned),
@@ -2454,7 +2468,7 @@ function renderToolBrowser(
   });
 
   const icons = ["ease", "reverseOrder", "wiggle", "cameraTransition", "shapeLibrary", "neon", "context"];
-  const libraryItems = (): LibraryItem[] => TOOLS.filter(tool => !["ease", "cloneKeys", "reverseKeys", "reverseValues", "sendToEdge"].includes(tool.id)).map(tool => {
+  const libraryItems = (): LibraryItem[] => TOOLS.filter(tool => !["ease", "cloneKeys", "reverseKeys", "reverseValues", "sendToEdge", "anchor", "createNull", "flip"].includes(tool.id)).map(tool => {
       const profile = tool.commandId ? getQuickProfile(tool.commandId) ?? operationQuickProfile(tool.id) : undefined;
       const quick = Boolean(tool.id !== "beat" && tool.id !== "ease" && profile && !getDescriptor(tool.commandId ?? "")?.destructive);
       return {
@@ -2564,7 +2578,8 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
       pick: async hex => {
         const response = await client.execute<{ cancelled: boolean; hex: string | null }>("ae.ui.color-picker", { hex });
         logger.recordResponse("ae.ui.color-picker", response);
-        return response.ok ? response.data?.hex ?? null : null;
+        if (!response.ok) throw new Error(response.error?.message || "Não foi possível abrir o seletor de cores.");
+        return response.data?.hex ?? null;
       }
     }
   });
@@ -2583,6 +2598,18 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
     regions.content.parentElement?.setAttribute("data-browser", "true");
     const gallery = createPresetWorkspace(document, {
       cache: presetWorkspaceCache,
+      canMutate: accountCanMutate,
+      watchInspection: (read, enabled) => {
+        const reader = { read, enabled }; selectionReaders.add(reader);
+        const stop = selectionCoordinator?.subscribe(reader);
+        return () => { selectionReaders.delete(reader); stop?.(); };
+      },
+      onInspection: data => { if (data.context) state.context = data.context; },
+      renderAppliedTools: (container, data) => renderManagedTools(document, container, data.tools ?? [], i18n.locale(), async args => {
+        const response = await client.execute("ae.tools.adjust", args, { preserveSelection: true });
+        logger.recordResponse("ae.tools.adjust", response); selectionCoordinator?.refresh();
+        return response;
+      }),
       context: () => ({ hasComp: Boolean(state.context?.isComposition), selectionCount: state.context?.selectionLayerCount ?? 0, selectedKeys: state.context?.selectionSelectedKeyCount ?? 0, fps: state.context?.compFrameRate ?? undefined, textLayers: state.context?.selectionTextLayerCount, lockedLayers: state.context?.selectionLockedLayerCount }),
       execute: async (command, args) => { const response = await client.execute(command, args, {preserveSelection:true}); if(command !== "ae.presets.inspect") logger.recordResponse(command,response); return response; },
       locale: i18n.locale(), preferences: panelPreferences, busy: state.busy, navigation: presetNavigation,
@@ -3348,8 +3375,10 @@ function renderSettings(
     onRefresh: () => regions.shell.rerender(),
     onNavigate: viewId => regions.shell.navigate(viewId)
   });
+  const account = createAccountView(document, i18n.locale());
+  view.element.prepend(account.element);
   regions.content.appendChild(view.element);
-  disposeView = () => view.dispose();
+  disposeView = () => { account.dispose(); view.dispose(); };
 }
 
 function mountSupportView(
@@ -3527,42 +3556,24 @@ const CONTEXT_POLL_MS = 700;
  * instantânea, e folgado o bastante para o custo do `evalScript` sumir no ruído.
  */
 function startContextWatch(shell: Shell, logger: MotionLogger, client: Client): () => void {
-  let assinatura = contextFingerprint(state.context);
-  let lendo = false;
-  const numberGesturePending = (): boolean => Boolean(document.querySelector(".ch-preset-workspace input[data-scrub-pressed], .ch-preset-workspace input[data-scrubbing], .ch-preset-workspace [data-gesture-active], .ch-preset-workspace .ch-phase-scrub-row:hover"));
-
-  const polling = focusedPoll(document, () => {
-    if (lendo || state.busy || document.hidden || numberGesturePending() || document.querySelector(".ch-bezier[data-dragging]")) return;
-    lendo = true;
-
-    void client
-      .execute<ContextData>("ae.context.read")
-      .then((response) => {
-        if (state.busy || numberGesturePending() || document.querySelector(".ch-bezier[data-dragging]") || !response.ok || !response.data) return;
-
-        const nova = contextFingerprint(response.data);
-        state.context = response.data;
-        if (nova === assinatura) return;
-
-        assinatura = nova;
-        // O host pode ter mudado de versão entre leituras? Não — mas o log
-        // precisa do host preenchido antes do primeiro erro, e esta é a única
-        // leitura que roda sempre.
-        logger.setHost("after-effects", response.data.hostVersion ?? undefined);
-        if (refreshLibrary) refreshLibrary();
-        else if (refreshToolContext) refreshToolContext();
-        else if (refreshPresetContext) refreshPresetContext();
-        else if (!document.querySelector(".ch-preset-workspace")) shell.rerender();
-      })
-      .catch(() => {
-        // Silêncio deliberado: ver o item 2 acima.
-      })
-      .then(() => {
-        lendo = false;
-      });
-  }, CONTEXT_POLL_MS);
-
-  return () => polling.dispose();
+  let signature = contextFingerprint(state.context);
+  const blocked = (): boolean => state.busy || isColorPickerOpen(document) || hasColorDraft(document) || Boolean(document.querySelector("[data-scrub-pressed], [data-scrubbing], [data-gesture-active], .ch-bezier[data-dragging]"));
+  const coordinator = createSelectionCoordinator({ document, window, blocked,
+    read: async () => {
+      const response = await client.execute<ContextData>("ae.context.read");
+      if (blocked() || !response.ok || !response.data) return;
+      const next = contextFingerprint(response.data); state.context = response.data;
+      if (next === signature) return;
+      signature = next; logger.setHost("after-effects", response.data.hostVersion ?? undefined);
+      if (refreshLibrary) refreshLibrary();
+      else if (refreshToolContext) refreshToolContext();
+      else if (refreshPresetContext) refreshPresetContext();
+      else if (!document.querySelector(".ch-preset-workspace")) shell.rerender();
+    }
+  });
+  selectionCoordinator = coordinator;
+  for (const reader of selectionReaders) coordinator.subscribe(reader);
+  return () => { coordinator.dispose(); selectionCoordinator = null; };
 }
 
 async function refreshContext(

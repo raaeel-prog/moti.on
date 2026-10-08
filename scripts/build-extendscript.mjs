@@ -100,6 +100,7 @@ export const HOST_SOURCE_ORDER = [
   "commands/preset-timing.jsx",
   "commands/personal-preset-library.jsx",
   "commands/context-read.jsx",
+  "commands/tool-controls.jsx",
   "commands/capability-probe.jsx",
   "commands/diagnostics-echo.jsx",
   "commands/ui-color-picker.jsx",

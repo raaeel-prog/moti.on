@@ -695,6 +695,7 @@ export function searchField(doc: Document, options: SearchFieldOptions): HTMLEle
 export interface ColorFieldOptions extends FieldBaseOptions {
   /** Sempre `#rrggbb` minusculo — a forma canonica aceita por `input[type=color]`. */
   value: string;
+  onOpenChange?(open: boolean): void;
   onCommit(value: string): void;
 }
 
@@ -728,6 +729,7 @@ export function colorField(doc: Document, options: ColorFieldOptions): HTMLEleme
     const picker = createColorPicker(doc, {
       id: options.id, label: options.label, value: normalizeHexColor(options.value) ?? "#000000",
       onCommit: options.onCommit,
+      ...(options.onOpenChange ? { onOpenChange: options.onOpenChange } : {}),
       ...(options.description ? { description: options.description } : {}),
       ...(options.disabled ? { disabled: true } : {}),
       ...(options.disabledReason ? { disabledReason: options.disabledReason } : {})

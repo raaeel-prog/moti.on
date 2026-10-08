@@ -35,7 +35,9 @@
 .ch-color-hue { position:relative; flex:0 0 14px; height:14px; margin:0 7px; border-radius:7px; background:linear-gradient(to right, #f00 0%, #ff0 16.67%, #0f0 33.33%, #0ff 50%, #00f 66.67%, #f0f 83.33%, #f00 100%); cursor:ew-resize; touch-action:none; }
 .ch-color-hue__thumb { top:0; width:14px; height:14px; margin-left:-7px; }
 .ch-color-area:focus-visible, .ch-color-hue:focus-visible { outline:var(--focus-ring); outline-offset:2px; }
-.ch-color-row { display:flex; flex:0 0 28px; align-items:center; gap:var(--s2); height:28px; min-width:0; }
+.ch-color-surface__row { display:flex; flex:0 0 28px; align-items:center; gap:var(--s2); height:28px; min-width:0; }
+.ch-color-native-error { flex:0 0 auto; margin:0; color:var(--danger); font-size:var(--font-caption); overflow-wrap:anywhere; }
+.ch-color-native-error[hidden] { display:none; }
 .ch-color-preview { display:flex; flex:0 0 56px; height:28px; overflow:hidden; border-radius:var(--radius-small); box-shadow:inset 0 0 0 1px var(--line-hairline); }
 .ch-color-preview__before, .ch-color-preview__after { flex:1 1 50%; height:100%; margin:0; padding:0; border:0; }
 .ch-color-preview__before { cursor:pointer; }

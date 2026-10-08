@@ -5,7 +5,7 @@ import {
   type GradientArgs, type GradientReadData, type GradientSettingsV1, type GradientScalarKey, type CommandResponse
 } from "@motion/contracts";
 import {
-  checkboxField, colorField, createActionButton, createElement, hint, numberField, selectField, textField,
+  checkboxField, colorField, closeOpenColorPicker, createActionButton, createElement, hint, isColorPickerOpen, numberField, selectField, textField,
   type ActionButtonController, type I18n
 } from "@motion/ui-core";
 
@@ -120,7 +120,7 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
   const locked = (key: string): boolean => Boolean(state.read?.lockedKeys.includes(key));
   const allApplied = (): boolean => Boolean(state.read && state.read.selectionCount > 0 && state.read.appliedCount === state.read.selectionCount);
   const invalid = (): boolean => invalidKeys.size > 0;
-  const editing = (): boolean => gesture || inputDrafts.size > 0 || fieldBindings.some(binding =>
+  const editing = (): boolean => isColorPickerOpen(doc) || gesture || inputDrafts.size > 0 || fieldBindings.some(binding =>
     binding.inputs.some(input => input.hasAttribute?.("data-scrub-pressed"))
     || Array.from(binding.root.getElementsByTagName("button")).some(button => button.getAttribute("data-dragging") === "true"));
   const reason = (action: "apply" | "create-background" | "remove" = "apply"): string | null => {
@@ -288,7 +288,7 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
   }
   function renderFields(): void {
     const active = doc.activeElement as HTMLInputElement | null;
-    const activeId = active?.id;
+    const activeId = active?.getAttribute("data-focus-key") ?? active?.id;
     const selectionStart = active?.selectionStart, selectionEnd = active?.selectionEnd;
     controls.splice(0);
     while (fields.firstChild) fields.removeChild(fields.firstChild);
@@ -331,7 +331,7 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
       if (section.id === "light") target.appendChild(hint(doc, i18n.t("gradient.linearHelp")));
     }
     if (activeId) {
-      const next = fieldBindings.flatMap(binding => binding.inputs).find(input => input.id === activeId);
+      const next = fieldControl(activeId);
       if (next && !next.disabled) {
         next.focus();
         if (typeof selectionStart === "number" && typeof selectionEnd === "number" && next.tagName.toLowerCase() === "input") {
@@ -340,14 +340,18 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
       }
     }
   }
+  function fieldControl(key: string): HTMLInputElement | HTMLSelectElement | HTMLButtonElement | undefined {
+    const candidates = fieldBindings.flatMap(binding => [...binding.inputs, ...Array.from(binding.root.getElementsByTagName("button"))]);
+    return candidates.find(input => input.getAttribute("data-focus-key") === key) ?? candidates.find(input => input.id === key);
+  }
   async function refresh(force = false): Promise<void> {
-    if (!alive || reading || running || !force && (editing() || invalid())) return;
+    if (!alive || reading || running || isColorPickerOpen(doc) || !force && (editing() || invalid())) return;
     const context = options.context();
     if (!context.isComposition) { state.read = null; updateChrome(); return; }
     reading = true; const ticket = ++readSequence, revision = state.revision;
     try {
       const response = await options.read();
-      if (!alive || running || ticket !== readSequence || options.context().signature !== context.signature || state.revision !== revision || !force && editing()) return;
+      if (!alive || running || isColorPickerOpen(doc) || ticket !== readSequence || options.context().signature !== context.signature || state.revision !== revision || !force && editing()) return;
       if (!response.ok || !isGradientReadData(response.data)) { readFailed = true; message = response.ok ? i18n.t("gradient.readFailed") : options.error(response); updateChrome(); return; }
       const targetChanged = readContext !== "" && readContext !== context.signature;
       const previous = JSON.stringify([state.read?.lockedKeys, state.read?.mixedKeys]), priorSettings = JSON.stringify(state.settings);
@@ -362,6 +366,8 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
   }
   async function mutate(action: "apply" | "update" | "create-background" | "remove"): Promise<void> {
     if (!alive || reason(action === "update" ? "apply" : action)) { updateChrome(); return; }
+    const focused = doc.activeElement;
+    const focusKey = focused?.getAttribute("data-focus-key") ?? focused?.id;
     const keys = [...state.dirty], revision = state.revision, settings = cloneGradientSettings(state.settings);
     const selectionToken = state.read!.selectionToken;
     const args: GradientArgs = action === "remove" ? { action, selectionToken } : action === "update" ? { action, settings, changedKeys: keys, selectionToken }
@@ -382,6 +388,12 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
       if (alive) {
         updateChrome();
         if (success) await refresh(true);
+        // Disabling a focused native button moves focus to body in Chromium.
+        // Restore that control after the update, without stealing a new focus.
+        if (alive && focusKey && (!doc.activeElement || doc.activeElement === doc.body || doc.activeElement === focused)) {
+          const control = fieldControl(focusKey);
+          if (control && !control.disabled) control.focus();
+        }
       }
     }
   }
@@ -396,6 +408,7 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
   element.appendChild(retry.element);
   renderFields(); updateChrome();
   return { element, actions, refresh: () => refresh(), dispose() {
+    if (element.querySelector('.ch-color-trigger[aria-expanded="true"]')) closeOpenColorPicker(doc);
     alive = false; readSequence++; for (const control of [...controls, apply, background, remove, retry]) control.setDisabled(true, i18n.t("gradient.reading"));
   } };
 }

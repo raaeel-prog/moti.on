@@ -6,7 +6,7 @@ const built=await build({entryPoints:[fileURLToPath(new URL('../client/src/prese
 const {GALLERY_PRESETS,curveProgress,cameraPoint,presetArgs,defaultLibraryOptions,galleryCategoryMatches,gallerySequenceControls,signatureDurationRange}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
 test('curated and legacy presets retain unique identities and real application handlers',()=>{
-  assert.equal(GALLERY_PRESETS.length,238);assert.equal(new Set(GALLERY_PRESETS.map(p=>p.id )).size,238);
+  assert.equal(GALLERY_PRESETS.length,232);assert.equal(new Set(GALLERY_PRESETS.map(p=>p.id )).size,232);
   for(const p of GALLERY_PRESETS){
     assert.ok(p.version&&p.displayName['pt-BR']&&p.displayName['en-US']&&p.preview.fixtureId);
     assert.equal(p.operationPlan.command,p.handler);
@@ -34,10 +34,10 @@ test('impact & shake filter lists exactly the ten precomp-only impact transition
   }
   assert.ok(!GALLERY_PRESETS.some(p=>!p.motion?.cameraSpec?.impact&&galleryCategoryMatches('camera-impact',p)));
 });
-test('prévia das curvas respeita extremos e diferencia as seis velocidades',()=>{
-  const presets=GALLERY_PRESETS.filter(p=>p.category==='ease');
-  for(const p of presets){assert.ok(Math.abs(curveProgress(p.curve,0))<1e-8);assert.ok(Math.abs(curveProgress(p.curve,1)-1)<1e-8);}
-  assert.equal(new Set(presets.map(p=>[.2,.5,.8].map(t=>curveProgress(p.curve,t).toFixed(5)).join(','))).size,6);
+test('curve recipes are absent from the gallery; the shared curve evaluator remains correct',()=>{
+  assert.equal(GALLERY_PRESETS.filter(p=>p.category==='ease').length,0);
+  const curve={x1:.333,y1:0,x2:.667,y2:1};
+  assert.ok(Math.abs(curveProgress(curve,0))<1e-8);assert.ok(Math.abs(curveProgress(curve,1)-1)<1e-8);
 });
 test('prévia de câmera separa deslocamento, giro, zoom e profundidade',()=>{
   const point=[200,100,0];const center=cameraPoint('truckRight',0,point);

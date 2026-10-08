@@ -135,7 +135,7 @@ test("cada adapter avalia o host atual antes do primeiro comando mesmo com dispa
 
   try {
     const { logger } = createLogger();
-    const firstAdapter = createAeHostAdapter(logger);
+    const firstAdapter = createAeHostAdapter(logger, undefined, async () => true);
     assert.ok(firstAdapter);
 
     const firstResponse = await firstAdapter.client.execute("ae.context.read");
@@ -143,7 +143,7 @@ test("cada adapter avalia o host atual antes do primeiro comando mesmo com dispa
 
     // O global do primeiro adapter continua disponível, mas não prova que o
     // arquivo instalado ainda é o mesmo. A nova instância precisa avaliá-lo.
-    const secondAdapter = createAeHostAdapter(logger);
+    const secondAdapter = createAeHostAdapter(logger, undefined, async () => true);
     assert.ok(secondAdapter);
 
     const secondResponse = await secondAdapter.client.execute("ae.context.read");
@@ -171,7 +171,7 @@ test("comandos concorrentes compartilham um único bootstrap e preservam a fila"
 
   try {
     const { logger } = createLogger();
-    const adapter = createAeHostAdapter(logger);
+    const adapter = createAeHostAdapter(logger, undefined, async () => true);
     assert.ok(adapter);
 
     const first = adapter.client.execute("ae.context.read");
@@ -214,7 +214,7 @@ test("pedido concorrente entra na fila do reload quando o engine é perdido", as
 
   try {
     const { logger } = createLogger();
-    const adapter = createAeHostAdapter(logger);
+    const adapter = createAeHostAdapter(logger, undefined, async () => true);
     assert.ok(adapter);
 
     const interrupted = adapter.client.execute("ae.context.read");
@@ -250,7 +250,7 @@ test("falha CEP de comando mutante recarrega o engine sem reenviar a mutação",
 
   try {
     const { logger } = createLogger();
-    const adapter = createAeHostAdapter(logger);
+    const adapter = createAeHostAdapter(logger, undefined, async () => true);
     assert.ok(adapter);
 
     const response = await adapter.client.execute("ae.demo.createComposition");
@@ -293,7 +293,7 @@ test("falha do reload não apaga a ambiguidade de uma mutação já enviada", as
 
   try {
     const { logger } = createLogger();
-    const adapter = createAeHostAdapter(logger);
+    const adapter = createAeHostAdapter(logger, undefined, async () => true);
     assert.ok(adapter);
 
     const response = await adapter.client.execute("ae.demo.createComposition");
@@ -325,7 +325,7 @@ test("falha CEP de comando read-only permite exatamente um retry após bootstrap
 
   try {
     const { logger } = createLogger();
-    const adapter = createAeHostAdapter(logger);
+    const adapter = createAeHostAdapter(logger, undefined, async () => true);
     assert.ok(adapter);
 
     const response = await adapter.client.execute("ae.context.read");
@@ -353,7 +353,7 @@ test("segunda falha CEP de read-only encerra tipada sem sugerir Undo", async () 
 
   try {
     const { logger } = createLogger();
-    const adapter = createAeHostAdapter(logger);
+    const adapter = createAeHostAdapter(logger, undefined, async () => true);
     assert.ok(adapter);
 
     const response = await adapter.client.execute("ae.context.read");
@@ -382,7 +382,7 @@ test("request acima do limite falha tipado sem evalScript quando arquivo tempor�
 
   try {
     const { logger } = createLogger();
-    const adapter = createAeHostAdapter(logger);
+    const adapter = createAeHostAdapter(logger, undefined, async () => true);
     assert.ok(adapter);
 
     const response = await adapter.client.execute("ae.diagnostics.echo", {
@@ -424,7 +424,7 @@ test("bootstrap que não instala dispatcher devolve falha tipada sem esperar tim
 
   try {
     const { logger } = createLogger();
-    const adapter = createAeHostAdapter(logger);
+    const adapter = createAeHostAdapter(logger, undefined, async () => true);
     assert.ok(adapter);
 
     const promise = adapter.client.execute("ae.context.read");
@@ -458,7 +458,7 @@ test("panel language overrides command context dynamically and can return to hos
   try {
     let locale="en-US";
     const {logger}=createLogger();
-    const adapter=createAeHostAdapter(logger,()=>locale);
+    const adapter=createAeHostAdapter(logger,()=>locale, async () => true);
     await adapter.client.execute("ae.context.read");
     locale="pt-BR";await adapter.client.execute("ae.context.read");
     locale=undefined;await adapter.client.execute("ae.context.read");

@@ -128,3 +128,4 @@ export * from "./preset-workspace.js";
 export * from "./text-effects.js";
 
 export * from "./gradient.js";
+export * from "./selection.js";

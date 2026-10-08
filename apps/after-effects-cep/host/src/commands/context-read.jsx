@@ -53,7 +53,7 @@
     for (i = 0; i < camadasLidas; i += 1) {
       var camada = /** @type {any} */ (camadas[i]);
       if (!camada) continue;
-      identity.push("L" + camada.index);
+      identity.push("L" + (typeof camada.id === "number" ? camada.id : camada.index));
       if (camada.threeDLayer === true) alguma3D = true;
       if (typeof TextLayer !== "undefined" && camada instanceof TextLayer) textos += 1;
       if (camada.locked === true) bloqueadas += 1;
@@ -76,7 +76,7 @@
       while (cursor && cursor.parentProperty && depth < 32) {
         path.unshift(String(cursor.propertyIndex)); cursor = cursor.parentProperty; depth += 1;
       }
-      identity.push("P" + (cursor ? cursor.index : "") + ":" + path.join("."));
+      identity.push("P" + (cursor ? (typeof cursor.id === "number" ? cursor.id : cursor.index) : "") + ":" + path.join("."));
       if (propriedade.propertyType !== PropertyType.PROPERTY) continue;
       if (propriedade.canSetExpression === true) aplicaveis += 1;
       if (typeof propriedade.numKeys === "number" && propriedade.numKeys > 0) comKeyframes += 1;

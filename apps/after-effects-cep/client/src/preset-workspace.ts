@@ -5,22 +5,29 @@ import { focusedPoll } from "./focused-poll.js";
 import { createPresetTimingControls, defaultPresetTimingDraft } from "./preset-timing-controls.js";
 import { createPresetVariants, type PresetVariant, type PresetVariantError, type PresetVariantResult, type PresetVariantStorage } from "./preset-variants.js";
 import {cepGestureFiles,createNativeGestures} from "./native-gesture.js";
-import {createPresetPhaseEditor} from "./preset-phase-editor.js";
+import {createPresetPhaseEditor,type PresetPhaseDrafts} from "./preset-phase-editor.js";
 import {createPresetLayerSections} from "./preset-layer-sections.js";
 import {hostFailureMessage} from "./host-feedback.js";
 
 type GalleryOptions = Parameters<typeof createPresetGallery>[1];
+interface LayerDraft { inspection:PresetInspection; options?:MotionLibraryOptions; phases?:PresetPhaseDrafts; invalid:[string,string][]; changed:(keyof MotionLibraryOptions)[]; }
 export interface PresetWorkspaceCache {
   personal?: PersonalPresetCatalog;
   /** Session-only recipe data: never retains host layer identities or expressions. */
   copied?: { presetId: string; options: MotionLibraryOptions };
   /** Keep the last deletion reversible when navigation recreates the workspace. */
   removedVariant?: PresetVariant;
+  /** Bounded in-memory drafts, keyed by composition, layer and managed instance. */
+  editDrafts?:Map<string,LayerDraft>;
 }
 let workspaceSequence = 0;
 export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
   cache: PresetWorkspaceCache;
   execute(command: string, args: Record<string, unknown>): Promise<CommandResponse<unknown>>;
+  watchInspection?(refresh:()=>Promise<void>,enabled:()=>boolean):()=>void;
+  onInspection?(inspection:PresetInspection):void;
+  renderAppliedTools?(container:HTMLElement,inspection:PresetInspection):(()=>void)|void;
+  canMutate?():boolean;
 }): { element: HTMLElement; updateContext(): void; dispose(): void } {
   let liveActive=false,gestureError="",phaseEditor:ReturnType<typeof createPresetPhaseEditor>|undefined;
   let retainedPhaseEditor:ReturnType<typeof createPresetPhaseEditor>|undefined,needsInspection=false;
@@ -49,6 +56,11 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
   let disposed=false, epoch=0, busy=false, readSequence=0, activeRead=0, gallery:ReturnType<typeof createPresetGallery>|undefined;
   let revealId:string|undefined;
   let snapshot:PresetInspection|undefined,draft:MotionLibraryOptions|undefined,dirty=false,stale=false;
+  const savedDrafts=options.cache.editDrafts??(options.cache.editDrafts=new Map());
+  let restoredPhases:PresetPhaseDrafts|undefined,disposeTools:(()=>void)|undefined;
+  let pointerHeld=false,redrawPending=false,pointerRelease:ReturnType<typeof setTimeout>|undefined;
+  let returnToBrowseAfterRemoval=false;
+  let deferredInspection:{data:PresetInspection;force:boolean;epoch:number}|undefined;
   let error="", notice:HTMLElement|undefined, editApply:HTMLButtonElement|undefined;
   let editApplyControl:ActionButtonController|undefined;
   let noticeAlert:AlertController|undefined, noticeKey="";
@@ -66,6 +78,17 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
   let displayedVariant:PresetVariant|undefined;
   const invalidNumbers=new Map<string,string>();
   const changedKeys=new Set<keyof MotionLibraryOptions>();
+  function draftKey(data?:PresetInspection):string|undefined {
+    const target=data?.target;if(!target)return;
+    return JSON.stringify([target.compId,target.layerId,target.instance,...(data.targets??[]).map(item=>[item.compId,item.layerId,item.instance])]);
+  }
+  function rememberDraft():void {
+    const key=draftKey(snapshot);if(!key||!snapshot)return;
+    if(!dirty){savedDrafts.delete(key);return;}
+    savedDrafts.delete(key);savedDrafts.set(key,{inspection:snapshot,...(draft?{options:{...draft}}:{}),...(phaseEditor||retainedPhaseEditor?{phases:(phaseEditor??retainedPhaseEditor)!.drafts()}:restoredPhases?{phases:restoredPhases}:{}),invalid:[...invalidNumbers],changed:[...changedKeys]});
+    while(savedDrafts.size>50)savedDrafts.delete(savedDrafts.keys().next().value!);
+  }
+  function forgetDraft():void {const key=draftKey(snapshot);if(key)savedDrafts.delete(key);restoredPhases=undefined;}
   const isMixed=(key:keyof MotionLibraryOptions):boolean=>Boolean(snapshot?.mixedKeys?.includes(key)&&!changedKeys.has(key));
   const numericCleanups:Array<()=>void>=[];
   function disposeNumbers(preservePhase=false):void{
@@ -88,7 +111,7 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
   function tabState():void {content.setAttribute("data-browse",String((nav.view??"browse")==="browse"));tabs.hidden=false;for(const [tab,view] of [[browse,"browse"],[edit,"edit"]] as const){tab.setAttribute("aria-selected",String((nav.view??"browse")===view));tab.setAttribute("aria-controls",content.id);tab.tabIndex=(nav.view??"browse")===view?0:-1;tab.disabled=isBusy();}content.setAttribute("aria-labelledby",nav.view==="edit"?edit.id:browse.id);}
   tabs.addEventListener("keydown",event=>{if(!isBusy()&&["ArrowLeft","ArrowRight","Home","End"].includes(event.key)){event.preventDefault();switchView(event.key==="Home"?"browse":event.key==="End"?"edit":nav.view==="edit"?"browse":"edit");(nav.view==="edit"?edit:browse).focus();}});
   function switchView(view:"browse"|"edit",initial=false):void {
-    if(!initial&&(isBusy()||nav.view===view))return;disposeNumbers(dirty&&Boolean(snapshot?.phases?.length));nav.view=view;epoch++;activeRead=0;needsInspection=view==="edit"&&dirty&&Boolean(retainedPhaseEditor);gallery?.dispose();gallery=undefined;noticeAlert?.dispose();noticeAlert=undefined;noticeKey="";clearNode(content);notice=undefined;tabState();
+    if(!initial&&(isBusy()||nav.view===view))return;rememberDraft();disposeTools?.();disposeTools=undefined;disposeNumbers(dirty&&Boolean(snapshot?.phases?.length));nav.view=view;epoch++;activeRead=0;needsInspection=view==="edit"&&dirty&&Boolean(retainedPhaseEditor);gallery?.dispose();gallery=undefined;noticeAlert?.dispose();noticeAlert=undefined;noticeKey="";clearNode(content);notice=undefined;tabState();
     if(view==="browse")drawBrowse();else{drawEdit();void inspect();}polling?.refresh();
   }
   function showError(message:string):void {error=message;if(nav.view==="edit"){if(snapshot?.target)stale=true;drawEdit();}else drawBrowse();}
@@ -139,6 +162,33 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
     finally{busy=false;if(!disposed){tabState();drawBrowse();}}
   }
   function sameTarget(a?:PresetTarget,b?:PresetTarget):boolean{return Boolean(a&&b&&a.compId===b.compId&&a.layerId===b.layerId&&a.instance===b.instance);}
+  function acceptInspection(next:PresetInspection,force=false):void {
+    if(pointerHeld){deferredInspection={data:next,force,epoch};return;}
+    options.onInspection?.(next);
+    if(!force&&snapshot?.state===next.state&&snapshot?.target?.fingerprint===next.target?.fingerprint&&(sameTarget(next.target,snapshot?.target)||(!next.target&&!snapshot?.target))&&snapshot?.message===next.message&&snapshot?.presetId===next.presetId&&snapshot?.frameRate===next.frameRate&&snapshot?.dropFrame===next.dropFrame&&JSON.stringify(snapshot?.phases)===JSON.stringify(next.phases)&&JSON.stringify(snapshot?.targets)===JSON.stringify(next.targets)&&JSON.stringify(snapshot?.mixedKeys)===JSON.stringify(next.mixedKeys)&&JSON.stringify(snapshot?.colorTarget)===JSON.stringify(next.colorTarget)&&JSON.stringify(snapshot?.selection)===JSON.stringify(next.selection)&&JSON.stringify(snapshot?.tools)===JSON.stringify(next.tools)){needsInspection=false;updateNotice();return;}
+    if(!force&&dirty&&draftKey(snapshot)===draftKey(next)){stale=true;needsInspection=false;updateNotice();return;}
+    if(!force)rememberDraft();else forgetDraft();
+    disposeNumbers();
+    const saved=!force?savedDrafts.get(draftKey(next)??""):undefined;
+    snapshot=saved?.inspection??next;draft=saved?.options?{...saved.options}:next.options?{...next.options}:undefined;
+    restoredPhases=saved?.phases;dirty=Boolean(saved);stale=Boolean(saved&&saved.inspection.target?.fingerprint!==next.target?.fingerprint);needsInspection=false;
+    error=gestureError;gestureError="";invalidNumbers.clear();changedKeys.clear();
+    for(const [key,value] of saved?.invalid??[])invalidNumbers.set(key,value);
+    for(const key of saved?.changed??[])changedKeys.add(key);
+    if(returnToBrowseAfterRemoval){returnToBrowseAfterRemoval=false;if(next.state==="unmanaged"){redrawPending=false;switchView("browse");return;}}
+    drawEdit();
+  }
+  function releasePointer():void {
+    clearTimeout(pointerRelease);pointerRelease=setTimeout(()=>{
+      pointerHeld=false;if(disposed)return;
+      const pending=deferredInspection;deferredInspection=undefined;
+      if(pending&&pending.epoch===epoch)acceptInspection(pending.data,pending.force);
+      if(redrawPending){redrawPending=false;if(nav.view==="edit")drawEdit();}
+    },0);
+  }
+  const pressPointer=(event:Event):void=>{if(nav.view==="edit"&&content.contains(event.target as Node)){clearTimeout(pointerRelease);pointerHeld=true;}};
+  doc.addEventListener("pointerdown",pressPointer,true);doc.addEventListener("pointerup",releasePointer,true);doc.addEventListener("pointercancel",releasePointer,true);
+  window.addEventListener("blur",releasePointer);
   async function inspect(force=false):Promise<void>{
     if(disposed||isBusy()||numberPressed()||(!force&&numberHovered())||activeRead||nav.view!=="edit"||doc.hidden)return;
     const token=epoch,readId=++readSequence;activeRead=readId;content.setAttribute("aria-busy","true");updateNotice();
@@ -146,11 +196,7 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
       const response=await options.execute("ae.presets.inspect",{});
       if(disposed||token!==epoch||numberPressed()||(!force&&numberHovered())||nav.view!=="edit")return;
       if(!response.ok||!response.data){showError(hostError(response,pt?"Não foi possível ler a seleção.":"Unable to read selection."));return;}
-      const next=response.data as PresetInspection;
-      if(!force&&snapshot?.state===next.state&&snapshot?.target?.fingerprint===next.target?.fingerprint&&(sameTarget(next.target,snapshot?.target)||(!next.target&&!snapshot?.target))&&snapshot?.message===next.message&&JSON.stringify(snapshot?.targets)===JSON.stringify(next.targets)&&JSON.stringify(snapshot?.mixedKeys)===JSON.stringify(next.mixedKeys)&&JSON.stringify(snapshot?.colorTarget)===JSON.stringify(next.colorTarget)&&JSON.stringify(snapshot?.selection)===JSON.stringify(next.selection)){needsInspection=false;updateNotice();return;}
-      // A host selection change must not silently discard local edits.
-      if(!force&&dirty){stale=true;needsInspection=false;updateNotice();return;}
-      snapshot=next;draft=next.options?{...next.options}:undefined;dirty=false;stale=false;needsInspection=false;error=gestureError;gestureError="";invalidNumbers.clear();changedKeys.clear();drawEdit();
+      acceptInspection(response.data as PresetInspection,force);
     }catch{if(!disposed&&token===epoch)showError(pt?"A leitura falhou. Tente novamente.":"Reading failed. Try again.");}
     finally{if(activeRead===readId){activeRead=0;content.setAttribute("aria-busy","false");if(!disposed)updateNotice();}}
   }
@@ -382,17 +428,20 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
   }
   function drawLayerSections(data:PresetInspection):void{
     content.appendChild(createPresetLayerSections(doc,{locale:options.locale,inspection:data,busy:isBusy(),blocked:dirty||stale,execute:(command,args)=>{void phaseCommand(command,args);}}));
+    const dispose=options.renderAppliedTools?.(content,data);if(dispose)disposeTools=dispose;
   }
   function drawEdit():void {
+    if(pointerHeld){redrawPending=true;return;}
+    disposeTools?.();disposeTools=undefined;
     content.setAttribute("data-editor","other");
     disposeNumbers(dirty&&Boolean(snapshot?.phases?.length));noticeAlert?.dispose();noticeAlert=undefined;noticeKey="";clearNode(content);editApply=undefined;copyButton=undefined;notice=createElement(doc,"div","ch-workspace-notice");content.appendChild(notice);
     const data=snapshot;
     if(data?.state==="ready"&&data.phases?.length){
-      phaseEditor=retainedPhaseEditor??createPresetPhaseEditor(doc,{locale:options.locale,inspection:data,busy:isBusy(),
+      phaseEditor=retainedPhaseEditor??createPresetPhaseEditor(doc,{locale:options.locale,inspection:data,busy:isBusy(),...(restoredPhases?{drafts:restoredPhases}:{}),
         reveal:revealPreset,
         copy:phase=>{options.cache.copied={presetId:phase.presetId,options:{...phase.options}};transferStatus=pt?"Fase copiada. Selecione a camada de destino e cole.":"Phase copied. Select the destination layer and paste.";updateTransferContext();},
         execute:(command,args)=>{void phaseCommand(command,args);},onDirty:value=>{dirty=value;updateTransferContext();},
-        ...(gestures.available()&&data.target&&!data.targets?.length?{live:{start:(phase,key)=>{if(isBusy()||stale)return false;const hostValue=Number(phase.options[key as keyof MotionLibraryOptions]);if(!Number.isFinite(hostValue))return false;gestures.start(data.target!,phase,key,hostValue);return liveActive;},update:value=>gestures.update(value),finish:(canceled,value)=>{void gestures.finish(canceled,value);}}}: {})});retainedPhaseEditor=undefined;
+        ...(gestures.available()&&data.target&&!data.targets?.length?{live:{start:(phase,key)=>{if(isBusy()||stale||dirty||options.canMutate?.()===false)return false;const hostValue=Number(phase.options[key as keyof MotionLibraryOptions]);if(!Number.isFinite(hostValue))return false;gestures.start(data.target!,phase,key,hostValue);return liveActive;},update:value=>gestures.update(value),finish:(canceled,value)=>{void gestures.finish(canceled,value);}}}: {})});retainedPhaseEditor=undefined;restoredPhases=undefined;
       content.appendChild(phaseEditor.element);
       drawLayerSections(data);drawUtilities();updateNotice();return;
     }
@@ -490,7 +539,7 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
     editApplyControl=createActionButton(doc,{id:"preset-edit-apply",label:pt?"Aplicar ajustes":"Apply changes",variant:"primary",onPress:()=>{if(!disposed&&!isBusy())void adjust();}});
     editApply=editApplyControl.button;editApplyControl.element.classList.add("ch-preset-primary-action");actions.appendChild(editApplyControl.element);content.appendChild(actions);
     const lifecycle=createElement(doc,"div","ch-preset-footer");
-    if(options.lifecycle){lifecycle.appendChild(createActionButton(doc,{id:"preset-edit-remove",label:pt?"Remover da seleção":"Remove from selection",variant:"destructive",disabled:isBusy(),disabledReason:pt?"Aguarde a operação atual.":"Wait for the current operation.",onPress:()=>{if(!disposed&&!isBusy())options.lifecycle?.("remove");}}).element);
+    if(options.lifecycle){lifecycle.appendChild(createActionButton(doc,{id:"preset-edit-remove",label:pt?"Remover da seleção":"Remove from selection",variant:"destructive",disabled:isBusy(),disabledReason:pt?"Aguarde a operação atual.":"Wait for the current operation.",onPress:()=>{if(!disposed&&!isBusy())void phaseCommand("ae.presets.remove",{target:data.target,...(data.targets?{targets:data.targets}: {})});}}).element);
       if(!preset.category.startsWith("text-"))lifecycle.appendChild(createActionButton(doc,{id:"preset-edit-bake",label:pt?"Converter em keyframes":"Bake to keyframes",disabled:isBusy(),disabledReason:pt?"Aguarde a operação atual.":"Wait for the current operation.",onPress:()=>{if(!disposed&&!isBusy())options.lifecycle?.("bake");}}).element);}
     content.appendChild(lifecycle);drawLayerSections(data);drawUtilities();
     // One scroll region keeps utilities reachable without pushing Apply out of
@@ -505,7 +554,7 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
     try{
       const response=await options.execute("ae.presets.adjust",args);
       if(disposed)return;if(!response.ok){error=hostError(response,pt?"Não foi possível ajustar.":"Unable to adjust.");stale=true;}
-      else{dirty=false;snapshot=undefined;}
+      else{forgetDraft();dirty=false;snapshot=undefined;}
     }catch{if(!disposed){error=pt?"Falha ao ajustar. Recarregue os valores antes de tentar novamente.":"Adjustment failed. Reload values before trying again.";stale=true;}}
     finally{busy=false;if(!disposed){tabState();if(!snapshot)await inspect(true);else drawEdit();}}
   }
@@ -514,14 +563,27 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
       // Discard is a local draft operation. A host read can be in flight (or
       // waiting behind the native gesture), so redraw from the last accepted
       // inspection immediately and let the normal poll refresh later.
-      dirty=false;stale=false;needsInspection=false;error="";epoch++;activeRead=0;drawEdit();void inspect(true);return;
+      forgetDraft();dirty=false;stale=false;needsInspection=false;error="";epoch++;activeRead=0;drawEdit();void inspect(true);return;
     }
     if(stale||needsInspection)return;
     if(command==="ae.presets.color-adjust"&&(dirty||stale)){error=pt?"Aplique ou descarte os ajustes do preset antes de alterar a cor.":"Apply or discard preset changes before changing colors.";updateNotice();return;}
-    const removing=command==="ae.presets.phase-action"&&args.action==="remove";
+    const removing=command==="ae.presets.remove"||command==="ae.presets.phase-action"&&args.action==="remove";
+    const expected=snapshot;
     let removed=false;
     busy=true;epoch++;activeRead=0;error="";tabState();drawEdit();
-    try{const response=await options.execute(command,args);if(disposed)return;if(!response.ok){error=hostError(response,pt?"Não foi possível editar a fase.":"Unable to edit phase.");stale=true;}else{removed=removing;dirty=false;snapshot=undefined;}}
+    try{
+      if(removing){
+        const read=await options.execute("ae.presets.inspect",{});if(disposed)return;
+        if(!read.ok||!read.data){error=hostError(read,pt?"Não foi possível confirmar a seleção. Nada foi removido.":"Could not confirm the selection. Nothing was removed.");stale=true;return;}
+        const current=read.data as PresetInspection;
+        const recipe=(value?:PresetInspection):string=>JSON.stringify(value?.phases?.map(phase=>[phase.phase,phase.presetId,phase.instance])??value?.presetId);
+        const targets=(value?:PresetInspection):string=>JSON.stringify((value?.targets??[]).map(target=>[target.compId,target.layerId,target.instance]));
+        if(current.state!=="ready"||!sameTarget(args.target as PresetTarget,current.target)||recipe(expected)!==recipe(current)||targets(expected)!==targets(current)){
+          error=pt?"A camada ou o preset mudou. Nada foi removido. Confira a seleção antes de tentar novamente.":"The layer or preset changed. Nothing was removed. Check the selection before trying again.";stale=true;return;
+        }
+        args={...args,target:current.target,...(current.targets?{targets:current.targets}: {})};
+      }
+      const response=await options.execute(command,args);if(disposed)return;if(!response.ok){error=hostError(response,pt?"Não foi possível editar a fase.":"Unable to edit phase.");stale=true;}else{removed=removing;returnToBrowseAfterRemoval=removing;forgetDraft();dirty=false;snapshot=undefined;}}
     catch{if(!disposed){error=pt?"Falha ao editar a fase. Recarregue os controles.":"Phase editing failed. Reload controls.";stale=true;}}
     finally{busy=false;if(!disposed){tabState();if(!snapshot)await inspect(true);else drawEdit();
       // Keep Edit when another phase remains. After the last phase is removed,
@@ -529,8 +591,9 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
       if(removed&&!disposed&&nav.view==="edit"&&snapshot?.state==="unmanaged")switchView("browse");
     }}
   }
-  const polling=focusedPoll(doc,()=>{void inspect();},750,()=>nav.view==="edit");
+  const stopWatch=options.watchInspection?.(()=>inspect(),()=>!disposed&&nav.view==="edit");
+  const polling=stopWatch?undefined:focusedPoll(doc,()=>{void inspect();},750,()=>nav.view==="edit");
   nav.view??="browse";switchView(nav.view,true);
   if(!options.cache.personal&&nav.view==="browse")void personal("list");
-  return {element,updateContext(){gallery?.updateContext();updateTransferContext();timingControls?.updateContext();},dispose(){disposed=true;gestures.dispose();disposeNumbers();epoch++;noticeAlert?.dispose();gallery?.dispose();polling?.dispose();}};
+  return {element,updateContext(){gallery?.updateContext();updateTransferContext();timingControls?.updateContext();},dispose(){if(disposed)return;rememberDraft();disposed=true;clearTimeout(pointerRelease);doc.removeEventListener("pointerdown",pressPointer,true);doc.removeEventListener("pointerup",releasePointer,true);doc.removeEventListener("pointercancel",releasePointer,true);window.removeEventListener("blur",releasePointer);disposeTools?.();gestures.dispose();disposeNumbers();epoch++;noticeAlert?.dispose();gallery?.dispose();polling?.dispose();stopWatch?.();}};
 }

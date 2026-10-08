@@ -550,6 +550,7 @@ export interface RigMetadata {
 |---|---|---|---|
 | `ae.presets.apply` | Aplicar uma receita própria da biblioteca ou ajustar a mesma receita gerenciada | After Effects | P1 |
 | `ae.presets.camera-transition` | Criar pré-comp de transição acima das camadas, com marcador CUT e controles editáveis | After Effects | P1 |
+| `ae.tools.adjust` | Ajustar controles identificados de ferramentas na seleção | After Effects | P1 |
 | `ae.presets.inspect` | Ler preset e controles nativos da camada selecionada | After Effects | P1 |
 | `ae.presets.timing` | Alinhar, deslocar, escalonar ou definir duração da fase pelos marcadores In/Out Moti.on | After Effects | P1 |
 | `ae.presets.phase-apply` | Aplicar entrada e saída com receitas e controles independentes | After Effects | P1 |

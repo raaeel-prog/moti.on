@@ -32,6 +32,8 @@ export interface ColorPickerOptions {
   description?: string;
   disabled?: boolean;
   disabledReason?: string;
+  /** A consumer can protect its draft from background hydration for the whole session. */
+  onOpenChange?(open: boolean): void;
   onCommit(value: string): void;
 }
 
@@ -44,6 +46,8 @@ export interface ColorPicker {
   open(): void;
   /** `deferCommit` runs `onCommit` in a microtask (used while the shell rerenders). */
   close(commit?: boolean, deferCommit?: boolean): void;
+  /** Cancels the session and invalidates pending native dialog results. */
+  dispose(): void;
 }
 
 export interface ColorSurfaceLayout {
@@ -80,6 +84,13 @@ export function configureColorPickers(doc: Document, config: ColorPickerConfig):
 
 /** Closes the open picker; with `commit`, its choice is confirmed after the current task. */
 export function closeOpenColorPicker(doc: Document, commit = false): void { openPickers.get(doc)?.(commit); }
+
+export function isColorPickerOpen(doc: Document): boolean { return openPickers.has(doc); }
+
+/** Text drafts outside the overlay also need protection from host polling. */
+export function hasColorDraft(doc: Document): boolean {
+  return Boolean(doc.querySelector?.('[data-color-draft="true"]'));
+}
 
 /** Same probe as the dropdown: UXP has custom elements but no reliable overlays. */
 export function supportsColorOverlay(doc: Document): boolean {
@@ -141,6 +152,7 @@ export function createColorPicker(doc: Document, options: ColorPickerOptions): C
   let hsv: Hsv = hexToHsv(committed) ?? { h: 0, s: 0, v: 0 };
   let initial = committed;
   let isOpen = false;
+  let disposed = false, session = 0;
 
   const trigger = createElement(doc, "button", "ch-color-trigger") as HTMLButtonElement;
   trigger.type = "button";
@@ -182,6 +194,7 @@ export function createColorPicker(doc: Document, options: ColorPickerOptions): C
   let hexInput: HTMLInputElement | null = null;
   let before: HTMLButtonElement | null = null, after: HTMLElement | null = null;
   let nativeButton: HTMLButtonElement | null = null;
+  let nativeError: HTMLElement | null = null;
   let observer: MutationObserver | undefined;
   let exitTimer: ReturnType<typeof setTimeout> | undefined;
   let dragging: "area" | "hue" | null = null;
@@ -257,17 +270,19 @@ export function createColorPicker(doc: Document, options: ColorPickerOptions): C
     backdrop?.parentNode?.removeChild(backdrop);
     backdrop = null;
     surface = area = areaThumb = hue = hueThumb = after = null;
-    hexInput = null; before = null; nativeButton = null;
+    hexInput = null; before = null; nativeButton = null; nativeError = null;
   }
   /** Silent teardown when the trigger leaves the document. */
-  function dispose(): void {
+  function cancelDetached(): void {
     if (!isOpen) return;
-    isOpen = false; dragging = null;
+    isOpen = false; dragging = null; session++;
     trigger.setAttribute("aria-expanded", "false");
     detach(); removeSurface();
     if (openPickers.get(doc) === external) openPickers.delete(doc);
+    paintTrigger(committed);
+    options.onOpenChange?.(false);
   }
-  const external = (commit: boolean): void => { if (commit) close(true, true); else dispose(); };
+  const external = (commit: boolean): void => { if (commit) close(true, true); else cancelDetached(); };
 
   function focusables(): HTMLElement[] {
     if (!surface || typeof surface.querySelectorAll !== "function") return [];
@@ -356,7 +371,7 @@ export function createColorPicker(doc: Document, options: ColorPickerOptions): C
       set({ ...hsv, h: Math.min(359.999, Math.max(0, next)) });
     });
 
-    const row = createElement(doc, "div", "ch-color-row");
+    const row = createElement(doc, "div", "ch-color-surface__row");
     const preview = createElement(doc, "span", "ch-color-preview");
     before = createElement(doc, "button", "ch-color-preview__before") as HTMLButtonElement;
     before.type = "button";
@@ -409,19 +424,32 @@ export function createColorPicker(doc: Document, options: ColorPickerOptions): C
 
     const host = config().native;
     if (host) {
+      nativeError = createElement(doc, "p", "ch-color-native-error");
+      nativeError.setAttribute("role", "alert");
+      nativeError.hidden = true;
+      root.appendChild(nativeError);
       nativeButton = createElement(doc, "button", "ch-color-native", host.label ?? i18n.t("color.picker.native")) as HTMLButtonElement;
       nativeButton.type = "button";
       nativeButton.addEventListener("click", () => {
         if (!nativeButton || nativeButton.disabled) return;
         const button = nativeButton;
+        const ticket = session;
         button.disabled = true;
         button.setAttribute("aria-busy", "true");
-        host.pick(current()).then(result => {
+        if (nativeError) { nativeError.hidden = true; nativeError.textContent = ""; }
+        Promise.resolve().then(() => host.pick(current())).then(result => {
           const next = result ? hexToHsv(result) : null;
-          if (!isOpen) return;
+          if (!isOpen || disposed || ticket !== session) return;
           if (next) { set(next); close(true); return; }
+          if (result !== null) throw new Error(i18n.t("color.picker.failed"));
           button.disabled = false; button.removeAttribute("aria-busy");
-        }, () => { if (isOpen) { button.disabled = false; button.removeAttribute("aria-busy"); } });
+          button.focus();
+        }).catch(error => {
+          if (!isOpen || disposed || ticket !== session) return;
+          button.disabled = false; button.removeAttribute("aria-busy");
+          if (nativeError) { nativeError.textContent = error instanceof Error && error.message ? error.message : i18n.t("color.picker.failed"); nativeError.hidden = false; }
+          layout(); button.focus();
+        });
       });
       root.appendChild(nativeButton);
     }
@@ -443,12 +471,12 @@ export function createColorPicker(doc: Document, options: ColorPickerOptions): C
   }
 
   function open(): void {
-    if (disabled || isOpen) return;
+    if (disabled || disposed || trigger.isConnected === false || isOpen) return;
     closeOpenDropdown(doc);
     const previous = openPickers.get(doc);
     if (previous) previous(true);
     if (exitTimer !== undefined) { clearTimeout(exitTimer); exitTimer = undefined; removeSurface(); }
-    isOpen = true;
+    isOpen = true; session++;
     initial = committed;
     hsv = hexToHsv(committed) ?? hsv;
     surface = build();
@@ -465,9 +493,10 @@ export function createColorPicker(doc: Document, options: ColorPickerOptions): C
     surface.setAttribute("data-open", "true");
     backdrop.setAttribute("data-open", "true");
     openPickers.set(doc, external);
+    options.onOpenChange?.(true);
     browser?.addEventListener?.("resize", resized);
     if (typeof browser?.MutationObserver === "function") {
-      observer = new browser.MutationObserver(() => { if (!doc.documentElement.contains(trigger)) dispose(); });
+      observer = new browser.MutationObserver(() => { if (!doc.documentElement.contains(trigger)) cancelDetached(); });
       observer.observe(doc.body, { childList: true, subtree: true });
     }
     area?.focus();
@@ -475,7 +504,7 @@ export function createColorPicker(doc: Document, options: ColorPickerOptions): C
 
   function close(commit = true, deferCommit = false): void {
     if (!isOpen || !surface) return;
-    isOpen = false; dragging = null;
+    isOpen = false; dragging = null; session++;
     const next = current();
     detach();
     if (openPickers.get(doc) === external) openPickers.delete(doc);
@@ -494,12 +523,13 @@ export function createColorPicker(doc: Document, options: ColorPickerOptions): C
     paintTrigger(committed);
     // Focus first: a consumer that rerenders restores focus by data-focus-key.
     if (trigger.isConnected !== false) trigger.focus();
+    // Keep the consumer's editing guard raised until a synchronous commit finishes.
     if (changed) {
       const value = committed;
       config().recent?.record(value);
-      if (deferCommit) queueMicrotask(() => options.onCommit(value));
-      else options.onCommit(value);
-    }
+      if (deferCommit) queueMicrotask(() => { if (!disposed) options.onCommit(value); options.onOpenChange?.(false); });
+      else { options.onCommit(value); options.onOpenChange?.(false); }
+    } else options.onOpenChange?.(false);
   }
 
   trigger.addEventListener("click", () => { if (isOpen) close(true); else open(); });
@@ -524,6 +554,7 @@ export function createColorPicker(doc: Document, options: ColorPickerOptions): C
       syncDisabled();
     },
     open,
-    close
+    close,
+    dispose() { disposed = true; session++; cancelDetached(); detach(); removeSurface(); }
   };
 }

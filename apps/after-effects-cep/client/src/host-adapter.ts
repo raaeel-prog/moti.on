@@ -145,7 +145,7 @@ export interface AeHostAdapter {
 
 export function createAeHostAdapter(logger: {
   warn(message: string, details?: Record<string, unknown>): void;
-}, preferredLocale?: () => string | undefined): AeHostAdapter | null {
+}, preferredLocale?: () => string | undefined, authorizeMutation: () => Promise<boolean> = async () => false): AeHostAdapter | null {
   if (typeof CSInterface === "undefined") {
     // O painel foi aberto fora do CEP. Devolver null em vez de lançar deixa a
     // interface mostrar um estado honesto — "não estou dentro do After Effects"
@@ -342,8 +342,15 @@ export function createAeHostAdapter(logger: {
   }
 
   const transport: Transport = {
-    send(serialized, onResult) {
+    async send(serialized, onResult) {
       const request = readLocalRequestMetadata(serialized);
+      if (request.mutates) {
+        let allowed = false; try { allowed = await authorizeMutation(); } catch { /* Fail closed. */ }
+        if (!allowed) {
+          sendTransportFailure(request, onResult, "INTERNAL_ERROR", "Uma licença beta ativa é necessária. Abra Configurações → Conta.", { reason: "LICENSE_REQUIRED", mayHaveMutated: false });
+          return;
+        }
+      }
       const encodedChars = encodeForEvalScript(serialized).length;
 
       let call: string;

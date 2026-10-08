@@ -147,7 +147,7 @@ test('the default gallery exposes all collections with its filters in a closed a
   assert.equal(navigation.category,'all');
   const cards=root.getElementsByTagName('article');
   assert.ok(cards.length>30,'all collections include more than the former premium-only default');
-  assert.ok(cards.some(card=>card.id==='builtin.ease.balanced'));
+  assert.ok(!cards.some(card=>card.id.startsWith('builtin.ease.')));
   assert.ok(cards.some(card=>card.id==='builtin.camera.pushIn'));
   const menu=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-filter-menu');
   const categories=root.getElementsByTagName('nav').find(node=>node.className==='ch-preset-categories');
@@ -193,18 +193,18 @@ test('category menu supports arrow, Home/End and fold keys',t=>{
   key('ArrowUp');assert.equal(doc.activeElement.dataset.category,'personal','arrows wrap around');
 });
 
-test('details and the Apply bar stay hidden until a preset is chosen, and close again on demand',t=>{
+test('a selected preset persists when closing settings or pressing Escape',t=>{
   const {gallery,navigation,doc}=fixture(t,{pick:false}),root=gallery.element;
   const editor=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-editor');
   const bar=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-applybar');
   assert.equal(navigation.selectedId,undefined);assert.equal(editor.hidden,true);assert.equal(bar.hidden,true);
   const title=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-apply'));
-  title.click();assert.equal(editor.hidden,false);assert.equal(bar.hidden,false);
-  const close=root.getElementsByTagName('button').find(node=>node.getAttribute('aria-label')==='Fechar ajustes do preset');
-  close.click();assert.equal(navigation.selectedId,'');assert.equal(editor.hidden,true);assert.equal(bar.hidden,true);
-  assert.equal(doc.activeElement,title,'focus returns to the card that was open');
-  title.click();assert.equal(editor.hidden,false);
-  doc.emit('keydown',{key:'Escape'});assert.equal(editor.hidden,true,'Escape inside the gallery closes the details');
+  title.click();const selected=navigation.selectedId;
+  assert.equal(editor.hidden,false);assert.equal(bar.hidden,false);
+  assert.equal(root.getElementsByTagName('button').some(node=>node.getAttribute('aria-label')==='Fechar ajustes do preset'),false);
+  title.focus();doc.emit('keydown',{key:'Escape'});
+  assert.equal(navigation.selectedId,selected);assert.equal(editor.hidden,false);assert.equal(bar.hidden,false);
+  assert.equal(doc.activeElement,title);
 });
 
 test('the selected preset inspector stays inline and keeps the exact draft during context refresh',t=>{
@@ -238,15 +238,10 @@ test('a missing composition or selection blocks both Apply and preview double-cl
   apply.click();assert.equal(applied.length,1);assert.equal(applied[0].preset.id,'builtin.motion.premium-arc-arrival');
 });
 
-test('curve preset application requires selected keyframes and updates without rebuilding its inspector',t=>{
-  const {gallery,context,applied}=fixture(t,{category:'ease',context:{hasComp:true,selectionCount:1,selectedKeys:0}}),root=gallery.element;
-  const apply=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-primary-apply'));
-  const inspector=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-inspector');
-  assert.equal(apply.disabled,true);assert.match(root.allText,/Selecione keyframes/);
-  context.selectedKeys=2;gallery.updateContext();
-  assert.equal(root.getElementsByTagName('section').find(node=>node.className==='ch-preset-inspector'),inspector);
-  assert.equal(apply.disabled,false);apply.click();
-  assert.equal(applied.length,1);assert.equal(applied[0].preset.handler,'ae.keys.ease.apply');
+test('legacy Curves navigation migrates to all presets without a dead selected item',t=>{
+  const {gallery,navigation}=fixture(t,{category:'ease',pick:false});
+  assert.equal(navigation.category,'all');
+  assert.ok(!gallery.element.getElementsByTagName('article').some(card=>card.id.startsWith('builtin.ease.')));
 });
 
 test('invalid draft remains visible and cannot be bypassed by losing and restoring selection',t=>{
@@ -289,9 +284,9 @@ test('switching to personal presets clears the previous inspector and preserves 
   chooseCategory('personal');
   assert.equal(editor.hidden,true);assert.equal(inspector.getElementsByTagName('input').length,0);
   assert.equal(inspector.getElementsByTagName('div').some(node=>node.className==='ch-preset-approved-heading'),false);
-  assert.equal(navigation.selectedId,'');assert.equal(navigation.drafts[selected].durationFrames,53);
+  assert.equal(navigation.selectedId,selected);assert.equal(navigation.drafts[selected].durationFrames,53);
   chooseCategory('all');
-  assert.equal(editor.hidden,true,'returning to the library does not pick a preset on its own');assert.equal(navigation.selectedId,'');
+  assert.equal(editor.hidden,false,'returning restores the explicit selection');assert.equal(navigation.selectedId,selected);
   root.getElementsByTagName('button').find(node=>node.dataset.focusKey===`title.${selected}`).click();
   assert.equal(editor.hidden,false);assert.equal(navigation.selectedId,selected);
   assert.equal(inspector.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Duração · frames').value,'53');

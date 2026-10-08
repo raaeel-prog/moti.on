@@ -157,7 +157,7 @@ export { registerMotiDrawer, type MotiDrawer, type MotiDrawerConstructor } from 
 export { ICON_CATALOG, type IconDefinition, type IconId, type IconFamily, type IconGesture } from "./icons.js";
 
 export {
-  closeOpenColorPicker, colorSurfaceChrome, configureColorPickers, createColorPicker, resolveColorSurfaceLayout, supportsColorOverlay,
+  closeOpenColorPicker, colorSurfaceChrome, configureColorPickers, createColorPicker, hasColorDraft, isColorPickerOpen, resolveColorSurfaceLayout, supportsColorOverlay,
   type ColorPicker, type ColorPickerConfig, type ColorPickerOptions, type ColorSurfaceLayout
 } from "./elements/color-view.js";
 export { clampHsv, hexToHsv, hexToRgb, hsvToHex, hsvToRgb, rgbToHex, rgbToHsv, type Hsv, type Rgb } from "./color-math.js";

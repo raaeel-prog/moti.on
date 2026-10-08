@@ -1,4 +1,5 @@
 import type { MotionLibraryOptions } from "./motion-library.js";
+import type { SelectionContext, ManagedToolInspection } from "./selection.js";
 
 /** Stable identity captured by Inspect; Adjust must reject a stale target. */
 export interface PresetTarget {
@@ -9,6 +10,8 @@ export interface PresetTarget {
 }
 
 export interface PresetInspection {
+  context?: SelectionContext;
+  tools?: ManagedToolInspection[];
   state: "ready" | "no-comp" | "no-selection" | "multiple" | "unmanaged" | "conflict";
   message: string;
   target?: PresetTarget;

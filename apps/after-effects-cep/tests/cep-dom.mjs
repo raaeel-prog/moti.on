@@ -11,6 +11,7 @@ export function createCepDocument() {
     Object.defineProperty(node, 'parentElement', { get: () => node.parentNode });
     node.getBoundingClientRect = () => ({left: 10, top: 10, bottom: 54, width: 160, height: 60});
     node.querySelector = tag => node.getElementsByTagName(tag)[0];
+    node.contains = candidate => { for(let current=candidate;current;current=current.parentNode)if(current===node)return true;return false; };
     node.closest = selector => {
       let current = node;
       while (current) { if (selector.split(',').some(s => current.className.split(' ').includes(s.trim().slice(1)))) return current; current = current.parentNode; }
@@ -22,6 +23,6 @@ export function createCepDocument() {
   doc.hidden = false;
   doc.addEventListener = (type, fn) => { events.set(type, [...(events.get(type) ?? []), fn]); };
   doc.removeEventListener = (type, fn) => { events.set(type, (events.get(type) ?? []).filter(f => f !== fn)); };
-  doc.emit = type => (events.get(type) ?? []).forEach(fn => fn());
+  doc.emit = (type,init={}) => (events.get(type) ?? []).forEach(fn => fn({type,target:doc,...init}));
   return doc;
 }

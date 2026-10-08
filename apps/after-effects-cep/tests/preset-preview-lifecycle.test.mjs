@@ -44,7 +44,7 @@ function fixture(t,{autoplay=true,focused=true,intersection=true,scroll=0,naviga
 }
 
 test('full catalogue allocates artwork only for visible cards and animates one at the display rate',t=>{
-  const f=fixture(t);assert.equal(f.views.length,238);assert.ok(f.svgs.every(s=>s.children.length===0));
+  const f=fixture(t);assert.equal(f.views.length,232);assert.ok(f.svgs.every(s=>s.children.length===0));
   f.visible([0,1,2,3,4,5]);assert.equal(f.svgs.filter(s=>s.children.length).length,6);assert.equal(f.frames.size,1);
   let before=f.snapshots();f.tick(1000);
   assert.equal(f.snapshots().filter((n,i)=>n!==before[i]).length,1);
@@ -127,7 +127,7 @@ test('returning to the same visible preset keeps the exact position even when it
 });
 
 test('applying from Recent keeps its displayed order and offset on return, then refreshes when the filter is reentered',t=>{
-  const recent=['builtin.motion.premium-arc-arrival','builtin.ease.balanced','builtin.camera.pushIn'];
+  const recent=['builtin.motion.premium-arc-arrival','builtin.motion.arc-arrival','builtin.camera.pushIn'];
   const navigation={query:'',category:'all',scope:'recent',scroll:0};
   const f=fixture(t,{navigation,recent,onApply(preset,prefs){prefs.recent=[preset.id,...prefs.recent.filter(id=>id!==preset.id)];}});
   const cards=gallery=>gallery.element.querySelectorAll('.ch-preset-card');
@@ -233,7 +233,7 @@ test('explicit selection and filter changes cancel an unfinished reveal',async t
   const cases=[
     ['selection',f=>f.gallery.element.querySelectorAll('.ch-preset-preview')[0].click()],
     ['scope',f=>f.gallery.element.getElementsByTagName('button').find(node=>node.dataset.scope==='favorites').click()],
-    ['category',f=>f.gallery.element.getElementsByTagName('button').find(node=>node.dataset.category==='ease').click()],
+    ['category',f=>f.gallery.element.getElementsByTagName('button').find(node=>node.dataset.category==='text').click()],
     ['query',f=>{const input=f.gallery.element.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Buscar preset');input.value='different';input.emit('input');}],
   ];
   for(const [name,act] of cases)await t.test(name,t=>{

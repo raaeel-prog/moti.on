@@ -23,14 +23,6 @@ export interface GalleryPreset extends Pick<PresetDefinitionV1, "id" | "version"
   params: Record<string, unknown>;
 }
 const cameraCurve = { x1: 0.33, y1: 0, x2: 0.67, y2: 1 };
-const easeDefinitions: [string, string, string, Curve][] = [
-  ["balanced", "Suave", "Smooth", { x1: 0.333, y1: 0, x2: 0.667, y2: 1 }],
-  ["soft-start", "Partida suave", "Soft start", { x1: 0.42, y1: 0, x2: 1, y2: 1 }],
-  ["soft-stop", "Chegada suave", "Soft stop", { x1: 0, y1: 0, x2: 0.58, y2: 1 }],
-  ["snappy", "Ágil", "Snappy", { x1: 0.76, y1: 0, x2: 0.24, y2: 1 }],
-  ["glide", "Deslizar", "Glide", { x1: 0.16, y1: 1, x2: 0.3, y2: 1 }],
-  ["gentle", "Fluido", "Flow", { x1: 0.25, y1: 0.1, x2: 0.25, y2: 1 }]
-];
 const cameraDefinitions: [string, string, string][] = [
   ["pushIn", "Aproximar", "Push in"], ["pullOut", "Afastar", "Pull out"],
   ["truckLeft", "Deslocar à esquerda", "Truck left"], ["truckRight", "Deslocar à direita", "Truck right"],
@@ -148,15 +140,6 @@ export const GALLERY_PRESETS: GalleryPreset[] = [
     curve: cameraCurve, preview: { renderer: "motion", fixtureId: `${motion.id}-v1` },
     handler, applyMode: transition ? "precomp" : "layers", reapplyPolicy: "adjust-managed", motion, params
   }; }),
-  ...easeDefinitions.map(([id, pt, en, curve]): GalleryPreset => ({
-    id: `builtin.ease.${id}`, version: "1.0.0", displayName: { "pt-BR": pt, "en-US": en },
-    category: "ease", hosts: ["after-effects"], minHostVersion: { "after-effects": "25.0" },
-    requirements: ["selected-keyframes"], operationPlan: { command: "ae.keys.ease.apply", args: { ...curve, applyIn: true, applyOut: true } },
-    tags: "ease easing curva keyframes movimento motion", curve,
-    preview: { renderer: "curve", fixtureId: `curve-${id}-v1` },
-    handler: "ae.keys.ease.apply", applyMode: "properties", reapplyPolicy: "update-ease",
-    params: { ...curve, applyIn: true, applyOut: true }
-  })),
   ...cameraDefinitions.map(([id, pt, en]): GalleryPreset => {
     const params = { preset: id, durationFrames: 30, amount: /^(pan|tilt)/.test(id) ? 15 : 400, curve: cameraCurve, cameraName: "" };
     return { id: `builtin.camera.${id}`, version: "1.0.0", displayName: { "pt-BR": pt, "en-US": en },
@@ -263,6 +246,10 @@ export function createPresetGallery(doc: Document, options: {
   const pt = i18n.locale() === "pt-BR", nav = options.navigation;
   let primaryApply: ActionButtonController | undefined;
   nav.drafts ??= {};
+  // Curve editing belongs to Suavização. Keep user curve libraries untouched.
+  if (nav.category === "ease") nav.category = "all";
+  if (nav.selectedId?.startsWith("builtin.ease.")) nav.selectedId = "";
+  if (nav.pendingRevealId?.startsWith("builtin.ease.")) delete nav.pendingRevealId;
   const requestedPreset = GALLERY_PRESETS.find(preset => preset.id === options.revealId);
   if (requestedPreset) {
     const prefs = options.preferences.snapshot();
@@ -358,7 +345,6 @@ export function createPresetGallery(doc: Document, options: {
     {id: "motion", label: "Motion", children: [
       {id:"motion-2d",label:pt?"Transições 2D":"2D transitions"}, {id:"motion-3d",label:pt?"Transições 3D":"3D transitions"}, {id:"motion-effects",label:pt?"Efeitos":"Effects"}]},
     {id:"transitions",label:pt?"Transições":"Transitions",children:[{id:"camera-transitions",label:pt?"Transições de corte":"Cut transitions"},{id:"camera-impact",label:pt?"Impacto e tremor":"Impact & shake"},{id:"camera-moves",label:pt?"Movimentos 3D":"3D movements"}]},
-    {id:"ease",label:labels.ease!},
     {id:"all",label:labels.all!},
     {id:"personal",label:pt?"Minha biblioteca":"My library",children:[]}
   ];
@@ -385,7 +371,7 @@ export function createPresetGallery(doc: Document, options: {
       toggle.dataset.focusKey=`toggle.${node.id}`;
       toggle.setAttribute("aria-label",`${expanded?(pt?"Recolher":"Collapse"):(pt?"Expandir":"Expand")} ${node.label}`);
       if(node.children?.length)toggle.setAttribute("aria-expanded",String(expanded));row.appendChild(toggle);
-      const selectFolder = button(doc,{label:"",onClick:()=>{if(disposed)return;cancelReveal();nav.category=node.id;nav.scroll=0;nav.selectedId="";setFilters(false);filterButton.focus();draw();}});
+      const selectFolder = button(doc,{label:"",onClick:()=>{if(disposed)return;cancelReveal();nav.category=node.id;nav.scroll=0;setFilters(false);filterButton.focus();draw();}});
       selectFolder.dataset.category=node.id;selectFolder.className="ch-folder-select";
       selectFolder.dataset.focusKey=`folder.${node.id}`;
       selectFolder.appendChild(createElement(doc,"span","ch-folder-icon"));selectFolder.appendChild(createElement(doc,"span","ch-folder-name",node.label));
@@ -633,7 +619,7 @@ export function createPresetGallery(doc: Document, options: {
   const escape = (event: KeyboardEvent): void => { if(event.key!=="Escape"||event.defaultPrevented)return;
     if(settingsOpen){event.preventDefault();closeEditor(true);return;}
     if(colorFolder){event.preventDefault();const id=colorFolder;colorFolder="";drawFolders();restoreFocus(`more.${id}`);}else if(!filterMenu.hidden){event.preventDefault();setFilters(false);filterButton.focus();}
-    else if(nav.selectedId&&!nav.category.startsWith("personal")&&element.contains(doc.activeElement as Node)&&doc.activeElement?.tagName!=="INPUT"&&doc.activeElement?.tagName!=="SELECT"){event.preventDefault();deselect();} };
+    };
   doc.addEventListener("mousedown", outside); doc.addEventListener("keydown", escape); window.addEventListener("resize", resize);
   const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resize) : null; observer?.observe(browser);
   resize();
@@ -650,15 +636,6 @@ export function createPresetGallery(doc: Document, options: {
     nav.selectedId = preset.id;
     for (const card of Array.from(grid.querySelectorAll(".ch-preset-card"))) {card.setAttribute("data-selected", String(card.id === preset.id));card.querySelector(".ch-preset-preview")?.setAttribute("aria-pressed",String(card.id===preset.id));}
     drawInspector(preset);
-  }
-  /** Clears the selection; the details and Apply bar leave until a preset is chosen again. */
-  function deselect(restoreFocus = true): void {
-    if (disposed || !nav.selectedId) return;
-    const previous = nav.selectedId;
-    closeEditor(); nav.selectedId = "";
-    for (const card of Array.from(grid.querySelectorAll(".ch-preset-card"))) {card.setAttribute("data-selected", "false");card.querySelector(".ch-preset-preview")?.setAttribute("aria-pressed","false");}
-    drawInspector();
-    if (restoreFocus) Array.from(grid.getElementsByTagName("button")).find(node => node.dataset.focusKey === `title.${previous}`)?.focus();
   }
   function applyPreset(preset: GalleryPreset): void {
     if (disposed || options.busy) return;
@@ -749,9 +726,6 @@ export function createPresetGallery(doc: Document, options: {
     const heading = createElement(doc, "div", "ch-preset-approved-heading");
     heading.appendChild(createElement(doc, "span", "", preset.displayName[options.locale] ?? preset.id));
     heading.appendChild(createBadge(doc, { label: pt ? "Ajustável" : "Editable", showIcon: false }).element);
-    const dismiss = button(doc, { label: "×", onClick: () => deselect() });
-    dismiss.classList.add("ch-preset-deselect"); dismiss.setAttribute("aria-label", pt ? "Fechar ajustes do preset" : "Close preset details"); dismiss.title = pt ? "Fechar (Esc)" : "Close (Esc)";
-    heading.appendChild(dismiss);
     inspector.appendChild(heading);
     if (preset.motion) {
       const needs = requirementLabels(motionLibraryRequirements(preset.motion), pt);
@@ -1033,7 +1007,7 @@ export function createPresetGallery(doc: Document, options: {
     if (!count) grid.appendChild(emptyState());
     // Filtering only hides the current selection; returning to the library
     // restores that preset and its draft instead of silently choosing another.
-    drawInspector(selected); schedulePreviews();restoreFocus(focused);restoreScroll();
+    drawInspector(selected ?? GALLERY_PRESETS.find(preset => preset.id === nav.selectedId)); schedulePreviews();restoreFocus(focused);restoreScroll();
   }
   grid.addEventListener("scroll", () => {
     if (disposed || grid.isConnected === false) return;

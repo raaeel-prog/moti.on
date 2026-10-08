@@ -79,3 +79,30 @@ test('a multiple-phase selection reports the single-layer editor limit explicitl
   const state=f.run('inspect').data;assert.equal(state.state,'multiple');assert.match(state.message,/uma camada/);assert.equal(state.selection.length,2);assert.equal(state.target,undefined);
 });
 
+
+test('replacing a phase with equal parameters invalidates old editor targets and recipe identity',async()=>{
+  const f=await fixture(),args=f.args('premium-arc-arrival',{phase:'in',durationFrames:20});
+  f.run('phase-apply',args);const original=f.run('inspect').data;
+  f.run('phase-apply',{...args,presetId:'premium-spiral-unfold'});const next=f.run('inspect').data;
+  assert.notEqual(next.target.fingerprint,original.target.fingerprint);
+  const before=f.mutations;
+  assert.equal(f.handler('phase-adjust').preflight({target:original.target,phase:'in',presetId:original.presetId,options:{...original.options,intensity:42}}).code,'INVALID_PRESET');
+  assert.equal(f.handler('phase-adjust').preflight({target:next.target,phase:'in',presetId:original.presetId,options:{...original.options,intensity:42}}).code,'INVALID_PRESET');
+  assert.equal(f.mutations,before);
+});
+
+test('frame rate and drop-frame changes invalidate phase timecode snapshots',async()=>{
+  const f=await fixture();f.run('phase-apply',f.args('premium-arc-arrival',{phase:'in'}));
+  const first=f.run('inspect').data;f.comp.frameRate=60;f.comp.frameDuration=1/60;
+  const second=f.run('inspect').data;assert.notEqual(first.target.fingerprint,second.target.fingerprint);
+  f.comp.dropFrame=true;assert.notEqual(second.target.fingerprint,f.run('inspect').data.target.fingerprint);
+});
+
+test('targeted legacy removal rejects a selection change between preflight and run',async()=>{
+  const f=await fixture();f.run('apply',f.args('premium-arc-arrival',{phase:'in'}));
+  const original=f.run('inspect').data,args={target:original.target};
+  assert.equal(f.handler('remove').preflight(args),null);
+  f.comp.id=101;const before=f.mutations;
+  assert.throws(()=>f.handler('remove').run(args),/seleção ou o preset mudou/);assert.equal(f.mutations,before);
+  f.comp.id=100;f.run('remove',args);assert.equal(f.layer.comment,'Keep this comment');
+});
