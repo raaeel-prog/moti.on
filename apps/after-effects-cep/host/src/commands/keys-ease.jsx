@@ -29,7 +29,17 @@
     return typeof value === "number" && isFinite(value);
   }
 
-  var EXTRA_ARGS = { build: true, points: true, bake: true };
+  /** Argumentos opcionais. Apenas os de MODE_ARGS sao mutuamente exclusivos. */
+  var EXTRA_ARGS = { build: true, points: true, bake: true, expectedSelection: true, session: true };
+  var MODE_ARGS = { build: true, points: true, bake: true };
+  var SESSION_FIELDS = ["signature", "segments"];
+  var SEGMENT_FIELDS = ["propertyId", "layerIndex", "t0", "t1", "generated"];
+  var GENERATED_FIELDS = ["time", "value"];
+  var MAX_SESSION_SEGMENTS = 200;
+  var MAX_SESSION_GENERATED = 10000;
+  var MAX_VALUE_COMPONENTS = 4;
+  var VALUE_ABS_TOLERANCE = 0.0001;
+  var VALUE_REL_TOLERANCE = 0.000001;
   var POINT_FIELDS = ["x", "y", "inX", "inY", "outX", "outY"];
   var OSCILLATION_FIELDS = ["amp", "freq", "decay", "start"];
   var CURVE_FIELDS = ["x1", "y1", "x2", "y2"];
@@ -157,6 +167,72 @@
     return null;
   }
 
+  /**
+   * Sessao devolvida por um pedido anterior deste comando e mandada de volta
+   * pelo painel: assinatura da selecao e, por segmento, os keyframes gerados
+   * que o host pode descartar antes de reaplicar. So a FORMA e validada aqui;
+   * a comparacao com a timeline e do preflight, com a composicao em maos.
+   *
+   * @param {unknown} session
+   * @returns {MotionCommandFailure|null}
+   */
+  function validateSession(session) {
+    var s = /** @type {Record<string, unknown>} */ (session);
+    var segments;
+    var totalGenerated = 0;
+    var i;
+    var g;
+    var c;
+    if (!isPlainObject(s) || unknownKey(SESSION_FIELDS, s) !== null) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Sessao de Ease invalida.", { field: "session" });
+    }
+    if (typeof s.signature !== "string") {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Sessao de Ease sem assinatura.", { field: "session.signature" });
+    }
+    segments = s.segments;
+    if (!(segments instanceof Array) || segments.length > MAX_SESSION_SEGMENTS) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Segmentos da sessao invalidos (ate 200).", { field: "session.segments" });
+    }
+    for (i = 0; i < segments.length; i += 1) {
+      var seg = /** @type {Record<string, unknown>} */ (segments[i]);
+      if (!isPlainObject(seg) || unknownKey(SEGMENT_FIELDS, seg) !== null) {
+        return failure(MotionContracts.ERROR.INVALID_PRESET, "Segmento da sessao com formato desconhecido.", { field: "session.segments", index: i });
+      }
+      if (typeof seg.propertyId !== "string" || !isNumber(seg.layerIndex) || !isNumber(seg.t0) || !isNumber(seg.t1)) {
+        return failure(MotionContracts.ERROR.INVALID_PRESET, "Segmento da sessao precisa de id e tempos finitos.", { field: "session.segments", index: i });
+      }
+      if (!(Number(seg.t1) > Number(seg.t0))) {
+        return failure(MotionContracts.ERROR.INVALID_PRESET, "Segmento da sessao precisa de t1 maior que t0.", { field: "session.segments", index: i });
+      }
+      var generated = seg.generated;
+      if (!(generated instanceof Array)) {
+        return failure(MotionContracts.ERROR.INVALID_PRESET, "Segmento da sessao sem lista de keyframes gerados.", { field: "session.segments", index: i });
+      }
+      totalGenerated += generated.length;
+      if (totalGenerated > MAX_SESSION_GENERATED) {
+        return failure(MotionContracts.ERROR.INVALID_PRESET, "A sessao descreve mais de 10.000 keyframes.", { field: "session.segments", index: i });
+      }
+      for (g = 0; g < generated.length; g += 1) {
+        var entry = /** @type {Record<string, unknown>} */ (generated[g]);
+        if (!isPlainObject(entry) || unknownKey(GENERATED_FIELDS, entry) !== null || !isNumber(entry.time)) {
+          return failure(MotionContracts.ERROR.INVALID_PRESET, "Keyframe gerado da sessao com formato desconhecido.", { field: "session.segments", index: i });
+        }
+        var value = entry.value;
+        if (value instanceof Array) {
+          if (value.length < 1 || value.length > MAX_VALUE_COMPONENTS) {
+            return failure(MotionContracts.ERROR.INVALID_PRESET, "Valor gerado da sessao com dimensao invalida.", { field: "session.segments", index: i });
+          }
+          for (c = 0; c < value.length; c += 1) {
+            if (!isNumber(value[c])) return failure(MotionContracts.ERROR.INVALID_PRESET, "Valor gerado da sessao precisa de numeros finitos.", { field: "session.segments", index: i });
+          }
+        } else if (!isNumber(value)) {
+          return failure(MotionContracts.ERROR.INVALID_PRESET, "Valor gerado da sessao precisa ser numero ou vetor.", { field: "session.segments", index: i });
+        }
+      }
+    }
+    return null;
+  }
+
   /** @param {Record<string, unknown>} args @returns {MotionCommandFailure|null} */
   function validateArgs(args) {
     var key;
@@ -178,11 +254,18 @@
         return failure(MotionContracts.ERROR.INVALID_PRESET, "Argumento de Ease ausente.", { field: key });
       }
     }
-    for (key in EXTRA_ARGS) {
-      if (Object.prototype.hasOwnProperty.call(EXTRA_ARGS, key) && Object.prototype.hasOwnProperty.call(args, key)) modes += 1;
+    for (key in MODE_ARGS) {
+      if (Object.prototype.hasOwnProperty.call(MODE_ARGS, key) && Object.prototype.hasOwnProperty.call(args, key)) modes += 1;
     }
     if (modes > 1) {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Use apenas um de build, points ou bake.", null);
+    }
+    if (Object.prototype.hasOwnProperty.call(args, "expectedSelection") && typeof args.expectedSelection !== "string") {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "expectedSelection precisa ser texto.", { field: "expectedSelection" });
+    }
+    if (Object.prototype.hasOwnProperty.call(args, "session")) {
+      error = validateSession(args.session);
+      if (error) return error;
     }
     if (Object.prototype.hasOwnProperty.call(args, "build") && (!args.build || typeof args.build !== "object")) {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Parametros de animacao invalidos.", null);
@@ -472,26 +555,204 @@
   }
 
   /**
-   * @typedef {{ k: number, t0: number, t1: number, times: number[] }} SegmentPair
-   * @typedef {{ property: Property, pairs: SegmentPair[] }} SegmentPlanItem
+   * Indice do keyframe no tempo `time`, com tolerancia de meio quadro; 0 quando
+   * nao ha keyframe nesse quadro. E a unica forma de reencontrar um keyframe
+   * entre dois pedidos: indices mudam a cada insercao, tempos nao.
+   *
+   * @param {Property} property
+   * @param {number} time
+   * @param {number} frameDuration
+   * @returns {number}
+   */
+  function indexAt(property, time, frameDuration) {
+    var tolerance = frameDuration / 2;
+    var idx;
+    var i;
+    if (!property.numKeys) return 0;
+    if (typeof /** @type {any} */ (property).nearestKeyIndex === "function") {
+      idx = indiceNoTempo(property, time);
+      if (idx < 1 || idx > property.numKeys) return 0;
+      return Math.abs(property.keyTime(idx) - time) <= tolerance ? idx : 0;
+    }
+    for (i = 1; i <= property.numKeys; i += 1) {
+      if (Math.abs(property.keyTime(i) - time) <= tolerance) return i;
+    }
+    return 0;
+  }
+
+  /** @param {number} a @param {number} b @returns {boolean} */
+  function numbersMatch(a, b) {
+    var scale = Math.abs(a) > Math.abs(b) ? Math.abs(a) : Math.abs(b);
+    return Math.abs(a - b) <= VALUE_ABS_TOLERANCE + VALUE_REL_TOLERANCE * scale;
+  }
+
+  /**
+   * Valor atual do keyframe contra o valor gravado na sessao, componente a
+   * componente. Diferenca acima da tolerancia significa que o usuario editou o
+   * keyframe gerado, e ele deixa de ser descartavel.
+   *
+   * @param {unknown} current
+   * @param {unknown} recorded
+   * @returns {boolean}
+   */
+  function valuesMatch(current, recorded) {
+    var a = /** @type {number[]} */ (current);
+    var b = /** @type {number[]} */ (recorded);
+    var c;
+    if (typeof recorded === "number") {
+      return typeof current === "number" && numbersMatch(current, recorded);
+    }
+    if (!a || !b || typeof a.length !== "number" || typeof b.length !== "number" || a.length !== b.length) return false;
+    for (c = 0; c < a.length; c += 1) {
+      if (typeof a[c] !== "number" || typeof b[c] !== "number" || !numbersMatch(Number(a[c]), Number(b[c]))) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Propriedades selecionadas, suportadas e com keyframes selecionados, por id
+   * estavel de `describeProperty`. E o universo que uma sessao pode referenciar.
+   *
+   * @param {CompItem} comp
+   * @returns {Record<string, Property>}
+   */
+  function selectedById(comp) {
+    /** @type {Record<string, Property>} */
+    var byId = {};
+    var selectedProps = comp.selectedProperties;
+    var p;
+    for (p = 0; p < selectedProps.length; p += 1) {
+      var propRaw = selectedProps[p];
+      if (!propRaw || !("canVaryOverTime" in propRaw)) continue;
+      var prop = /** @type {Property} */ (propRaw);
+      if (!prop.selectedKeys || prop.selectedKeys.length === 0) continue;
+      if (!MotionKeyframes.isSupportedProperty(prop)) continue;
+      byId[String(MotionKeyframes.describeProperty(comp, prop).id)] = prop;
+    }
+    return byId;
+  }
+
+  /** @typedef {{ propertyId: string, layerIndex: number, t0: number, t1: number, generated: Array<{time: number, value: unknown}> }} EaseSessionSegment */
+  /** @typedef {{ signature: string, segments: EaseSessionSegment[] }} EaseSession */
+
+  /**
+   * Segmentos da sessao agrupados pela propriedade selecionada que os possui.
+   *
+   * @param {CompItem} comp
+   * @param {EaseSession} session
+   * @returns {Record<string, EaseSessionSegment[]>}
+   */
+  function segmentsByProperty(comp, session) {
+    /** @type {Record<string, EaseSessionSegment[]>} */
+    var out = {};
+    var i;
+    for (i = 0; i < session.segments.length; i += 1) {
+      var seg = /** @type {EaseSessionSegment} */ (session.segments[i]);
+      var id = String(seg.propertyId);
+      if (!Object.prototype.hasOwnProperty.call(out, id)) out[id] = [];
+      /** @type {EaseSessionSegment[]} */ (out[id]).push(seg);
+    }
+    return out;
+  }
+
+  /** @param {EaseSessionSegment} seg @param {number} time @param {number} tolerance @returns {boolean} */
+  function isGeneratedTime(seg, time, tolerance) {
+    var g;
+    for (g = 0; g < seg.generated.length; g += 1) {
+      var entry = /** @type {{time: number}} */ (seg.generated[g]);
+      if (Math.abs(Number(entry.time) - time) <= tolerance) return true;
+    }
+    return false;
+  }
+
+  /**
+   * A sessao descreve keyframes que ESTE comando gerou num pedido anterior.
+   * Antes de os descartar, cada um precisa continuar exatamente como foi
+   * deixado: no mesmo quadro, com o mesmo valor, e sem keyframe do usuario no
+   * meio do segmento. Qualquer divergencia recusa antes de qualquer escrita —
+   * o comando nunca apaga um keyframe que nao criou.
+   *
+   * @param {CompItem} comp
+   * @param {EaseSession} session
+   * @returns {MotionCommandFailure|null}
+   */
+  function validateSessionAgainstComp(comp, session) {
+    var fd = comp.frameDuration;
+    var tolerance = fd / 2;
+    var byId;
+    var i;
+    var g;
+    var j;
+    if (session.signature !== MotionSelection.signature(comp)) {
+      return failure(MotionContracts.ERROR.STALE_SELECTION, "A selecao mudou.", { messageKey: "hostError.staleSelection" });
+    }
+    byId = selectedById(comp);
+    for (i = 0; i < session.segments.length; i += 1) {
+      var seg = /** @type {EaseSessionSegment} */ (session.segments[i]);
+      var id = String(seg.propertyId);
+      if (!Object.prototype.hasOwnProperty.call(byId, id)) {
+        return failure(MotionContracts.ERROR.STALE_SELECTION, "A selecao mudou.", { messageKey: "hostError.staleSelection", propertyId: id });
+      }
+      var prop = /** @type {Property} */ (byId[id]);
+      var nome = prop.name || prop.matchName || "Property";
+      var k0 = indexAt(prop, Number(seg.t0), fd);
+      var k1 = indexAt(prop, Number(seg.t1), fd);
+      if (!k0 || !k1 || k1 <= k0) {
+        return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Os keyframes do segmento foram editados ou removidos.", { messageKey: "hostError.easeGeneratedEdited", propertyName: nome });
+      }
+      for (g = 0; g < seg.generated.length; g += 1) {
+        var entry = /** @type {{time: number, value: unknown}} */ (seg.generated[g]);
+        var idx = indexAt(prop, Number(entry.time), fd);
+        if (!idx || !valuesMatch(prop.keyValue(idx), entry.value)) {
+          return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Os keyframes gerados pela curva foram editados.", { messageKey: "hostError.easeGeneratedEdited", propertyName: nome, time: Number(entry.time) });
+        }
+      }
+      for (j = k0 + 1; j < k1; j += 1) {
+        var t = prop.keyTime(j);
+        if (!isGeneratedTime(seg, t, tolerance)) {
+          return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Ja existe um keyframe no quadro de um ponto da curva. Afaste o ponto ou use um segmento mais longo.", {
+            propertyName: nome,
+            time: t,
+            point: -1
+          });
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * @typedef {{ k: number, t0: number, t1: number, times: number[], ignore: EaseSessionSegment|null }} SegmentPair
+   * @typedef {{ property: Property, id: string, layerIndex: number, pairs: SegmentPair[] }} SegmentPlanItem
    * @typedef {{ error: MotionCommandFailure|null, items: SegmentPlanItem[], ignoradas: number, semSegmento: number }} SegmentPlan
    */
 
+  /** @param {Record<string, unknown>} args @returns {string} "points" | "bake" | "plain" */
+  function modeOf(args) {
+    if (args.points instanceof Array) return "points";
+    if (args.bake) return "bake";
+    return "plain";
+  }
+
   /**
-   * Planeja pontos/bake sem escrever nada. Para cada propriedade suportada com
-   * keys selecionadas, pares (k, k+1) de keys selecionadas vizinhas por indice.
-   * `times` sao os tempos dos novos keyframes de cada par, ja ajustados ao
-   * quadro da composicao. `preflight` e `run` chamam os dois; nada sobrevive
-   * entre as chamadas.
+   * Planeja sem escrever nada. Para cada propriedade suportada com keys
+   * selecionadas, os pares (t0, t1) a tratar: com sessao, os segmentos que ela
+   * gravou para a propriedade; sem sessao, keys selecionadas vizinhas por
+   * indice. `times` sao os tempos dos novos keyframes de cada par, ja ajustados
+   * ao quadro da composicao (vazio na curva simples). `preflight` e `run`
+   * chamam os dois; nada sobrevive entre as chamadas.
    *
    * @param {CompItem} comp
    * @param {Record<string, unknown>} args
+   * @param {EaseSession|null} session
    * @returns {SegmentPlan}
    */
-  function planSegments(comp, args) {
+  function planSegments(comp, args, session) {
     var fd = comp.frameDuration;
     var tolerance = fd / 2;
-    var points = /** @type {Array<Record<string, number>>|null} */ (args.points instanceof Array ? args.points : null);
+    var mode = modeOf(args);
+    var points = /** @type {Array<Record<string, number>>|null} */ (mode === "points" ? args.points : null);
+    var bySession = session ? segmentsByProperty(comp, session) : null;
     var selectedProps = comp.selectedProperties;
     /** @type {SegmentPlanItem[]} */
     var items = [];
@@ -500,6 +761,7 @@
     var totalNovos = 0;
     var p;
     var k;
+    var c;
     var i;
     var j;
     var n;
@@ -517,18 +779,39 @@
         ignoradas += 1;
         continue;
       }
+      var described = MotionKeyframes.describeProperty(comp, prop);
+      var id = String(described.id);
+      var nome = prop.name || prop.matchName || "Property";
+      /** @type {SegmentPair[]} */
+      var candidates = [];
+      var segs = bySession && Object.prototype.hasOwnProperty.call(bySession, id) ? bySession[id] : null;
+      if (segs && segs.length > 0) {
+        for (c = 0; c < segs.length; c += 1) {
+          var seg = /** @type {EaseSessionSegment} */ (segs[c]);
+          var k0 = indexAt(prop, Number(seg.t0), fd);
+          var kEnd = indexAt(prop, Number(seg.t1), fd);
+          if (!k0 || !kEnd) {
+            return rejected(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Os keyframes do segmento foram editados ou removidos.", { messageKey: "hostError.easeGeneratedEdited", propertyName: nome });
+          }
+          candidates.push({ k: k0, t0: prop.keyTime(k0), t1: prop.keyTime(kEnd), times: [], ignore: seg });
+        }
+        candidates.sort(function (a, b) { return a.t0 - b.t0; });
+      } else {
+        for (k = 0; k < selectedKeys.length; k += 1) {
+          var keyIndex = selectedKeys[k];
+          if (typeof keyIndex !== "number" || !containsKey(selectedKeys, keyIndex + 1)) continue;
+          if (keyIndex < 1 || keyIndex + 1 > prop.numKeys) continue;
+          candidates.push({ k: keyIndex, t0: prop.keyTime(keyIndex), t1: prop.keyTime(keyIndex + 1), times: [], ignore: null });
+        }
+      }
       /** @type {SegmentPair[]} */
       var pairs = [];
-      var encontrouPar = false;
-      for (k = 0; k < selectedKeys.length; k += 1) {
-        var keyIndex = selectedKeys[k];
-        if (typeof keyIndex !== "number" || !containsKey(selectedKeys, keyIndex + 1)) continue;
-        if (keyIndex < 1 || keyIndex + 1 > prop.numKeys) continue;
-        encontrouPar = true;
-        var t0 = prop.keyTime(keyIndex);
-        var t1 = prop.keyTime(keyIndex + 1);
+      for (c = 0; c < candidates.length; c += 1) {
+        var pair = /** @type {SegmentPair} */ (candidates[c]);
+        var t0 = pair.t0;
+        var t1 = pair.t1;
         if (!(t1 - t0 > 0)) {
-          semSegmento += 1;
+          if (mode !== "plain") semSegmento += 1;
           continue;
         }
         /** @type {number[]} */
@@ -539,20 +822,23 @@
             var t = snapToFrame(t0 + Number(ponto.x) * (t1 - t0), fd);
             var colide = Math.abs(t - t0) <= tolerance || Math.abs(t - t1) <= tolerance;
             for (j = 0; j < times.length && !colide; j += 1) if (Math.abs(Number(times[j]) - t) <= tolerance) colide = true;
-            for (j = 1; j <= prop.numKeys && !colide; j += 1) if (Math.abs(prop.keyTime(j) - t) <= tolerance) colide = true;
+            for (j = 1; j <= prop.numKeys && !colide; j += 1) {
+              var existing = prop.keyTime(j);
+              if (Math.abs(existing - t) <= tolerance && !(pair.ignore && isGeneratedTime(pair.ignore, existing, tolerance))) colide = true;
+            }
             if (colide) {
               return rejected(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Ja existe um keyframe no quadro de um ponto da curva. Afaste o ponto ou use um segmento mais longo.", {
-                propertyName: prop.name || prop.matchName || "Property",
+                propertyName: nome,
                 time: t,
                 point: i
               });
             }
             times.push(t);
           }
-        } else {
+        } else if (mode === "bake") {
           for (n = 1; t0 + n * fd < t1 - tolerance; n += 1) {
             if (n > MAX_BAKE_FRAMES_PER_SEGMENT) {
-              return rejected(MotionContracts.ERROR.INVALID_PRESET, "Segmento longo demais para assar (maximo de 3600 quadros).", { propertyName: prop.name || prop.matchName || "Property" });
+              return rejected(MotionContracts.ERROR.INVALID_PRESET, "Segmento longo demais para assar (maximo de 3600 quadros).", { propertyName: nome });
             }
             times.push(t0 + n * fd);
           }
@@ -561,12 +847,14 @@
         if (totalNovos > MAX_BAKE_KEYS_TOTAL) {
           return rejected(MotionContracts.ERROR.INVALID_PRESET, "A operacao criaria mais de 10.000 keyframes. Reduza a selecao.", null);
         }
-        pairs.push({ k: keyIndex, t0: t0, t1: t1, times: times });
+        pairs.push({ k: pair.k, t0: t0, t1: t1, times: times, ignore: pair.ignore });
       }
-      if (!encontrouPar) {
-        return rejected(MotionContracts.ERROR.NO_SELECTION, "Selecione dois keyframes vizinhos por propriedade.", { propertyName: prop.name || prop.matchName || "Property" });
+      if (candidates.length === 0 && mode !== "plain") {
+        return rejected(MotionContracts.ERROR.NO_SELECTION, "Selecione dois keyframes vizinhos por propriedade.", { propertyName: nome });
       }
-      if (pairs.length > 0) items.push({ property: prop, pairs: pairs });
+      if (pairs.length > 0 || mode === "plain") {
+        items.push({ property: prop, id: id, layerIndex: Number(described.layerIndex), pairs: pairs });
+      }
     }
     return { error: null, items: items, ignoradas: ignoradas, semSegmento: semSegmento };
   }
@@ -610,11 +898,18 @@
       return failure(MotionContracts.ERROR.NO_SELECTION, "Nenhum keyframe selecionado.", null);
     }
 
-    if (args.points || args.bake) {
-      return planSegments(comp, args).error;
+    // A selecao que o painel viu precisa ser a que esta na timeline agora: entre
+    // o clique e a chegada do pedido o usuario pode ter clicado em outra coisa.
+    if (typeof args.expectedSelection === "string" && args.expectedSelection !== MotionSelection.signature(comp)) {
+      return failure(MotionContracts.ERROR.STALE_SELECTION, "A selecao mudou.", { messageKey: "hostError.staleSelection" });
+    }
+    var session = /** @type {EaseSession|null} */ (args.session ? args.session : null);
+    if (session) {
+      var sessionError = validateSessionAgainstComp(comp, session);
+      if (sessionError) return sessionError;
     }
 
-    return null;
+    return planSegments(comp, args, session).error;
   }
 
   /**
@@ -623,66 +918,11 @@
    */
   function run(args) {
     if (args.build) return runBuild(args);
-    if (args.points) return runPoints(args);
-    if (args.bake) return runBake(args);
-    var x1 = /** @type {number} */ (args.x1);
-    var y1 = /** @type {number} */ (args.y1);
-    var x2 = /** @type {number} */ (args.x2);
-    var y2 = /** @type {number} */ (args.y2);
-    var applyIn = /** @type {boolean} */ (args.applyIn);
-    var applyOut = /** @type {boolean} */ (args.applyOut);
-
     var comp = /** @type {CompItem} */ (app.project.activeItem);
-    var selectedProps = comp.selectedProperties;
-    var appliedCount = 0;
-    var ignoradas = 0;
-    var semSegmento = 0;
-    /** Copias intactas, capturadas antes de escrever: e para onde o rollback volta. */
-    var intactos = [];
-
-    try {
-    for (var p = 0; p < selectedProps.length; p++) {
-      var propRaw = selectedProps[p];
-      if (!propRaw || !("canVaryOverTime" in propRaw)) continue;
-      var prop = /** @type {Property} */ (propRaw);
-      var selectedKeys = prop.selectedKeys;
-      if (!selectedKeys || selectedKeys.length === 0) continue;
-
-      // Snapshot e escrita andam juntos. Uma propriedade que nao pode ser
-      // capturada tambem nao pode ser escrita: sem a copia intacta o rollback
-      // nao teria para onde voltar, e a falha deixaria metade do trabalho no
-      // projeto do usuario. Ate 2026-09-05 so a captura era condicional, e
-      // Mask Path caia justamente nessa fresta.
-      if (!MotionKeyframes.isSupportedProperty(prop)) {
-        ignoradas += 1;
-        continue;
-      }
-      intactos.push(MotionKeyframes.captureProperty(prop));
-
-      var escreveuNesta = false;
-      for (var k = 0; k < selectedKeys.length; k++) {
-        var keyIndex = selectedKeys[k];
-        if (typeof keyIndex === "number") {
-          if (applyEaseToKeyframe(prop, keyIndex, x1, y1, x2, y2,
-            applyIn && (selectedKeys.length === 1 || containsKey(selectedKeys, keyIndex - 1)),
-            applyOut && (selectedKeys.length === 1 || containsKey(selectedKeys, keyIndex + 1)))) {
-            appliedCount += 1;
-            escreveuNesta = true;
-          }
-        }
-      }
-      if (!escreveuNesta) semSegmento += 1;
-    }
-
-    } catch (easeError) {
-      rollback(intactos);
-    }
-
-    return {
-      changed: appliedCount > 0,
-      warnings: avisosDeSelecao(ignoradas, semSegmento),
-      data: { appliedCount: appliedCount, skippedCount: ignoradas + semSegmento }
-    };
+    var session = /** @type {EaseSession|null} */ (args.session ? args.session : null);
+    var plan = planSegments(comp, args, session);
+    throwPlanError(plan);
+    return runWithPlan(comp, args, plan, session);
   }
 
   /** @param {SegmentPlan} plan @returns {void} lanca o erro do plano com motionCode. */
@@ -741,134 +981,192 @@
   }
 
   /**
-   * Curva multiponto: insere um keyframe por ponto, no valor da corda, e liga
-   * os segmentos com a curva local de cada um.
+   * Descarta os keyframes que a sessao gravou para esta propriedade, do ultimo
+   * indice para o primeiro. O preflight ja provou que cada um esta no quadro e
+   * com o valor gravados; aqui so se reencontra o indice.
    *
-   * @param {Record<string, unknown>} args
-   * @returns {MotionCommandResult}
+   * @param {Property} property
+   * @param {EaseSessionSegment[]} segs
+   * @param {number} fd
+   * @returns {number} quantos foram removidos
    */
-  function runPoints(args) {
-    var comp = /** @type {CompItem} */ (app.project.activeItem);
-    var plan = planSegments(comp, args);
-    throwPlanError(plan);
-    var points = /** @type {Array<{x: number, y: number, inX: number, inY: number, outX: number, outY: number}>} */ (args.points);
-    var curva = { x1: Number(args.x1), y1: Number(args.y1), x2: Number(args.x2), y2: Number(args.y2) };
-    var applyIn = /** @type {boolean} */ (args.applyIn);
-    var applyOut = /** @type {boolean} */ (args.applyOut);
-    var segments = MotionKeyframes.normalizeCurveSegments(curva, points).segments;
-    var appliedCount = 0;
-    /** @type {MotionPropertySnapshot[]} */
-    var intactos = [];
-    var i;
-    var q;
-    var n;
-    try {
-      for (i = 0; i < plan.items.length; i += 1) {
-        var item = plan.items[i];
-        if (!item) throw new Error("Plano incompleto.");
-        var prop = item.property;
-        intactos.push(MotionKeyframes.captureProperty(prop));
-        // Do ultimo par para o primeiro: inserir keys num par nao desloca os
-        // indices dos pares ainda nao processados.
-        for (q = item.pairs.length - 1; q >= 0; q -= 1) {
-          var pair = item.pairs[q];
-          if (!pair) throw new Error("Plano incompleto.");
-          var v0 = prop.keyValue(pair.k);
-          var v1 = prop.keyValue(pair.k + 1);
-          for (n = 0; n < pair.times.length; n += 1) {
-            var pontoN = /** @type {{y: number}} */ (points[n]);
-            prop.setValueAtTime(Number(pair.times[n]), valorNaCorda(v0, v1, Number(pontoN.y)));
-          }
-          /** @type {number[]} */
-          var indices = [indiceNoTempo(prop, pair.t0)];
-          for (n = 0; n < pair.times.length; n += 1) {
-            var idx = indiceNoTempo(prop, Number(pair.times[n]));
-            fixarEspacial(prop, idx);
-            indices.push(idx);
-          }
-          indices.push(indiceNoTempo(prop, pair.t1));
-          for (n = 0; n < indices.length; n += 1) {
-            var inCurve = n === 0 ? null : /** @type {EaseCurve} */ (segments[n - 1]);
-            var outCurve = n === indices.length - 1 ? null : /** @type {EaseCurve} */ (segments[n]);
-            if (n === 0 && !applyOut) outCurve = null;
-            if (n === indices.length - 1 && !applyIn) inCurve = null;
-            if (applyEaseSides(prop, Number(indices[n]), inCurve, outCurve)) appliedCount += 1;
-          }
-        }
+  function removeGenerated(property, segs, fd) {
+    /** @type {number[]} */
+    var indices = [];
+    var s;
+    var g;
+    for (s = 0; s < segs.length; s += 1) {
+      var seg = /** @type {EaseSessionSegment} */ (segs[s]);
+      for (g = 0; g < seg.generated.length; g += 1) {
+        var entry = /** @type {{time: number}} */ (seg.generated[g]);
+        var idx = indexAt(property, Number(entry.time), fd);
+        if (!idx) throw new Error("Keyframe gerado nao encontrado.");
+        indices.push(idx);
       }
-    } catch (pointsError) {
-      rollback(intactos);
     }
-    return {
-      changed: appliedCount > 0,
-      warnings: avisosDeSelecao(plan.ignoradas, plan.semSegmento),
-      data: { appliedCount: appliedCount, skippedCount: plan.ignoradas + plan.semSegmento }
-    };
+    indices.sort(function (a, b) { return b - a; });
+    MotionKeyframes.removeIndicesDescending(property, indices);
+    return indices.length;
+  }
+
+  /** @param {Property} property @param {number} idx @param {boolean} selected @returns {void} */
+  function trySelect(property, idx, selected) {
+    try { property.setSelectedAtKey(idx, selected); } catch (selectError) { /* host sem suporte */ }
   }
 
   /**
-   * Easing assado: um keyframe linear por quadro entre os dois selecionados,
-   * com o valor da funcao elastica/bounce. Os keyframes das pontas ficam, so o
-   * lado voltado para dentro vira Linear.
+   * Executa o plano: curva multiponto, easing assado ou curva simples. Por
+   * propriedade: snapshot PRIMEIRO, descarte dos keyframes da sessao, e so
+   * entao a escrita, do ultimo par para o primeiro (inserir keys num par nao
+   * desloca os indices dos pares ainda nao processados). Qualquer excecao
+   * devolve tudo ao snapshot.
    *
+   * @param {CompItem} comp
    * @param {Record<string, unknown>} args
+   * @param {SegmentPlan} plan
+   * @param {EaseSession|null} session
    * @returns {MotionCommandResult}
    */
-  function runBake(args) {
-    var comp = /** @type {CompItem} */ (app.project.activeItem);
-    var plan = planSegments(comp, args);
-    throwPlanError(plan);
-    var bake = /** @type {Record<string, unknown>} */ (args.bake);
-    var mode = String(bake.mode);
-    var direction = String(bake.direction);
-    var params = {
+  function runWithPlan(comp, args, plan, session) {
+    var fd = comp.frameDuration;
+    var mode = modeOf(args);
+    var x1 = Number(args.x1);
+    var y1 = Number(args.y1);
+    var x2 = Number(args.x2);
+    var y2 = Number(args.y2);
+    var applyIn = /** @type {boolean} */ (args.applyIn);
+    var applyOut = /** @type {boolean} */ (args.applyOut);
+    var curva = { x1: x1, y1: y1, x2: x2, y2: y2 };
+    var points = /** @type {Array<{x: number, y: number, inX: number, inY: number, outX: number, outY: number}>|null} */ (mode === "points" ? args.points : null);
+    var segments = points ? MotionKeyframes.normalizeCurveSegments(curva, points).segments : null;
+    var bake = /** @type {Record<string, unknown>|null} */ (mode === "bake" ? args.bake : null);
+    var bakeParams = bake ? {
       "in": bake["in"],
       out: bake.out,
       inCurve: bake.inCurve ? bake.inCurve : null,
       outCurve: bake.outCurve ? bake.outCurve : null
-    };
-    var LINEAR = KeyframeInterpolationType.LINEAR;
-    var bakedKeys = 0;
+    } : null;
+    var LINEAR = typeof KeyframeInterpolationType !== "undefined" ? KeyframeInterpolationType.LINEAR : 0;
+    var bySession = session ? segmentsByProperty(comp, session) : null;
+    var appliedCount = 0;
+    var removedCount = 0;
+    var semSegmento = mode === "plain" ? 0 : plan.semSegmento;
+    /** @type {EaseSessionSegment[]} */
+    var outSegments = [];
     /** @type {MotionPropertySnapshot[]} */
     var intactos = [];
     var i;
     var q;
     var n;
+    var k;
     try {
       for (i = 0; i < plan.items.length; i += 1) {
         var item = plan.items[i];
         if (!item) throw new Error("Plano incompleto.");
         var prop = item.property;
         intactos.push(MotionKeyframes.captureProperty(prop));
+        if (bySession && Object.prototype.hasOwnProperty.call(bySession, item.id)) {
+          removedCount += removeGenerated(prop, /** @type {EaseSessionSegment[]} */ (bySession[item.id]), fd);
+        }
+        /** @type {EaseSessionSegment[]} */
+        var produced = [];
         for (q = item.pairs.length - 1; q >= 0; q -= 1) {
           var pair = item.pairs[q];
           if (!pair) throw new Error("Plano incompleto.");
-          var v0 = prop.keyValue(pair.k);
-          var v1 = prop.keyValue(pair.k + 1);
-          for (n = 0; n < pair.times.length; n += 1) {
-            var tempo = Number(pair.times[n]);
-            var u = (tempo - pair.t0) / (pair.t1 - pair.t0);
-            prop.setValueAtTime(tempo, valorNaCorda(v0, v1, MotionKeyframes.easingValue(mode, /** @type {any} */ (params), direction, u)));
+          var k0 = indexAt(prop, pair.t0, fd);
+          var k1 = indexAt(prop, pair.t1, fd);
+          if (!k0 || k1 !== k0 + 1) throw new Error("Keyframes do segmento deixaram de ser vizinhos.");
+          /** @type {Array<{time: number, value: unknown}>} */
+          var generated = [];
+          if (mode === "points" && points && segments) {
+            var v0 = prop.keyValue(k0);
+            var v1 = prop.keyValue(k1);
+            for (n = 0; n < pair.times.length; n += 1) {
+              var pontoN = /** @type {{y: number}} */ (points[n]);
+              prop.setValueAtTime(Number(pair.times[n]), valorNaCorda(v0, v1, Number(pontoN.y)));
+            }
+            /** @type {number[]} */
+            var indices = [indiceNoTempo(prop, pair.t0)];
+            for (n = 0; n < pair.times.length; n += 1) {
+              var idx = indiceNoTempo(prop, Number(pair.times[n]));
+              fixarEspacial(prop, idx);
+              indices.push(idx);
+            }
+            indices.push(indiceNoTempo(prop, pair.t1));
+            for (n = 0; n < indices.length; n += 1) {
+              var inCurve = n === 0 ? null : /** @type {EaseCurve} */ (segments[n - 1]);
+              var outCurve = n === indices.length - 1 ? null : /** @type {EaseCurve} */ (segments[n]);
+              if (n === 0 && !applyOut) outCurve = null;
+              if (n === indices.length - 1 && !applyIn) inCurve = null;
+              if (applyEaseSides(prop, Number(indices[n]), inCurve, outCurve)) appliedCount += 1;
+            }
+          } else if (mode === "bake" && bake && bakeParams) {
+            var b0 = prop.keyValue(k0);
+            var b1 = prop.keyValue(k1);
+            for (n = 0; n < pair.times.length; n += 1) {
+              var tempo = Number(pair.times[n]);
+              var u = (tempo - pair.t0) / (pair.t1 - pair.t0);
+              prop.setValueAtTime(tempo, valorNaCorda(b0, b1, MotionKeyframes.easingValue(String(bake.mode), /** @type {any} */ (bakeParams), String(bake.direction), u)));
+            }
+            for (n = 0; n < pair.times.length; n += 1) {
+              var bidx = indiceNoTempo(prop, Number(pair.times[n]));
+              prop.setInterpolationTypeAtKey(bidx, LINEAR, LINEAR);
+              fixarEspacial(prop, bidx);
+              appliedCount += 1;
+            }
+            var idx0 = indiceNoTempo(prop, pair.t0);
+            var idx1 = indiceNoTempo(prop, pair.t1);
+            prop.setInterpolationTypeAtKey(idx0, prop.keyInInterpolationType(idx0), LINEAR);
+            prop.setInterpolationTypeAtKey(idx1, LINEAR, prop.keyOutInterpolationType(idx1));
           }
           for (n = 0; n < pair.times.length; n += 1) {
-            var idx = indiceNoTempo(prop, Number(pair.times[n]));
-            prop.setInterpolationTypeAtKey(idx, LINEAR, LINEAR);
-            fixarEspacial(prop, idx);
-            bakedKeys += 1;
+            var gidx = indexAt(prop, Number(pair.times[n]), fd);
+            if (!gidx) throw new Error("Keyframe gerado nao encontrado apos a escrita.");
+            generated.push({ time: prop.keyTime(gidx), value: prop.keyValue(gidx) });
+            trySelect(prop, gidx, false);
           }
-          var idx0 = indiceNoTempo(prop, pair.t0);
-          var idx1 = indiceNoTempo(prop, pair.t1);
-          prop.setInterpolationTypeAtKey(idx0, prop.keyInInterpolationType(idx0), LINEAR);
-          prop.setInterpolationTypeAtKey(idx1, LINEAR, prop.keyOutInterpolationType(idx1));
+          produced.unshift({ propertyId: item.id, layerIndex: item.layerIndex, t0: pair.t0, t1: pair.t1, generated: generated });
+        }
+        if (mode === "plain") {
+          // Caminho historico da curva simples, intacto: cada key selecionada
+          // recebe a curva nos lados cujo vizinho tambem esta selecionado (ou
+          // nos dois, quando e a unica).
+          var selectedKeys = prop.selectedKeys;
+          var escreveuNesta = false;
+          for (k = 0; k < selectedKeys.length; k++) {
+            var keyIndex = selectedKeys[k];
+            if (typeof keyIndex === "number") {
+              if (applyEaseToKeyframe(prop, keyIndex, x1, y1, x2, y2,
+                applyIn && (selectedKeys.length === 1 || containsKey(selectedKeys, keyIndex - 1)),
+                applyOut && (selectedKeys.length === 1 || containsKey(selectedKeys, keyIndex + 1)))) {
+                appliedCount += 1;
+                escreveuNesta = true;
+              }
+            }
+          }
+          if (!escreveuNesta) semSegmento += 1;
+        }
+        for (q = 0; q < produced.length; q += 1) {
+          var seg = /** @type {EaseSessionSegment} */ (produced[q]);
+          var s0 = indexAt(prop, seg.t0, fd);
+          var s1 = indexAt(prop, seg.t1, fd);
+          if (s0) trySelect(prop, s0, true);
+          if (s1) trySelect(prop, s1, true);
+          outSegments.push(seg);
         }
       }
-    } catch (bakeError) {
+    } catch (easeError) {
       rollback(intactos);
     }
     return {
-      changed: bakedKeys > 0,
-      warnings: avisosDeSelecao(plan.ignoradas, plan.semSegmento),
-      data: { appliedCount: bakedKeys, skippedCount: plan.ignoradas + plan.semSegmento }
+      changed: appliedCount > 0 || removedCount > 0,
+      warnings: avisosDeSelecao(plan.ignoradas, semSegmento),
+      data: {
+        appliedCount: appliedCount,
+        skippedCount: plan.ignoradas + semSegmento,
+        removedCount: removedCount,
+        session: { signature: MotionSelection.signature(comp), segments: outSegments }
+      }
     };
   }
 

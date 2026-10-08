@@ -1,3 +1,9 @@
+## 2026-10-08 — Suavização: gestos diretos, aplicação segura e janela flutuante
+- Editor de curva no estilo do vídeo de referência: gráfico de velocidade arrastável (para baixo suaviza mais), curva de valor com pontos inseridos por clique simples (forma preservada) e arrastados no mesmo gesto, Shift para ajuste fino, Escape cancela, Back/Elastic/Bounce com In/InOut/Out, curva anterior tracejada, ponto ativo destacado.
+- Aplicação segura: o host revalida a assinatura da seleção antes de escrever (`STALE_SELECTION`), keys geradas por pontos/Elastic/Bounce são substituídas em vez de acumuladas (sessão devolvida pelo host), respostas atrasadas são descartadas, Live só ao concluir o gesto com um Desfazer por ajuste.
+- "Suavização rápida": segunda extensão CEP `Modeless` (~300×360) com a mesma curva, chips de presets, Live e Aplicar, sincronizada com o painel. Abertura automática ao selecionar keyframes implementada, mas entregue desligada até a prova no After Effects real.
+- `npm run check` PASS. Chromium PASS (painel 280/360/480/720 px e janela 300×360). After Effects real NOT RUN: ver `docs/research/cep-modeless-quick-ease.md` e `docs/HOST_LIMITATIONS.md`.
+
 ## 2026-10-07 — Erros que explicam, camadas bloqueadas e presets que dizem o que pedem
 - Falhas chegam ao painel com motivo e solução: o host envia uma chave de mensagem de uma lista fechada, traduzida em PT/EN; frases de preflight em português aparecem em vez de "Não foi possível concluir"; avisos passam pelo mesmo filtro. Ajuste fora da faixa deixou de mandar o usuário ao suporte.
 - Camada bloqueada é recusada antes de qualquer alteração em mais 10 ferramentas (Inertial, Jump, Cortar keys, Delay, Inverter valores, Parent, Effector, Separar formas, Trim Paths, Fast Edit), sempre com o mesmo código e mensagem. Fast Edit restaura sozinho se o After Effects recusar uma escrita no meio.

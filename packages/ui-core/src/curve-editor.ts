@@ -7,8 +7,14 @@
  * `@motion/keyframe-core`; this file only maps it to SVG and gestures.
  *
  * Gesture rules follow `bezier.ts`: pointer capture first, a bounded mouse
- * fallback registered on the document only during a gesture, Y refit only when
- * nothing is being dragged, every handle a keyboard `slider`.
+ * fallback registered on the document only during a mouse-only gesture, Y refit
+ * only when nothing is being dragged, every handle a keyboard `slider`.
+ *
+ * A press arms a gesture record; it becomes a drag only after the pointer moves
+ * `DRAG_THRESHOLD_PX`. Shift scales the integrated motion by `FINE_DRAG_FACTOR`
+ * on a virtual pointer so toggling Shift mid-drag never jumps. Escape,
+ * `pointercancel`, `setModel` and `dispose` restore the pre-press snapshot and
+ * report `onCancel`; release, lost capture and window blur commit "gesture".
  */
 import {
   DEFAULT_BACK_OVERSHOOT,
@@ -87,6 +93,8 @@ export interface CurveEditorOptions {
   onInput(model: CurveEditorModel): void;
   /** Fired on release, field commit, keyboard step, mode, direction, view, reset and point add/remove. */
   onCommit(model: CurveEditorModel, reason: CurveCommitReason): void;
+  /** Fired when a gesture is cancelled (Escape, pointercancel, setModel, dispose) after the model was restored and `onInput` emitted. */
+  onCancel?(): void;
 }
 
 export interface CurveEditor {
@@ -110,6 +118,14 @@ const Y_MAX = 2;
 const MODES: EasingMode[] = ["bezier", "back", "elastic", "bounce"];
 const DIRECTIONS: EasingDirection[] = ["in", "inOut", "out"];
 const DEFAULT_CURVE: CubicBezierCurve = { x1: 0.25, y1: 0.1, x2: 0.25, y2: 1 };
+/** A press turns into a drag only after this many CSS px of pointer travel. */
+export const DRAG_THRESHOLD_PX = 3;
+/** Shift scales pointer motion by this factor (fine adjustment). */
+export const FINE_DRAG_FACTOR = 0.2;
+/** Invisible stroke around the curve that accepts presses (CSS `.ch-curve__hit`). */
+export const HIT_BAND_PX = 12;
+/** Minimum hit target of a dot in CSS px at any dock width (r=5 plus a 16 px transparent stroke). */
+export const DOT_TARGET_PX = 20;
 
 /** 16×16 glyphs for the mode menu. Strokes only, so they follow `currentColor`. */
 const MODE_ICONS: Record<EasingMode, string> = {
@@ -214,6 +230,27 @@ function defaultParams(mode: EasingMode): EasingParams {
 
 type Pt = { x: number; y: number };
 type DragMove = (plot: Pt, event: MouseEvent) => void;
+type GestureKind = "end" | "half" | "speed" | "point" | "handleIn" | "handleOut" | "line";
+/** What a target returns on press; `null` means "no gesture". */
+interface GestureStart { kind: GestureKind; move: DragMove; onClick?: () => void; commitReason?: CurveCommitReason }
+type BeginDrag = (event: MouseEvent) => GestureStart | null;
+interface Gesture {
+  kind: GestureKind;
+  /** `null` in the mouse-only fallback (no Pointer Events). */
+  pointerId: number | null;
+  target: Element;
+  /** Client coordinates of the press. */
+  origin: Pt;
+  /** Last raw client position seen. */
+  last: Pt;
+  /** Integrated position; Shift slows its motion by `FINE_DRAG_FACTOR`. */
+  virtual: Pt;
+  snapshot: CurveEditorModel;
+  dragging: boolean;
+  move: DragMove;
+  onClick: (() => void) | null;
+  commitReason: CurveCommitReason;
+}
 
 export function createCurveEditor(doc: Document, options: CurveEditorOptions): CurveEditor {
   const { labels } = options;
@@ -221,8 +258,11 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   if (model.mode !== "bezier" || model.points.length) model.view = "value";
   let range: PlotRange = { low: 0, high: 1 };
   let disposed = false;
-  let gesture: { pointerId: number | null; move: DragMove; moved: boolean } | null = null;
-  let removeMouse: (() => void) | null = null;
+  let gesture: Gesture | null = null;
+  /** Once a pointerdown is seen, mousedown handlers are ignored for the editor lifetime. */
+  let pointerSeen = false;
+  let activePoint: number | null = null;
+  let removeGestureListeners: (() => void) | null = null;
   let removeMenuListeners: (() => void) | null = null;
   let fieldCleanups: (() => void)[] = [];
   let menuIndex = 0;
@@ -407,6 +447,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   const ghost = svgEl("path", "ch-curve__ghost", { "aria-hidden": "true" });
   const faint = svgEl("path", "ch-curve__value ch-curve__value--faint", { "aria-hidden": "true" });
   const main = svgEl("path", "ch-curve__value");
+  const hit = svgEl("path", "ch-curve__hit", { "aria-hidden": "true" });
   const halfIn = svgEl("path", "ch-curve__half ch-curve__half--in", { "aria-hidden": "true" });
   const halfOut = svgEl("path", "ch-curve__half ch-curve__half--out", { "aria-hidden": "true" });
   const join = svgEl("path", "ch-curve__join", { "aria-hidden": "true", stroke: `url(#${gradientId})` });
@@ -418,18 +459,23 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   const peakText = svgEl("text", "ch-curve__peak", {
     x: String(CURVE_PAD + CURVE_PLOT - 4), y: String(CURVE_PAD + 14), "text-anchor": "end", "aria-label": labels.peak
   });
-  for (const node of [axis, reference, ghost, faint, main, halfIn, halfOut, join, ...stems]) svg.appendChild(node);
+  for (const node of [axis, reference, ghost, faint, main, hit, halfIn, halfOut, join, ...stems]) svg.appendChild(node);
 
   function slider(label: string, cls = "ch-curve__handle"): SVGElement {
     const node = svgEl("circle", cls, { r: "5", role: "slider", tabindex: "0", "aria-label": label });
     return node;
   }
+  /** Decorative ring drawn just before its dot; `place()` positions both. */
+  function ring(kind: "point" | "marker"): SVGElement {
+    return svgEl("circle", `ch-curve__ring ch-curve__ring--${kind}`, { r: "7", "aria-hidden": "true" });
+  }
   const endHandles = [slider(labels.outHandle), slider(labels.inHandle)];
   const speedMarkers = [slider(labels.speedLeft, "ch-curve__marker"), slider(labels.speedRight, "ch-curve__marker")];
+  const markerRings = [ring("marker"), ring("marker")];
   const halfHandles = [slider(labels.outHandle), slider(labels.inHandle)];
   const pointsGroup = svgEl("g", "ch-curve__points");
   svg.appendChild(pointsGroup);
-  for (const node of [...endHandles, ...halfHandles, ...speedMarkers, peakText, chip]) svg.appendChild(node);
+  for (const node of [...endHandles, ...halfHandles, markerRings[0]!, speedMarkers[0]!, markerRings[1]!, speedMarkers[1]!, peakText, chip]) svg.appendChild(node);
   plot.appendChild(svg);
 
   const overlay = createElement(doc, "button", "ch-button ch-curve__overlay") as HTMLButtonElement;
@@ -439,7 +485,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   const hint = createElement(doc, "div", "ch-curve__hint", labels.addPointHint);
   plot.appendChild(hint);
 
-  type PointNodes = { knot: SVGElement; handleIn: SVGElement; handleOut: SVGElement; stemIn: SVGElement; stemOut: SVGElement };
+  type PointNodes = { knot: SVGElement; ring: SVGElement; handleIn: SVGElement; handleOut: SVGElement; stemIn: SVGElement; stemOut: SVGElement };
   let pointNodes: PointNodes[] = [];
 
   // --- geometry -----------------------------------------------------------------
@@ -463,11 +509,12 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     }
     range = fitRange(values, 0);
   }
-  function plotPoint(event: MouseEvent): Pt | null {
+  /** Client (CSS px) → viewBox units through the screen CTM, or the bounding box when the host lacks it. */
+  function clientToPlot(clientX: number, clientY: number): Pt | null {
     if (typeof svg.createSVGPoint === "function" && typeof svg.getScreenCTM === "function") {
       const matrix = svg.getScreenCTM();
       if (matrix) {
-        const source = svg.createSVGPoint(); source.x = event.clientX; source.y = event.clientY;
+        const source = svg.createSVGPoint(); source.x = clientX; source.y = clientY;
         const local = source.matrixTransform(matrix.inverse());
         return { x: local.x, y: local.y };
       }
@@ -478,13 +525,15 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     const scale = Math.min(box.width / SIZE, box.height / SIZE);
     const left = box.left + (box.width - SIZE * scale) / 2;
     const top = box.top + (box.height - SIZE * scale) / 2;
-    return { x: (event.clientX - left) / scale, y: (event.clientY - top) / scale };
+    return { x: (clientX - left) / scale, y: (clientY - top) / scale };
   }
+  function plotPoint(event: MouseEvent): Pt | null { return clientToPlot(event.clientX, event.clientY); }
   function toCurve(p: Pt): Pt { return plotToCurve(p.x, p.y, range); }
-  function place(node: SVGElement, x: number, y: number, text?: string): void {
+  function place(node: SVGElement, x: number, y: number, text?: string, ringNode?: SVGElement): void {
     const p = curveToPlot(x, y, range);
     node.setAttribute("cx", fmt(p.x)); node.setAttribute("cy", fmt(p.y));
     node.setAttribute("aria-valuetext", text ?? `${round3(x)}, ${round3(y)}`);
+    if (ringNode) { ringNode.setAttribute("cx", fmt(p.x)); ringNode.setAttribute("cy", fmt(p.y)); }
   }
   function stem(node: SVGElement, ax: number, ay: number, bx: number, by: number): void {
     const a = curveToPlot(ax, ay, range), b = curveToPlot(bx, by, range);
@@ -493,72 +542,135 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   }
 
   // --- gestures -----------------------------------------------------------------
-  function bindDrag(node: Element, begin: (event: MouseEvent) => DragMove | null): void {
-    node.addEventListener("pointerdown", e => startDrag(e as PointerEvent, true, begin));
-    node.addEventListener("mousedown", e => startDrag(e as MouseEvent, false, begin));
+  function bindDrag(node: Element, begin: BeginDrag): void {
+    node.addEventListener("pointerdown", e => { pointerSeen = true; startDrag(e as PointerEvent, true, begin); });
+    node.addEventListener("mousedown", e => { if (pointerSeen) return; startDrag(e as MouseEvent, false, begin); });
     node.addEventListener("pointermove", e => {
       const pe = e as PointerEvent;
-      if (gesture && gesture.pointerId === pe.pointerId) moveEvent(pe);
+      if (gesture && gesture.pointerId !== null && gesture.pointerId === pe.pointerId) moveEvent(pe);
     });
-    node.addEventListener("pointerup", e => releasePointer(e as PointerEvent));
-    node.addEventListener("pointercancel", e => releasePointer(e as PointerEvent));
-    node.addEventListener("lostpointercapture", () => { if (gesture && gesture.pointerId !== null) endGesture(); });
+    node.addEventListener("pointerup", e => {
+      const pe = e as PointerEvent;
+      if (gesture && gesture.pointerId !== null && gesture.pointerId === pe.pointerId) finishGesture(true);
+    });
+    node.addEventListener("pointercancel", e => {
+      const pe = e as PointerEvent;
+      if (gesture && gesture.pointerId !== null && gesture.pointerId === pe.pointerId) cancelGesture();
+    });
+    node.addEventListener("lostpointercapture", () => { if (gesture && gesture.pointerId !== null) finishGesture(false); });
   }
-  function startDrag(event: MouseEvent, pointer: boolean, begin: (event: MouseEvent) => DragMove | null): void {
+  function startDrag(event: MouseEvent, pointer: boolean, begin: BeginDrag): void {
     if (disposed || event.button !== 0 || gesture) return;
     if (pointer && (event as PointerEvent).isPrimary === false) return;
-    const move = begin(event);
-    if (!move) return;
-    gesture = { pointerId: pointer ? (event as PointerEvent).pointerId : null, move, moved: false };
-    container.setAttribute("data-dragging", "true");
+    const target = (event.currentTarget ?? event.target) as Element;
+    clearPop();
+    // Snapshot before `begin`: a line press inserts a point that a cancel must undo.
+    const snapshot = cloneModel(model);
+    const start = begin(event);
+    if (!start) return;
+    const at = { x: event.clientX, y: event.clientY };
+    gesture = {
+      kind: start.kind, pointerId: pointer ? (event as PointerEvent).pointerId : null, target,
+      origin: at, last: { ...at }, virtual: { ...at }, snapshot, dragging: false,
+      move: start.move, onClick: start.onClick ?? null, commitReason: start.commitReason ?? "gesture"
+    };
     ghost.setAttribute("d", main.getAttribute("d") ?? "");
-    show(ghost, true);
     if (pointer) {
-      const target = event.currentTarget as Element;
-      try { target.setPointerCapture?.((event as PointerEvent).pointerId); } catch { /* mouse fallback below */ }
+      try { target.setPointerCapture?.((event as PointerEvent).pointerId); } catch { /* host without capture: node-level pointermove still follows */ }
     }
-    attachMouse();
+    const onKey = (e: Event): void => {
+      if ((e as KeyboardEvent).key !== "Escape") return;
+      e.preventDefault?.();
+      cancelGesture();
+    };
+    const removers = [listenDoc("keydown", onKey)];
+    if (!pointer) {
+      const onMove = (e: Event): void => {
+        if (container.isConnected === false) { finishGesture(false); return; }
+        moveEvent(e as MouseEvent);
+      };
+      removers.push(listenDoc("mousemove", onMove), listenDoc("mouseup", () => finishGesture(true)));
+    }
+    const win = doc.defaultView;
+    if (win && typeof win.addEventListener === "function") {
+      const onBlur = (): void => finishGesture(false);
+      win.addEventListener("blur", onBlur);
+      removers.push(() => win.removeEventListener("blur", onBlur));
+    }
+    removeGestureListeners = () => removers.forEach(remove => remove());
     event.preventDefault();
   }
   function moveEvent(event: MouseEvent): void {
-    if (!gesture) return;
-    const p = plotPoint(event);
+    const g = gesture;
+    if (!g) return;
+    // Integrate on a virtual pointer so toggling Shift mid-drag changes the rate, never the position.
+    const factor = event.shiftKey ? FINE_DRAG_FACTOR : 1;
+    g.virtual.x += (event.clientX - g.last.x) * factor;
+    g.virtual.y += (event.clientY - g.last.y) * factor;
+    g.last = { x: event.clientX, y: event.clientY };
+    if (!g.dragging) {
+      if (Math.hypot(event.clientX - g.origin.x, event.clientY - g.origin.y) < DRAG_THRESHOLD_PX) return;
+      g.dragging = true;
+      container.setAttribute("data-dragging", "true");
+      show(ghost, true);
+    }
+    const p = clientToPlot(g.virtual.x, g.virtual.y);
     if (!p) return;
-    gesture.move(p, event);
-    gesture.moved = true;
+    g.move(p, event);
     render();
     emitInput();
   }
-  function attachMouse(): void {
-    if (removeMouse) return;
-    const onMove = (e: Event): void => {
-      if (container.isConnected === false) { endGesture(); return; }
-      moveEvent(e as MouseEvent);
-    };
-    const onEnd = (): void => endGesture();
-    const removers = [listenDoc("mousemove", onMove), listenDoc("mouseup", onEnd)];
-    const win = doc.defaultView;
-    if (win && typeof win.addEventListener === "function") {
-      win.addEventListener("blur", onEnd);
-      removers.push(() => win.removeEventListener("blur", onEnd));
-    }
-    removeMouse = () => removers.forEach(remove => remove());
-  }
-  function releasePointer(event: PointerEvent): void {
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
-    endGesture();
-    const target = event.currentTarget as Element;
-    try { if (target.hasPointerCapture?.(event.pointerId)) target.releasePointerCapture(event.pointerId); } catch { /* already released */ }
-  }
-  function endGesture(): void {
-    if (!gesture) return;
-    const moved = gesture.moved;
+  /** Drops the record and every listener it owns; the model is left as is. */
+  function cleanupGesture(): Gesture | null {
+    const g = gesture;
+    if (!g) return null;
     gesture = null;
-    removeMouse?.(); removeMouse = null;
+    removeGestureListeners?.(); removeGestureListeners = null;
+    if (g.pointerId !== null) {
+      try { if (g.target.hasPointerCapture?.(g.pointerId)) g.target.releasePointerCapture(g.pointerId); } catch { /* already released */ }
+    }
     container.removeAttribute("data-dragging");
     show(ghost, false);
+    return g;
+  }
+  /**
+   * Release: a drag commits, an armed press is a click (when `click`), anything
+   * else just ends. A hit-path press already inserted a point, so ending it
+   * without a click (blur, lost capture) must undo that insertion like a cancel.
+   */
+  function finishGesture(click: boolean): void {
+    if (!gesture) return;
+    if (gesture.dragging) { endGesture(); return; }
+    if (!click && gesture.kind === "line") { cancelGesture(); return; }
+    const g = cleanupGesture();
+    if (click) g?.onClick?.();
+  }
+  function endGesture(): void {
+    const g = cleanupGesture();
+    if (!g) return;
     fit(); render();
-    if (moved) emitCommit("gesture");
+    emitCommit(g.commitReason);
+  }
+  function cancelGesture(): void {
+    const g = cleanupGesture();
+    if (!g) return;
+    model = cloneModel(g.snapshot);
+    syncPoints(); fit(); render();
+    emitInput();
+    options.onCancel?.();
+  }
+  function setActivePoint(index: number | null): void {
+    activePoint = index !== null && model.points[index] ? index : null;
+    pointNodes.forEach((nodes, i) => {
+      for (const node of [nodes.knot, nodes.ring]) {
+        if (i === activePoint) node.setAttribute("data-active", "true"); else node.removeAttribute("data-active");
+      }
+    });
+    if (activePoint === null) container.removeAttribute("data-active-point");
+    else container.setAttribute("data-active-point", String(activePoint));
+  }
+  function clearPop(): void {
+    for (const nodes of pointNodes) { nodes.knot.removeAttribute("data-pop"); nodes.ring.removeAttribute("data-pop"); }
   }
 
   // --- model edits ---------------------------------------------------------------
@@ -595,19 +707,21 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     fit(); render();
     emitCommit("keyboard");
   }
-  function addPoint(x: number): void {
+  /** Inserts a knot at curve `x` keeping the shape; returns its index or -1 when refused (gap too small or 16 points). */
+  function insertPoint(x: number): number {
     const next = insertCurvePoint(model.curve, model.points, x);
-    if (next.points.length === model.points.length) return;
+    if (next.points.length === model.points.length) return -1;
+    const index = next.points.findIndex((p, i) => model.points[i]?.x !== p.x);
     model.points = next.points;
     model.curve = constrainCurveEnds(next.curve, model.points);
     model.view = "value";
-    syncPoints(); fit(); render();
-    emitCommit("point");
+    syncPoints();
+    return index === -1 ? model.points.length - 1 : index;
   }
   function removePoint(index: number): void {
     if (!model.points[index]) return;
     model.points.splice(index, 1);
-    syncPoints(); fit(); render();
+    syncPoints(); setActivePoint(null); fit(); render();
     const focusTarget = pointNodes[Math.min(index, pointNodes.length - 1)]?.knot ?? endHandles[0];
     focusTarget?.focus?.();
     emitCommit("point");
@@ -633,7 +747,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
       emitCommit("view");
       return;
     }
-    if (model.mode === "bezier") { model.curve = { ...DEFAULT_CURVE }; model.points = []; syncPoints(); }
+    if (model.mode === "bezier") { model.curve = { ...DEFAULT_CURVE }; model.points = []; syncPoints(); setActivePoint(null); }
     else if (model.mode === "back") model.back = { overshoot: DEFAULT_BACK_OVERSHOOT };
     else if (model.mode === "elastic") model.elastic = defaultParams("elastic");
     else model.bounce = defaultParams("bounce");
@@ -644,7 +758,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   // End handles: drag and keyboard.
   endHandles.forEach((node, i) => {
     const index = i as 0 | 1;
-    bindDrag(node, () => p => { const c = toCurve(p); moveEnd(index, c.x, c.y); });
+    bindDrag(node, () => ({ kind: "end", move: p => { const c = toCurve(p); moveEnd(index, c.x, c.y); } }));
     node.addEventListener("keydown", e => {
       const event = e as KeyboardEvent;
       const delta = keyDelta(event);
@@ -662,7 +776,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   // In-half handles of an InOut elastic/bounce.
   halfHandles.forEach((node, i) => {
     const index = i as 0 | 1;
-    bindDrag(node, () => p => { const c = toCurve(p); moveHalf(index, c.x, c.y); });
+    bindDrag(node, () => ({ kind: "half", move: p => { const c = toCurve(p); moveHalf(index, c.x, c.y); } }));
     node.addEventListener("keydown", e => {
       const event = e as KeyboardEvent;
       const delta = keyDelta(event);
@@ -673,62 +787,68 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
       afterKey(event);
     });
   });
-  // Speed markers: vertical drag edits the influence; keys step it.
-  function speedDrag(start: Pt): DragMove {
+  // Speed markers: vertical drag edits the influence (down = more smoothing); keys step it the same way.
+  function speedDrag(start: Pt): GestureStart {
     const startCurve = { ...model.curve };
     const px = clamp(plotToCurve(start.x, start.y, range).x, 0, 1);
-    return p => { model.curve = speedDragToCurve(startCurve, px, (start.y - p.y) / CURVE_PLOT); };
+    return { kind: "speed", move: p => { model.curve = speedDragToCurve(startCurve, px, (p.y - start.y) / CURVE_PLOT); } };
   }
   speedMarkers.forEach((node, i) => {
     bindDrag(node, event => { const p = plotPoint(event); return p ? speedDrag(p) : null; });
     node.addEventListener("keydown", e => {
       const event = e as KeyboardEvent;
       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
-      const amount = (event.key === "ArrowUp" ? 1 : -1) * stepOf(event);
+      const amount = (event.key === "ArrowDown" ? 1 : -1) * stepOf(event);
       if (i === 0) model.curve = { ...model.curve, x1: round3(clamp(model.curve.x1 + amount, 0, 1)) };
       else model.curve = { ...model.curve, x2: round3(clamp(model.curve.x2 - amount, 0, 1)) };
       afterKey(event);
     });
   });
-  // The curve itself: Ctrl/Meta adds a point; otherwise it grabs the nearest control.
-  function nearestEnd(c: Pt): 0 | 1 {
-    return Math.hypot(c.x - model.curve.x1, c.y - model.curve.y1) <= Math.hypot(c.x - model.curve.x2, c.y - model.curve.y2) ? 0 : 1;
-  }
-  bindDrag(main, event => {
+  // The curve itself (invisible hit band): in speed view it is a speed drag; in
+  // value view a press inserts a point (de Casteljau keeps the shape) that the
+  // same gesture then drags. A plain click commits "point"; a drag commits
+  // "gesture" including the insertion. Back/elastic/bounce: not interactive.
+  bindDrag(hit, event => {
     if (model.mode !== "bezier") return null;
     const p = plotPoint(event);
     if (!p) return null;
     if (speedView()) return speedDrag(p);
-    const c = toCurve(p);
-    if (event.ctrlKey || event.metaKey) { addPoint(c.x); return null; }
-    const index = nearestEnd(c);
-    return q => { const d = toCurve(q); moveEnd(index, d.x, d.y); };
-  });
-  main.addEventListener("click", e => {
-    // Hosts that deliver click without a usable pointerdown (keyboard "click") still add points.
-    const event = e as MouseEvent;
-    if (model.mode !== "bezier" || speedView() || !(event.ctrlKey || event.metaKey) || gesture) return;
-    const p = plotPoint(event);
-    if (p) addPoint(toCurve(p).x);
+    const index = insertPoint(toCurve(p).x);
+    if (index < 0) return null;
+    const nodes = pointNodes[index]!;
+    nodes.knot.setAttribute("data-pop", "true"); nodes.ring.setAttribute("data-pop", "true");
+    setActivePoint(index);
+    render();
+    nodes.knot.focus?.();
+    return {
+      kind: "line",
+      move: q => { const d = toCurve(q); movePoint(index, { x: d.x, y: d.y }, false); },
+      onClick: () => emitCommit("point")
+    };
   });
 
   function syncPoints(): void {
     while (pointNodes.length > model.points.length) {
       const nodes = pointNodes.pop()!;
-      for (const node of [nodes.stemIn, nodes.stemOut, nodes.handleIn, nodes.handleOut, nodes.knot]) pointsGroup.removeChild(node);
+      for (const node of [nodes.stemIn, nodes.stemOut, nodes.handleIn, nodes.handleOut, nodes.ring, nodes.knot]) pointsGroup.removeChild(node);
     }
+    if (activePoint !== null && activePoint >= model.points.length) setActivePoint(null);
     while (pointNodes.length < model.points.length) {
       const index = pointNodes.length;
       const nodes: PointNodes = {
         stemIn: svgEl("line", "ch-curve__stem", { "aria-hidden": "true" }),
         stemOut: svgEl("line", "ch-curve__stem", { "aria-hidden": "true" }),
         knot: slider(labels.point, "ch-curve__point"),
+        ring: ring("point"),
         handleIn: slider(labels.pointIn),
         handleOut: slider(labels.pointOut)
       };
-      bindDrag(nodes.knot, () => p => { const c = toCurve(p); movePoint(index, { x: c.x, y: c.y }, false); });
-      bindDrag(nodes.handleIn, () => (p, event) => { const c = toCurve(p); movePoint(index, { inX: c.x, inY: c.y }, !event.altKey); });
-      bindDrag(nodes.handleOut, () => (p, event) => { const c = toCurve(p); movePoint(index, { outX: c.x, outY: c.y }, !event.altKey); });
+      // Pressing a knot or one of its handles makes the point active so Delete right after a click removes only it.
+      const activate = (): void => { setActivePoint(index); nodes.knot.focus?.(); };
+      bindDrag(nodes.knot, () => { activate(); return { kind: "point", move: p => { const c = toCurve(p); movePoint(index, { x: c.x, y: c.y }, false); } }; });
+      bindDrag(nodes.handleIn, () => { activate(); return { kind: "handleIn", move: (p, event) => { const c = toCurve(p); movePoint(index, { inX: c.x, inY: c.y }, !event.altKey); } }; });
+      bindDrag(nodes.handleOut, () => { activate(); return { kind: "handleOut", move: (p, event) => { const c = toCurve(p); movePoint(index, { outX: c.x, outY: c.y }, !event.altKey); } }; });
+      nodes.knot.addEventListener("animationend", () => { nodes.knot.removeAttribute("data-pop"); nodes.ring.removeAttribute("data-pop"); });
       nodes.knot.addEventListener("keydown", e => {
         const event = e as KeyboardEvent;
         if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); removePoint(index); return; }
@@ -754,7 +874,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
         movePoint(index, { outX: point.outX + delta.x, outY: point.outY + delta.y }, !event.altKey);
         afterKey(event);
       });
-      for (const node of [nodes.stemIn, nodes.stemOut, nodes.handleIn, nodes.handleOut, nodes.knot]) pointsGroup.appendChild(node);
+      for (const node of [nodes.stemIn, nodes.stemOut, nodes.handleIn, nodes.handleOut, nodes.ring, nodes.knot]) pointsGroup.appendChild(node);
       pointNodes.push(nodes);
     }
   }
@@ -872,6 +992,8 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     main.setAttribute("d", speed ? speedPathD(model.curve, range) : valueD);
     main.setAttribute("class", `ch-curve__value${speed ? " ch-curve__value--speed" : ""}${halves() ? " ch-curve__value--hidden" : ""}`);
     show(main, true);
+    hit.setAttribute("d", main.getAttribute("d") ?? "");
+    show(hit, model.mode === "bezier");
     faint.setAttribute("d", valueD);
     show(faint, speed);
     // Bezier handles.
@@ -888,7 +1010,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     pointNodes.forEach((nodes, i) => {
       const p = model.points[i];
       if (!p) return;
-      place(nodes.knot, p.x, p.y);
+      place(nodes.knot, p.x, p.y, undefined, nodes.ring);
       place(nodes.handleIn, p.inX, p.inY);
       place(nodes.handleOut, p.outX, p.outY);
       stem(nodes.stemIn, p.x, p.y, p.inX, p.inY);
@@ -896,12 +1018,13 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     });
     // Speed view.
     speedMarkers.forEach(node => show(node, speed));
+    markerRings.forEach(node => show(node, speed));
     show(peakText, speed);
     if (speed) {
       const samples = sampleBezierSpeed(model.curve, 129);
       const at = (x: number): number => samples[Math.round(clamp(x, 0, 1) * (samples.length - 1))]!.speed;
-      place(speedMarkers[0]!, model.curve.x1, at(model.curve.x1), `${round3(model.curve.x1)}`);
-      place(speedMarkers[1]!, model.curve.x2, at(model.curve.x2), `${round3(1 - model.curve.x2)}`);
+      place(speedMarkers[0]!, model.curve.x1, at(model.curve.x1), `${round3(model.curve.x1)}`, markerRings[0]);
+      place(speedMarkers[1]!, model.curve.x2, at(model.curve.x2), `${round3(1 - model.curve.x2)}`, markerRings[1]);
       peakText.textContent = `×${peakSpeed(model.curve).toFixed(1)}`;
     }
     // InOut halves of elastic/bounce.
@@ -930,16 +1053,16 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
 
   function setModel(next: CurveEditorModel): void {
     if (disposed) return;
-    endGesture();
+    cancelGesture();
     closeMenu(false);
     model = cloneModel(next);
     if (model.mode !== "bezier" || model.points.length) model.view = "value";
-    if (canSvg) syncPoints();
+    if (canSvg) { syncPoints(); setActivePoint(null); }
     buildFields(); fit(); render();
   }
   function dispose(): void {
     if (disposed) return;
-    endGesture();
+    cancelGesture();
     closeMenu(false);
     disposed = true;
     fieldCleanups.forEach(cleanup => cleanup());

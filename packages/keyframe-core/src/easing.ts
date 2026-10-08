@@ -91,9 +91,12 @@ export function peakSpeed(curve: CubicBezierCurve, samples = 129): number {
 
 /**
  * Drag on the speed graph. `px` is the normalized x where the drag started and
- * `dyNorm` the vertical displacement as a fraction of the plot height (up is
- * positive). Near the left edge only the out influence (x1) changes, near the
- * right edge only the in influence (1 - x2); in the middle both change.
+ * `dyNorm` the drag amount as a fraction of the plot height: positive means
+ * MORE influence (more smoothing, towards ease), negative means less (towards
+ * linear). The caller maps a plot drag DOWN to a positive `dyNorm`, so pulling
+ * the speed curve down flattens it. Near the left edge only the out influence
+ * (x1) changes, near the right edge only the in influence (1 - x2); in the
+ * middle both change.
  */
 export function speedDragToCurve(start: CubicBezierCurve, px: number, dyNorm: number): CubicBezierCurve {
   const wL = clamp((0.65 - px) / 0.3, 0, 1);
@@ -169,6 +172,9 @@ export function constrainCurveEnds(curve: CubicBezierCurve, points: readonly Cur
   return { x1: round3(clamp(curve.x1, 0, first)), y1: curve.y1, x2: round3(clamp(curve.x2, last, 1)), y2: curve.y2 };
 }
 
+/** Upper bound of interior points; `insertCurvePoint` refuses beyond it. */
+export const MAX_CURVE_POINTS = 16;
+
 /**
  * Inserts a point on the curve at absolute `x` without changing its shape: the
  * containing segment is split with de Casteljau, so the new point and the
@@ -176,6 +182,7 @@ export function constrainCurveEnds(curve: CubicBezierCurve, points: readonly Cur
  */
 export function insertCurvePoint(curve: CubicBezierCurve, points: readonly CurvePoint[], x: number):
 { curve: CubicBezierCurve; points: CurvePoint[] } {
+  if (points.length >= MAX_CURVE_POINTS) return { curve: { ...curve }, points: points.map(p => ({ ...p })) };
   const clampedX = clamp(x, 0.02, 0.98);
   const index = points.findIndex(p => p.x >= clampedX);
   const segment = index === -1 ? points.length : index;

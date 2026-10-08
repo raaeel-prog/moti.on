@@ -137,6 +137,7 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
     "ease.mode.back", "ease.mode.elastic", "ease.mode.bounce",
     "ease.direction.in", "ease.direction.out", "ease.direction.inOut",
     "ease.amp", "ease.freq", "ease.decay", "ease.param.start", "ease.overshoot",
+    "ease.preset.in", "ease.preset.out", "ease.preset.inOut", "ease.preset.linear", "ease.preset.ease",
     "tool.wiggle.name",
     "tool.flicker.name",
     // Simbolo de unidade e nome de parametro iguais nos dois idiomas.

@@ -34,8 +34,13 @@ import { createSelectionCoordinator, type SelectionReader } from "./selection-co
 import { renderManagedTools } from "./managed-tools-editor.js";
 import { focusedPoll } from "./focused-poll.js";
 import { createGradientEditor } from "./gradient-editor.js";
-import { DEFAULT_EASE, cloneEaseDraft, easeCommandArgs, easeNeedsPair, type EaseDraft } from "./ease-args.js";
-import { readEaseLive, writeEaseLive } from "./ease-library.js";
+import { DEFAULT_EASE, cloneEaseDraft, easeNeedsPair, type EaseDraft } from "./ease-args.js";
+import { readEaseAutoOpen, readEaseLive, writeEaseAutoOpen, writeEaseLive } from "./ease-library.js";
+import { createEaseController, type EaseApplyOutcome, type EaseController } from "./ease-controller.js";
+import { EASE_NAVIGATE_EVENT, createEaseApplyLock, createEaseSync, readSharedDraft } from "./ease-sync.js";
+import { QUICK_EASE_EXTENSION_ID, createCepEvents, type CepEvents } from "./cep-events.js";
+import { createEaseAutoOpen } from "./ease-auto-open.js";
+import { QUICK_EASE_AUTO_OPEN_PROVEN } from "./capabilities.js";
 import type { GradientReadData } from "@motion/contracts";
 import {
   anchorGrid,
@@ -1499,7 +1504,7 @@ const TOOLS: readonly ToolDefinition[] = [
     descriptionKey: "tool.ease.description",
     render: renderEase,
     disabledReason: easeDisabledReason,
-    apply: applyEase,
+    apply: async (shell, i18n) => { await ensureEaseController(shell, i18n).apply(); },
     reset: () => {
       state.ease = { ...cloneEaseDraft(DEFAULT_EASE), live: state.ease.live };
     }
@@ -2163,6 +2168,8 @@ function start(): void {
   // selecao na timeline chega aqui sem o usuario apertar nada.
   const pararWatch = startContextWatch(shell, logger, adapter.client);
   window.addEventListener("unload", pararWatch);
+  const pararSuperficies = startEaseSurfaces(shell, i18n, adapter.client);
+  window.addEventListener("unload", pararSuperficies);
 }
 
 interface Wiring {
@@ -3352,7 +3359,11 @@ function renderSettings(
       regions.shell.rerender();
     },
     onRefresh: () => regions.shell.rerender(),
-    onNavigate: viewId => regions.shell.navigate(viewId)
+    onNavigate: viewId => regions.shell.navigate(viewId),
+    easeAutoOpen: QUICK_EASE_AUTO_OPEN_PROVEN ? {
+      checked: readEaseAutoOpen(easeStorage()),
+      onChange: value => { writeEaseAutoOpen(easeStorage(), value); }
+    } : null
   });
   const account = createAccountView(document, i18n.locale());
   regions.content.appendChild(account.element);
@@ -3542,6 +3553,7 @@ function startContextWatch(shell: Shell, logger: MotionLogger, client: Client): 
       const response = await client.execute<ContextData>("ae.context.read");
       if (blocked() || !response.ok || !response.data) return;
       const next = contextFingerprint(response.data); state.context = response.data;
+      easeController?.onSelectionSignature(response.data.selectionSignature ?? null);
       if (next === signature) return;
       signature = next; logger.setHost("after-effects", response.data.hostVersion ?? undefined);
       if (refreshLibrary) refreshLibrary();
@@ -6200,22 +6212,30 @@ function renderEase(regions: RenderRegions, i18n: I18n): void {
   });
   regions.content.appendChild(actions.element);
   refreshToolContext = () => actions.update(easeActionsDisabledReason(i18n));
-  let easeStorage: Storage | undefined;
-  try { easeStorage = window.localStorage; } catch { /* live flag simply is not remembered */ }
-  state.ease.live = readEaseLive(easeStorage);
+  state.ease.live = readEaseLive(easeStorage());
+  const controller = ensureEaseController(regions.shell, i18n);
   const editor = createEaseEditor(document, {
     i18n, draft: state.ease, busy: state.busy,
     platformMeta: /mac/i.test(typeof navigator === "undefined" ? "" : navigator.platform ?? ""),
     onChange: draft => { state.ease = draft; },
-    onCommit: draft => { state.ease = draft; if (state.ease.live) scheduleLiveApply(regions.shell, i18n); },
+    onCommit: draft => { state.ease = draft; easeSync?.publish(draft, controller.session()); if (state.ease.live) controller.scheduleLive(); },
+    onCancel: () => controller.cancelPending("escape"),
     onLiveToggle: live => {
-      state.ease.live = live; writeEaseLive(easeStorage, live);
+      state.ease.live = live; writeEaseLive(easeStorage(), live);
       regions.shell.setStatus(i18n.t(live ? "ease.liveOn" : "ease.liveOff"), "ok");
-      if (!live) cancelLiveApply();
+      if (!live) controller.cancelPending("live-off");
     },
-    onApply: () => { if (wiringAtual && !easeDisabledReason(i18n)) void applyEase(regions.shell, i18n, wiringAtual.logger, wiringAtual.client); }
+    onApply: () => { if (wiringAtual && !easeDisabledReason(i18n)) void controller.apply(); }
   });
-  disposeView = () => { actions.dispose(); editor.dispose(); cancelLiveApply(); };
+  easeEditorHandle = editor;
+  // The floating window: same curve, same apply path, next to the timeline.
+  const quick = createActionButton(document, {
+    id: "ease-open-quick", label: i18n.t("ease.quick.open"), variant: "tertiary",
+    onPress: () => { if (!cepEvents?.requestOpenExtension(QUICK_EASE_EXTENSION_ID)) regions.shell.setStatus(i18n.t("ease.quick.outsideHost"), "error"); }
+  });
+  quick.element.title = i18n.t("ease.quick.openHint");
+  quick.element.classList.add("ch-ease-quick-open");
+  disposeView = () => { actions.dispose(); editor.dispose(); easeEditorHandle = null; controller.cancelPending("close"); };
   regions.content.appendChild(editor.element);
   const sides = createElement(document, "div", "ch-ease-sides");
   sides.appendChild(checkboxField(document, { id: "ease-apply-in", label: i18n.t("ease.applyIn"), checked: state.ease.applyIn,
@@ -6223,6 +6243,122 @@ function renderEase(regions: RenderRegions, i18n: I18n): void {
   sides.appendChild(checkboxField(document, { id: "ease-apply-out", label: i18n.t("ease.applyOut"), checked: state.ease.applyOut,
     onChange: value => { state.ease.applyOut = value; regions.shell.rerender(); } }));
   (editor.element.querySelector(".ch-ease-main") ?? editor.element).appendChild(sides);
+  (editor.element.querySelector(".ch-ease-main") ?? editor.element).appendChild(quick.element);
+}
+
+function easeStorage(): Storage | undefined {
+  try { return window.localStorage; } catch { return undefined; }
+}
+
+let easeController: EaseController | null = null;
+let easeEditorHandle: { setDraft(draft: EaseDraft): void } | null = null;
+let easeSync: ReturnType<typeof createEaseSync> | null = null;
+let cepEvents: CepEvents | null = null;
+
+/**
+ * One controller for the panel lifetime: the host session (generated
+ * keyframes) must survive view re-renders, otherwise a second adjustment
+ * would multiply keyframes instead of replacing them.
+ */
+function ensureEaseController(shell: Shell, i18n: I18n): EaseController {
+  if (easeController) return easeController;
+  easeController = createEaseController({
+    origin: "panel",
+    execute: async args => {
+      if (!wiringAtual) throw new Error("host indisponível");
+      const response = await wiringAtual.client.execute<{ appliedCount?: number; skippedCount?: number; removedCount?: number; session?: unknown }>("ae.keys.ease.apply", args, { preserveSelection: true });
+      wiringAtual.logger.recordResponse("ae.keys.ease.apply", response);
+      if (response.warnings.length) reportHostWarnings(response.warnings);
+      return response;
+    },
+    draft: () => state.ease,
+    selectionSignature: () => state.context?.selectionSignature ?? null,
+    disabledReason: () => easeDisabledReason(i18n),
+    busy: () => state.busy,
+    setBusy: (busy, quiet) => {
+      // The quiet path keeps the editor mounted: `setBusy` rerenders the view.
+      if (quiet) { state.busy = busy; shell.setBusy(busy); }
+      else setBusy(shell, busy, busy ? i18n.t("status.applyingEase") : undefined);
+      if (busy) shell.setStatus(i18n.t("status.applyingEase"), "busy");
+    },
+    invalidInput: () => {
+      const invalid = document.querySelector<HTMLInputElement>(".ch-ease-editor [aria-invalid='true']");
+      if (invalid) invalid.focus();
+      return Boolean(invalid);
+    },
+    report: outcome => reportEaseOutcome(shell, i18n, outcome),
+    lock: createEaseApplyLock(easeStorage())
+  });
+  return easeController;
+}
+
+function reportEaseOutcome(shell: Shell, i18n: I18n, outcome: EaseApplyOutcome): void {
+  state.lastError = null;
+  switch (outcome.kind) {
+    case "applied":
+      shell.setStatus(i18n.t(outcome.quiet ? "ease.liveApplied" : "message.easeApplied", { count: outcome.appliedCount }), "ok");
+      easeSync?.publish(state.ease, outcome.session);
+      void refreshEaseContext();
+      break;
+    case "noChange": shell.setStatus(i18n.t("ease.noChange"), "error"); break;
+    case "stale": state.lastError = i18n.t("ease.stale"); shell.setStatus(state.lastError, "error"); break;
+    case "conflict": {
+      const keyed = outcome.response.error?.details && typeof (outcome.response.error.details as { messageKey?: unknown }).messageKey === "string";
+      state.lastError = keyed ? hostFailureMessage(outcome.response.error!, i18n) : i18n.t(state.ease.mode === "bezier" ? "ease.conflict.points" : "ease.conflict.bake");
+      shell.setStatus(state.lastError, "error");
+      break;
+    }
+    case "failed":
+      if (outcome.response.error) reportFailure(shell, i18n, outcome.response);
+      else shell.setStatus(i18n.t("message.failureWithoutReason"), "error");
+      break;
+    case "discarded":
+      if (outcome.reason === "selection" && !outcome.quiet) shell.setStatus(i18n.t("ease.stale"), "error");
+      break;
+  }
+}
+
+/** After an apply the selection may have been re-pointed by the host; read it back once. */
+async function refreshEaseContext(): Promise<void> {
+  if (!wiringAtual) return;
+  try {
+    const current = await wiringAtual.client.execute<ContextData>("ae.context.read");
+    wiringAtual.logger.recordResponse("ae.context.read", current);
+    if (current.ok && current.data) { state.context = current.data; easeController?.onSelectionSignature(current.data.selectionSignature ?? null); refreshToolContext?.(); }
+  } catch { /* the regular watch catches up */ }
+}
+
+/**
+ * Cross-surface wiring, once per panel: reload the draft when the floating
+ * window edits it, navigate to the ease view when it asks, and (gated) open it
+ * automatically on a new keyframe selection.
+ */
+function startEaseSurfaces(shell: Shell, i18n: I18n, client: Client): () => void {
+  cepEvents = createCepEvents();
+  const controller = ensureEaseController(shell, i18n);
+  const shared = readSharedDraft(easeStorage());
+  if (shared) { state.ease = { ...shared.draft, live: state.ease.live }; controller.setSession(shared.session); }
+  easeSync = createEaseSync({
+    storage: easeStorage(), events: cepEvents, origin: "panel",
+    onRemoteChange: remote => {
+      state.ease = { ...remote.draft, live: state.ease.live };
+      controller.setSession(remote.session);
+      easeEditorHandle?.setDraft(state.ease);
+    }
+  });
+  const stopNavigate = cepEvents.listen(EASE_NAVIGATE_EVENT, () => { state.activeTool = "ease"; shell.navigate("ease"); });
+  const autoOpen = QUICK_EASE_AUTO_OPEN_PROVEN ? createEaseAutoOpen({
+    doc: document, events: cepEvents,
+    enabled: () => readEaseAutoOpen(easeStorage()),
+    isBusy: () => state.busy,
+    read: async () => {
+      const response = await client.execute<ContextData>("ae.context.read");
+      wiringAtual?.logger.recordResponse("ae.context.read", response);
+      return response.ok && response.data ? response.data : null;
+    },
+    open: () => { cepEvents?.requestOpenExtension(QUICK_EASE_EXTENSION_ID); }
+  }) : null;
+  return () => { stopNavigate(); easeSync?.dispose(); easeSync = null; autoOpen?.dispose(); controller.dispose(); easeController = null; };
 }
 
 function easeActionsDisabledReason(i18n: I18n): string | null {
@@ -6260,61 +6396,6 @@ async function applyEaseAction(action: EaseAction, shell: Shell, i18n: I18n, log
     state.lastError = i18n.t("message.failureWithoutReason");
     shell.setStatus(state.lastError, "error");
   } finally { setBusy(shell, false); }
-}
-
-let liveApplyTimer: ReturnType<typeof setTimeout> | undefined;
-let liveApplyPending = false;
-
-function cancelLiveApply(): void {
-  if (liveApplyTimer) clearTimeout(liveApplyTimer);
-  liveApplyTimer = undefined; liveApplyPending = false;
-}
-
-/**
- * Live apply: one host call per completed change, debounced so a drag with
- * many commits in a row does not queue up, and deferred while another call runs.
- * The quiet path keeps the editor mounted: `setBusy` would rerender the view.
- */
-function scheduleLiveApply(shell: Shell, i18n: I18n): void {
-  if (liveApplyTimer) clearTimeout(liveApplyTimer);
-  liveApplyTimer = setTimeout(() => {
-    liveApplyTimer = undefined;
-    if (!wiringAtual || !state.ease.live) return;
-    if (state.busy) { liveApplyPending = true; return; }
-    if (easeDisabledReason(i18n)) return;
-    void applyEase(shell, i18n, wiringAtual.logger, wiringAtual.client, { quiet: true });
-  }, 150);
-}
-
-async function applyEase(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client, options: { quiet?: boolean } = {}): Promise<void> {
-  if (state.busy) return;
-  const invalid = document.querySelector<HTMLInputElement>(".ch-ease-editor [aria-invalid='true']");
-  if (invalid) { invalid.focus(); return; }
-  const args = easeCommandArgs(state.ease);
-  state.lastError = null;
-  if (options.quiet) { state.busy = true; shell.setBusy(true); }
-  else setBusy(shell, true, i18n.t("status.applyingEase"));
-  shell.setStatus(i18n.t("status.applyingEase"), "busy");
-  try {
-    const response = await client.execute<{ appliedCount: number; skippedCount: number }>("ae.keys.ease.apply", args, { preserveSelection: true });
-    logger.recordResponse("ae.keys.ease.apply", response);
-    if (response.warnings.length) reportHostWarnings(response.warnings);
-    if (response.ok && (response.data?.appliedCount ?? 0) > 0) {
-      shell.setStatus(i18n.t(options.quiet ? "ease.liveApplied" : "message.easeApplied", { count: response.data!.appliedCount }), "ok");
-    } else if (!response.ok) {
-      if (response.error?.code === "KEYFRAME_CONFLICT") {
-        state.lastError = i18n.t(state.ease.mode === "bezier" ? "ease.conflict.points" : "ease.conflict.bake");
-        shell.setStatus(state.lastError, "error");
-      } else reportFailure(shell, i18n, response);
-    }
-    else shell.setStatus(i18n.t("ease.noChange"), "error");
-  } catch {
-    shell.setStatus(i18n.t("message.failureWithoutReason"), "error");
-  } finally {
-    if (options.quiet) { state.busy = false; shell.setBusy(false); }
-    else setBusy(shell, false);
-    if (liveApplyPending) { liveApplyPending = false; scheduleLiveApply(shell, i18n); }
-  }
 }
 
 function reverseKeysDisabledReason(i18n: I18n): string | null {

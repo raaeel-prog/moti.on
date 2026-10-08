@@ -22,12 +22,12 @@ test("PROTOCOL_VERSION é 1", () => {
   assert.equal(PROTOCOL_VERSION, 1);
 });
 
-test("os 22 códigos da especificação estão presentes, sem duplicata", () => {
+test("os 23 códigos da especificação estão presentes, sem duplicata", () => {
   // A lista vem da §8 do master spec. O número não é decorativo: se um código
   // sumir numa refatoração, os comandos que dependiam dele passam a cair em
   // INTERNAL_ERROR e o usuário perde a ação corretiva específica.
-  assert.equal(ERROR_CODES.length, 22);
-  assert.equal(new Set(ERROR_CODES).size, 22, "Há código duplicado em ERROR_CODES.");
+  assert.equal(ERROR_CODES.length, 23);
+  assert.equal(new Set(ERROR_CODES).size, 23, "Há código duplicado em ERROR_CODES.");
 
   for (const required of [
     "NO_ACTIVE_PROJECT",
@@ -46,6 +46,7 @@ test("os 22 códigos da especificação estão presentes, sem duplicata", () => 
     "INVALID_PRESET",
     "EXPRESSION_CONFLICT",
     "KEYFRAME_CONFLICT",
+    "STALE_SELECTION",
     "TRACK_CONFLICT",
     "ASSET_LICENSE_BLOCKED",
     "USER_CANCELLED",

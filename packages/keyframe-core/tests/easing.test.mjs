@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_BOUNCE, DEFAULT_ELASTIC, backCurve, bezierSpeedAt, bezierValueAt, bounceOut, constrainCurveEnds, constrainCurvePoint,
   easingValue, elasticOut, insertCurvePoint, multiPointValueAt, normalizeCurveSegments, peakSpeed, sampleBezierSpeed,
-  sortedPointsValid, speedDragToCurve, fitRange
+  sortedPointsValid, speedDragToCurve, fitRange, MAX_CURVE_POINTS
 } from "../dist/index.js";
 
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) <= eps, `${a} ≉ ${b}`);
@@ -103,4 +103,30 @@ test("direction composition: in mirrors out, inOut is continuous and honours the
 test("fitRange always contains 0..1", () => {
   assert.deepEqual(fitRange([0.2, 0.5]), { low: 0, high: 1 });
   assert.deepEqual(fitRange([-0.5, 1.5], 0.1), { low: -0.6, high: 1.6 });
+});
+
+test("insertCurvePoint refuses once MAX_CURVE_POINTS (16) interior points exist", () => {
+  assert.equal(MAX_CURVE_POINTS, 16);
+  let state = { curve: { ...LINEAR }, points: [] };
+  for (let i = 1; i <= 16; i++) state = insertCurvePoint(state.curve, state.points, i / 17);
+  assert.equal(state.points.length, 16);
+  const refused = insertCurvePoint(state.curve, state.points, 0.5 / 17 + 0.5);
+  assert.equal(refused.points.length, 16);
+  assert.deepEqual(refused.points, state.points);
+  assert.deepEqual(refused.curve, state.curve);
+  assert.notEqual(refused.points, state.points, "returns copies");
+});
+
+test("speedDragToCurve: a downward (positive) drag at the centre raises both influences", () => {
+  const next = speedDragToCurve(EASE, 0.5, 0.1);
+  assert.ok(next.x1 > EASE.x1, "x1 up");
+  assert.ok(1 - next.x2 > 1 - EASE.x2, "1 - x2 up");
+  near(next.x1, 0.3); near(next.x2, 0.2);
+  assert.equal(next.y1, EASE.y1); assert.equal(next.y2, EASE.y2);
+  const up = speedDragToCurve(EASE, 0.5, -0.1);
+  assert.ok(up.x1 < EASE.x1 && up.x2 > EASE.x2, "upward drag lowers both");
+  const left = speedDragToCurve(EASE, 0.1, 0.1);
+  assert.equal(left.x2, EASE.x2, "x≈0.1 leaves x2 alone");
+  const right = speedDragToCurve(EASE, 0.9, 0.1);
+  assert.equal(right.x1, EASE.x1, "x≈0.9 leaves x1 alone");
 });

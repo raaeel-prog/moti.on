@@ -1224,6 +1224,8 @@ export interface CubicBezierCurve {
 - modos de curva: **Bezier** (gráfico de valor com pontos intermediários via ⌘/Ctrl+clique, e gráfico de velocidade arrastável com rótulo `×N` da velocidade máxima), **Back** (overshoot, vira Bézier comum), **Elastic** e **Bounce** (amp, freq, decay, start) com direção In / InOut / Out; em InOut cada metade tem seus parâmetros e a metade de entrada aceita alças Bézier;
 - aplicação ao vivo opcional (`((•))` no cabeçalho): cada ajuste concluído é um `ae.keys.ease.apply` e, portanto, um Undo;
 - curva anterior desenhada tracejada durante o arrasto; botão de restaurar por modo;
+- gestos diretos: clique simples na linha insere um ponto (divisão de de Casteljau, forma preservada) e, se continuar arrastando, move esse ponto no mesmo gesto; clicar numa bolinha a seleciona; Delete/Backspace remove só o ponto interno selecionado; máximo de 16 pontos internos; limiar clique/arrasto de 3 px; Shift reduz a sensibilidade a 20 % sem salto; Escape e cancelamento de pointer restauram o estado anterior ao gesto; perder o foco encerra com o último estado válido; faixa de captura de 12 px na linha e alvos de 20 px nas bolinhas; escala congelada durante o arraste;
+- gráfico de velocidade: arrastar a linha **para baixo** aumenta a suavização, para cima aproxima do linear; centro ajusta os dois lados, laterais pesam o lado correspondente; cálculo a partir da curva capturada no início do gesto;
 - histórico Undo/Redo apenas da UI;
 - salvar preset local e sincronizar com conta opcionalmente;
 - acessível por teclado.
@@ -1268,6 +1270,19 @@ bake:   { mode: "elastic"|"bounce", direction: "in"|"out"|"inOut",
 - `points` insere um keyframe por ponto (valor ao longo da corda) e aplica a curva local de cada segmento; colisão com keyframe existente → `KEYFRAME_CONFLICT` antes de escrever;
 - `bake` grava um keyframe por quadro entre as duas chaves, com interpolação LINEAR (amostragem por quadro não perde forma visível); trecho com keyframes no meio → `KEYFRAME_CONFLICT`;
 - tudo passa pelo snapshot/rollback do comando: uma falha restaura a propriedade inteira.
+
+Aplicação segura (ambas as superfícies):
+
+```text
+expectedSelection: string      // assinatura da seleção capturada ao agendar; divergente → STALE_SELECTION, nada é escrito
+session: { signature, segments: [{ propertyId, layerIndex, t0, t1, generated: [{ time, value }] }] }
+data.session                   // devolvido em toda aplicação; reenviado na seguinte
+```
+
+- o host revalida a seleção antes de escrever; uma resposta atrasada para outra seleção é descartada também no cliente;
+- com `session`, as keys geradas (pontos, Elastic, Bounce) são removidas e regeradas a partir dos pares `(t0, t1)` da sessão — nunca keys do usuário; key gerada editada ou key nova dentro do trecho → `KEYFRAME_CONFLICT` sem escrita;
+- após aplicar, as duas pontas ficam selecionadas e as keys geradas não;
+- Live aplica só ao concluir o gesto, com debounce de 150 ms; mudança de seleção, fechamento ou Escape invalida aplicações pendentes; cada aplicação é um único Desfazer.
 
 ### 15.5 Operações de keyframe
 
@@ -1346,7 +1361,12 @@ lugar para operações compostas.
 - nenhum key perdido por colisão sem warning;
 - preview de curva corresponde visualmente ao easing aplicado;
 - um Undo por operação;
-- segmento com pontos intermediários, Elastic e Bounce gravados por quadro, aplicação ao vivo com um Undo por ajuste concluído.
+- segmento com pontos intermediários, Elastic e Bounce gravados por quadro, aplicação ao vivo com um Undo por ajuste concluído;
+- reaplicar sobre keys geradas substitui em vez de acumular; seleção obsoleta nunca recebe escrita.
+
+### 15.8 Editor flutuante (extensão `Modeless`)
+
+Segunda extensão `com.motion.plugin.ae.quick-ease` no mesmo bundle (CEP 12: `Type=Modeless`, `AutoVisible=false`, ~300×360, mínimo 280×320), aberta pelo botão "Suavização rápida" da view de Suavização (`CSInterface.requestOpenExtension`) ou pelo menu de extensões. Reutiliza o editor de curva em modo compacto (chips In/Out/InOut/Linear/Ease, sem biblioteca), o mesmo controlador de aplicação e o mesmo comando. Rascunho e sessão compartilhados em `motion.ease.draft.v1` com evento `com.motion.plugin.ease.sync`; um único escritor no host por vez (lease `motion.ease.lock.v1`). Sem seleção válida mostra orientação; modos que exigem segmento pedem dois keyframes consecutivos. "Abrir automaticamente ao selecionar keyframes" é opcional, desligado por padrão e só é oferecido quando a capability `QUICK_EASE_AUTO_OPEN_PROVEN` for ligada após a prova em `docs/research/cep-modeless-quick-ease.md`.
 
 ---
 

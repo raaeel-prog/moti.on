@@ -85,6 +85,7 @@ export {
   elasticOut,
   fitRange,
   insertCurvePoint,
+  MAX_CURVE_POINTS,
   multiPointValueAt,
   normalizeCurveSegments,
   peakSpeed,

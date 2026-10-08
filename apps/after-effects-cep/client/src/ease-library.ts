@@ -71,3 +71,11 @@ export function readEaseLive(storage: Pick<Storage, "getItem"> | undefined): boo
 export function writeEaseLive(storage: Pick<Storage, "getItem" | "setItem"> | undefined, live: boolean): boolean {
   return protectedWrite(storage, EASE_LIVE_KEY, live ? "1" : "0", raw => raw === "1" || raw === "0");
 }
+/** "Open Quick ease when keyframes are selected" — off by default, standalone key. */
+export const EASE_AUTO_OPEN_KEY = "motion.ease.autoOpen.v1";
+export function readEaseAutoOpen(storage: Pick<Storage, "getItem"> | undefined): boolean {
+  try { return storage?.getItem(EASE_AUTO_OPEN_KEY) === "1"; } catch { return false; }
+}
+export function writeEaseAutoOpen(storage: Pick<Storage, "getItem" | "setItem"> | undefined, value: boolean): boolean {
+  return protectedWrite(storage, EASE_AUTO_OPEN_KEY, value ? "1" : "0", raw => raw === "1" || raw === "0");
+}

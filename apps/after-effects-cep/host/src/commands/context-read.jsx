@@ -22,8 +22,8 @@
  * a contagem mentir.
  */
 (function () {
-  var MAX_CAMADAS = 60;
-  var MAX_PROPRIEDADES = 60;
+  var MAX_CAMADAS = MotionSelection.MAX_LAYERS;
+  var MAX_PROPRIEDADES = MotionSelection.MAX_PROPERTIES;
 
   /**
    * Descreve a seleção da composição ativa.
@@ -46,14 +46,12 @@
     // que um preset de texto precisa de texto e que uma camada esta bloqueada.
     var textos = 0;
     var bloqueadas = 0;
-    var identity = [String(/** @type {any} */ (comp).id)];
     var somaDeDuracoes = 0;
     var i;
 
     for (i = 0; i < camadasLidas; i += 1) {
       var camada = /** @type {any} */ (camadas[i]);
       if (!camada) continue;
-      identity.push("L" + (typeof camada.id === "number" ? camada.id : camada.index));
       if (camada.threeDLayer === true) alguma3D = true;
       if (typeof TextLayer !== "undefined" && camada instanceof TextLayer) textos += 1;
       if (camada.locked === true) bloqueadas += 1;
@@ -72,11 +70,6 @@
     for (i = 0; i < propriedadesLidas; i += 1) {
       var propriedade = /** @type {any} */ (propriedades[i]);
       if (!propriedade) continue;
-      var cursor = propriedade, path = [], depth = 0;
-      while (cursor && cursor.parentProperty && depth < 32) {
-        path.unshift(String(cursor.propertyIndex)); cursor = cursor.parentProperty; depth += 1;
-      }
-      identity.push("P" + (cursor ? (typeof cursor.id === "number" ? cursor.id : cursor.index) : "") + ":" + path.join("."));
       if (propriedade.propertyType !== PropertyType.PROPERTY) continue;
       if (propriedade.canSetExpression === true) aplicaveis += 1;
       if (typeof propriedade.numKeys === "number" && propriedade.numKeys > 0) comKeyframes += 1;
@@ -96,7 +89,9 @@
     }
 
     return {
-      selectionSignature: identity.join("|"),
+      // Calculada em selection-signature.jsx, o mesmo modulo que
+      // `ae.keys.ease.apply` usa para recusar uma selecao obsoleta.
+      selectionSignature: MotionSelection.signature(comp),
       selectionLayerCount: totalCamadas,
       selectionPropertyCount: totalPropriedades,
       selectionExpressibleCount: aplicaveis,

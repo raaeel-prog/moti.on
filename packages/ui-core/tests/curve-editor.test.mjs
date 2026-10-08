@@ -15,7 +15,7 @@ const labels = {
   graph: "Easing graph", modeMenu: "Mode",
   modes: { bezier: "Bezier", back: "Back", elastic: "Elastic", bounce: "Bounce" },
   directions: { in: "In", out: "Out", inOut: "In Out" }, directionGroup: "Direction",
-  speedView: "Speed graph", valueView: "Value graph", reset: "Reset", addPointHint: "Ctrl-click to add a point",
+  speedView: "Speed graph", valueView: "Value graph", reset: "Reset", addPointHint: "Click the curve to add a point",
   outHandle: "Out handle", inHandle: "In handle", point: "Point", pointIn: "Point in handle", pointOut: "Point out handle",
   speedLeft: "Out influence", speedRight: "In influence", peak: "Peak speed",
   amp: "amp", freq: "freq", decay: "decay", start: "start", overshoot: "overshoot", inHalf: "In half", outHalf: "Out half"
@@ -140,27 +140,39 @@ test("overlay toggles the view only in bezier mode without points", () => {
   assert.equal(back.overlay.title, labels.reset);
 });
 
-test("speed markers step the influence with ArrowUp/ArrowDown", () => {
+test("speed markers step the influence: ArrowDown = more, ArrowUp = less", () => {
   const { byRole, commits } = mount({ view: "speed" });
   const markers = byRole("slider").filter(s => s.getAttribute("class") === "ch-curve__marker");
   assert.equal(markers.length, 2);
+  markers[0].keydown("ArrowDown");
+  assert.equal(commits.at(-1).reason, "keyboard");
+  assert.equal(commits.at(-1).model.curve.x1, 0.26, "ArrowDown raises x1 (more out influence)");
   markers[0].keydown("ArrowUp");
-  assert.equal(commits.at(-1).model.curve.x1, 0.26);
-  markers[1].keydown("ArrowUp");
-  assert.equal(commits.at(-1).model.curve.x2, 0.24);
+  assert.equal(commits.at(-1).model.curve.x1, 0.25, "ArrowUp lowers x1");
+  markers[1].keydown("ArrowDown");
+  assert.equal(commits.at(-1).model.curve.x2, 0.24, "ArrowDown lowers x2 (more in influence: 1 - x2 up)");
+  markers[1].keydown("ArrowUp", { shiftKey: true });
+  assert.equal(commits.at(-1).model.curve.x2, 0.34, "Shift steps by 0.1");
 });
 
-test("ctrl-click on the value path adds a point and Delete on it removes the point", () => {
-  const { mainPath, byRole, commits, editor, root } = mount();
+test("plain click on the hit path adds a point and Delete on it removes the point", () => {
+  const { byRole, commits, editor, root, doc } = mount();
   // Fake DOM has no geometry; the editor falls back to getBoundingClientRect.
   const svg = root.getElementsByTagName("svg").find(n => n.getAttribute("class") === "ch-curve__svg");
   svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 368, height: 368 });
-  mainPath.emit("click", { ctrlKey: true, clientX: CURVE_PAD + CURVE_PLOT * 0.5, clientY: CURVE_PAD + CURVE_PLOT * 0.5, button: 0 });
+  const hit = root.getElementsByTagName("path").find(p => p.getAttribute("class") === "ch-curve__hit");
+  assert.ok(hit, "hit path missing");
+  const at = { clientX: CURVE_PAD + CURVE_PLOT * 0.5, clientY: CURVE_PAD + CURVE_PLOT * 0.5, button: 0, pointerId: 1, isPrimary: true };
+  hit.emit("pointerdown", at);
+  assert.equal(commits.length, 0, "nothing committed while the press is armed");
+  hit.emit("pointerup", at);
   assert.equal(commits.at(-1).reason, "point");
   assert.equal(commits.at(-1).model.points.length, 1);
   assert.equal(commits.at(-1).model.points[0].x, 0.5);
   const knot = byRole("slider").find(s => s.getAttribute("aria-label") === labels.point);
   assert.ok(knot, "point knot missing");
+  assert.equal(knot.getAttribute("data-active"), "true");
+  assert.equal(doc.activeElement, knot);
   assert.equal(byRole("slider").filter(s => [labels.pointIn, labels.pointOut].includes(s.getAttribute("aria-label"))).length, 2);
   assert.equal(editor.getModel().points.length, 1);
   knot.keydown("Delete");

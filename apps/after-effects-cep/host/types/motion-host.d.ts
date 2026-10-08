@@ -38,6 +38,7 @@ type MotionErrorCodes = {
   readonly INVALID_PRESET: string;
   readonly EXPRESSION_CONFLICT: string;
   readonly KEYFRAME_CONFLICT: string;
+  readonly STALE_SELECTION: string;
   readonly TRACK_CONFLICT: string;
   readonly ASSET_LICENSE_BLOCKED: string;
   readonly USER_CANCELLED: string;
@@ -461,6 +462,14 @@ interface MotionKeyEditPlan {
   targets: MotionPropertySnapshot[];
   error: MotionCommandFailure | null;
 }
+
+/** selection-signature.jsx: assinatura da selecao, compartilhada por context-read e keys-ease. */
+declare const MotionSelection: {
+  signature(comp: CompItem): string;
+  propertyToken(property: unknown): string;
+  MAX_LAYERS: number;
+  MAX_PROPERTIES: number;
+};
 
 declare const MotionKeyframes: {
   planEdit(comp: CompItem, operation: string, destination: string): MotionKeyEditPlan;

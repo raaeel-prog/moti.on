@@ -49,6 +49,8 @@ const EXPECTED_DIST_FILES = [
   "after-effects-cep/client/index.html",
   "after-effects-cep/client/lib/CSInterface.js",
   "after-effects-cep/client/main.js",
+  "after-effects-cep/client/quick-ease.html",
+  "after-effects-cep/client/quick-ease.js",
   "after-effects-cep/host/index.jsx",
   "after-effects-cep/styles/theme.css",
 
@@ -238,6 +240,9 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       // porque Parallax e Cylinder ja precisam do mesmo bloco, e duas copias de
       // "onde comeca e onde termina" divergiriam no primeiro caso de borda.
       "MotionRigMeta",
+      // Assinatura da selecao, partilhada por `ae.context.read` e pela
+      // reaplicacao segura de `ae.keys.ease.apply`. Interna, sem dispatch.
+      "MotionSelection",
       // Signature text looks used only by the preset library's effect stage.
       // No dispatch surface and no Undo group: it receives the library's own
       // owned-effect and expression helpers and resolves parameters by match name.
@@ -258,8 +263,8 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
   );
 });
 
-test("o bundle do After Effects chama o dispatcher e nenhum comando por nome", async () => {
-  const client = await readFile(path.join(dist, "after-effects-cep/client/main.js"), "utf8");
+for (const bundleName of ["main.js", "quick-ease.js"]) test(`o bundle do After Effects (${bundleName}) chama o dispatcher e nenhum comando por nome`, async () => {
+  const client = await readFile(path.join(dist, "after-effects-cep/client", bundleName), "utf8");
   const manifest = await readFile(path.join(dist, "after-effects-cep/CSXS/manifest.xml"), "utf8");
 
   assert.match(client, /MotionAE\.dispatch\(/);
@@ -307,7 +312,7 @@ test("o bundle do Premiere registra os comandos e nao contem evalScript", async 
 test("os bundles não contêm URL literal fora da allowlist", async () => {
   const allowed = new Set(["http://www.w3.org/2000/svg"]);
 
-  for (const relativePath of ["after-effects-cep/client/main.js", "premiere-uxp/main.js"]) {
+  for (const relativePath of ["after-effects-cep/client/main.js", "after-effects-cep/client/quick-ease.js", "premiere-uxp/main.js"]) {
     const bundle = await readFile(path.join(dist, relativePath), "utf8");
     const rejected = (bundle.match(/https?:\/\/[^"'\s)]+/g) || []).filter(
       (url) => !allowed.has(url)

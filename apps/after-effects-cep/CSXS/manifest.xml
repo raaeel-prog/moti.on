@@ -7,6 +7,7 @@
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <ExtensionList>
     <Extension Id="com.motion.plugin.ae.panel" Version="0.2.0" />
+    <Extension Id="com.motion.plugin.ae.quick-ease" Version="0.2.0" />
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>
@@ -44,6 +45,39 @@
             <MaxSize>
               <Height>1600</Height>
               <Width>1600</Width>
+            </MaxSize>
+          </Geometry>
+        </UI>
+      </DispatchInfo>
+    </Extension>
+    <!-- Janela flutuante "Suavizacao rapida": mesma curva e mesmo comando do painel,
+         numa janela Modeless (CEP 12 Cookbook) aberta pelo painel via
+         requestOpenExtension ou pelo menu de extensoes. O painel acima precisa
+         continuar PRIMEIRO: validate.mjs le o primeiro MinSize. -->
+    <Extension Id="com.motion.plugin.ae.quick-ease">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./client/quick-ease.html</MainPath>
+          <CEFCommandLine><Parameter>--enable-nodejs</Parameter></CEFCommandLine>
+        </Resources>
+        <Lifecycle>
+          <AutoVisible>false</AutoVisible>
+        </Lifecycle>
+        <UI>
+          <Type>Modeless</Type>
+          <Menu>Moti.on - Suavizacao rapida</Menu>
+          <Geometry>
+            <Size>
+              <Height>360</Height>
+              <Width>300</Width>
+            </Size>
+            <MinSize>
+              <Height>320</Height>
+              <Width>280</Width>
+            </MinSize>
+            <MaxSize>
+              <Height>900</Height>
+              <Width>700</Width>
             </MaxSize>
           </Geometry>
         </UI>

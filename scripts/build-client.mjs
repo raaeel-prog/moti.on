@@ -35,9 +35,9 @@ const root = path.resolve(scriptDir, "..");
  */
 const CEP_CHROMIUM_TARGET = "chrome88";
 
-export async function buildAeClient(outputPath) {
+export async function buildAeClient(outputPath, entry = "main.ts") {
   const result = await esbuild.build({
-    entryPoints: [path.join(root, "apps", "after-effects-cep", "client", "src", "main.ts")],
+    entryPoints: [path.join(root, "apps", "after-effects-cep", "client", "src", entry)],
     outfile: outputPath,
     bundle: true,
     // IIFE, nao ESM: o painel carrega por <script src>, e o CEP nao serve

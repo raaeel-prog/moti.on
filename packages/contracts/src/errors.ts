@@ -31,6 +31,7 @@ export const ERROR_CODES = [
   "INVALID_PRESET",
   "EXPRESSION_CONFLICT",
   "KEYFRAME_CONFLICT",
+  "STALE_SELECTION",
   "TRACK_CONFLICT",
   "ASSET_LICENSE_BLOCKED",
   "USER_CANCELLED",
@@ -87,6 +88,8 @@ export const ERROR_META: Record<ErrorCode, ErrorMeta> = {
   INVALID_PRESET: { recoverable: true, actionKey: "error.action.checkSettings" },
   EXPRESSION_CONFLICT: { recoverable: true, actionKey: "error.action.chooseConflictMode" },
   KEYFRAME_CONFLICT: { recoverable: true, actionKey: "error.action.chooseConflictMode" },
+  // A selecao mudou entre o agendamento e a escrita: nada foi tocado.
+  STALE_SELECTION: { recoverable: true, actionKey: "error.action.reselectAndRetry" },
   TRACK_CONFLICT: { recoverable: true, actionKey: "error.action.chooseTrack" },
   ASSET_LICENSE_BLOCKED: { recoverable: false, actionKey: "error.action.chooseAnotherAsset" },
   USER_CANCELLED: { recoverable: true, actionKey: "error.action.none" },
