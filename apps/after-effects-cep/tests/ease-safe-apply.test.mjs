@@ -10,7 +10,6 @@ async function load(file) {
 const { createEaseController } = await load("ease-controller.ts");
 const { createEaseSync, createEaseApplyLock, readSharedDraft, writeSharedDraft, EASE_DRAFT_KEY } = await load("ease-sync.ts");
 const { visiblePoll } = await load("visible-poll.ts");
-const { createEaseAutoOpen } = await load("ease-auto-open.ts");
 const { DEFAULT_EASE, cloneEaseDraft, easeCommandArgs } = await load("ease-args.ts");
 
 const ok = data => ({ protocolVersion: 1, requestId: "r", ok: true, data, warnings: [], error: null });
@@ -118,24 +117,6 @@ test("visiblePoll reads while visible without focus, one read at a time, and sto
   doc.hidden = true; listeners.visibilitychange(); const before = reads; release?.(); await wait(25);
   assert.equal(reads, before, "no reads while hidden");
   poll.dispose();
-});
-
-test("auto-open opens only for a new selection with keys, and never again after the window was closed on it", async () => {
-  const closedListeners = [];
-  const events = { extensionId: () => "p", dispatch() {}, listen: (type, fn) => { closedListeners.push(fn); return () => {}; }, requestOpenExtension: () => true, closeExtension() {}, setWindowTitle() {}, available: () => true };
-  const doc = { hidden: false, defaultView: null, addEventListener() {}, removeEventListener() {} };
-  let context = { selectionSignature: "S1", selectionSelectedKeyCount: 2, isComposition: true };
-  const opened = [];
-  const watcher = createEaseAutoOpen({ doc, events, intervalMs: 5, enabled: () => true, isBusy: () => false, read: async () => context, open: () => opened.push(context.selectionSignature) });
-  await wait(20); assert.deepEqual(opened, ["S1"]);
-  await wait(20); assert.deepEqual(opened, ["S1"], "same selection is not reopened");
-  context = { selectionSignature: "S1", selectionSelectedKeyCount: 0, isComposition: true }; await wait(15);
-  context = { selectionSignature: "S2", selectionSelectedKeyCount: 1, isComposition: true }; await wait(20);
-  assert.deepEqual(opened, ["S1", "S2"]);
-  closedListeners.forEach(fn => fn({ type: "closed", data: "S3", extensionId: "q" }));
-  context = { selectionSignature: "S3", selectionSelectedKeyCount: 1, isComposition: true }; await wait(20);
-  assert.deepEqual(opened, ["S1", "S2"], "closed by the user for S3: stays closed");
-  watcher.dispose();
 });
 
 test("easeCommandArgs forwards expectedSelection and a valid session only", () => {

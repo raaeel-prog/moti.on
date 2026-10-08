@@ -137,11 +137,6 @@ const extendScript = await buildExtendScript(
 const aeClient = await buildAeClient(
   path.join(dist, "after-effects-cep", "client", "main.js")
 );
-// Segunda extensao do mesmo bundle: a janela flutuante de suavizacao.
-const aeQuickEase = await buildAeClient(
-  path.join(dist, "after-effects-cep", "client", "quick-ease.js"),
-  "quick-ease.ts"
-);
 
 const premiereClient = await buildPremiereClient(
   path.join(dist, "premiere-uxp", "main.js")
@@ -164,6 +159,5 @@ console.log(
   `Build concluído em dist/.
   ExtendScript: ${extendScript.files} fonte(s), ${extendScript.bytes} bytes.
   Cliente AE:   ${aeClient.bytes} bytes.
-  Janela ease:  ${aeQuickEase.bytes} bytes.
   Cliente PPro: ${premiereClient.bytes} bytes.`
 );

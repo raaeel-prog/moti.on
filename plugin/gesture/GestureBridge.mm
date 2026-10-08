@@ -2,6 +2,7 @@
 #include "AEConfig.h"
 #include "AE_GeneralPlug.h"
 #include "AEGP_SuiteHandler.h"
+#include "QuickBar.h"
 #import <Foundation/Foundation.h>
 #include <chrono>
 #include <cmath>
@@ -97,7 +98,7 @@ static A_Err begin(Bridge* p,NSDictionary* d){
 }
 static void response(Bridge* p,A_Err error,bool canceled=false){save(p,@"response.json",@{@"version":@1,@"sequence":@(p->sequence),@"session":ns(p->session),@"gesture":ns(p->gesture),@"error":@(error),@"open":@(p->opened),@"canceled":@(canceled),@"value":@(p->current)});}
 static A_Err idle(AEGP_GlobalRefcon,AEGP_IdleRefcon ref,A_long* sleep){
-    auto* p=reinterpret_cast<Bridge*>(ref);@autoreleasepool{
+    auto* p=reinterpret_cast<Bridge*>(ref);QuickBarIdle();@autoreleasepool{
         *sleep=p->opened?1:6;NSString* path=[ns(p->root) stringByAppendingPathComponent:@"request.json"];
         struct stat info{};NSData* bytes=nil;
         if(!lstat([path fileSystemRepresentation],&info)&&S_ISREG(info.st_mode)&&info.st_uid==getuid()&&info.st_size>0&&info.st_size<=4096)bytes=[NSData dataWithContentsOfFile:path];
@@ -124,7 +125,7 @@ static A_Err idle(AEGP_GlobalRefcon,AEGP_IdleRefcon ref,A_long* sleep){
         if(p->opened&&(Clock::now()-p->touched>std::chrono::seconds(4)||Clock::now()-p->started>std::chrono::seconds(120)||selected(p))){A_Err e=finish(p,true);response(p,e?e:A_Err_GENERIC,true);}
     }return 0;
 }
-static A_Err death(AEGP_GlobalRefcon,AEGP_DeathRefcon ref){auto* p=reinterpret_cast<Bridge*>(ref);finish(p,true);@autoreleasepool{[[NSFileManager defaultManager] removeItemAtPath:[ns(p->root) stringByAppendingPathComponent:@"handshake.json"] error:nil];}delete p;return 0;}
+static A_Err death(AEGP_GlobalRefcon,AEGP_DeathRefcon ref){auto* p=reinterpret_cast<Bridge*>(ref);QuickBarStop();finish(p,true);@autoreleasepool{[[NSFileManager defaultManager] removeItemAtPath:[ns(p->root) stringByAppendingPathComponent:@"handshake.json"] error:nil];}delete p;return 0;}
 extern "C" __attribute__((visibility("default"))) A_Err GestureBridgeMain(SPBasicSuite* basic,A_long,A_long,AEGP_PluginID id,AEGP_GlobalRefcon* out){
     auto* p=new Bridge{};p->basic=basic;p->id=id;@autoreleasepool{
         p->root=utf([NSHomeDirectory() stringByAppendingPathComponent:@"Library/Caches/Moti.on/Gestures"]);
@@ -132,5 +133,6 @@ extern "C" __attribute__((visibility("default"))) A_Err GestureBridgeMain(SPBasi
         p->token=utf([[NSUUID UUID] UUIDString]);
         save(p,@"handshake.json",@{@"version":@1,@"token":ns(p->token),@"capabilities":@[@"phase-number"],@"hostProof":@YES,@"pid":@(getpid())});
     }
+    QuickBarStart();
     AEGP_SuiteHandler s(basic);A_Err e=s.RegisterSuite5()->AEGP_RegisterIdleHook(id,idle,reinterpret_cast<AEGP_IdleRefcon>(p));if(!e)e=s.RegisterSuite5()->AEGP_RegisterDeathHook(id,death,reinterpret_cast<AEGP_DeathRefcon>(p));*out=reinterpret_cast<AEGP_GlobalRefcon>(p);return e;
 }

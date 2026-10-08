@@ -1364,9 +1364,9 @@ lugar para operações compostas.
 - segmento com pontos intermediários, Elastic e Bounce gravados por quadro, aplicação ao vivo com um Undo por ajuste concluído;
 - reaplicar sobre keys geradas substitui em vez de acumular; seleção obsoleta nunca recebe escrita.
 
-### 15.8 Editor flutuante (extensão `Modeless`)
+### 15.8 Barra rápida na timeline (nativa)
 
-Segunda extensão `com.motion.plugin.ae.quick-ease` no mesmo bundle (CEP 12: `Type=Modeless`, `AutoVisible=false`, ~300×360, mínimo 280×320), aberta pelo botão "Suavização rápida" da view de Suavização (`CSInterface.requestOpenExtension`) ou pelo menu de extensões. Reutiliza o editor de curva em modo compacto (chips In/Out/InOut/Linear/Ease, sem biblioteca), o mesmo controlador de aplicação e o mesmo comando. Rascunho e sessão compartilhados em `motion.ease.draft.v1` com evento `com.motion.plugin.ease.sync`; um único escritor no host por vez (lease `motion.ease.lock.v1`). Sem seleção válida mostra orientação; modos que exigem segmento pedem dois keyframes consecutivos. "Abrir automaticamente ao selecionar keyframes" é opcional, desligado por padrão e só é oferecido quando a capability `QUICK_EASE_AUTO_OPEN_PROVEN` for ligada após a prova em `docs/research/cep-modeless-quick-ease.md`.
+Ao selecionar keyframes, uma barra compacta aparece junto ao cursor (que acabou de selecioná-los), acima dele ou abaixo quando falta espaço, com fade + escala ease-out (só fade com "Reduzir movimento"). Botões: Ease, In, Out, InOut, Linear e até quatro favoritos da biblioteca (ícone da curva, nome no tooltip e no rótulo de acessibilidade), "Editor completo" (abre a view Suavização) e Fechar. A barra continua aberta depois de um preset para comparar outros nas mesmas keys; Esc, clique fora ou Fechar a dispensa para aquela seleção. Implementação: `NSPanel` não ativador em `plugin/gesture/QuickBar.mm`, hospedado pela AEGP Live Gestures, com o mesmo transporte de arquivos (`~/Library/Caches/Moti.on/QuickBar`, token por sessão do AE); a decisão de mostrar e a escrita no projeto ficam no painel (`client/src/quick-bar.ts` → `ae.keys.ease.apply`). Preferência `motion.ease.quickBar.v1`, ligada por padrão. A janela CEP `Modeless` anterior (`com.motion.plugin.ae.quick-ease`) foi removida.
 
 ---
 

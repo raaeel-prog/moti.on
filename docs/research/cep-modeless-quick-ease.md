@@ -3,7 +3,8 @@
 - **Pergunta:** o Moti.on pode abrir, a partir do painel dockado, uma segunda janela CEP com a curva de suavização, sincronizar o rascunho entre as duas superfícies e abrir essa janela automaticamente quando keyframes são selecionados — sem interromper a seleção na timeline?
 - **Data da decisão:** 2026-10-08
 - **Host/versão alvo:** After Effects 25.0+ (manifesto `[25.0,99.9]`), CEP 12 (`RequiredRuntime CSXS 12.0`).
-- **Status:** `PARTIAL` — documentado e implementado; execução em host real `NOT RUN`. Abertura automática entregue **desligada por capability** (`QUICK_EASE_AUTO_OPEN_PROVEN = false` em `apps/after-effects-cep/client/src/capabilities.ts`).
+- **Status:** `SUPERSEDED` (2026-10-08) — a janela CEP foi removida e substituída pela barra nativa junto ao cursor (`plugin/gesture/QuickBar.mm`, ver MASTER_BUILD_SPEC §15.8). Registro histórico abaixo.
+- **Status anterior:** `PARTIAL` — documentado e implementado; execução em host real `NOT RUN`. Abertura automática entregue **desligada por capability** (`QUICK_EASE_AUTO_OPEN_PROVEN = false` em `apps/after-effects-cep/client/src/capabilities.ts`).
 
 ## Evidências
 

@@ -4,6 +4,12 @@ export interface GestureFiles {
   read(name:"handshake.json"|"response.json"):string|undefined;
   write(text:string):void;
 }
+/** Same transport, any of the native folders (Gestures, QuickBar). */
+export interface NativeFiles {
+  read(name:"handshake.json"|"response.json"|"event.json"):string|undefined;
+  write(text:string):void;
+}
+export type NativeFolder="Gestures"|"QuickBar";
 interface CepFs {
   readFile(path:string):{err:number;data:string};
   writeFile(path:string,data:string):{err:number};
@@ -14,7 +20,10 @@ declare const CSInterface: new()=>{getSystemPath(type:string):string};
 declare const SystemPath:{USER_DATA:string;EXTENSION:string};
 
 /** Fixed, private macOS path. Never accepts a host/user-supplied filesystem path. */
-export function cepGestureFiles(view:Window|null):GestureFiles|undefined {
+export function cepGestureFiles(view:Window|null):GestureFiles|undefined {return cepNativeFiles(view,"Gestures");}
+
+/** `~/Library/Caches/Moti.on/<folder>`, resolved from CEP's own paths only. */
+export function cepNativeFiles(view:Window|null,folder:NativeFolder):NativeFiles|undefined {
   const fs=(view as (Window&{cep?:{fs?:CepFs}})|null)?.cep?.fs;
   if(!fs||typeof CSInterface==="undefined"||typeof SystemPath==="undefined")return;
   const paths=new CSInterface();
@@ -26,7 +35,7 @@ export function cepGestureFiles(view:Window|null):GestureFiles|undefined {
   const userRoot=/^(\/Users\/[^/]+)\/Library\/Application Support(?:\/Adobe(?:\/CEP)?)?\/?$/.exec(userData);
   const home=installed?.[1]??userRoot?.[1];
   if(!home)return;
-  const root=`${home}/Library/Caches/Moti.on/Gestures`;
+  const root=`${home}/Library/Caches/Moti.on/${folder}`;
   const report=(stage:string,code:number):void=>{try{fs.writeFile(`${root}/client-status.json`,JSON.stringify({version:1,stage,code}));}catch{/* A diagnostic must never interrupt the gesture. */}};
   return {
     read(name){const result=fs.readFile(`${root}/${name}`);return result.err===0&&typeof result.data==="string"&&result.data.length<=4096?result.data:undefined;},

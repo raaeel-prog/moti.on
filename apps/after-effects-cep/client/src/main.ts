@@ -35,12 +35,12 @@ import { renderManagedTools } from "./managed-tools-editor.js";
 import { focusedPoll } from "./focused-poll.js";
 import { createGradientEditor } from "./gradient-editor.js";
 import { DEFAULT_EASE, cloneEaseDraft, easeNeedsPair, type EaseDraft } from "./ease-args.js";
-import { readEaseAutoOpen, readEaseLive, writeEaseAutoOpen, writeEaseLive } from "./ease-library.js";
+import { EASE_PRESETS, readEaseAutoOpen, readEaseLibrary, readEaseLive, writeEaseAutoOpen, writeEaseLive, type EaseCurve } from "./ease-library.js";
 import { createEaseController, type EaseApplyOutcome, type EaseController } from "./ease-controller.js";
 import { EASE_NAVIGATE_EVENT, createEaseApplyLock, createEaseSync, readSharedDraft } from "./ease-sync.js";
-import { QUICK_EASE_EXTENSION_ID, createCepEvents, type CepEvents } from "./cep-events.js";
-import { createEaseAutoOpen } from "./ease-auto-open.js";
-import { QUICK_EASE_AUTO_OPEN_PROVEN } from "./capabilities.js";
+import { PANEL_EXTENSION_ID, createCepEvents, type CepEvents } from "./cep-events.js";
+import { createQuickBar, type QuickBar, type QuickBarItem } from "./quick-bar.js";
+import { cepNativeFiles } from "./native-gesture.js";
 import type { GradientReadData } from "@motion/contracts";
 import {
   anchorGrid,
@@ -3360,9 +3360,9 @@ function renderSettings(
     },
     onRefresh: () => regions.shell.rerender(),
     onNavigate: viewId => regions.shell.navigate(viewId),
-    easeAutoOpen: QUICK_EASE_AUTO_OPEN_PROVEN ? {
+    easeAutoOpen: quickBar?.available() ? {
       checked: readEaseAutoOpen(easeStorage()),
-      onChange: value => { writeEaseAutoOpen(easeStorage(), value); }
+      onChange: value => { writeEaseAutoOpen(easeStorage(), value); if (!value) quickBar?.hide(); }
     } : null
   });
   const account = createAccountView(document, i18n.locale());
@@ -6228,13 +6228,6 @@ function renderEase(regions: RenderRegions, i18n: I18n): void {
     onApply: () => { if (wiringAtual && !easeDisabledReason(i18n)) void controller.apply(); }
   });
   easeEditorHandle = editor;
-  // The floating window: same curve, same apply path, next to the timeline.
-  const quick = createActionButton(document, {
-    id: "ease-open-quick", label: i18n.t("ease.quick.open"), variant: "tertiary",
-    onPress: () => { if (!cepEvents?.requestOpenExtension(QUICK_EASE_EXTENSION_ID)) regions.shell.setStatus(i18n.t("ease.quick.outsideHost"), "error"); }
-  });
-  quick.element.title = i18n.t("ease.quick.openHint");
-  quick.element.classList.add("ch-ease-quick-open");
   disposeView = () => { actions.dispose(); editor.dispose(); easeEditorHandle = null; controller.cancelPending("close"); };
   regions.content.appendChild(editor.element);
   const sides = createElement(document, "div", "ch-ease-sides");
@@ -6243,7 +6236,6 @@ function renderEase(regions: RenderRegions, i18n: I18n): void {
   sides.appendChild(checkboxField(document, { id: "ease-apply-out", label: i18n.t("ease.applyOut"), checked: state.ease.applyOut,
     onChange: value => { state.ease.applyOut = value; regions.shell.rerender(); } }));
   (editor.element.querySelector(".ch-ease-main") ?? editor.element).appendChild(sides);
-  (editor.element.querySelector(".ch-ease-main") ?? editor.element).appendChild(quick.element);
 }
 
 function easeStorage(): Storage | undefined {
@@ -6254,6 +6246,24 @@ let easeController: EaseController | null = null;
 let easeEditorHandle: { setDraft(draft: EaseDraft): void } | null = null;
 let easeSync: ReturnType<typeof createEaseSync> | null = null;
 let cepEvents: CepEvents | null = null;
+/** Native bar next to the pointer in the Timeline (plugin/gesture/QuickBar.mm). */
+let quickBar: QuickBar | null = null;
+/** What the bar offers: the editor's quick chips, then up to four favourites. */
+function quickBarItems(i18n: I18n): QuickBarItem[] {
+  const quick: [string, Parameters<I18n["t"]>[0]][] = [["ease", "ease.preset.ease"], ["cubic-in", "ease.preset.in"], ["cubic-out", "ease.preset.out"], ["cubic-in-out", "ease.preset.inOut"], ["linear", "ease.preset.linear"]];
+  const library = readEaseLibrary(easeStorage());
+  const all = [...EASE_PRESETS, ...library.custom];
+  const items: QuickBarItem[] = [];
+  for (const [id, key] of quick) { const preset = all.find(p => p.id === id); if (preset) items.push({ id, label: `${i18n.t(key)} · ${preset.name}`, curve: preset.curve }); }
+  for (const id of library.favorites) {
+    if (items.length >= 9 || items.some(item => item.id === id)) continue;
+    const preset = all.find(p => p.id === id); if (preset) items.push({ id, label: preset.name, curve: preset.curve });
+  }
+  return items;
+}
+function quickBarCurve(id: string): EaseCurve | null {
+  return [...EASE_PRESETS, ...readEaseLibrary(easeStorage()).custom].find(p => p.id === id)?.curve ?? null;
+}
 
 /**
  * One controller for the panel lifetime: the host session (generated
@@ -6329,9 +6339,9 @@ async function refreshEaseContext(): Promise<void> {
 }
 
 /**
- * Cross-surface wiring, once per panel: reload the draft when the floating
- * window edits it, navigate to the ease view when it asks, and (gated) open it
- * automatically on a new keyframe selection.
+ * Cross-surface wiring, once per panel: keep the shared draft, navigate to the
+ * ease view when asked, and run the Timeline quick bar (shown next to the
+ * pointer on a new keyframe selection).
  */
 function startEaseSurfaces(shell: Shell, i18n: I18n, client: Client): () => void {
   cepEvents = createCepEvents();
@@ -6347,18 +6357,32 @@ function startEaseSurfaces(shell: Shell, i18n: I18n, client: Client): () => void
     }
   });
   const stopNavigate = cepEvents.listen(EASE_NAVIGATE_EVENT, () => { state.activeTool = "ease"; shell.navigate("ease"); });
-  const autoOpen = QUICK_EASE_AUTO_OPEN_PROVEN ? createEaseAutoOpen({
-    doc: document, events: cepEvents,
+  quickBar = createQuickBar({
+    doc: document, files: cepNativeFiles(window, "QuickBar"),
     enabled: () => readEaseAutoOpen(easeStorage()),
     isBusy: () => state.busy,
     read: async () => {
       const response = await client.execute<ContextData>("ae.context.read");
       wiringAtual?.logger.recordResponse("ae.context.read", response);
-      return response.ok && response.data ? response.data : null;
+      if (!response.ok || !response.data) return null;
+      state.context = response.data;
+      controller.onSelectionSignature(response.data.selectionSignature ?? null);
+      return response.data;
     },
-    open: () => { cepEvents?.requestOpenExtension(QUICK_EASE_EXTENSION_ID); }
-  }) : null;
-  return () => { stopNavigate(); easeSync?.dispose(); easeSync = null; autoOpen?.dispose(); controller.dispose(); easeController = null; };
+    items: () => quickBarItems(i18n),
+    labels: () => ({ editor: i18n.t("ease.quick.fullEditor"), close: i18n.t("ease.quick.close"), title: i18n.t("ease.quick.title") }),
+    // Same path as the panel's Apply: the preset becomes the draft, the controller writes it once (one Undo).
+    onPick: (id, signature) => {
+      const curve = quickBarCurve(id);
+      if (!curve || state.context?.selectionSignature !== signature) return;
+      state.ease = { ...state.ease, mode: "bezier", points: [], ...curve };
+      easeEditorHandle?.setDraft(state.ease);
+      easeSync?.publish(state.ease, controller.session());
+      void controller.apply();
+    },
+    onEditor: () => { cepEvents?.requestOpenExtension(PANEL_EXTENSION_ID); state.activeTool = "ease"; shell.navigate("ease"); }
+  });
+  return () => { stopNavigate(); easeSync?.dispose(); easeSync = null; quickBar?.dispose(); quickBar = null; controller.dispose(); easeController = null; };
 }
 
 function easeActionsDisabledReason(i18n: I18n): string | null {

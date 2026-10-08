@@ -56,14 +56,8 @@ test("os dois hosts recusam painel abaixo da largura mínima suportada de 280 px
   assert.match(aeMinimumSize, /<Width>\s*280\s*<\/Width>/);
 });
 
-test("a janela flutuante de suavização é uma segunda extensão Modeless do mesmo bundle", async () => {
+test("o bundle do After Effects tem uma única extensão: a barra rápida é nativa, não uma janela CEP", async () => {
   const ae = await readFile(path.join(root, "apps/after-effects-cep/CSXS/manifest.xml"), "utf8");
-  assert.match(ae, /<Extension Id="com\.motion\.plugin\.ae\.quick-ease" Version="0\.2\.0" \/>/);
-  const dispatch = ae.match(/<Extension Id="com\.motion\.plugin\.ae\.quick-ease">([\s\S]*?)<\/Extension>/)?.[1] ?? "";
-  assert.match(dispatch, /<MainPath>\.\/client\/quick-ease\.html<\/MainPath>/);
-  assert.match(dispatch, /<Type>Modeless<\/Type>/);
-  assert.match(dispatch, /<AutoVisible>false<\/AutoVisible>/, "A janela só abre a pedido: pelo painel, pelo menu ou pela abertura automática aprovada.");
-  assert.match(dispatch, /<MinSize>[\s\S]*?<Width>\s*280\s*<\/Width>/);
-  // O painel principal continua primeiro: validate.mjs lê o primeiro MinSize.
-  assert.ok(ae.indexOf('Extension Id="com.motion.plugin.ae.panel">') < ae.indexOf('Extension Id="com.motion.plugin.ae.quick-ease">'));
+  assert.equal((ae.match(/<Extension Id="/g) || []).length, 2, "uma entrada em ExtensionList e uma em DispatchInfoList");
+  assert.doesNotMatch(ae, /quick-ease/);
 });
