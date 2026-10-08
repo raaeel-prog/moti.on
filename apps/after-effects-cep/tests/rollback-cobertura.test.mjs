@@ -182,6 +182,7 @@ async function fixture(comp, files) {
       "src/undo.jsx",
       "src/registry.jsx",
       "src/keyframe-operations.jsx",
+      "src/selection-signature.jsx",
       ...files,
       "src/dispatch.jsx"
     ],

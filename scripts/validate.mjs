@@ -161,6 +161,23 @@ const aeHostBundle = await readFile(await mustExist("after-effects-cep/host/inde
 const aeClientCode = stripCommentsAndStrings(aeClientBundle);
 const aeHostCode = stripCommentsAndStrings(aeHostBundle);
 
+// A janela flutuante de suavizacao e um segundo bundle do mesmo bundle CEP e
+// obedece as mesmas regras de fronteira: um unico evalScript (o adapter), o
+// bootstrap explicito por $.evalFile, nada de eval, marcador ou console.
+const aeQuickBundle = await readFile(await mustExist("after-effects-cep/client/quick-ease.js"), "utf8");
+const aeQuickCode = stripCommentsAndStrings(aeQuickBundle);
+const quickEvalCalls = (aeQuickCode.match(/\.evalScript\s*\(/g) || []).length;
+assert(quickEvalCalls === 1, `A janela de suavização chama evalScript ${quickEvalCalls} vezes. Somente o host adapter pode chamá-lo.`);
+assert(aeQuickBundle.includes("$.evalFile"), "A janela de suavização perdeu o bootstrap explícito do host por $.evalFile.");
+for (const [pattern, label] of [[/(^|[^.\w])eval\s*\(/, "eval("], [/new\s+Function\s*\(/, "new Function("]]) {
+  assert(!pattern.test(aeQuickCode), `Geração de código em runtime na janela de suavização: ${label}`);
+}
+assert(findWorkMarker(aeQuickBundle) === null, "Marcador de trabalho inacabado na janela de suavização.");
+assert(!/console\.(log|warn|error|info|debug)\s*\(/.test(aeQuickCode), "console na janela de suavização. Use o logger.");
+assert(/Extension Id="com\.motion\.plugin\.ae\.quick-ease"/.test(aeManifest), "Extensão da janela de suavização ausente do manifest.");
+assert(/<Type>Modeless<\/Type>/.test(aeManifest), "A janela de suavização precisa ser Modeless.");
+assert(/<MainPath>\.\/client\/quick-ease\.html<\/MainPath>/.test(aeManifest), "MainPath da janela de suavização inesperado.");
+
 // Um unico ponto de contato com o evalScript. Ele recebe uma string de codigo
 // que o After Effects avalia com acesso total ao projeto e ao sistema de
 // arquivos; espalhar chamadas tornaria impossivel auditar o que atravessa.
@@ -282,7 +299,7 @@ assert(
 );
 
 // CSP nos dois paineis.
-for (const htmlPath of ["premiere-uxp/index.html", "after-effects-cep/client/index.html"]) {
+for (const htmlPath of ["premiere-uxp/index.html", "after-effects-cep/client/index.html", "after-effects-cep/client/quick-ease.html"]) {
   const html = await readFile(await mustExist(htmlPath), "utf8");
   assert(
     /http-equiv="Content-Security-Policy"/.test(html),

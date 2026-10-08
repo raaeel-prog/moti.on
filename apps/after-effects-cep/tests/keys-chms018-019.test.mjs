@@ -164,6 +164,7 @@ async function fixture(comp, files) {
       "src/registry.jsx",
       "src/expression-templates.jsx",
       "src/keyframe-operations.jsx",
+      "src/selection-signature.jsx",
       ...files,
       "src/dispatch.jsx"
     ],

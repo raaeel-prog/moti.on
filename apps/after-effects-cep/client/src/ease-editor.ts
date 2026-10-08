@@ -15,7 +15,22 @@ export interface EaseEditorOptions {
   /** Explicit apply request (double-click on a preset). */
   onApply(): void;
   onLiveToggle(live: boolean): void;
+  /** A gesture was cancelled (Escape / pointer cancel): the draft already reverted via onChange. */
+  onCancel?(): void;
+  /**
+   * Floating-window layout: no library shelf, no numeric row; a row of quick
+   * preset chips instead. The curve, mode, direction, view and live toggle stay.
+   */
+  compact?: boolean;
 }
+
+export interface EaseEditorHandle { element: HTMLElement; setDraft(draft: EaseDraft): void; dispose(): void }
+
+/** Presets offered as chips in the compact layout, by `EASE_PRESETS` id. */
+const QUICK_PRESETS: { id: string; labelKey: "ease.preset.in" | "ease.preset.out" | "ease.preset.inOut" | "ease.preset.linear" | "ease.preset.ease" }[] = [
+  { id: "ease", labelKey: "ease.preset.ease" }, { id: "cubic-in", labelKey: "ease.preset.in" },
+  { id: "cubic-out", labelKey: "ease.preset.out" }, { id: "cubic-in-out", labelKey: "ease.preset.inOut" }, { id: "linear", labelKey: "ease.preset.linear" }
+];
 
 function modelOf(draft: EaseDraft): CurveEditorModel {
   return {
@@ -42,7 +57,7 @@ function mergeModel(draft: EaseDraft, model: CurveEditorModel): EaseDraft {
 
 const sameCurve = (a: EaseCurve, b: EaseCurve): boolean => a.x1 === b.x1 && a.y1 === b.y1 && a.x2 === b.x2 && a.y2 === b.y2;
 
-export function createEaseEditor(doc: Document, options: EaseEditorOptions): { element: HTMLElement; dispose(): void } {
+export function createEaseEditor(doc: Document, options: EaseEditorOptions): EaseEditorHandle {
   const t = options.i18n.t;
   let draft = cloneEaseDraft(options.draft);
   let storage: Storage | undefined;
@@ -55,6 +70,7 @@ export function createEaseEditor(doc: Document, options: EaseEditorOptions): { e
   const win = doc.defaultView;
   const root = createElement(doc, "div", "ch-ease-editor");
   root.setAttribute("data-ease-mode", draft.mode);
+  if (options.compact) root.setAttribute("data-compact", "true");
   const columns = createElement(doc, "div", "ch-ease-columns"); root.appendChild(columns);
   const editor = createElement(doc, "div", "ch-ease-main"); columns.appendChild(editor);
   const graphHeader = createElement(doc, "div", "ch-ease-graph-header");
@@ -99,19 +115,25 @@ export function createEaseEditor(doc: Document, options: EaseEditorOptions): { e
       inHalf: t("ease.inHalf"), outHalf: t("ease.outHalf")
     },
     onInput: model => { draft = mergeModel(draft, model); options.onChange(draft); refreshSidebar(false); },
-    onCommit: model => { draft = mergeModel(draft, model); options.onChange(draft); refreshSidebar(true); options.onCommit(draft); }
+    onCommit: model => { draft = mergeModel(draft, model); options.onChange(draft); refreshSidebar(true); options.onCommit(draft); },
+    onCancel: () => { refreshSidebar(true); options.onCancel?.(); }
   });
   editor.appendChild(curve.element);
+  const chips = createElement(doc, "div", "ch-ease-quick-presets");
+  chips.setAttribute("role", "group"); chips.setAttribute("aria-label", t("ease.presets"));
+  chips.hidden = !options.compact;
+  editor.appendChild(chips);
 
   const values = createElement(doc, "div", "ch-ease-values"); editor.appendChild(values);
   values.setAttribute("role", "group"); values.setAttribute("aria-label", t("ease.coordinates"));
+  const chipButtons: { element: HTMLButtonElement; curve: EaseCurve }[] = [];
   const bakeHint = createElement(doc, "p", "ch-hint", t("ease.bakeHint")); bakeHint.classList.add("ch-ease-bake-hint"); editor.appendChild(bakeHint);
 
   /** Numeric row and name follow the draft; `committedInput` keeps other drafts untouched. */
   function refreshSidebar(syncInputs: boolean, committedInput?: HTMLInputElement): void {
     root.setAttribute("data-ease-mode", draft.mode);
-    values.hidden = draft.mode !== "bezier";
-    bakeHint.hidden = !(draft.mode === "elastic" || draft.mode === "bounce");
+    values.hidden = draft.mode !== "bezier" || Boolean(options.compact);
+    bakeHint.hidden = !(draft.mode === "elastic" || draft.mode === "bounce") || Boolean(options.compact);
     if (syncInputs) {
       numeric.forEach((input, i) => {
         if (committedInput && input !== committedInput) return;
@@ -124,6 +146,7 @@ export function createEaseEditor(doc: Document, options: EaseEditorOptions): { e
     }
     const current = presetCurve();
     selectedButtons.forEach(b => b.element.setAttribute("aria-pressed", String(Boolean(current && sameCurve(b.curve, current)))));
+    chipButtons.forEach(b => b.element.setAttribute("aria-pressed", String(Boolean(current && sameCurve(b.curve, current)))));
     updateCurveName();
   }
 
@@ -199,7 +222,8 @@ export function createEaseEditor(doc: Document, options: EaseEditorOptions): { e
   }
   saveRow.appendChild(button(doc, { label: t("ease.save"), onClick: save }));
   saveRow.addEventListener("submit", e => { e.preventDefault(); save(); });
-  const shelf = createElement(doc, "section", "ch-ease-library"); shelf.setAttribute("aria-label", t("ease.library")); columns.appendChild(shelf);
+  const shelf = createElement(doc, "section", "ch-ease-library"); shelf.setAttribute("aria-label", t("ease.library"));
+  if (!options.compact) columns.appendChild(shelf);
   const shelfHeader = createElement(doc, "div", "ch-ease-library-header"); shelf.appendChild(shelfHeader);
   shelfHeader.appendChild(createElement(doc, "h3", "ch-ease-section-title", t("ease.presets")));
   const saveToggle = button(doc, { label: t("ease.saveCurve"), disabled: options.busy, onClick: () => {
@@ -229,6 +253,14 @@ export function createEaseEditor(doc: Document, options: EaseEditorOptions): { e
   };
   /** A preset is always a plain bezier: choosing one leaves any other mode and clears the points. */
   const choose = (preset: EaseCurve): void => update({ mode: "bezier", points: [], view: draft.view, ...preset });
+  for (const quick of QUICK_PRESETS) {
+    const preset = EASE_PRESETS.find(p => p.id === quick.id);
+    if (!preset) continue;
+    const chip = button(doc, { label: t(quick.labelKey), onClick: () => choose(preset.curve) });
+    chip.classList.add("ch-ease-chip"); chip.title = preset.name;
+    chip.addEventListener("dblclick", () => { choose(preset.curve); options.onApply(); });
+    chipButtons.push({ element: chip, curve: preset.curve }); chips.appendChild(chip);
+  }
   function drawLibrary(): void {
     stop(); updateCurveName(); grid.textContent = ""; selectedButtons.length = 0;
     const current = presetCurve();
@@ -267,8 +299,18 @@ export function createEaseEditor(doc: Document, options: EaseEditorOptions): { e
     if (!presets.length) grid.appendChild(createElement(doc, "p", "ch-hint", t("ease.empty")));
   }
   refreshSidebar(true);
-  drawLibrary();
-  return { element: root, dispose() { alive = false; stop(); curve.dispose(); } };
+  if (!options.compact) drawLibrary();
+  return {
+    element: root,
+    /** The other surface edited the draft: adopt it without emitting a commit. */
+    setDraft(next) {
+      draft = cloneEaseDraft(next);
+      curve.setModel(modelOf(draft));
+      live.setAttribute("aria-pressed", String(draft.live)); live.title = draft.live ? t("ease.liveOn") : t("ease.liveOff");
+      refreshSidebar(true);
+    },
+    dispose() { alive = false; stop(); curve.dispose(); }
+  };
 }
 
 export { DEFAULT_EASE };

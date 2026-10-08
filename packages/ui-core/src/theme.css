@@ -1059,6 +1059,8 @@ body,
   --dur-4: 1ms;
   --dur-5: 1ms;
   --stagger: 0ms;
+  --motion-instant: 1ms;
+  --motion-fast: 1ms;
   --ch-motion-fast: 1ms;
 }
 
@@ -1070,6 +1072,8 @@ body,
     --dur-4: 1ms;
     --dur-5: 1ms;
     --stagger: 0ms;
+    --motion-instant: 1ms;
+    --motion-fast: 1ms;
     --ch-motion-fast: 1ms;
   }
 }
@@ -1571,6 +1575,8 @@ body,
 .ch-curve__menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; margin: 0; padding: 4px; list-style: none; min-width: 148px;
   background: var(--ch-surface-control); border: 1px solid var(--ch-border-default); border-radius: var(--ch-radius-control); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
 .ch-curve__menu[hidden] { display: none; }
+.ch-curve__menu { animation: ch-curve-menu var(--ch-motion-fast) var(--ease-out); }
+@keyframes ch-curve-menu { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 .ch-curve__option { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 8px; border-radius: var(--ch-radius-control); color: var(--ch-text-primary); font-size: var(--ch-font-sm); cursor: pointer; }
 .ch-curve__option:hover { background: var(--ch-surface-hover, rgba(255, 255, 255, 0.06)); }
 .ch-curve__option[aria-selected="true"] { color: var(--ch-accent); }
@@ -1594,7 +1600,11 @@ body,
 .ch-curve__grid { stroke: var(--ch-border-subtle); stroke-width: 1; }
 .ch-curve__axis { fill: none; stroke: var(--curve-axis); stroke-width: 1.5; }
 .ch-curve__reference { stroke: var(--ch-text-muted); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.5; }
-.ch-curve__value { fill: none; stroke: var(--curve-path); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; cursor: grab; pointer-events: stroke; }
+/* The visible path never animates: it follows the pointer directly. Presses land on the invisible hit band. */
+.ch-curve__value { fill: none; stroke: var(--curve-path); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; transition-property: none; }
+.ch-curve__hit { fill: none; stroke: transparent; stroke-width: 12; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: crosshair; touch-action: none; }
+.ch-curve[data-view="speed"] .ch-curve__hit { cursor: grab; }
+.ch-curve[data-mode="back"] .ch-curve__hit, .ch-curve[data-mode="elastic"] .ch-curve__hit, .ch-curve[data-mode="bounce"] .ch-curve__hit { pointer-events: none; }
 .ch-curve__value--faint { stroke: var(--curve-faint); stroke-width: 1.5; opacity: 0.45; pointer-events: none; cursor: default; }
 .ch-curve__value--hidden { stroke: transparent; }
 .ch-curve__ghost { fill: none; stroke: var(--curve-ghost); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: 0.85; pointer-events: none; }
@@ -1607,11 +1617,20 @@ body,
 .ch-curve__chip-bg { fill: var(--ch-surface-control); stroke: var(--ch-border-default); stroke-width: 1; }
 .ch-curve__chip-path { fill: none; stroke: var(--curve-path); stroke-width: 1.5; }
 .ch-curve__stem { stroke: var(--curve-handle); stroke-width: 1; opacity: 0.8; }
-.ch-curve__handle, .ch-curve__point, .ch-curve__marker { fill: var(--curve-handle); stroke: transparent; stroke-width: 10; paint-order: stroke fill; cursor: grab; pointer-events: all; touch-action: none; }
-.ch-curve__point { stroke: var(--curve-ring); stroke-width: 2.5; paint-order: normal; }
-.ch-curve__marker { fill: var(--surface-deep); stroke: var(--curve-path); stroke-width: 2.5; paint-order: normal; }
+/* Dots: r=5 plus a 16 px transparent, non-scaling stroke → a ≥20 CSS px target at any dock width. */
+.ch-curve__handle, .ch-curve__point, .ch-curve__marker { fill: var(--curve-handle); stroke: transparent; stroke-width: 16; vector-effect: non-scaling-stroke; paint-order: stroke fill; cursor: grab; pointer-events: all; touch-action: none; transition: fill var(--ch-motion-fast) var(--ease-std); }
+.ch-curve__marker { fill: var(--surface-deep); }
+.ch-curve__handle:hover, .ch-curve__point:hover, .ch-curve__marker:hover { fill: var(--ch-text-primary); }
+.ch-curve__point[data-active="true"] { fill: var(--ch-accent); }
+/* Decorative rings sit just before their dot and never take the pointer. */
+.ch-curve__ring { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
+.ch-curve__ring--point { stroke: var(--curve-ring); }
+.ch-curve__ring--marker { stroke: var(--curve-path); }
+.ch-curve__ring[data-active="true"] { stroke: var(--ch-accent); }
+.ch-curve__point[data-pop="true"], .ch-curve__ring[data-pop="true"] { transform-box: fill-box; transform-origin: center; animation: ch-curve-pop var(--motion-instant) var(--ease-pop); }
+@keyframes ch-curve-pop { from { transform: scale(0.4); } to { transform: scale(1); } }
 .ch-curve__handle:focus-visible, .ch-curve__point:focus-visible, .ch-curve__marker:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
-.ch-curve[data-dragging] .ch-curve__svg, .ch-curve[data-dragging] .ch-curve__handle, .ch-curve[data-dragging] .ch-curve__value { cursor: grabbing; }
+.ch-curve[data-dragging] .ch-curve__svg, .ch-curve[data-dragging] .ch-curve__handle, .ch-curve[data-dragging] .ch-curve__point, .ch-curve[data-dragging] .ch-curve__marker, .ch-curve[data-dragging] .ch-curve__hit { cursor: grabbing; }
 .ch-curve__peak { fill: var(--curve-axis); font-size: 13px; font-variant-numeric: tabular-nums; pointer-events: none; }
 .ch-curve__overlay { position: absolute; top: 6px; right: 6px; width: 28px; min-width: 28px; height: 28px; min-height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: var(--ch-surface-control); border: 1px solid var(--ch-border-subtle); color: var(--ch-text-secondary); }
 .ch-curve__overlay[aria-pressed="true"] { color: var(--ch-accent); border-color: var(--ch-accent); }

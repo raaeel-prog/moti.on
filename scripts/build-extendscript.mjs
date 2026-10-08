@@ -85,6 +85,7 @@ export const HOST_SOURCE_ORDER = [
   "expression-templates.jsx",
   "transform-math.jsx",
   "keyframe-operations.jsx",
+  "selection-signature.jsx",
   "effect-operations.jsx",
   "grouped-controls.jsx",
   "live-controls.jsx",

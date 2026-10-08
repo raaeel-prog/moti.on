@@ -134,6 +134,7 @@ async function easePeloHost(curva, duracao, diferenca) {
       "src/undo.jsx",
       "src/registry.jsx",
       "src/keyframe-operations.jsx",
+      "src/selection-signature.jsx",
       "src/commands/keys-ease.jsx",
       "src/dispatch.jsx"
     ],

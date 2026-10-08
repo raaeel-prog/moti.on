@@ -12,6 +12,8 @@ export function createAeSettingsView(doc: Document, options: {
   onLocale(value: string): void;
   onRefresh(): void;
   onNavigate(view: "context" | "system" | "diagnostics"): void;
+  /** Offered only once the floating ease window is proven in a real host (capabilities.ts). */
+  easeAutoOpen?: { checked: boolean; onChange(value: boolean): void } | null;
 }): { element: HTMLElement; dispose(): void } {
   const { i18n, preferences, motionPreference } = options;
   let alive = true;
@@ -41,6 +43,13 @@ export function createAeSettingsView(doc: Document, options: {
     description: i18n.t("settings.reduceMotion.description"), checked: motionPreference.snapshot().internal,
     onChange: checked => { if (alive) { motionPreference.setInternal(checked); options.onRefresh(); } }
   }));
+  if (options.easeAutoOpen) {
+    accessibility.appendChild(checkboxField(doc, {
+      id: "settings-ease-auto-open", label: i18n.t("settings.easeAutoOpen.label"),
+      description: i18n.t("settings.easeAutoOpen.description"), checked: options.easeAutoOpen.checked,
+      onChange: checked => { if (alive) options.easeAutoOpen?.onChange(checked); }
+    }));
+  }
   const help = section("settings.help.title");
   help.classList.add("ch-settings-help");
   for (const view of ["context", "system", "diagnostics"] as const) {

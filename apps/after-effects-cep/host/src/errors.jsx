@@ -31,7 +31,9 @@
     "hostError.noChange": true,
     "hostError.writeRefusedRestored": true,
     "hostError.rollbackIncomplete": true,
-    "hostError.removedPartially": true
+    "hostError.removedPartially": true,
+    "hostError.staleSelection": true,
+    "hostError.easeGeneratedEdited": true
   };
 
   /** Parametros aceitos; cada um vira `{nome}` na frase traduzida. */

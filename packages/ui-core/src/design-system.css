@@ -98,3 +98,28 @@
 .ch-shell [data-motion~="disclosure-expand"] > summary { display:flex; align-items:center; gap:6px; list-style:none; cursor:pointer; }
 .ch-shell [data-motion~="disclosure-expand"] > summary::-webkit-details-marker { display:none; }
 .ch-shell [data-motion~="disclosure-expand"] > summary::before { content:""; flex:0 0 auto; width:0; height:0; border-top:4px solid transparent; border-bottom:4px solid transparent; border-left:5px solid currentColor; }
+
+/* --- Suavização: chips rápidos, botão da janela flutuante e a própria janela --- */
+.ch-ease-quick-presets { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 6px; }
+.ch-ease-quick-presets[hidden] { display: none; }
+.ch-ease-quick-presets .ch-ease-chip { flex: 1 1 auto; min-height: 26px; height: 26px; padding: 0 8px; border: 1px solid var(--border-muted, var(--ch-border-subtle)); border-radius: var(--radius-medium); background: transparent; font-size: 11px; color: var(--ch-text-secondary); }
+.ch-ease-quick-presets .ch-ease-chip[aria-pressed="true"] { background: var(--bg-elevated); border-color: var(--border-control, var(--ch-border-default)); color: var(--ch-text-primary); }
+.ch-ease-editor[data-compact] .ch-ease-columns { display: block; }
+.ch-ease-editor[data-compact] .ch-curve__plot { max-width: none; }
+.ch-ease-editor[data-compact] .ch-ease-graph-header { display: none; }
+.ch-ease-quick-open { margin-top: 8px; }
+.ch-quick-ease { display: flex; flex-direction: column; gap: 8px; min-height: 100vh; padding: 10px 12px 12px; box-sizing: border-box; background: var(--surface-base, #121212); color: var(--ch-text-primary); }
+.ch-quick-ease__header { display: flex; align-items: center; min-height: 20px; }
+.ch-quick-ease__title { margin: 0; font-size: 12px; font-weight: 500; color: var(--ch-text-secondary); letter-spacing: 0.01em; }
+.ch-quick-ease__status { margin: 0; min-height: 16px; font-size: 11px; line-height: 1.35; color: var(--ch-text-muted); }
+.ch-quick-ease__status[data-tone="error"] { color: var(--ch-danger, #ff8a80); }
+.ch-quick-ease__status[data-tone="ok"] { color: var(--ch-text-secondary); }
+.ch-quick-ease__footer { display: flex; gap: 6px; margin-top: auto; }
+.ch-quick-ease__footer > * { flex: 1 1 0; min-width: 0; }
+.ch-quick-ease .ch-ease-sides { display: none; }
+/* A janela flutuante precisa mostrar curva, chips, estado e Aplicar sem rolagem em 300×360. */
+.ch-quick-ease .ch-curve__plot { width: min(100%, calc(100vh - 190px)); min-width: 160px; margin: 0 auto; }
+.ch-quick-ease .ch-ease-editor { display: flex; flex-direction: column; min-height: 0; }
+.ch-ease-values[hidden], .ch-ease-bake-hint[hidden], .ch-ease-quick-presets[hidden] { display: none; }
+.ch-quick-ease .ch-curve__hint { display: none; }
+.ch-quick-ease__status { flex: 0 0 auto; }

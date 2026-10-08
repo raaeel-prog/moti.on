@@ -141,6 +141,7 @@ export default [
         MotionTransform: "readonly",
         MotionEffects: "readonly",
         MotionKeyframes: "readonly",
+        MotionSelection: "readonly",
         MotionLiveControls: "readonly",
         MotionLivePreset: "readonly",
         MotionGroupedControls: "readonly",

@@ -213,6 +213,7 @@ const MODULOS = [
   "src/registry.jsx",
   "src/expression-templates.jsx",
   "src/keyframe-operations.jsx",
+  "src/selection-signature.jsx",
   "src/transform-math.jsx",
   "src/effect-operations.jsx",
   "src/rig-meta.jsx"

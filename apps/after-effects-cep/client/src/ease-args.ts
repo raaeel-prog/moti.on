@@ -55,8 +55,43 @@ export function easeNeedsPair(draft: EaseDraft): boolean {
   return draft.mode === "elastic" || draft.mode === "bounce" || (draft.mode === "bezier" && draft.points.length > 0);
 }
 
+/** One segment the host worked on, with the keyframes it generated inside it. */
+export interface EaseSessionSegment {
+  propertyId: string;
+  layerIndex: number;
+  t0: number;
+  t1: number;
+  generated: { time: number; value: number | number[] }[];
+}
+
+/**
+ * What the host returns after an apply and what it receives back on the next
+ * one, so generated keyframes are replaced instead of multiplied. Valid only
+ * while the selection signature matches.
+ */
+export interface EaseSession { signature: string; segments: EaseSessionSegment[] }
+
+export function validEaseSession(value: unknown): value is EaseSession {
+  if (!value || typeof value !== "object") return false;
+  const s = value as EaseSession;
+  if (typeof s.signature !== "string" || !Array.isArray(s.segments) || s.segments.length > 200) return false;
+  return s.segments.every(seg => seg && typeof seg === "object" && typeof seg.propertyId === "string"
+    && Number.isFinite(seg.layerIndex) && Number.isFinite(seg.t0) && Number.isFinite(seg.t1) && seg.t1 > seg.t0
+    && Array.isArray(seg.generated) && seg.generated.every(g => g && Number.isFinite(g.time)
+      && (typeof g.value === "number" ? Number.isFinite(g.value) : Array.isArray(g.value) && g.value.length <= 4 && g.value.every(Number.isFinite))));
+}
+
+export interface EaseCommandExtras { expectedSelection?: string | null; session?: EaseSession | null }
+
 /** Builds exactly the arguments `ae.keys.ease.apply` allows for the current mode. */
-export function easeCommandArgs(draft: EaseDraft): Record<string, unknown> {
+export function easeCommandArgs(draft: EaseDraft, extras: EaseCommandExtras = {}): Record<string, unknown> {
+  const args = modeArgs(draft);
+  if (typeof extras.expectedSelection === "string") args.expectedSelection = extras.expectedSelection;
+  if (extras.session && validEaseSession(extras.session)) args.session = { signature: extras.session.signature, segments: extras.session.segments.map(seg => ({ ...seg, generated: seg.generated.map(g => ({ time: g.time, value: Array.isArray(g.value) ? [...g.value] : g.value })) })) };
+  return args;
+}
+
+function modeArgs(draft: EaseDraft): Record<string, unknown> {
   const base = { ...curveOf(easeEffectiveCurve(draft)), applyIn: draft.applyIn, applyOut: draft.applyOut };
   if (draft.mode === "bezier" && draft.points.length > 0) {
     return { ...base, points: draft.points.map(p => ({ x: round(p.x), y: round(p.y), inX: round(p.inX), inY: round(p.inY), outX: round(p.outX), outY: round(p.outY) })) };
