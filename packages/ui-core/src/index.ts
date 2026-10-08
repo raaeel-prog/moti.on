@@ -155,3 +155,11 @@ export { registerMotiPopover, type MotiPopover, type MotiPopoverConstructor } fr
 export { registerMotiDrawer, type MotiDrawer, type MotiDrawerConstructor } from "./elements/moti-drawer.js";
 
 export { ICON_CATALOG, type IconDefinition, type IconId, type IconFamily, type IconGesture } from "./icons.js";
+
+export {
+  closeOpenColorPicker, colorSurfaceChrome, configureColorPickers, createColorPicker, resolveColorSurfaceLayout, supportsColorOverlay,
+  type ColorPicker, type ColorPickerConfig, type ColorPickerOptions, type ColorSurfaceLayout
+} from "./elements/color-view.js";
+export { clampHsv, hexToHsv, hexToRgb, hsvToHex, hsvToRgb, rgbToHex, rgbToHsv, type Hsv, type Rgb } from "./color-math.js";
+export { pluralCategory } from "./i18n.js";
+export { attachActionOverflow, closeOpenActionMenu, type ActionOverflow, type ActionOverflowOptions } from "./action-overflow.js";

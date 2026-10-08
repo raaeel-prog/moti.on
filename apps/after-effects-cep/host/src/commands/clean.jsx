@@ -119,9 +119,12 @@
       return { changed: removed.length > 0, warnings: [], data: { removedCount: removed.length, removedItemIds: removed } };
     } catch (error) {
       lastScan = null;
-      var failErr = /** @type {Error & {motionCode?: string}} */ (new Error("Clean falhou depois de remover " + removed.length + " item(ns): " + String(error)));
-      failErr.motionCode = MotionContracts.ERROR.HOST_OPERATION_FAILED;
-      throw failErr;
+      throw MotionErrors.error(
+        "hostError.removedPartially",
+        "Clean falhou depois de remover " + removed.length + " item(ns): " + String(error),
+        { count: removed.length },
+        MotionContracts.ERROR.HOST_OPERATION_FAILED
+      );
     }
   }
   MotionRegistry.register("ae.project.clean", { preflight: preflight, run: run });

@@ -200,9 +200,9 @@ Na extensão equivalente, `appUILocale` e `appLocale` foram `"pt_BR"`. `normaliz
 
 ### 10. Payload grande no After Effects
 
-O teto canônico é 60.000 caracteres do JSON **já codificado** para o `evalScript`. Acima dele, o adapter falha fechado antes até da sonda de presença, com `INTERNAL_ERROR`, motivo `INLINE_PAYLOAD_TOO_LARGE`, `encodedChars`, `maxInlineChars` e `mayHaveMutated: false`.
+O teto canônico é 60.000 caracteres do JSON **já codificado** para o `evalScript`. Acima dele, o adapter grava o pedido num arquivo temporário em `USER_DATA` (`cep.fs.writeFile`) e chama `buildFileDispatchCall` (`packages/contracts/src/evalscript.ts`), que lê o arquivo no host, o remove e despacha. Se a gravação falhar, o adapter responde `INTERNAL_ERROR` com `TEMP_TRANSPORT_FAILED` e `mayHaveMutated: false`, sem chamar o host. Desde 2026-10-07, quando o host não consegue ler o arquivo (vazio, ilegível ou host ausente), a chamada devolve uma resposta completa montada pelo cliente, com o `requestId` do pedido e `TEMP_TRANSPORT_READ_FAILED`; antes, o erro chegava sem `requestId`, era descartado e o usuário só via o timeout.
 
-Não existe transporte por arquivo temporário, checksum nem limpeza de temporário. Status: `PARTIAL`; host: `NOT RUN`. O botão Unicode comum não fecha este gate porque seu payload fica abaixo do limite.
+Ainda não há checksum do conteúdo. Status: `PARTIAL`; leitura e remoção do arquivo testadas com `File` simulado (`packages/contracts/tests/file-dispatch.test.mjs`); host real: `NOT RUN`.
 
 ### 11. QA visual
 

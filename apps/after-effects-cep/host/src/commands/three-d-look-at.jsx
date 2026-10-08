@@ -158,7 +158,7 @@
     var target = args.targetLayerName ? findLayerByName(comp, /** @type {string} */ (args.targetLayerName)) : null;
     if (args.targetLayerName && !target) return failure(MotionContracts.ERROR.NO_SELECTION, "O alvo escolhido nao existe na composicao.", null);
     var controller = controllerOf(comp);
-    if (controller && controller.locked) return failure(MotionContracts.ERROR.HOST_OPERATION_FAILED, "Desbloqueie o nulo de Encarar.", null);
+    if (controller && controller.locked) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie o nulo de Encarar.", null);
     if (controller && !controlOf(controller)) return failure(MotionContracts.ERROR.HOST_OPERATION_FAILED, "O controle de alvo do nulo foi removido ou esta ambiguo.", null);
     var selected = comp.selectedLayers;
     var count = 0;
@@ -168,7 +168,7 @@
       if (layer === target || layer === controller) continue;
       var property = rotationOf(layer);
       if (!property || property.canSetExpression !== true) continue;
-      if (layer.locked) return failure(MotionContracts.ERROR.HOST_OPERATION_FAILED, "Desbloqueie as camadas selecionadas para encarar.", { selectionIndex: i });
+      if (layer.locked) return MotionErrors.failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "hostError.layerLocked", "Desbloqueie as camadas selecionadas para encarar.", null, { selectionIndex: i });
       var managed = is3D(layer) ? MotionExpressions.isManagedLookAt(property.expression) : MotionExpressions.isManagedLookAt2D(property.expression);
       if (property.expression !== "" && !managed) return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A rotacao contem uma expressao de usuario.", { selectionIndex: i });
       count += 1;

@@ -90,8 +90,10 @@ test('hover shows a legible name outside its icon tile', t => {
   assert.equal(tooltip.style.width, '');
   assert.equal(tooltip.style.height, '');
   assert.equal(tooltip.style.transformOrigin, '50px bottom');
-  assert.equal(tooltip.children.length, 1);
-  assert.equal(tooltip.allText, 'clean');
+  // Nome e, abaixo, o que a ferramenta faz e o que o clique faz.
+  assert.equal(tooltip.children.length, 2);
+  assert.equal(tooltip.children[0].allText, 'clean');
+  assert.equal(tooltip.children[1].allText, 'Description · Abrir ajustes');
   assert.equal(tooltip.hidden, false);
   assert.equal(tool.getAttribute('aria-describedby'), tooltip.id);
 });

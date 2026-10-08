@@ -20,6 +20,8 @@
 declare const $: {
   global: Record<string, unknown>;
   fileName: string;
+  /** Diálogo de cor do sistema (JavaScript Tools Guide): recebe e devolve 0xRRGGBB; -1 = padrão/cancelado. */
+  colorPicker(color: number): number;
 };
 
 declare class Folder { readonly fsName: string; readonly parent: Folder; }

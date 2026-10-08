@@ -43,13 +43,13 @@ function fixture(t,{autoplay=true,focused=true,intersection=true,scroll=0,naviga
     snapshots(){return svgs.map(s=>s.firstChild);}};
 }
 
-test('full catalogue allocates artwork only for visible cards and animates one at 15 fps',t=>{
-  const f=fixture(t);assert.equal(f.views.length,214);assert.ok(f.svgs.every(s=>s.children.length===0));
+test('full catalogue allocates artwork only for visible cards and animates one at the display rate',t=>{
+  const f=fixture(t);assert.equal(f.views.length,238);assert.ok(f.svgs.every(s=>s.children.length===0));
   f.visible([0,1,2,3,4,5]);assert.equal(f.svgs.filter(s=>s.children.length).length,6);assert.equal(f.frames.size,1);
   let before=f.snapshots();f.tick(1000);
   assert.equal(f.snapshots().filter((n,i)=>n!==before[i]).length,1);
-  before=f.snapshots();f.tick(1030);assert.deepEqual(f.snapshots(),before);
-  f.tick(1068);assert.equal(f.snapshots().filter((n,i)=>n!==before[i]).length,1);
+  before=f.snapshots();f.tick(1008);assert.deepEqual(f.snapshots(),before,'never more than one paint per display frame');
+  f.tick(1017);assert.equal(f.snapshots().filter((n,i)=>n!==before[i]).length,1,'a cheap preview paints every 60 Hz frame');
 });
 test('native focus loss immediately cancels animation, including an already dequeued callback',t=>{
   const f=fixture(t);f.visible([0,1]);const late=[...f.frames.values()][0];

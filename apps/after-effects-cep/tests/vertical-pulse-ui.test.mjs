@@ -171,10 +171,11 @@ async function mountPulsePanel(data = empty(), { holdRead = false } = {}) {
     setTimeout: () => 1, clearTimeout() {}, setInterval: () => 1, clearInterval() {} });
   await tick();
   const byId = id => mount.getElementsByTagName('button').find(node => node.id === id);
+  const back = () => mount.getElementsByTagName('button').find(node => node.className === 'ch-context-back');
   const edit = async () => { byId('library-options-verticalPulse').click(); byId('library-edit-verticalPulse').click(); await tick(); };
   const input = key => mount.getElementsByTagName('input').find(node => node.id === `verticalPulse-${key}`);
   const writes = () => qa.requests.filter(request => request.command === 'ae.text.vertical-pulse');
-  return { qa, mount, document, byId, edit, input, writes };
+  return { qa, mount, document, byId, back, edit, input, writes };
 }
 
 test('Pulse main Quick reads the legacy rig and preserves all controls without migrating or duplicating the click', async () => {
@@ -209,7 +210,8 @@ test('Pulse main preserves a later focused draft when a delayed selection read c
 
 test('Pulse main ignores a delayed snapshot after leaving its editor', async () => {
   const f = await mountPulsePanel(selected({ preset: 'plasma', controls: pulsePresetArgs('plasma', 30) }), { holdRead: true }); await f.edit();
-  f.byId('tool-verticalPulse-back').click(); f.qa.holdRead = false; f.qa.pending.shift()(); await tick();
+  // The editor is left through the header's "← Ferramentas"; the footer no longer repeats it.
+  f.back().click(); f.qa.holdRead = false; f.qa.pending.shift()(); await tick();
   assert.ok(f.byId('library-tool-verticalPulse')); assert.equal(f.input('durationFrames'), undefined);
   f.qa.data = empty(); await f.edit(); assert.equal(f.input('durationFrames').value, '54');
 });

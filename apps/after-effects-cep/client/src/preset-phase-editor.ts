@@ -84,7 +84,7 @@ export function createPresetPhaseEditor(doc:Document, options:{
       choice("unit",pt?"Animar por":"Animate by",[["preset",pt?"Original":"Original"],["characters",pt?"Caracteres":"Characters"],["words",pt?"Palavras":"Words"],["lines",pt?"Linhas":"Lines"],["all",pt?"Tudo":"All"]]);
       numeric("staggerFrames",pt?"Intervalo · frames":"Stagger · frames",0,60);
       choice("order",pt?"Ordem":"Order",[["preset",pt?"Original":"Original"],["forward",pt?"Em sequência":"Forward"],["reverse",pt?"Reversa":"Reverse"],["center-out",pt?"Centro para bordas":"Center out"],["edges-in",pt?"Bordas para centro":"Edges in"],["random",pt?"Aleatória":"Random"]]);
-      if(["studio","native","premium"].includes(preset.collection??""))numeric("overlap",pt?"Sobreposição · %":"Overlap · %",0,100);
+      if(["studio","native","premium","signature"].includes(preset.collection??""))numeric("overlap",pt?"Sobreposição · %":"Overlap · %",0,100);
     }
     if(draft.easing==="spring"||preset.easing==="spring")numeric("elasticity",pt?"Elasticidade · %":"Elasticity · %",0,100);
     if(gallerySequenceControls(preset,draft).seed)numeric("seed",pt?"Variação":"Variation",0,9999);

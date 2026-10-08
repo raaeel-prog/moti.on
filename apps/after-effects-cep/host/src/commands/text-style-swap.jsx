@@ -163,7 +163,7 @@
     item.property("ADBE Text Range Type2").setValue(unit === "words" ? 3 : 1);
     expression(item.property("ADBE Text Expressible Amount"), morphExpression(role, linkName, model, convergence));
   }
-  /** @param {any} layer @param {number} time @param {number} [fraction] @returns {number[]} */
+  /** @param {any} layer @param {number} time @param {number} [fraction] @returns {[number, number]} */
   function center(layer, time, fraction) {
     var rect = layer.sourceRectAtTime(time, false);
     var transform = layer.property("ADBE Transform Group");
@@ -175,7 +175,7 @@
     var y = (rect.top + rect.height / 2 - anchor[1]) * scale[1] / 100;
     return [position[0] + x * Math.cos(angle) - y * Math.sin(angle), position[1] + x * Math.sin(angle) + y * Math.cos(angle)];
   }
-  /** @param {any} layer @param {number[]} delta @returns {number[]} */
+  /** @param {any} layer @param {[number, number]} delta @returns {[number, number]} */
   function localVector(layer, delta) {
     var transform = layer.property("ADBE Transform Group");
     var scale = transform.property("ADBE Scale").value;
@@ -205,22 +205,36 @@
     if (!model) return false;
     var names = ["blur", "start", "end"];
     for (var i = 0; i < names.length; i += 1) {
-      var v = model[names[i]];
+      var v = model[String(names[i])];
       if (!v || v.length !== 2 || typeof v[0] !== "number" || typeof v[1] !== "number" || !isFinite(v[0]) || !isFinite(v[1])) return false;
     }
     return model.blur[0] >= 0 && model.blur[0] <= 64 && model.blur[1] >= 0 && model.blur[1] <= 48;
   }
   /** @param {any} layer @param {string} kind @returns {any} */
   function morphProperties(layer, kind) {
-    var groups = animators(layer), target = selector(layer, kind);
+    var groups = animators(layer), prefix = kind === "morph" ? MORPH_HEADER : CONVERGE_HEADER;
     for (var i = 1; groups && i <= groups.numProperties; i += 1) {
       var animator = groups.property(i), selectors = animator.property("ADBE Text Selectors");
-      for (var j = 1; selectors && j <= selectors.numProperties; j += 1) if (selectors.property(j) === target) return animator.property("ADBE Text Animator Properties");
+      for (var j = 1; selectors && j <= selectors.numProperties; j += 1) {
+        var amount = selectors.property(j).property("ADBE Text Expressible Amount");
+        if (amount && String(amount.expression).indexOf(prefix) === 0) return animator.property("ADBE Text Animator Properties");
+      }
     }
     return null;
   }
   /** @param {any} property @param {any} expected @returns {boolean} */
-  function untouched(property, expected) { return !!property && !property.numKeys && !property.expression && MotionJson.stringify(property.value) === MotionJson.stringify(expected); }
+  function untouched(property, expected) {
+    if (!property || property.numKeys || property.expression) return false;
+    var actual = property.value;
+    if (actual && expected && typeof actual.length === "number" && typeof expected.length === "number") {
+      if (actual.length !== expected.length) return false;
+      // Native text animator values are stored as floats. Ownership checks must
+      // allow their rounding without treating it as a user's manual change.
+      for (var i = 0; i < actual.length; i += 1) if (!isFinite(actual[i]) || Math.abs(actual[i] - expected[i]) > .00001 * Math.max(1, Math.abs(expected[i]))) return false;
+      return true;
+    }
+    return actual === expected;
+  }
   /** @param {any} layer @param {unknown} unit @returns {number} */
   function unitCount(layer, unit) {
     var text = String(layer.property("ADBE Text Properties").property("ADBE Text Document").value.text);
@@ -267,6 +281,7 @@
       if (typeof md.start !== "number" || !isFinite(md.start) || !integer(md.count, 1, 500) || typeof meta(rig.sourceFrom).enabled !== "boolean" || typeof meta(rig.sourceTo).enabled !== "boolean") return {error: failure(MotionContracts.ERROR.TRACK_CONFLICT, "A metadata da troca de estilos foi modificada.")};
       if (!selector(rig.from) || !selector(rig.to) || !control(rig.controller, PROGRESS) || !control(rig.controller, DURATION) || !control(rig.controller, STAGGER)) return {error: failure(MotionContracts.ERROR.TRACK_CONFLICT, "Um controle gerenciado foi removido ou substituido.")};
       if (md.controlsVersion >= 2 && !control(rig.controller, AUTOMATIC) || md.controlsVersion >= 3 && (!control(rig.controller, FOLLOW) || !control(rig.controller, REFERENCE) || control(rig.controller, REFERENCE).value !== rig.sourceFrom.index)) return {error: failure(MotionContracts.ERROR.TRACK_CONFLICT, "Um controle gerenciado foi removido ou substituido.")};
+      if (md.controlsVersion >= 4 && (!control(rig.controller, MORPH) || !control(rig.controller, BLEND_WIDTH))) return {error: failure(MotionContracts.ERROR.TRACK_CONFLICT, "Um controle do morfismo foi removido.")};
       if (args.action === "apply") {
         if (control(rig.controller, DURATION).numKeys || control(rig.controller, STAGGER).numKeys || control(rig.controller, DURATION).expression || control(rig.controller, STAGGER).expression) return {error: failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Duracao ou intervalo contem animacao manual; ajuste esses controles na timeline.")};
         if (control(rig.controller, PROGRESS).expression !== progressExpression(md.start, md.count, md.controlsVersion >= 2, md.controlsVersion >= 3)) return {error: failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A expressao de progresso foi personalizada; ajuste o rig na timeline.")};
@@ -277,7 +292,15 @@
         for (var g = 0; g < generated.length; g += 1) {
           var gm = meta(generated[g]);
           var gs = selector(generated[g]);
-          if (!control(generated[g], gm.link) || gs.property("ADBE Text Expressible Amount").expression !== amountExpression(gm.role, gm.link, md.controlsVersion >= 3) || gs.property("ADBE Text Expressible Amount").numKeys || gs.property("ADBE Text Range Type2").numKeys) return {error: failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "O seletor ou vinculo da troca foi personalizado; ajuste o rig na timeline.")};
+          if (!control(generated[g], gm.link) || gs.property("ADBE Text Expressible Amount").expression !== amountExpression(gm.role, gm.link, md.controlsVersion >= 3, md.controlsVersion >= 4) || gs.property("ADBE Text Expressible Amount").numKeys || gs.property("ADBE Text Range Type2").numKeys) return {error: failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "O seletor ou vinculo da troca foi personalizado; ajuste o rig na timeline.")};
+          if (md.controlsVersion >= 4) {
+            if (!validMorphModel(gm.model)) return {error: failure(MotionContracts.ERROR.TRACK_CONFLICT, "A geometria do morfismo foi modificada.")};
+            var kinds = ["morph", "converge"];
+            for (var ki = 0; ki < kinds.length; ki += 1) {
+              var ms = selector(generated[g], String(kinds[ki])), mp = morphProperties(generated[g], String(kinds[ki]));
+              if (!ms || !mp || ms.property("ADBE Text Expressible Amount").numKeys || ms.property("ADBE Text Range Type2").numKeys || ms.property("ADBE Text Expressible Amount").expression !== morphExpression(gm.role, gm.link, gm.model, ki === 1) || (ki === 0 ? !untouched(mp.property("ADBE Text Blur"), gm.model.blur) || !untouched(mp.property("ADBE Text Scale 3D"), [68, 118, 100]) : !untouched(mp.property("ADBE Text Position 3D"), [100, 100, 0]))) return {error: failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "O morfismo foi personalizado; ajuste os controles na timeline.")};
+            }
+          }
           var sourceText = generated[g].property("ADBE Text Properties").property("ADBE Text Document");
           if (sourceText.numKeys || sourceText.expression) return {error: failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "O texto das copias esta animado; ajuste o rig na timeline.")};
         }
@@ -360,12 +383,19 @@
       addControl(controller, AUTOMATIC, "ADBE Checkbox Control", 0);
       addControl(controller, FOLLOW, "ADBE Checkbox Control", 1);
       addControl(controller, REFERENCE, "ADBE Layer Control", a.index);
+      addControl(controller, MORPH, "ADBE Slider Control", 100);
+      addControl(controller, BLEND_WIDTH, "ADBE Slider Control", 2.4);
       expression(control(controller, PROGRESS), progressExpression(comp.time, plan.count, true, true));
+      var fromModel = morphModel(from, to, comp.time), toModel = morphModel(to, from, comp.time), addedAnimators = /** @type {any[]} */ ([]);
       addAnimator(from, controller, "from", String(args.unit), linkName);
       addAnimator(to, controller, "to", String(args.unit), linkName);
-      tag(from, {id: id, role: "from", link: linkName});
-      tag(to, {id: id, role: "to", link: linkName});
-      tag(controller, {id: id, role: "controller", start: comp.time, count: plan.count, unit: args.unit, controlsVersion: 3});
+      addMorphAnimator(from, "from", String(args.unit), linkName, fromModel, false, addedAnimators);
+      addMorphAnimator(from, "from", String(args.unit), linkName, fromModel, true, addedAnimators);
+      addMorphAnimator(to, "to", String(args.unit), linkName, toModel, false, addedAnimators);
+      addMorphAnimator(to, "to", String(args.unit), linkName, toModel, true, addedAnimators);
+      tag(from, {id: id, role: "from", link: linkName, model: fromModel});
+      tag(to, {id: id, role: "to", link: linkName, model: toModel});
+      tag(controller, {id: id, role: "controller", start: comp.time, count: plan.count, unit: args.unit, controlsVersion: 4});
       tag(a, {id: id, role: "sourceFrom", enabled: a.enabled});
       tag(b, {id: id, role: "sourceTo", enabled: b.enabled});
       a.enabled = false;
@@ -392,27 +422,57 @@
     var fromAmount = selector(rig.from).property("ADBE Text Expressible Amount"), toAmount = selector(rig.to).property("ADBE Text Expressible Amount");
     var ctrlPosition = rig.controller.property("ADBE Transform Group").property("ADBE Position");
     var snapshot = {duration: duration.value, stagger: stagger.value, from: fromUnit.value, to: toUnit.value, expression: progress.expression, enabled: progress.expressionEnabled, comment: rig.controller.comment, position: ctrlPosition.value, fromExpression: fromAmount.expression, toExpression: toAmount.expression, fromEnabled: fromAmount.expressionEnabled, toEnabled: toAmount.expressionEnabled};
-    var added = [], positioned = false;
+    var added = [], addedAnimators = /** @type {any[]} */ ([]), positioned = false;
+    var fromComment = rig.from.comment, toComment = rig.to.comment;
+    var morphUnits = /** @type {any[]} */ ([]);
+    if (plan.metadata.controlsVersion >= 4) {
+      var existingLayers = [rig.from, rig.to], kinds = ["morph", "converge"];
+      for (var eli = 0; eli < existingLayers.length; eli += 1) for (var eki = 0; eki < kinds.length; eki += 1) morphUnits.push({layer: existingLayers[eli], kind: kinds[eki], value: selector(existingLayers[eli], kinds[eki]).property("ADBE Text Range Type2").value});
+    }
     try {
       if (!control(rig.controller, AUTOMATIC)) {
         addControl(rig.controller, AUTOMATIC, "ADBE Checkbox Control", 0); added.push(AUTOMATIC);
       }
       if (!control(rig.controller, FOLLOW)) { addControl(rig.controller, FOLLOW, "ADBE Checkbox Control", 1); added.push(FOLLOW); }
       if (!control(rig.controller, REFERENCE)) { addControl(rig.controller, REFERENCE, "ADBE Layer Control", rig.sourceFrom.index); added.push(REFERENCE); }
+      if (!control(rig.controller, MORPH)) { addControl(rig.controller, MORPH, "ADBE Slider Control", 100); added.push(MORPH); }
+      if (!control(rig.controller, BLEND_WIDTH)) { addControl(rig.controller, BLEND_WIDTH, "ADBE Slider Control", 2.4); added.push(BLEND_WIDTH); }
       duration = control(rig.controller, DURATION); stagger = control(rig.controller, STAGGER); progress = control(rig.controller, PROGRESS);
       if (!(plan.metadata.controlsVersion >= 3) && !ctrlPosition.numKeys && !ctrlPosition.expression) { ctrlPosition.setValue(center(rig.sourceFrom, plan.comp.time, 0)); positioned = true; }
+      if (!(plan.metadata.controlsVersion >= 4)) {
+        var fm = meta(rig.from), tm = meta(rig.to);
+        fm.model = morphModel(rig.from, rig.to, plan.comp.time); tm.model = morphModel(rig.to, rig.from, plan.comp.time);
+        addMorphAnimator(rig.from, "from", String(args.unit), fm.link, fm.model, false, addedAnimators);
+        addMorphAnimator(rig.from, "from", String(args.unit), fm.link, fm.model, true, addedAnimators);
+        addMorphAnimator(rig.to, "to", String(args.unit), tm.link, tm.model, false, addedAnimators);
+        addMorphAnimator(rig.to, "to", String(args.unit), tm.link, tm.model, true, addedAnimators);
+        tag(rig.from, fm); tag(rig.to, tm);
+      }
+      // Adding native indexed animators invalidates earlier Property handles.
+      fromUnit = selector(rig.from).property("ADBE Text Range Type2"); toUnit = selector(rig.to).property("ADBE Text Range Type2");
+      fromAmount = selector(rig.from).property("ADBE Text Expressible Amount"); toAmount = selector(rig.to).property("ADBE Text Expressible Amount");
       duration.setValue(args.durationFrames); stagger.setValue(args.staggerFrames);
       fromUnit.setValue(args.unit === "words" ? 3 : 1); toUnit.setValue(args.unit === "words" ? 3 : 1);
+      var layers = [rig.from, rig.to];
+      for (var li = 0; li < layers.length; li += 1) {
+        selector(layers[li], "morph").property("ADBE Text Range Type2").setValue(args.unit === "words" ? 3 : 1);
+        selector(layers[li], "converge").property("ADBE Text Range Type2").setValue(args.unit === "words" ? 3 : 1);
+      }
       expression(progress, progressExpression(plan.metadata.start, countA, true, true));
-      expression(fromAmount, amountExpression("from", meta(rig.from).link, true));
-      expression(toAmount, amountExpression("to", meta(rig.to).link, true));
-      plan.metadata.unit = args.unit; plan.metadata.count = countA; plan.metadata.controlsVersion = 3; tag(rig.controller, plan.metadata);
+      expression(fromAmount, amountExpression("from", meta(rig.from).link, true, true));
+      expression(toAmount, amountExpression("to", meta(rig.to).link, true, true));
+      plan.metadata.unit = args.unit; plan.metadata.count = countA; plan.metadata.controlsVersion = 4; tag(rig.controller, plan.metadata);
     } catch (e) {
       try {
+        for (var rai = addedAnimators.length - 1; rai >= 0; rai -= 1) animators(addedAnimators[rai].layer).property(addedAnimators[rai].index).remove();
+        rig.from.comment = fromComment; rig.to.comment = toComment;
+        for (var mui = 0; mui < morphUnits.length; mui += 1) selector(morphUnits[mui].layer, morphUnits[mui].kind).property("ADBE Text Range Type2").setValue(morphUnits[mui].value);
         if (added.length) {
           for (var ai = added.length - 1; ai >= 0; ai--) rig.controller.property("ADBE Effect Parade").property(added[ai]).remove();
           duration = control(rig.controller, DURATION); stagger = control(rig.controller, STAGGER); progress = control(rig.controller, PROGRESS);
         }
+        fromUnit = selector(rig.from).property("ADBE Text Range Type2"); toUnit = selector(rig.to).property("ADBE Text Range Type2");
+        fromAmount = selector(rig.from).property("ADBE Text Expressible Amount"); toAmount = selector(rig.to).property("ADBE Text Expressible Amount");
         if (positioned) ctrlPosition.setValue(snapshot.position);
         duration.setValue(snapshot.duration); stagger.setValue(snapshot.stagger); fromUnit.setValue(snapshot.from); toUnit.setValue(snapshot.to);
         progress.expression = snapshot.expression; progress.expressionEnabled = snapshot.enabled; rig.controller.comment = snapshot.comment;

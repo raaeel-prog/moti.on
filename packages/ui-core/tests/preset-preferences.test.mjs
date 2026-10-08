@@ -36,7 +36,7 @@ test('quick dock pin is an additive preference and survives reopening with legac
   assert.equal(preferences.snapshot().quickDockPinned,false);
   preferences.setQuickDockPinned(true);
   const reopened=createPanelPreferences(root,storage);
-  assert.deepEqual(reopened.snapshot(),{theme:'light',locale:'pt-BR',density:'compact',category:'layers',favorites:['wiggle'],recent:['ease'],persistent:true,presetAutoplay:false,presetSize:240,quickDockPinned:true,folderColors:{motion:'green'},collapsedFolders:['text']});
+  assert.deepEqual(reopened.snapshot(),{theme:'light',locale:'pt-BR',density:'compact',category:'layers',favorites:['wiggle'],recent:['ease'],recentColors:[],persistent:true,recovered:false,presetAutoplay:false,presetSize:240,quickDockPinned:true,folderColors:{motion:'green'},collapsedFolders:['text'],lastView:'',gallery:{category:'all',scope:'all',query:'',presetId:''},drafts:{}});
   reopened.setQuickDockPinned(false);
   assert.equal(createPanelPreferences(root,storage).snapshot().quickDockPinned,false);
 });
@@ -50,4 +50,14 @@ test('invalid saved pin state is ignored and unavailable storage still permits s
 
 afterEach(() => {
   for (const name of ["HTMLElement", "customElements", "document", "window"]) delete globalThis[name];
+});
+
+test('recent colors keep eight unique lowercase hex values and ignore anything else',()=>{
+  let raw=JSON.stringify({version:1,recentColors:['#ABCDEF','url(evil)','#abcdef','#123456',42]});const storage={getItem:()=>raw,setItem:(_,v)=>raw=v};
+  const p=createPanelPreferences(root,storage);
+  assert.deepEqual(p.snapshot().recentColors,['#abcdef','#123456'],'only canonical lowercase hex survives, without duplicates');
+  for(const hex of ['#111111','#222222','#333333','#444444','#555555','#666666','#777777','#888888','#999999'])p.recordColor(hex);
+  p.recordColor('#555555');p.recordColor('not a color');p.recordColor('#ABCDEF');
+  const saved=createPanelPreferences(root,storage).snapshot().recentColors;
+  assert.deepEqual(saved,['#abcdef','#555555','#999999','#888888','#777777','#666666','#444444','#333333']);
 });

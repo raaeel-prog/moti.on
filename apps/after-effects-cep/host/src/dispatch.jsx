@@ -54,6 +54,16 @@
     var line = errorLine(error);
     if (typeof command === "string" && command !== "") details.command = command;
     if (line !== null) details.line = line;
+    // A unica explicacao que atravessa: uma chave da lista fechada de
+    // MotionErrors, nunca o texto da excecao. Sem chave, ROLLBACK_FAILED ainda
+    // ganha a frase padrao de restauracao incompleta.
+    var user = typeof MotionErrors !== "undefined" ? MotionErrors.keyOf(error) : null;
+    if (user) {
+      details.messageKey = user.key;
+      if (user.params) details.messageParams = user.params;
+    } else if (exceptionCode(error) === ERROR.ROLLBACK_FAILED) {
+      details.messageKey = "hostError.rollbackIncomplete";
+    }
     return details;
   }
 
@@ -332,13 +342,15 @@
     if (requirement === "hasProject") {
       return makeError(ERROR.NO_ACTIVE_PROJECT, "Abra um projeto antes de executar este comando.", {
         command: command,
-        requirement: requirement
+        requirement: requirement,
+        messageKey: "hostError.openProject"
       });
     }
     if (requirement === "hasActiveComp") {
       return makeError(ERROR.NO_ACTIVE_COMP, "Abra uma composição antes de executar este comando.", {
         command: command,
-        requirement: requirement
+        requirement: requirement,
+        messageKey: "hostError.openComposition"
       });
     }
     return makeError(ERROR.CAPABILITY_UNAVAILABLE, "Uma capacidade obrigatória não está disponível.", {
@@ -561,7 +573,7 @@
           makeError(
             ERROR.HOST_OPERATION_FAILED,
             "Nenhuma alteração foi aplicada ao projeto.",
-            { command: request.command }
+            { command: request.command, messageKey: "hostError.noChange" }
           ),
           startedAt, startedMs
         );

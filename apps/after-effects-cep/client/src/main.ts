@@ -24,7 +24,7 @@ import { renderTextEffect, resetTextEffect, textEffectArgs, validTextEffect, hyd
 import { renderVerticalPulse, resetVerticalPulse, validVerticalPulse, verticalPulseAction, verticalPulseArgs,
   hydrateVerticalPulse, isVerticalPulseReadData, markVerticalPulseReadFailed, verticalPulseActionLabel,
   verticalPulseReadDisabledReason, verticalPulseRevision } from "./vertical-pulse.js";
-import { WORD_REVEAL_DEFAULTS, PROXIMITY_MORPH_DEFAULTS, STYLE_SWAP_DEFAULTS, pulsePresetArgs } from "@motion/contracts";
+import { WORD_REVEAL_DEFAULTS, PROXIMITY_MORPH_DEFAULTS, STYLE_SWAP_DEFAULTS, pulsePresetArgs, isMotionLibraryOptions, type MotionLibraryOptions } from "@motion/contracts";
 import { createAeSystemView } from "./views/system-view.js";
 import { createAeSettingsView } from "./views/settings-view.js";
 import { groupToolSections } from "./views/tool-sections.js";
@@ -41,6 +41,8 @@ import {
   button,
   checkboxField,
   colorField,
+  configureColorPickers,
+  attachActionOverflow,
   createI18n,
   createDiagnosticsView,
   createShell,
@@ -63,6 +65,15 @@ import {
 } from "@motion/ui-core";
 
 let globalFeedback: FeedbackController | null = null;
+/** Catálogo ativo, para traduzir avisos do host fora do escopo de `start`. */
+let warningI18n: I18n | null = null;
+
+/** Avisos do host traduzidos; texto sem tradução segura não aparece cru. */
+function reportHostWarnings(warnings: CommandResponse["warnings"]): void {
+  if (!warnings.length || !warningI18n) return;
+  const text = hostWarningMessage(warnings, warningI18n);
+  if (text) globalFeedback?.reportWarning(text);
+}
 let feedbackReady = false;
 import { getDescriptor, getQuickProfile } from "@motion/command-registry";
 import {
@@ -71,26 +82,61 @@ import {
 } from "@motion/ui-motion";
 
 import { createAeHostAdapter } from "./host-adapter.js";
-import { createQuickLibrary, type LibraryState, type LibraryItem } from "./quick-library.js";
+import { createQuickLibrary, type LibraryState, type LibraryItem, type TileFeedback } from "./quick-library.js";
 import { createQuickActions, updateQuickActions, quickActionName, type QuickAction } from "./quick-actions.js";
 import { createQuickDock } from "./quick-dock.js";
-import { hostFailureMessage } from "./host-feedback.js";
+import { hostFailureMessage, hostWarningMessage } from "./host-feedback.js";
 import { createEaseEditor } from "./ease-editor.js";
 import { createEaseActions, type EaseAction } from "./ease-actions.js";
 import { DEFAULT_ORBIT, ORBIT_PRESETS, deriveOrbitPreset, selectOrbitPreset, type OrbitDraft, type OrbitTargetMode } from "./orbit-presets.js";
-import { presetArgs, type PresetNavigation } from "./preset-gallery.js";
+import { presetArgs, defaultLibraryOptions, GALLERY_PRESETS, type PresetNavigation } from "./preset-gallery.js";
 
 const panelPreferences = createPanelPreferences(document.documentElement, browserPreferenceStorage(window));
 let panelHostLocale: string | undefined;
 const libraryNavigation: LibraryState = { category: panelPreferences.snapshot().category, scope: "all", query: "", scroll: 0 };
 let disposeView: (() => void) | null = null;
 let refreshLibrary: (() => void) | null = null;
+/** Tile feedback of the mounted tool library (A6.4); null outside the library view. */
+let quickTileFeedback: ((id: string, state: TileFeedback) => void) | null = null;
 let refreshToolContext: (() => void) | null = null;
 let refreshPresetContext: (() => void) | null = null;
 let orbitAdvancedOpen = false;
 import { createPresetWorkspace, type PresetWorkspaceCache } from "./preset-workspace.js";
 const presetWorkspaceCache: PresetWorkspaceCache = {};
-const presetNavigation: PresetNavigation = { category: "all", scope: "all", query: "", scroll: 0 };
+const presetNavigation: PresetNavigation = restorePresetNavigation();
+
+/**
+ * Reabre a galeria onde o usuário parou: categoria, filtro, busca, preset
+ * selecionado e os ajustes que ele mudou e ainda não aplicou. Pastas pessoais
+ * não voltam sozinhas, porque a pasta pode ter saído do disco entre sessões.
+ */
+function restorePresetNavigation(): PresetNavigation {
+  const saved = panelPreferences.snapshot();
+  const drafts: Record<string, MotionLibraryOptions> = {};
+  for (const [id, draft] of Object.entries(saved.drafts)) {
+    if (GALLERY_PRESETS.some(preset => preset.id === id && preset.motion) && isMotionLibraryOptions(draft)) drafts[id] = draft;
+  }
+  const category = saved.gallery.category.startsWith("personal") ? "all" : saved.gallery.category;
+  const known = GALLERY_PRESETS.some(preset => preset.id === saved.gallery.presetId);
+  return {
+    category, scope: saved.gallery.scope, query: saved.gallery.query, scroll: 0, drafts,
+    ...(known ? { selectedId: saved.gallery.presetId } : {})
+  };
+}
+
+/** Grava só ajustes que diferem do padrão do preset; abrir um preset não é editá-lo. */
+function rememberPresetNavigation(): void {
+  const changed: Record<string, MotionLibraryOptions> = {};
+  for (const [id, draft] of Object.entries(presetNavigation.drafts ?? {})) {
+    const motion = GALLERY_PRESETS.find(preset => preset.id === id)?.motion;
+    if (motion && JSON.stringify(draft) !== JSON.stringify(defaultLibraryOptions(motion, state.context?.compFrameRate ?? undefined))) changed[id] = draft;
+  }
+  panelPreferences.setGallery({
+    category: presetNavigation.category.startsWith("personal") ? "all" : presetNavigation.category,
+    scope: presetNavigation.scope, query: presetNavigation.query, presetId: presetNavigation.selectedId ?? ""
+  });
+  panelPreferences.setDrafts(changed);
+}
 
 interface ContextData {
   selectionSignature?: string;
@@ -126,6 +172,10 @@ interface ContextData {
   selectionHasKeyframes: boolean;
   selectionHasExpressions: boolean;
   selectionIs3D: boolean;
+  /** Camadas de texto entre as lidas. Ausente em hosts anteriores a este campo. */
+  selectionTextLayerCount?: number;
+  /** Camadas bloqueadas entre as lidas. Ausente em hosts anteriores a este campo. */
+  selectionLockedLayerCount?: number;
   averageLayerDurationSeconds: number | null;
   /** `true` quando a seleção passou do teto de varredura do host. */
   selectionTruncated: boolean;
@@ -2017,6 +2067,7 @@ function start(): void {
 
   const logger = createLogger({ pluginVersion: PLUGIN_VERSION });
   const i18n = createI18n({});
+  warningI18n = i18n;
   const motionPreference = createBrowserReducedMotionController(document.documentElement, window);
   const disposeMotionPreference = (): void => {
     motionPreference.dispose();
@@ -2067,6 +2118,7 @@ function start(): void {
   document.documentElement.lang = i18n.locale();
   document.documentElement.setAttribute("data-runtime", "cep");
 
+  const initialView = panelPreferences.snapshot().lastView;
   const shell = createShell({
     mount,
     document,
@@ -2083,9 +2135,14 @@ function start(): void {
       if (status === "error" && !state.lastError) globalFeedback?.reportError(message);
       globalFeedback?.onStatus({ message, state: status });
     },
-    onRender: (viewId, regions) =>
-      renderView(viewId, regions, { i18n, logger, adapter, motionPreference })
+    onRender: (viewId, regions) => {
+      panelPreferences.setLastView(viewId);
+      renderView(viewId, regions, { i18n, logger, adapter, motionPreference });
+    }
   });
+  // Reabre na aba em que o painel foi fechado. Lida antes do createShell,
+  // porque o primeiro render já grava a aba inicial.
+  if (initialView && initialView !== shell.activeView()) shell.navigate(initialView);
 
   globalFeedback = createFeedbackController(document, {
     id: "app-toasts",
@@ -2094,7 +2151,10 @@ function start(): void {
       : { region: "Notifications", dismiss: "Dismiss", queued: n => `${n} queued notifications`, success: "Complete", error: "Error", warning: "Warning", info: "Information" }
   });
   mount.appendChild(globalFeedback.element);
-  window.addEventListener("unload", () => { disposeView?.(); globalFeedback?.dispose(); });
+  window.addEventListener("unload", () => { rememberPresetNavigation(); disposeView?.(); globalFeedback?.dispose(); });
+  // Grava a navegação da galeria em segundo plano; só escreve quando mudou.
+  const navigationMemory = setInterval(rememberPresetNavigation, 2000);
+  window.addEventListener("unload", () => clearInterval(navigationMemory));
 
   shell.observeWidth(window);
   logger.info("panel.started", { command: "panel.started" });
@@ -2188,6 +2248,8 @@ async function applyQuickPreset(
   if (state.busy) return;
   state.lastError = null;
   const name = selectedPreset?.name ?? i18n.t(tool.nameKey);
+  let applied = false;
+  if (!selectedPreset) quickTileFeedback?.(tool.id, "loading");
   setBusy(shell, true, i18n.t("status.applyingQuick", { tool: name }));
   shell.setStatus(i18n.t("status.applyingQuick", { tool: name }), "busy");
   try {
@@ -2235,11 +2297,22 @@ async function applyQuickPreset(
       { mode: "quick", emitLiveControls: true, preserveSelection: commandId === "ae.text.variable-morph" ? preserveMorphSelection : commandId !== "ae.text.style-swap" });
     logger.recordResponse(commandId, response);
     if (!response.ok) { reportFailure(shell, i18n, response); return; }
-    if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+    if (response.warnings.length) reportHostWarnings(response.warnings);
     panelPreferences.recordUse(selectedPreset?.recentId ?? tool.id);
     if (!selectedPreset) state.activeTool = tool.id;
     const data = response.data as { appliedCount?: number; unchangedCount?: number; skippedCount?: number; mode?: string; status?: string } | null;
+    applied = !(commandId === "ae.keys.ease.apply" && data?.appliedCount === 0);
     const reused = data?.appliedCount === 0 && (data?.unchangedCount ?? 0) > 0;
+    // Resultado com caminho de volta: "Ajustar" abre a ferramenta que acabou de
+    // ser aplicada, com os mesmos controles do editor.
+    if (!selectedPreset && applied) globalFeedback?.attachToNextSuccess([{
+      label: i18n.t("feedback.adjust"), dismissOnPress: true,
+      onPress: () => {
+        state.activeTool = tool.id; state.lastError = null;
+        if (shell.activeView() === "tools") shell.rerender(); else shell.navigate("tools");
+        void tool.load?.();
+      }
+    }]);
     if (commandId === "ae.3d.orbit") {
       const draft = { ...args };
       delete draft["applyPreset"];
@@ -2273,7 +2346,10 @@ async function applyQuickPreset(
   } catch {
     state.lastError = i18n.t("message.failureWithoutReason");
     shell.setStatus(state.lastError, "error");
-  } finally { setBusy(shell, false); }
+  } finally {
+    setBusy(shell, false);
+    if (!selectedPreset) quickTileFeedback?.(tool.id, applied ? "success" : "idle");
+  }
 }
 
 /**
@@ -2310,7 +2386,7 @@ async function applyLibraryCommand(action: "apply" | "phase-apply" | "remove" | 
     if (count > 0 && action === "remove") presetNavigation.view = "browse";
     const message = action === "camera-transition" && count ? pt ? "Transição pronta. O marcador CUT indica o corte." : "Transition ready. The CUT marker marks the cut." : count ? pt ? action === "remove" ? "Preset removido da seleção." : action === "bake" ? "Animação convertida em keyframes." : "Preset aplicado. Ajuste na aba Editar." : action === "remove" ? "Preset removed." : action === "bake" ? "Animation baked to keyframes." : "Preset applied. Adjust in the Edit tab." : pt ? "Nenhum preset gerenciado na seleção." : "No managed preset in selection.";
     shell.setStatus(message, count ? "ok" : "busy");
-    if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+    if (response.warnings.length) reportHostWarnings(response.warnings);
   } catch { shell.setStatus(i18n.t("message.failureWithoutReason"), "error"); }
   finally { setBusy(shell, false); }
 }
@@ -2330,7 +2406,7 @@ async function applyQuickAction(action: QuickAction, shell: Shell, i18n: I18n, l
     const message = data.outputPath ? `${name}: ${data.outputPath}`
       : i18n.t(data.unchangedItems && !data.changedItems ? "message.quickReused" : "message.quickAppliedOperation", { tool: name });
     shell.setStatus(message, "ok");
-    if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+    if (response.warnings.length) reportHostWarnings(response.warnings);
     const current = await client.execute<ContextData>("ae.context.read");
     logger.recordResponse("ae.context.read", current);
     if (current.ok && current.data) state.context = current.data;
@@ -2409,7 +2485,8 @@ function renderToolBrowser(
     dock.update({ ...quickOptions(), contextKey: [state.context?.activeItemName, state.context?.selectionSignature, state.context?.selectionLayerCount].join("|"), busy: state.busy });
     shell.refreshChrome();
   };
-  disposeView = () => { library.dispose(); dock.dispose(); refreshLibrary = null; document.documentElement.style.setProperty("--ch-feedback-bottom", "38px"); };
+  quickTileFeedback = library.setFeedback;
+  disposeView = () => { library.dispose(); dock.dispose(); refreshLibrary = null; quickTileFeedback = null; document.documentElement.style.setProperty("--ch-feedback-bottom", "38px"); };
   regions.content.appendChild(library.element);
   refreshLibrary();
 
@@ -2480,6 +2557,17 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
   // Sempre a fiação deste render: os handlers de campo disparam trabalho
   // assíncrono e precisam do cliente que `render` não recebe.
   wiringAtual = { shell, i18n, logger, client };
+  // Every color field in this panel shares recent colors and the system dialog.
+  configureColorPickers(document, {
+    recent: { list: () => panelPreferences.snapshot().recentColors, record: hex => panelPreferences.recordColor(hex) },
+    native: {
+      pick: async hex => {
+        const response = await client.execute<{ cancelled: boolean; hex: string | null }>("ae.ui.color-picker", { hex });
+        logger.recordResponse("ae.ui.color-picker", response);
+        return response.ok ? response.data?.hex ?? null : null;
+      }
+    }
+  });
 
   // A falha pertence à tarefa que a pessoa acabou de executar. O ToastRegion
   // agora se encarrega de exibi-la de forma flutuante sem quebrar a grade,
@@ -2495,7 +2583,7 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
     regions.content.parentElement?.setAttribute("data-browser", "true");
     const gallery = createPresetWorkspace(document, {
       cache: presetWorkspaceCache,
-      context: () => ({ hasComp: Boolean(state.context?.isComposition), selectionCount: state.context?.selectionLayerCount ?? 0, selectedKeys: state.context?.selectionSelectedKeyCount ?? 0 }),
+      context: () => ({ hasComp: Boolean(state.context?.isComposition), selectionCount: state.context?.selectionLayerCount ?? 0, selectedKeys: state.context?.selectionSelectedKeyCount ?? 0, fps: state.context?.compFrameRate ?? undefined, textLayers: state.context?.selectionTextLayerCount, lockedLayers: state.context?.selectionLockedLayerCount }),
       execute: async (command, args) => { const response = await client.execute(command, args, {preserveSelection:true}); if(command !== "ae.presets.inspect") logger.recordResponse(command,response); return response; },
       locale: i18n.locale(), preferences: panelPreferences, busy: state.busy, navigation: presetNavigation,
       apply: (preset, settings, mode) => {
@@ -2586,21 +2674,24 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
           return response;
         },
         error: response => response.error ? hostFailureMessage(response.error, i18n) : i18n.t("gradient.operationFailed"),
-        busy: value => { state.busy = value; shell.setBusy(value); },
-        back: () => shell.navigate("home")
+        busy: value => { state.busy = value; shell.setBusy(value); }
       });
       regions.content.appendChild(editor.element); regions.actions.appendChild(editor.actions);
+      const overflow = attachActionOverflow(document, editor.actions, { label: i18n.t("action.moreActions") });
       const refresh = () => { void editor.refresh(); };
       refreshToolContext = refresh;
       const polling = focusedPoll(document, refresh, CONTEXT_POLL_MS);
       const stopPositioning = keepFeedbackAboveActions(regions.actions);
-      disposeView = () => { editor.dispose(); polling.dispose(); stopPositioning(); refreshToolContext = null; };
+      disposeView = () => { editor.dispose(); overflow.dispose(); polling.dispose(); stopPositioning(); refreshToolContext = null; };
       void editor.refresh();
       return;
     }
     tool.render(regions, i18n);
     groupToolSections(document, regions.content);
-    for (const section of Array.from(regions.content.getElementsByTagName("details"))) section.classList.add("ch-tool-disclosure");
+    for (const section of Array.from(regions.content.getElementsByTagName("details"))) {
+      section.classList.add("ch-tool-disclosure");
+      section.setAttribute("data-motion", "disclosure-expand");
+    }
     const refreshEditorContext = refreshToolContext as (() => void) | null;
 
     const editorContext = contextFingerprint(state.context);
@@ -2648,9 +2739,12 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
       contextNotice.element.hidden = !reason;
       contextNotice.setTitle(reason ?? i18n.t("action.apply"));
       applyControl.setDisabled(Boolean(reason), reason ?? undefined);
+      footer.refresh?.();
       shell.refreshChrome();
       shell.setViewTitle(i18n.t(tool.nameKey));
     };
+    // Filled once the footer exists; context refreshes can relabel its actions.
+    const footer: { refresh?: () => void } = {};
     const busy = state.busy ? { disabled: true, disabledReason: state.busyReason ?? i18n.t("status.initializing") } : {};
     if (tool.load) appendAction({
       id: `tool-${tool.id}-refresh`, label: i18n.t(tool.loadLabelKey ?? "action.refreshPreview"), ...busy,
@@ -2660,13 +2754,13 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
       id: `tool-${tool.id}-reset`, label: i18n.t("action.reset"), variant: "tertiary", ...busy,
       onPress: () => { tool.reset(); state.lastError = null; shell.rerender(); }
     });
-    if (tool.id !== "ease") appendAction({
-      id: `tool-${tool.id}-back`, label: i18n.t("action.backToTools"), variant: "tertiary", ...busy,
-      onPress: () => { state.lastError = null; shell.navigate("home"); }
-    });
+    // "← Ferramentas" in the header already leaves the editor; a footer Back
+    // only pushed the actions onto a second row.
     regions.actions.appendChild(actionBar);
+    const overflow = attachActionOverflow(document, actionBar, { label: i18n.t("action.moreActions") });
+    footer.refresh = overflow.refresh;
     const stopPositioningFeedback = keepFeedbackAboveActions(regions.actions);
-    disposeView = () => { actionAreaAlive = false; disposeEditor?.(); contextNotice.dispose(); stopPositioningFeedback(); };
+    disposeView = () => { actionAreaAlive = false; disposeEditor?.(); contextNotice.dispose(); overflow.dispose(); stopPositioningFeedback(); };
     return;
   }
 
@@ -3399,7 +3493,9 @@ function contextFingerprint(context: ContextData | null): string {
     context.selectionSelectedKeyCount,
     context.selectionHasKeyframes ? "1" : "0",
     context.selectionHasExpressions ? "1" : "0",
-    context.selectionIs3D ? "1" : "0"
+    context.selectionIs3D ? "1" : "0",
+    context.selectionTextLayerCount ?? "",
+    context.selectionLockedLayerCount ?? ""
   ].join("\u0000");
 }
 
@@ -6154,7 +6250,7 @@ async function applyEaseAction(action: EaseAction, shell: Shell, i18n: I18n, log
       } else reportFailure(shell, i18n, response);
       return;
     }
-    if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+    if (response.warnings.length) reportHostWarnings(response.warnings);
     shell.setStatus(i18n.t("message.quickAppliedOperation", { tool: label }), "ok");
     const current = await client.execute<ContextData>("ae.context.read");
     logger.recordResponse("ae.context.read", current);
@@ -6176,7 +6272,7 @@ async function applyEase(shell: Shell, i18n: I18n, logger: MotionLogger, client:
   try {
     const response = await client.execute<{ appliedCount: number; skippedCount: number }>("ae.keys.ease.apply", args);
     logger.recordResponse("ae.keys.ease.apply", response);
-    if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+    if (response.warnings.length) reportHostWarnings(response.warnings);
     if (response.ok && (response.data?.appliedCount ?? 0) > 0) {
       shell.setStatus(i18n.t("message.easeApplied", { count: response.data!.appliedCount }), "ok");
     } else if (!response.ok) reportFailure(shell, i18n, response);
@@ -7397,7 +7493,7 @@ async function applyOrbit(shell: Shell, i18n: I18n, logger: MotionLogger, client
     const response = await client.execute("ae.3d.orbit", { ...state.orbit }, { mode: "advanced", emitLiveControls: true, preserveSelection: true });
     logger.recordResponse("ae.3d.orbit", response);
     if (response.ok) {
-      if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+      if (response.warnings.length) reportHostWarnings(response.warnings);
       shell.setStatus(i18n.t(state.orbit.bake ? "message.orbitBaked" : "message.orbitApplied"), "ok");
     } else reportFailure(shell, i18n, response);
   } catch {
@@ -9669,7 +9765,7 @@ async function applyVerticalPulse(shell: Shell, i18n: I18n, logger: MotionLogger
     if (!response.ok) reportFailure(shell, i18n, response);
     else {
       state.lastError = null;
-      if (response.warnings.length) globalFeedback?.reportWarning(response.warnings.map(warning => warning.message).join(" "));
+      if (response.warnings.length) reportHostWarnings(response.warnings);
       shell.setStatus(i18n.t(action === "remove" ? "verticalPulse.removed" : action === "bake" ? "verticalPulse.baked"
         : action === "update" ? "verticalPulse.updated" : "verticalPulse.applied"), "ok");
       // The mutation may have changed engines or lifecycle state. Keep Apply

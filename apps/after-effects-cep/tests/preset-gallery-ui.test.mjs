@@ -8,7 +8,7 @@ import { createFakeWindow } from '../../../packages/ui-core/tests/fake-dom.mjs';
 const built=await build({entryPoints:[fileURLToPath(new URL('../client/src/preset-gallery.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
 const {createPresetGallery}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
-function fixture(t, { category = 'all', scope = 'all', query = '', locale = 'pt-BR', context = {hasComp:true, selectionCount:2, selectedKeys:4}, busy = false, personal, personalAction, onApply } = {}) {
+function fixture(t, { category = 'all', scope = 'all', query = '', locale = 'pt-BR', context = {hasComp:true, selectionCount:2, selectedKeys:4}, busy = false, personal, personalAction, onApply, pick = true } = {}) {
   const saved={window:globalThis.window,requestAnimationFrame:globalThis.requestAnimationFrame,cancelAnimationFrame:globalThis.cancelAnimationFrame,IntersectionObserver:globalThis.IntersectionObserver};
   globalThis.window=createFakeWindow();globalThis.window.setTimeout=setTimeout;
   globalThis.requestAnimationFrame=()=>1;globalThis.cancelAnimationFrame=()=>{};
@@ -43,9 +43,11 @@ function fixture(t, { category = 'all', scope = 'all', query = '', locale = 'pt-
   const navigation={query,category,scope,scroll:0};
   const preferences={favorites:[],recent:[],folderColors:{},collapsedFolders:[],presetAutoplay:false,presetSize:200};
   const gallery=createPresetGallery(doc,{locale,navigation,busy,context:()=>context,openApplied(){},personal,personalAction,
-    preferences:{snapshot:()=>preferences,toggleFavorite(id){preferences.favorites=preferences.favorites.includes(id)?preferences.favorites.filter(item=>item!==id):[...preferences.favorites,id];}},
+    preferences:{snapshot:()=>preferences,toggleFolder(id){preferences.collapsedFolders=preferences.collapsedFolders.includes(id)?preferences.collapsedFolders.filter(item=>item!==id):[...preferences.collapsedFolders,id];},toggleFavorite(id){preferences.favorites=preferences.favorites.includes(id)?preferences.favorites.filter(item=>item!==id):[...preferences.favorites,id];}},
     apply(preset,settings,mode){applied.push({preset,settings,mode});onApply?.(preset,navigation);},edit(){}});
   doc.documentElement.appendChild(gallery.element);
+  // Details appear only after a choice; most tests start from the user picking the first card.
+  if(pick)gallery.element.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-apply'))?.click();
   t.after(()=>{gallery.dispose();Object.assign(globalThis,saved);});
   return {doc,navigation,gallery,applied,context,preferences};
 }
@@ -163,6 +165,48 @@ test('the default gallery exposes all collections with its filters in a closed a
   trigger.click();assert.equal(menu.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');
 });
 
+test('thumbnail size shares the catalog toolbar and the category menu sizes itself',t=>{
+  const {gallery}=fixture(t),root=gallery.element;
+  const toolbar=root.getElementsByTagName('div').find(node=>node.className.includes('ch-preset-toolbar-approved'));
+  const size=root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Tamanho das miniaturas');
+  assert.ok(toolbar.contains(size),'the thumbnail control no longer owns a row of its own');
+  const categories=root.getElementsByTagName('nav').find(node=>node.className==='ch-preset-categories');
+  assert.equal(categories.style.width,undefined,'no inherited sidebar width narrows the menu');
+  assert.equal(root.getElementsByTagName('div').some(node=>node.className==='ch-preset-divider'),false);
+});
+
+test('category menu supports arrow, Home/End and fold keys',t=>{
+  const {gallery,doc,preferences}=fixture(t),root=gallery.element;
+  const menu=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-filter-menu');
+  const trigger=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-filter-trigger'));
+  trigger.click();
+  const key=name=>menu.emit('keydown',{key:name,target:doc.activeElement});
+  assert.equal(doc.activeElement.dataset.scope,'favorites');
+  key('ArrowDown');assert.equal(doc.activeElement.dataset.scope,'recent');
+  key('ArrowDown');assert.equal(doc.activeElement.dataset.category,'signature');
+  key('ArrowDown');assert.equal(doc.activeElement.dataset.category,'signature-essentials');
+  key('ArrowLeft');assert.equal(doc.activeElement.dataset.category,'signature','Left on a child returns to its group');
+  key('ArrowLeft');assert.deepEqual(preferences.collapsedFolders,['signature']);
+  key('ArrowRight');assert.deepEqual(preferences.collapsedFolders,[]);
+  key('End');assert.equal(doc.activeElement.dataset.category,'personal','a disabled Add folder is skipped');
+  key('Home');assert.equal(doc.activeElement.dataset.scope,'favorites');
+  key('ArrowUp');assert.equal(doc.activeElement.dataset.category,'personal','arrows wrap around');
+});
+
+test('details and the Apply bar stay hidden until a preset is chosen, and close again on demand',t=>{
+  const {gallery,navigation,doc}=fixture(t,{pick:false}),root=gallery.element;
+  const editor=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-editor');
+  const bar=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-applybar');
+  assert.equal(navigation.selectedId,undefined);assert.equal(editor.hidden,true);assert.equal(bar.hidden,true);
+  const title=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-apply'));
+  title.click();assert.equal(editor.hidden,false);assert.equal(bar.hidden,false);
+  const close=root.getElementsByTagName('button').find(node=>node.getAttribute('aria-label')==='Fechar ajustes do preset');
+  close.click();assert.equal(navigation.selectedId,'');assert.equal(editor.hidden,true);assert.equal(bar.hidden,true);
+  assert.equal(doc.activeElement,title,'focus returns to the card that was open');
+  title.click();assert.equal(editor.hidden,false);
+  doc.emit('keydown',{key:'Escape'});assert.equal(editor.hidden,true,'Escape inside the gallery closes the details');
+});
+
 test('the selected preset inspector stays inline and keeps the exact draft during context refresh',t=>{
   const {gallery,context,navigation,doc}=fixture(t),root=gallery.element;
   const editor=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-editor');
@@ -247,6 +291,8 @@ test('switching to personal presets clears the previous inspector and preserves 
   assert.equal(inspector.getElementsByTagName('div').some(node=>node.className==='ch-preset-approved-heading'),false);
   assert.equal(navigation.selectedId,'');assert.equal(navigation.drafts[selected].durationFrames,53);
   chooseCategory('all');
+  assert.equal(editor.hidden,true,'returning to the library does not pick a preset on its own');assert.equal(navigation.selectedId,'');
+  root.getElementsByTagName('button').find(node=>node.dataset.focusKey===`title.${selected}`).click();
   assert.equal(editor.hidden,false);assert.equal(navigation.selectedId,selected);
   assert.equal(inspector.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Duração · frames').value,'53');
 });

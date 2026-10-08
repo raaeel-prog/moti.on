@@ -4,7 +4,7 @@ import { MOTION_LIBRARY_PRESETS, MOTION_LIBRARY_DEFAULTS, isMotionLibraryOptions
 import { MOTION_LIBRARY_NATIVE_PRESETS } from '../dist/motion-library-native.js';
 
 test('native collection appends four original recipes without changing the 136 previous recipes', () => {
-  const old = MOTION_LIBRARY_PRESETS.filter(p => p.collection !== 'native' && p.collection !== 'premium');
+  const old = MOTION_LIBRARY_PRESETS.filter(p => p.collection !== 'native' && p.collection !== 'premium' && p.collection !== 'signature');
   assert.equal(old.length, 136);
   assert.deepEqual(MOTION_LIBRARY_PRESETS.filter(p => p.collection === 'native'), MOTION_LIBRARY_NATIVE_PRESETS);
   assert.deepEqual(MOTION_LIBRARY_NATIVE_PRESETS.map(p => [p.id, p.category, p.mode, p.effect, p.effectAmount]), [

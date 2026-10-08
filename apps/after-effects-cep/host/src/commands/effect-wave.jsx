@@ -142,7 +142,7 @@
     var i;
     for (i = 0; i < selecionadas.length; i += 1) {
       var layer = /** @type {any} */ (selecionadas[i]);
-      if (layer && layer.locked) return failure(MotionContracts.ERROR.TRACK_CONFLICT, "Desbloqueie a camada antes de aplicar Wave.", { selectionIndex: i });
+      if (layer && layer.locked) return MotionErrors.failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "hostError.layerLocked", "Desbloqueie a camada antes de aplicar Wave.", null, { selectionIndex: i });
       if (args.mode === "effect") {
         var lista = MotionEffects.parade(selecionadas[i]);
         if (!lista) {

@@ -751,7 +751,7 @@ export function createToastRegion(
   const queueButton = element(doc, "button", "ch-toast-queue");
   queueButton.setAttribute("type", "button");
   queueButton.setAttribute("aria-live", "polite");
-  queueButton.setAttribute("data-motion", "tile-hover tile-press");
+  queueButton.setAttribute("data-motion", "button-press");
   const managed: ManagedToast[] = [];
 
   const visible = () => managed.filter((item) => item.shown);

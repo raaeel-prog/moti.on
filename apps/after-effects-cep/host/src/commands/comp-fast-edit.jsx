@@ -339,22 +339,64 @@
     var validation = validateArgs(args);
     if (validation) return validation;
     var comp = /** @type {CompItem} */ (app.project.activeItem);
+    var bloqueio = camadasBloqueadas(comp, /** @type {string} */ (args.operation));
+    if (bloqueio) return bloqueio;
     return planejar(comp, args).error;
   }
 
   /**
-   * Desloca todas as camadas no tempo.
+   * Operacoes que deslocam ou reenquadram TODAS as camadas recusam qualquer
+   * camada bloqueada da composicao; as que agem na selecao olham so a selecao.
+   * Mudar duracao, fps ou resolucao nao toca camadas.
+   *
+   * @param {CompItem} comp
+   * @param {string} operation
+   * @returns {MotionCommandFailure|null}
+   */
+  function camadasBloqueadas(comp, operation) {
+    if (operation === "trimToWorkArea" || operation === "shiftLayersToZero" || operation === "cropToSelectedBounds") {
+      var todas = [];
+      var i;
+      for (i = 1; i <= comp.numLayers; i += 1) todas.push(comp.layer(i));
+      return MotionPreflight.unlockedLayers(todas);
+    }
+    if (operation === "fitLayers" || operation === "precompose") {
+      return MotionPreflight.unlockedLayers(comp.selectedLayers);
+    }
+    return null;
+  }
+
+  /**
+   * Desloca todas as camadas no tempo, guardando como voltar cada uma.
    *
    * @param {CompItem} comp
    * @param {number} deslocamento
+   * @param {Array<() => void>} restauros
    * @returns {void}
    */
-  function shiftAll(comp, deslocamento) {
+  function shiftAll(comp, deslocamento, restauros) {
     var i;
     for (i = 1; i <= comp.numLayers; i += 1) {
       var camada = comp.layer(i);
-      if (camada) camada.startTime = camada.startTime + deslocamento;
+      if (!camada) continue;
+      restauros.push(restaurarInicio(camada, camada.startTime));
+      camada.startTime = camada.startTime + deslocamento;
     }
+  }
+
+  /** @param {Layer} camada @param {number} inicio @returns {() => void} */
+  function restaurarInicio(camada, inicio) {
+    return function () { camada.startTime = inicio; };
+  }
+
+  /** @param {Property} propriedade @param {unknown} valor @returns {() => void} */
+  function restaurarValor(propriedade, valor) {
+    return function () { propriedade.setValue(valor); };
+  }
+
+  /** @param {CompItem} comp @param {string} campo @param {number} valor @returns {() => void} */
+  function restaurarComp(comp, campo, valor) {
+    return function () { /** @type {any} */ (comp)[campo] = valor; };
   }
 
   /**
@@ -369,70 +411,104 @@
     var operation = /** @type {string} */ (args.operation);
     var summary = plano.summary;
     var i;
+    // Cada escrita registra antes como ser desfeita. Se o After Effects recusar
+    // uma delas no meio, o que ja mudou volta, e o usuario nao fica com metade
+    // das camadas deslocadas.
+    /** @type {Array<() => void>} */
+    var restauros = [];
 
-    if (operation === "trimToWorkArea") {
-      // Deslocar antes de encurtar: se a duracao cair primeiro, o After Effects
-      // pode empurrar camadas que ainda estao no fim da linha do tempo.
-      shiftAll(comp, /** @type {number} */ (summary.layerShift));
-      comp.duration = /** @type {number} */ (summary.durationAfter);
-    } else if (operation === "setDuration") {
-      comp.duration = /** @type {number} */ (args.duration);
-    } else if (operation === "setFrameRate") {
-      comp.frameRate = /** @type {number} */ (args.frameRate);
-    } else if (operation === "setResolution") {
-      comp.width = /** @type {number} */ (args.width);
-      comp.height = /** @type {number} */ (args.height);
-    } else if (operation === "cropToSelectedBounds") {
-      // Deslocar antes de encolher: as camadas precisam ja estar no novo
-      // enquadramento quando a composicao muda de tamanho.
-      var deslocaX = /** @type {number} */ (summary.offsetX);
-      var deslocaY = /** @type {number} */ (summary.offsetY);
-      for (i = 1; i <= comp.numLayers; i += 1) {
-        var alvo = comp.layer(i);
-        if (!alvo) continue;
-        var grupoAlvo = /** @type {any} */ (alvo).property(MN.transform);
-        if (!grupoAlvo) continue;
-        var posAlvo = grupoAlvo.property(MN.position);
-        if (!(posAlvo instanceof Property) || posAlvo.numKeys > 0) continue;
-        var atualPos = /** @type {number[]} */ (posAlvo.value);
-        var novoPos = [
-          /** @type {number} */ (atualPos[0]) + deslocaX,
-          /** @type {number} */ (atualPos[1]) + deslocaY
-        ];
-        if (atualPos.length > 2) novoPos.push(/** @type {number} */ (atualPos[2]));
-        posAlvo.setValue(novoPos);
+    try {
+      if (operation === "trimToWorkArea") {
+        // Deslocar antes de encurtar: se a duracao cair primeiro, o After Effects
+        // pode empurrar camadas que ainda estao no fim da linha do tempo.
+        shiftAll(comp, /** @type {number} */ (summary.layerShift), restauros);
+        restauros.push(restaurarComp(comp, "duration", comp.duration));
+        comp.duration = /** @type {number} */ (summary.durationAfter);
+      } else if (operation === "setDuration") {
+        restauros.push(restaurarComp(comp, "duration", comp.duration));
+        comp.duration = /** @type {number} */ (args.duration);
+      } else if (operation === "setFrameRate") {
+        restauros.push(restaurarComp(comp, "frameRate", comp.frameRate));
+        comp.frameRate = /** @type {number} */ (args.frameRate);
+      } else if (operation === "setResolution") {
+        restauros.push(restaurarComp(comp, "width", comp.width));
+        comp.width = /** @type {number} */ (args.width);
+        restauros.push(restaurarComp(comp, "height", comp.height));
+        comp.height = /** @type {number} */ (args.height);
+      } else if (operation === "cropToSelectedBounds") {
+        // Deslocar antes de encolher: as camadas precisam ja estar no novo
+        // enquadramento quando a composicao muda de tamanho.
+        var deslocaX = /** @type {number} */ (summary.offsetX);
+        var deslocaY = /** @type {number} */ (summary.offsetY);
+        for (i = 1; i <= comp.numLayers; i += 1) {
+          var alvo = comp.layer(i);
+          if (!alvo) continue;
+          var grupoAlvo = /** @type {any} */ (alvo).property(MN.transform);
+          if (!grupoAlvo) continue;
+          var posAlvo = grupoAlvo.property(MN.position);
+          if (!(posAlvo instanceof Property) || posAlvo.numKeys > 0) continue;
+          var atualPos = /** @type {number[]} */ (posAlvo.value);
+          var novoPos = [
+            /** @type {number} */ (atualPos[0]) + deslocaX,
+            /** @type {number} */ (atualPos[1]) + deslocaY
+          ];
+          if (atualPos.length > 2) novoPos.push(/** @type {number} */ (atualPos[2]));
+          restauros.push(restaurarValor(posAlvo, atualPos));
+          posAlvo.setValue(novoPos);
+        }
+        restauros.push(restaurarComp(comp, "width", comp.width));
+        comp.width = /** @type {number} */ (summary.widthAfter);
+        restauros.push(restaurarComp(comp, "height", comp.height));
+        comp.height = /** @type {number} */ (summary.heightAfter);
+      } else if (operation === "shiftLayersToZero") {
+        shiftAll(comp, /** @type {number} */ (summary.layerShift), restauros);
+      } else if (operation === "fitLayers") {
+        var selecionadas = comp.selectedLayers;
+        for (i = 0; i < selecionadas.length; i += 1) {
+          var camada = /** @type {any} */ (selecionadas[i]);
+          if (!isFiniteNumber(camada.width) || !isFiniteNumber(camada.height)) continue;
+          if (camada.width <= 0 || camada.height <= 0) continue;
+          var grupo = camada.property(MN.transform);
+          if (!grupo) continue;
+          var escala = grupo.property(MN.scale);
+          if (!(escala instanceof Property)) continue;
+          // Menor dos dois fatores: caber inteiro, sem cortar nem distorcer.
+          var fator = Math.min(comp.width / camada.width, comp.height / camada.height) * 100;
+          var atual = /** @type {number[]} */ (escala.value);
+          var novo = [fator, fator];
+          if (atual.length > 2) novo.push(/** @type {number} */ (atual[2]));
+          restauros.push(restaurarValor(escala, atual));
+          escala.setValue(novo);
+        }
+      } else {
+        var indices = [];
+        var paraPrecompor = comp.selectedLayers;
+        for (i = 0; i < paraPrecompor.length; i += 1) {
+          indices.push(/** @type {any} */ (paraPrecompor[i]).index);
+        }
+        // Uma chamada so: se falhar, nada foi criado; se passar, nao ha passo
+        // seguinte que possa falhar depois dela.
+        comp.layers.precompose(
+          indices,
+          /** @type {string} */ (args.precomposeName),
+          args.moveAllAttributes === true
+        );
       }
-      comp.width = /** @type {number} */ (summary.widthAfter);
-      comp.height = /** @type {number} */ (summary.heightAfter);
-    } else if (operation === "shiftLayersToZero") {
-      shiftAll(comp, /** @type {number} */ (summary.layerShift));
-    } else if (operation === "fitLayers") {
-      var selecionadas = comp.selectedLayers;
-      for (i = 0; i < selecionadas.length; i += 1) {
-        var camada = /** @type {any} */ (selecionadas[i]);
-        if (!isFiniteNumber(camada.width) || !isFiniteNumber(camada.height)) continue;
-        if (camada.width <= 0 || camada.height <= 0) continue;
-        var grupo = camada.property(MN.transform);
-        if (!grupo) continue;
-        var escala = grupo.property(MN.scale);
-        if (!(escala instanceof Property)) continue;
-        // Menor dos dois fatores: caber inteiro, sem cortar nem distorcer.
-        var fator = Math.min(comp.width / camada.width, comp.height / camada.height) * 100;
-        var atual = /** @type {number[]} */ (escala.value);
-        var novo = [fator, fator];
-        if (atual.length > 2) novo.push(/** @type {number} */ (atual[2]));
-        escala.setValue(novo);
+    } catch (erro) {
+      var incompleto = false;
+      var r;
+      for (r = restauros.length - 1; r >= 0; r -= 1) {
+        try {
+          /** @type {() => void} */ (restauros[r])();
+        } catch (restauroErro) {
+          incompleto = true;
+        }
       }
-    } else {
-      var indices = [];
-      var paraPrecompor = comp.selectedLayers;
-      for (i = 0; i < paraPrecompor.length; i += 1) {
-        indices.push(/** @type {any} */ (paraPrecompor[i]).index);
-      }
-      comp.layers.precompose(
-        indices,
-        /** @type {string} */ (args.precomposeName),
-        args.moveAllAttributes === true
+      throw MotionErrors.error(
+        incompleto ? "hostError.rollbackIncomplete" : "hostError.writeRefusedRestored",
+        incompleto ? "Fast Edit falhou e a restauracao ficou incompleta." : "Fast Edit falhou; a composicao foi restaurada.",
+        null,
+        incompleto ? MotionContracts.ERROR.ROLLBACK_FAILED : MotionContracts.ERROR.HOST_OPERATION_FAILED
       );
     }
 

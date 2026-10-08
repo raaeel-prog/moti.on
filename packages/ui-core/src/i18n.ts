@@ -71,6 +71,17 @@ export function interpolate(template: string, params?: MessageParams): string {
   });
 }
 
+/** Categoria de plural CLDR; sem `Intl.PluralRules`, só distingue 1 do resto. */
+export function pluralCategory(locale: string, count: number): string {
+  // O CLDR do pt-BR classifica 0 como "one"; na interface, "0 camadas" é a
+  // forma natural.
+  if (count === 0) return "other";
+  try {
+    if (typeof Intl !== "undefined" && typeof Intl.PluralRules === "function") return new Intl.PluralRules(locale).select(count);
+  } catch { /* runtime sem dados do idioma */ }
+  return Math.abs(count) === 1 ? "one" : "other";
+}
+
 export interface I18nOptions {
   locale?: string | undefined;
 }
@@ -104,7 +115,10 @@ export function createI18n(options: I18nOptions = {}): I18n {
       // Chave ausente devolve a própria chave. É feio de propósito: aparece no
       // teste e na revisão, enquanto uma string vazia passaria despercebida até
       // um usuário encontrar um rótulo em branco.
-      const template = lookup(key);
+      // A frase base é a forma geral; `chave.one` (etc.) a substitui quando
+      // `count` cai nessa categoria do idioma ativo.
+      const count = params?.["count"];
+      const template = (typeof count === "number" ? lookup(`${key}.${pluralCategory(current, count)}`) : null) ?? lookup(key);
       return template === null ? key : interpolate(template, params);
     },
 

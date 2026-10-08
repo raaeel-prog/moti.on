@@ -125,6 +125,9 @@
 .ch-icon { display:block; flex-shrink:0; width:16px; height:16px; overflow:visible; color:var(--text-primary); }
 .ch-icon__base { color:var(--text-primary); }
 .ch-icon__detail { color:var(--icon-color, var(--text-secondary)); }
+/* Duotone fill: the family color at low opacity behind the strokes. */
+.ch-icon__fill { color:var(--icon-color, var(--text-secondary)); opacity:0.22; }
+[data-theme="light"] .ch-icon__fill { opacity:0.18; }
 [data-icon-family="keyframes"] { --icon-color:var(--icon-keyframes); }
 [data-icon-family="layers"] { --icon-color:var(--icon-layers); }
 [data-icon-family="animation"] { --icon-color:var(--icon-animation); }

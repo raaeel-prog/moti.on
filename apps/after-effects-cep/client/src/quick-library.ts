@@ -3,6 +3,17 @@ import { MOTION_CATALOG } from "@motion/ui-motion";
 
 const TOOLTIP_EXIT_MS = MOTION_CATALOG.find(motion => motion.id === "tooltip-enter")!.durationMs[0]!;
 const SURFACE_MS = MOTION_CATALOG.find(motion => motion.id === "surface-morph")!.durationMs[0]!;
+const RIPPLE_MS = MOTION_CATALOG.find(motion => motion.id === "tile-ripple")!.durationMs[0]!;
+const CASCADE_MS = MOTION_CATALOG.find(motion => motion.id === "grid-stagger")!.durationMs[0]!;
+/** Matches --delay-spinner / --delay-applied: fast commands never flash a spinner. */
+const SPINNER_DELAY_MS = 150;
+const APPLIED_MS = 700;
+/** Only the first rows cascade; the rest arrive with the last step (A6.5: nothing animates off-screen). */
+const CASCADE_MAX = 12;
+const CASCADE_STEP_MS = 18;
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+export type TileFeedback = "loading" | "success" | "idle";
 
 export interface LibraryItem {
   id: string;
@@ -43,7 +54,7 @@ export function createQuickLibrary(doc: Document, options: {
   locale: string;
   anchor: HTMLElement;
   onNavigate(): void;
-}): { element: HTMLElement; update(items: LibraryItem[]): void; dispose(): void } {
+}): { element: HTMLElement; update(items: LibraryItem[]): void; setFeedback(id: string, state: TileFeedback): void; dispose(): void } {
   const i18n = createI18n({ locale: options.locale });
   const copy = LIBRARY_COPY[i18n.locale() === "pt-BR" ? "pt-BR" : "en-US"];
   const nav = options.navigation;
@@ -122,6 +133,7 @@ export function createQuickLibrary(doc: Document, options: {
   element.appendChild(heading);
   const grid = createElement(doc, "div", "ch-tool-grid");
   grid.setAttribute("aria-label", copy.all);
+  grid.setAttribute("data-motion", "grid-stagger");
   element.appendChild(grid);
   element.appendChild(options.anchor);
   const tooltip = createElement(doc, "div", "ch-quick-tooltip ch-library-tooltip");
@@ -153,6 +165,9 @@ export function createQuickLibrary(doc: Document, options: {
   const tiles = new Map<string, { tile: HTMLElement; node: HTMLButtonElement; more: HTMLButtonElement }>();
   let visibleIds: string[] = [];
   let renderedEmptyKey = "";
+  let cascadeTimer: ReturnType<typeof setTimeout> | undefined;
+  let drawnQuery: string | null = null;
+  const feedback = new Map<string, { spinner: Element; check: Element; dot: HTMLElement; timer?: ReturnType<typeof setTimeout> }>();
 
   function hideTooltip(animate = false): void {
     clearTimeout(timer); clearTimeout(exitTimer);
@@ -182,19 +197,30 @@ export function createQuickLibrary(doc: Document, options: {
     node.style.left = `${left}px`; node.style.top = `${top}px`;
     node.style.transformOrigin = `${Math.max(0, Math.min(node.offsetWidth, rect.left + rect.width / 2 - originLeft - left))}px ${placeBelow ? "top" : "bottom"}`;
   }
-  function tooltipContent(name: string, reason: string | null): void {
+  function tooltipContent(name: string, reason: string | null, family: string | null = null, detail: string | null = null): void {
     clearNode(tooltip);
-    tooltip.appendChild(createElement(doc, "strong", "", name));
+    const title = createElement(doc, "strong", "", name);
+    // A dot in the family color ties the name to the icon's palette.
+    if (family) {
+      const dot = createElement(doc, "i", "ch-library-tooltip__family");
+      dot.setAttribute("aria-hidden", "true");
+      dot.setAttribute("data-icon-family", family);
+      title.insertBefore?.(dot, title.firstChild);
+    }
+    tooltip.appendChild(title);
+    // O que a ferramenta faz e o que o clique faz. Sem isso o ícone sozinho
+    // obrigava a abrir a ferramenta para descobrir.
+    if (detail && !reason) tooltip.appendChild(createElement(doc, "span", "ch-library-tooltip__detail", detail));
     if (reason) tooltip.appendChild(createElement(doc, "span", "", reason));
   }
-  function identify(node: HTMLElement, name: () => string, reason: () => string | null = () => null): void {
+  function identify(node: HTMLElement, name: () => string, reason: () => string | null = () => null, detail: () => string | null = () => null): void {
     node.setAttribute("aria-label", name());
     const show = (includeReason = false) => {
       hideTooltip();
       timer = setTimeout(() => {
         if (!alive || menuOpen || !contains(element, node)) return;
         const unavailable = includeReason ? reason() : null;
-        tooltipContent(name(), unavailable);
+        tooltipContent(name(), unavailable, node.getAttribute("data-icon-family"), detail());
         tooltip.hidden = false; tooltip.removeAttribute("aria-hidden");
         tooltipOwner = node; tooltipShowsReason = includeReason;
         node.setAttribute("aria-describedby", tooltip.id);
@@ -283,8 +309,18 @@ export function createQuickLibrary(doc: Document, options: {
       if (item.interaction === "configure") item.edit(); else item.run();
     } });
     node.id = `library-tool-${id}`; node.setAttribute("data-motion", "tile-hover tile-press");
-    node.appendChild(createIcon(doc, id));
-    identify(node, () => itemMap.get(id)?.name ?? "", () => itemMap.get(id)?.reason ?? null);
+    const icon = createIcon(doc, id);
+    node.appendChild(icon);
+    // The tile carries its family so ripple and feedback share the icon color.
+    const family = icon.getAttribute("data-icon-family");
+    if (family) node.setAttribute("data-icon-family", family);
+    node.addEventListener("pointerdown", event => ripple(node, event as PointerEvent));
+    identify(node, () => itemMap.get(id)?.name ?? "", () => itemMap.get(id)?.reason ?? null, () => {
+      const item = itemMap.get(id);
+      if (!item) return null;
+      const action = item.interaction === "configure" ? copy.configure : item.interaction === "quick" ? copy.quick : null;
+      return [item.description, action].filter(Boolean).join(" · ") || null;
+    });
     tile.appendChild(node);
     const more = button(doc, { label: "", onClick: () => showOptions(id, more) });
     more.id = `library-options-${id}`; more.className += " ch-quick-options";
@@ -295,6 +331,88 @@ export function createQuickLibrary(doc: Document, options: {
     node.addEventListener("keydown", event => { if ((event as KeyboardEvent).key === "ArrowRight") { event.preventDefault(); more.focus(); } });
     tile.appendChild(more);
     return { tile, node, more };
+  }
+  function ripple(node: HTMLButtonElement, event: PointerEvent): void {
+    if (node.disabled || node.getAttribute("aria-disabled") === "true" || (event.button !== undefined && event.button !== 0)) return;
+    if (typeof node.getBoundingClientRect !== "function") return;
+    const rect = node.getBoundingClientRect();
+    const wave = createElement(doc, "span", "ch-tile-ripple");
+    wave.setAttribute("aria-hidden", "true");
+    wave.setAttribute("data-motion", "tile-ripple");
+    const size = Math.ceil(Math.max(rect.width, rect.height) * 2);
+    wave.style.setProperty?.("--ripple-x", `${Math.round(event.clientX - rect.left)}px`);
+    wave.style.setProperty?.("--ripple-y", `${Math.round(event.clientY - rect.top)}px`);
+    wave.style.setProperty?.("--ripple-size", `${size}px`);
+    node.appendChild(wave);
+    wave.getBoundingClientRect();
+    wave.setAttribute("data-active", "true");
+    setTimeout(() => wave.parentNode?.removeChild(wave), RIPPLE_MS + 40);
+  }
+  function cascade(list: HTMLElement[]): void {
+    clearTimeout(cascadeTimer);
+    list.forEach((tile, index) => {
+      if (index >= CASCADE_MAX * 2) { tile.removeAttribute("data-cascade"); return; }
+      tile.setAttribute("data-cascade", "true");
+      tile.style?.setProperty?.("--stagger-index", String(Math.min(index, CASCADE_MAX)));
+    });
+    grid.setAttribute("data-stagger", "true");
+    cascadeTimer = setTimeout(() => { if (alive) grid.removeAttribute("data-stagger"); }, CASCADE_MS + CASCADE_MAX * CASCADE_STEP_MS + 40);
+  }
+  function feedbackParts(id: string): { spinner: Element; check: Element; dot: HTMLElement; timer?: ReturnType<typeof setTimeout> } | null {
+    const existing = feedback.get(id);
+    if (existing) return existing;
+    const tile = tiles.get(id);
+    if (!tile || typeof doc.createElementNS !== "function") return null;
+    const layer = createElement(doc, "span", "ch-tile-feedback");
+    layer.setAttribute("aria-hidden", "true");
+    const spinner = doc.createElementNS(SVG_NS, "svg");
+    spinner.setAttribute("class", "ch-tile-spinner"); spinner.setAttribute("viewBox", "0 0 24 24");
+    spinner.setAttribute("data-motion", "progress-spinner");
+    const ring = doc.createElementNS(SVG_NS, "circle");
+    ring.setAttribute("cx", "12"); ring.setAttribute("cy", "12"); ring.setAttribute("r", "9");
+    spinner.appendChild(ring);
+    const check = doc.createElementNS(SVG_NS, "svg");
+    check.setAttribute("class", "ch-tile-check"); check.setAttribute("viewBox", "0 0 24 24");
+    const mark = doc.createElementNS(SVG_NS, "path");
+    mark.setAttribute("d", "M6 12.5l4 4 8-9");
+    mark.setAttribute("data-motion", "confirmation-check");
+    mark.setAttribute("style", "--motion-check-length:20");
+    check.appendChild(mark);
+    layer.appendChild(spinner); layer.appendChild(check);
+    const dot = createElement(doc, "span", "ch-tile-applied");
+    dot.setAttribute("aria-hidden", "true");
+    dot.setAttribute("data-motion", "applied-dot");
+    tile.node.appendChild(layer); tile.node.appendChild(dot);
+    const parts = { spinner, check: mark, dot };
+    feedback.set(id, parts);
+    return parts;
+  }
+  /** A6.4: spinner only when slow, a drawn ✓ on success, then the applied dot stays. */
+  function setFeedback(id: string, next: TileFeedback): void {
+    if (!alive) return;
+    const node = tiles.get(id)?.node;
+    const parts = feedbackParts(id);
+    if (!node || !parts) return;
+    clearTimeout(parts.timer);
+    parts.spinner.setAttribute("data-active", "false");
+    parts.check.setAttribute("data-active", "false");
+    if (next === "loading") {
+      node.setAttribute("data-feedback", "loading");
+      node.setAttribute("aria-busy", "true");
+      parts.timer = setTimeout(() => { if (alive) parts.spinner.setAttribute("data-active", "true"); }, SPINNER_DELAY_MS);
+      return;
+    }
+    node.removeAttribute("aria-busy");
+    if (next === "idle") { node.setAttribute("data-feedback", "idle"); return; }
+    node.setAttribute("data-feedback", "success");
+    (parts.check as unknown as HTMLElement).getBoundingClientRect?.();
+    parts.check.setAttribute("data-active", "true");
+    parts.dot.setAttribute("data-active", "true");
+    parts.timer = setTimeout(() => {
+      if (!alive) return;
+      node.setAttribute("data-feedback", "idle");
+      parts.check.setAttribute("data-active", "false");
+    }, APPLIED_MS);
   }
   function draw(): void {
     const prefs = options.preferences.snapshot();
@@ -322,6 +440,9 @@ export function createQuickLibrary(doc: Document, options: {
         if (!tiles.has(item.id)) tiles.set(item.id, createTile(item.id));
         grid.appendChild(tiles.get(item.id)!.tile);
       }
+      // Entering the view or switching filters cascades; narrowing a search does not.
+      if (drawnQuery === null || drawnQuery === nav.query) cascade(visible.map(item => tiles.get(item.id)!.tile));
+      drawnQuery = nav.query;
       if (!visible.length) grid.appendChild(createEmptyState(doc, {
         icon: "search", title: i18n.t("library.empty.title"), description: i18n.t(emptyKey),
         action: { label: i18n.t("library.showAll"), onClick: () => {
@@ -347,7 +468,7 @@ export function createQuickLibrary(doc: Document, options: {
       if (item.reason) tile.node.setAttribute("aria-description", item.reason); else tile.node.removeAttribute("aria-description");
       if (tooltipOwner === tile.node && !tooltip.hidden) {
         const reason = tooltipShowsReason ? item.reason : null;
-        tooltipContent(item.name, reason);
+        tooltipContent(item.name, reason, tile.node.getAttribute("data-icon-family"));
         position(tooltip, tile.node);
       }
     }
@@ -423,8 +544,11 @@ export function createQuickLibrary(doc: Document, options: {
       for (const item of items) itemMap.set(item.id, item);
       draw();
     },
+    setFeedback,
     dispose() {
       alive = false; ++scrollVersion;
+      clearTimeout(cascadeTimer);
+      for (const parts of feedback.values()) clearTimeout(parts.timer);
       if (scrollFrame !== undefined) doc.defaultView?.cancelAnimationFrame?.(scrollFrame);
       scrollFrame = undefined;
       hideTooltip(); closeMenu(false, true); clearTimeout(blurTimer);

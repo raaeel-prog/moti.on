@@ -109,6 +109,7 @@ function metadata(layer) {
 const role = (comp, value) => comp.all.find((layer) => metadata(layer)?.role === value);
 const control = (layer, name) => layer.property("ADBE Effect Parade").property(name).property(1);
 const selector = (layer) => layer.property("ADBE Text Properties").property("ADBE Text Animators").property(1).property("ADBE Text Selectors").property(1);
+const morphSelector = (layer, index = 2) => layer.property("ADBE Text Properties").property("ADBE Text Animators").property(index).property("ADBE Text Selectors").property(1);
 const transform = (layer, name) => layer.property("ADBE Transform Group").property(name);
 const document = (layer) => layer.property("ADBE Text Properties").property("ADBE Text Document");
 function visibleCenter(layer) {
@@ -259,6 +260,8 @@ test("manual progress works at a fixed time and automatic mode starts at the ori
 
 test("legacy swap upgrades its manual controls without overwriting user progress", async () => {
   const {comp,run,handler}=await fixture();run();const controller=role(comp,'controller');
+  for(const name of ['Moti.on Swap - Morph','Moti.on Swap - Blend Width'])controller.property('ADBE Effect Parade').property(name).remove();
+  for(const r of ['from','to']){const groups=role(comp,r).property('ADBE Text Properties').property('ADBE Text Animators');groups.property(3).remove();groups.property(2).remove();}
   const progress=control(controller,PROGRESS);
   progress.expression='// MOTION_STYLE_SWAP v1\n'+progress.expression.split('} else {\n')[1].replace(/\n}$/, '');
   controller.property('ADBE Effect Parade').property('Moti.on Swap - Follow Null').remove();
@@ -269,7 +272,7 @@ test("legacy swap upgrades its manual controls without overwriting user progress
   const old=metadata(controller);delete old.controlsVersion;
   controller.comment='\n[MOTION_STYLE_SWAP_V1]'+JSON.stringify(old)+'[/MOTION_STYLE_SWAP_V1]';progress.numKeys=2;
   assert.equal(handler.preflight(defaults),null);run();
-  assert.equal(metadata(controller).controlsVersion,3);assert.equal(control(controller,PROGRESS).numKeys,2);
+  assert.equal(metadata(controller).controlsVersion,4);assert.equal(control(controller,PROGRESS).numKeys,2);
   assert.equal(control(controller,'Moti.on Swap - Follow Null').value,1);assert.equal(comp.numLayers,5);
 });
 
@@ -282,3 +285,38 @@ test("dragging the null directly controls the swap at a fixed time in the source
   assert.deepEqual(transform(role(comp,'controller'),'ADBE Position').value,[700,200],'repeat apply preserves moved controller');
 });
 
+test("liquid morph is local, sharp at endpoints, smooth at crossover and reversible", async () => {
+  const f=await fixture();f.run();const c=role(f.comp,'controller'),layer=role(f.comp,'from');
+  const {runInNewContext}=await import('node:vm');
+  const evaluate=(p,index,kind=2)=>runInNewContext(morphSelector(layer,kind).property('ADBE Text Expressible Amount').expression,{effect:()=>()=>({effect:name=>()=>({[PROGRESS]:p,[DURATION]:12,[STAGGER]:2,'Moti.on Swap - Follow Null':1,'Moti.on Swap - Blend Width':2.4,'Moti.on Swap - Morph':100})[name]}),textIndex:index,textTotal:13});
+  for(const p of [0,100])for(let i=1;i<=13;i++){assert.equal(evaluate(p,i),0);assert.ok(Array.from(evaluate(p,i,3)).every(v=>v===0));}
+  assert.equal(evaluate(50,7),100);assert.equal(evaluate(50,1),0);assert.equal(evaluate(50,13),0);
+  assert.ok(Math.abs(evaluate(50.0001,7)-evaluate(50,7))<.001);
+  assert.equal(evaluate(35,5),evaluate(35,5));
+  const props=layer.property('ADBE Text Properties').property('ADBE Text Animators').property(2).property('ADBE Text Animator Properties');
+  assert.deepEqual(props.property('ADBE Text Scale 3D').value,[68,118,100]);assert.ok(props.property('ADBE Text Blur').value[0]>0);
+  assert.equal(metadata(c).controlsVersion,4);assert.equal(control(c,'Moti.on Swap - Blend Width').value,2.4);
+  f.run({unit:'words'});for(const r of ['from','to'])for(const index of [2,3])assert.equal(morphSelector(role(f.comp,r),index).property('ADBE Text Range Type2').value,3);
+});
+
+test("custom morph properties are protected and migration failure removes partial animators", async () => {
+  const f=await fixture();f.run();const layer=role(f.comp,'from'),props=layer.property('ADBE Text Properties').property('ADBE Text Animators').property(2).property('ADBE Text Animator Properties');
+  props.property('ADBE Text Blur').setValue([80,80]);assert.equal(f.handler.preflight(defaults).code,ERROR.EXPRESSION_CONFLICT);
+  f.run({action:'remove'});
+  const g=await fixture();g.run();const c=role(g.comp,'controller');
+  for(const r of ['from','to']){const l=role(g.comp,r),groups=l.property('ADBE Text Properties').property('ADBE Text Animators');groups.property(3).remove();groups.property(2).remove();const amount=selector(l).property('ADBE Text Expressible Amount');amount.expression=amount.expression.replace(/if\(c.effect\("Moti.on Swap - Follow Null"\)\(1\) == 1\) \{[^\n]+\}/,'if(c.effect("Moti.on Swap - Follow Null")(1) == 1) u=Math.max(0,Math.min(1,p*textTotal-(textIndex-1)));');}
+  for(const n of ['Moti.on Swap - Morph','Moti.on Swap - Blend Width'])c.property('ADBE Effect Parade').property(n).remove();
+  const md=metadata(c);md.controlsVersion=3;c.comment='\n[MOTION_STYLE_SWAP_V1]'+JSON.stringify(md)+'[/MOTION_STYLE_SWAP_V1]';
+  const comments=g.comp.all.map(l=>l.comment);g.comp.failExpression=3;
+  assert.equal(g.handler.preflight(defaults),null);assert.throws(()=>g.handler.run(defaults),/injected expression/);
+  assert.deepEqual(g.comp.all.map(l=>l.comment),comments);
+  for(const r of ['from','to'])assert.equal(role(g.comp,r).property('ADBE Text Properties').property('ADBE Text Animators').numProperties,1);
+  assert.equal(c.property('ADBE Effect Parade').property('Moti.on Swap - Morph'),undefined);
+  assert.equal(g.handler.preflight(defaults),null);
+});
+
+test("native float rounding is accepted when reapplying managed blur", async () => {
+  const f=await fixture();f.run();
+  for(const r of ['from','to']){const p=role(f.comp,r).property('ADBE Text Properties').property('ADBE Text Animators').property(2).property('ADBE Text Animator Properties').property('ADBE Text Blur');p.setValue(p.value.map(Math.fround));}
+  assert.equal(f.handler.preflight(defaults),null);f.run();assert.equal(f.comp.numLayers,5);
+});

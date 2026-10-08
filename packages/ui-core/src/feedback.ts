@@ -43,6 +43,11 @@ export interface FeedbackController {
   reportError(message: string, options?: FeedbackReportOptions): ToastHandle;
   reportWarning(message: string, options?: FeedbackReportOptions): ToastHandle;
   reportInfo(message: string, options?: FeedbackReportOptions): ToastHandle;
+  /**
+   * Ações do próximo aviso de sucesso (ex.: "Ajustar" depois de um Quick).
+   * Valem para uma operação só: uma falha ou o próprio aviso as descartam.
+   */
+  attachToNextSuccess(actions: readonly ToastAction[]): void;
   refreshLabels(): void;
   clear(): void;
   dispose(): void;
@@ -66,6 +71,7 @@ export function createFeedbackController(doc: Document, options: FeedbackOptions
   });
   let running = false;
   let disposed = false;
+  let nextSuccessActions: readonly ToastAction[] | null = null;
 
   function report(
     state: "error" | "warning" | "default",
@@ -99,18 +105,24 @@ export function createFeedbackController(doc: Document, options: FeedbackOptions
       running = false;
       // Um status de inicialização/contexto não é resultado de uma operação.
       // Em falha, reportError recebe a mensagem concreta do resultado tipado.
+      // Anexadas imediatamente antes do status final da mesma operação.
+      const actions = nextSuccessActions;
+      nextSuccessActions = null;
       if (wasRunning && status.state === "ok" && status.message.trim()) {
         region.push({
           message: status.message,
           state: "success",
           stateLabel: options.labels().success,
           dedupKey: `success:${status.message}`,
-          durationMs: 3000
+          // Com ação, vale a duração padrão da região para avisos com botão.
+          ...(actions?.length ? { actions } : { durationMs: 3000 })
         });
       }
     },
+    attachToNextSuccess(actions) { if (!disposed) nextSuccessActions = actions.length ? actions : null; },
     reportError(message, reportOptions) {
       running = false;
+      nextSuccessActions = null;
       return report("error", message, reportOptions);
     },
     reportWarning(message, reportOptions) {

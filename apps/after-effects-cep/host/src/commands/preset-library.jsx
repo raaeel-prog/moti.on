@@ -174,7 +174,7 @@
     for (var k in args) if (Object.prototype.hasOwnProperty.call(args,k) && !allowed[k]) return fail(MotionContracts.ERROR.INVALID_PRESET,"Opção de preset desconhecida.");
     if (!definition(args) || (args.phase !== "in" && args.phase !== "out" && args.phase !== "both") || (args.direction !== "preset" && args.direction !== "left" && args.direction !== "right" && args.direction !== "top" && args.direction !== "bottom")) return fail(MotionContracts.ERROR.INVALID_PRESET,"Preset, fase ou direção inválidos.");
     if (typeof args.durationFrames !== "number" || !isFinite(args.durationFrames) || args.durationFrames < 1 || args.durationFrames > 600 || Math.floor(args.durationFrames) !== args.durationFrames || typeof args.intensity !== "number" || !isFinite(args.intensity) || args.intensity < 0 || args.intensity > 300 || typeof args.staggerFrames !== "number" || !isFinite(args.staggerFrames) || args.staggerFrames < 0 || args.staggerFrames > 60 || Math.floor(args.staggerFrames) !== args.staggerFrames) return fail(MotionContracts.ERROR.INVALID_PRESET,"Duração, intensidade ou intervalo fora do limite.");
-    if(Object.prototype.hasOwnProperty.call(args,"easing")&&args.easing!=="preset"&&args.easing!=="smooth"&&args.easing!=="cubic"&&args.easing!=="overshoot"&&args.easing!=="bounce"&&args.easing!=="flicker"&&args.easing!=="silk"&&args.easing!=="glide"&&args.easing!=="spring")return fail(MotionContracts.ERROR.INVALID_PRESET,"Suavização inválida.");
+    if(Object.prototype.hasOwnProperty.call(args,"easing")&&args.easing!=="preset"&&args.easing!=="smooth"&&args.easing!=="cubic"&&args.easing!=="overshoot"&&args.easing!=="bounce"&&args.easing!=="flicker"&&args.easing!=="silk"&&args.easing!=="glide"&&args.easing!=="spring"&&args.easing!=="velvet"&&args.easing!=="drift"&&args.easing!=="snap")return fail(MotionContracts.ERROR.INVALID_PRESET,"Suavização inválida.");
     var optional=["elasticity","overlap","speed"];
     for(var o=0;o<optional.length;o++){var option=optional[o];if(!option||!Object.prototype.hasOwnProperty.call(args,option))continue;
       var v=args[option],min=option==="speed"?25:0,max=option==="speed"?200:100;
@@ -189,29 +189,18 @@
   function isText(p) { return p.category.indexOf("text-") === 0; }
   /** @param {any} p @returns {boolean} */
   function usesNativeCore(p) { return p.effect === "native-rgb" || p.effect === "native-glitch"; }
+  /** Signature looks whose texture or sequence depends on the seed.
+   * @param {any} p @returns {boolean} */
+  function signatureSeeded(p) { return p.text.order === "random" || p.text.reveal === "resolve" || (p.choreography && p.choreography.distribution === "scatter") || p.effect === "film-burn" || p.effect === "projector"; }
   /** The renderer contract is verified independently of translated labels.
    * @param {any} effect @returns {boolean} */
   function nativeCoreCompatible(effect) {
     for (var i = 1; i <= 5; i++) if (!effect || !effect.property(NATIVE_CORE + "-000" + i)) return false;
     return true;
   }
-  /** @param {any} p @returns {string[]} */
-  function requiredEffects(p) {
-    var r = ["ADBE Slider Control"];
-    if (p.effect.indexOf("camera-") === 0) r.push("ADBE Gaussian Blur 2");
-    if (p.effect === "camera-dark" || p.effect === "camera-light") r.push("ADBE Tint");
-    if (p.effect === "camera-distort" || p.effect === "camera-shake") r.push("ADBE Turbulent Displace");
-    if (p.effect === "blur" || p.effect === "blur-wave") r.push("ADBE Gaussian Blur 2");
-    if (p.effect === "blur-wave") r.push("ADBE Wave Warp");
-    if (p.effect === "duotone" || p.effect === "chroma2") r.push("ADBE Tint");
-    if (p.effect === "rgb" || p.effect === "chroma2") r.push("Mettle SkyBox Chromatic Aberrat");
-    if (usesNativeCore(p)) r.push(NATIVE_CORE);
-    if (p.effect === "contrast") { r.push("ADBE Brightness & Contrast 2"); r.push("ADBE HUE SATURATION"); }
-    if (p.effect === "turbulent") r.push("ADBE Turbulent Displace");
-    if (p.effect === "extrude" || p.effect.indexOf("shadow") === 0) r.push("ADBE Drop Shadow");
-    if (p.effect === "shadow-stripes") { r.push("ADBE Venetian Blinds"); r.push("CC Composite"); }
-    return r;
-  }
+  /** Fonte unica com a galeria: packages/contracts/src/motion-library-requirements.ts,
+   * montada em MotionLibraryCore. @param {any} p @returns {string[]} */
+  function requiredEffects(p) { return /** @type {any} */ (global).MotionLibraryCore.libraryRequiredEffects(p); }
   /** @param {any} args @param {string} action @param {boolean=} migration @param {any[]=} selectedOverride @param {any=} phaseOwner @returns {MotionCommandFailure|null} */
   function preflight(args, action, migration, selectedOverride, phaseOwner) {
     if (action === "apply") { var validation = validate(args); if (validation) return validation; }
@@ -229,7 +218,8 @@
     if (p && p.cameraSpec) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Use a transição em pré-comp para este preset; ele processa a composição sem alterar as camadas.");
     for (var i = 0; i < layers.length; i++) {
       var l = /** @type {any} */ (layers[i]);
-      if (l.locked || !l.hasVideo || l.nullLayer || l instanceof CameraLayer || l instanceof LightLayer) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Selecione camadas visuais desbloqueadas.");
+      if (l.locked) return MotionErrors.failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"hostError.layerLocked","Selecione camadas visuais desbloqueadas.",null,{selectionIndex:i});
+      if (!l.hasVideo || l.nullLayer || l instanceof CameraLayer || l instanceof LightLayer) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Selecione camadas visuais desbloqueadas.");
       var m;
       try { m = phaseOwner ? null : metadata(l); } catch (badMetadata) { return fail(MotionContracts.ERROR.INVALID_PRESET,"Os metadados do preset estão incompletos."); }
       var ownership = verifyOwnership(l,m); if (ownership) return ownership;
@@ -264,8 +254,8 @@
       }
       var effects = requiredEffects(p), parade = l.property(MN_EFFECTS);
       for (j = 0; j < effects.length; j++) {
-        try { if (!parade || !parade.canAddProperty(effects[j])) return fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE,"Efeito nativo indisponível: " + effects[j]); }
-        catch (capabilityError) { return fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE,"Não foi possível verificar o efeito: " + effects[j]); }
+        try { if (!parade || !parade.canAddProperty(effects[j])) return MotionErrors.failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE,"hostError.effectUnavailable","Efeito nativo indisponível: " + effects[j],{effect:effects[j]}); }
+        catch (capabilityError) { return MotionErrors.failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE,"hostError.effectUnavailable","Não foi possível verificar o efeito: " + effects[j],{effect:effects[j]}); }
       }
       if (m && usesNativeCore(p)) {
         for (j = 0; j < m.effects.length; j++) if (m.effects[j].matchName === NATIVE_CORE && !nativeCoreCompatible(child(parade,m.effects[j].name))) return fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE,"CHMS Motion Core incompatível: atualize o plugin para usar os cinco controles deste preset.");
@@ -277,7 +267,7 @@
    * @param {any} p @param {any} args @param {any} m @param {boolean} text @returns {string} */
   function header(p,args,m,text) {
     var duration = "effect("+MotionJson.stringify(m.effects[0].name)+")(1)", amount = "effect("+MotionJson.stringify(m.effects[1].name)+")(1)", stagger = "effect("+MotionJson.stringify(m.effects[2].name)+")(1)";
-    var unit = args.unit === "preset" ? p.text.unit : args.unit,studio=p.collection==="studio"||p.collection==="native"||p.collection==="premium";
+    var unit = args.unit === "preset" ? p.text.unit : args.unit,studio=p.collection==="studio"||p.collection==="native"||p.collection==="premium"||p.collection==="signature";
     var order=args.order&&args.order!=="preset"?args.order:(p.text.order||(p.text.random?"random":"forward")),sequence="",seed=typeof args.seed==="number"?args.seed:17;
     if(text&&unit!=="all"){
       if(order==="random")sequence="var order="+core.libraryOrder.toString()+";idx=order(idx,total"+(typeof args.seed==="number"||p.collection==="premium"?",seed":"")+");\n";
@@ -292,7 +282,9 @@
       "var u=timing(time,inPoint,outPoint,dur,"+MotionJson.stringify(args.phase)+",idx,total,Math.max(0,Math.min(60,"+stagger+"))*thisComp.frameDuration"+(studio?",overlap":"")+");\n")+
       "var w="+(p.mode === "transition" ? "2-ease(u[0],"+MotionJson.stringify(args.easing&&args.easing!=="preset"?args.easing:p.easing)+",elastic)-ease(u[1],"+MotionJson.stringify(args.easing&&args.easing!=="preset"?args.easing:p.easing)+",elastic)" : "wave(age,idx,"+MotionJson.stringify(p.waveform === "none" ? "wiggle" : p.waveform)+",seed)")+";var fadeWeight=w;\n"+
       (p.mode === "transition" && p.waveform !== "none" ? "w+=wave(age,idx,"+MotionJson.stringify(p.waveform)+",seed)*Math.abs(w)*0.25;\n" : "")+
-      (p.choreography ? "var choreography="+core.libraryChoreography.toString()+";var pose=choreography(Math.max(0,Math.min(1,Math.min(u[0],u[1]))),w,"+p.position.join(",")+","+MotionJson.stringify(p.choreography.path)+","+MotionJson.stringify(p.choreography.distribution||"uniform")+",rawIndex,seed,"+(typeof p.choreography.turns==="number"?p.choreography.turns:1)+","+MotionJson.stringify(args.direction)+");\n" : "");
+      (p.choreography ? "var choreography="+core.libraryChoreography.toString()+";var pose=choreography(Math.max(0,Math.min(1,Math.min(u[0],u[1]))),w,"+p.position.join(",")+","+MotionJson.stringify(p.choreography.path)+","+MotionJson.stringify(p.choreography.distribution||"uniform")+",rawIndex,seed,"+(typeof p.choreography.turns==="number"?p.choreography.turns:1)+","+MotionJson.stringify(args.direction)+");\n" : "")+
+      // Signature looks share one progress, velocity and envelope with the preview.
+      (p.collection==="signature" ? "var envelope="+core.librarySignatureEnvelope.toString()+";var glyph="+core.librarySignatureGlyph.toString()+";var sp=Math.max(0,Math.min(1,Math.min(u[0],u[1])));var sv="+(p.mode==="transition"?"("+core.librarySignatureVelocity.toString()+")(sp,"+MotionJson.stringify(args.easing&&args.easing!=="preset"?args.easing:p.easing)+",elastic,ease)":"0")+";\n" : "");
   }
   /** @param {any} meta @param {string} key @param {number} fallback @returns {string} */
   function controlExpression(meta,key,fallback){return meta.controls&&meta.controls[key]?"effect("+MotionJson.stringify(meta.controls[key])+")(1)":String(fallback);}
@@ -321,6 +313,7 @@
   /** @param {any} plan */
   function effects(plan) {
     var p=plan.p, a=p.effectAmount, e, i;
+    if(p.collection==="signature"&&p.effect!=="rgb"){/** @type {any} */ (global).MotionSignatureEffects.apply(plan,{effect:effect,set:set,express:express,effectExpression:effectExpression,header:header});return;}
     if(usesNativeCore(p)){
       var nativeKey=plan.locale.indexOf("pt")===0?"Motor de cor":"Color engine";
       for(i=0;i<plan.meta.effects.length;i++)if(plan.meta.effects[i].matchName===NATIVE_CORE)nativeKey=plan.meta.effects[i].name.split(" · ").slice(1).join(" · ");
@@ -438,7 +431,10 @@
     textSelector(plan,a,"[w*amp*100,w*amp*100,w*amp*100];");
     }
     if(p.fade){a=animator(plan,"Opacidade");textProperty(plan,a,"ADBE Text Opacity",0);textSelector(plan,a,p.text.reveal==="typewriter"?"Math.min(u[0],u[1])<(idx+1)/total?Math.min(1,amp)*100:0;":p.mode==="transition"?"var opacity=Math.max(0,Math.min(1,fadeWeight*amp));[opacity*100,opacity*100,opacity*100];":"var opacity=Math.abs(w)*Math.min(1,amp)*.7;[opacity*100,opacity*100,opacity*100];");}
-    if(p.text.blur){a=animator(plan,"Foco");var blur=p.text.blur*plan.comp.height/1080;textProperty(plan,a,"ADBE Text Blur",[blur,blur]);textSelector(plan,a,"var b=Math.max(0,w)*amp*100;[b,b,b];");}
+    if(p.text.blur){a=animator(plan,"Foco");var blur=p.text.blur*plan.comp.height/1080;textProperty(plan,a,"ADBE Text Blur",[p.text.blurAxis==="y"?0:blur,p.text.blurAxis==="x"?0:blur]);textSelector(plan,a,"var b=Math.max(0,w)*amp*100;[b,b,b];");}
+    // The fill tints arriving units and returns to the editable source fill at rest.
+    if(p.text.fill&&p.mode==="transition"){a=animator(plan,"Cor");textProperty(plan,a,"ADBE Text Fill Color",[p.text.fill[0],p.text.fill[1],p.text.fill[2],1]);textSelector(plan,a,"var c=Math.max(0,Math.min(1,fadeWeight))*Math.min(1,amp)*100;[c,c,c];");}
+    if((p.text.reveal==="resolve"||p.text.reveal==="roll")&&p.mode==="transition"){a=animator(plan,"Glifos");textProperty(plan,a,"ADBE Text Character Offset",30);textSelector(plan,a,"var g=glyph("+MotionJson.stringify(p.text.reveal)+",Math.min(u[0],u[1]),fadeWeight,rawIndex,seed)*(amp>0?100/30:0);[g,g,g];");}
     if(p.text.decode){a=animator(plan,"Decodificação");textProperty(plan,a,"ADBE Text Character Offset",30);textSelector(plan,a,"var amount=Math.round(Math.sin(Math.floor((time-inPoint)*18)*7.7+textIndex*11.3)*30)*"+(p.mode==="transition"?"Math.max(0,Math.min(1,w))":"1")+"*amp;[amount*100/30,amount*100/30,amount*100/30];");}
     if(p.text.mask){
       var masks=plan.layer.property("ADBE Mask Parade"),name="Moti.on "+plan.meta.instance+" · Janela",mask=child(masks,name);
@@ -488,10 +484,10 @@
     }
     var extras=[];
     if(p.mode==="transition"&&((plan.args.easing&&plan.args.easing!=="preset"?plan.args.easing:p.easing)==="spring"||(m.controls&&m.controls.elasticity)))extras.push({key:"elasticity",pt:"Elasticidade (%)",en:"Elasticity (%)",fallback:30});
-    if(p.collection==="studio"||p.collection==="native"||p.collection==="premium"){
+    if(p.collection==="studio"||p.collection==="native"||p.collection==="premium"||p.collection==="signature"){
       if(isText(p)&&p.mode==="transition")extras.push({key:"overlap",pt:"Sobreposição (%)",en:"Overlap (%)",fallback:65});
       if(p.mode==="continuous")extras.push({key:"speed",pt:"Velocidade (%)",en:"Speed (%)",fallback:100});
-      if(p.collection==="premium")extras.push({key:"seed",pt:"Variação",en:"Variation",fallback:17});
+      if(p.collection==="premium"||p.collection==="signature"&&signatureSeeded(p))extras.push({key:"seed",pt:"Variação",en:"Variation",fallback:17});
     }
     if(extras.length){
       if(!m.controls)m.controls={};
@@ -525,7 +521,9 @@
   /** @param {any} layer @param {any} m @param {boolean=} preserveMetadata */
   function removeLayer(layer,m,preserveMetadata){
     removeMarkers(layer,m);
-    for(var i=0;i<m.expressions.length;i++){var r=m.expressions[i],p=locate(layer,r.path);p.expression=r.original;p.expressionEnabled=r.enabled;}
+    // Ordinary removal verifies ownership first; only a rollback after a failed
+    // render reaches properties whose owned effect was already removed.
+    for(var i=0;i<m.expressions.length;i++){var r=m.expressions[i],p=locate(layer,r.path);if(!p)continue;p.expression=r.original;p.expressionEnabled=r.enabled;}
     var groups=/** @type {any} */ ([[MN_EFFECTS,m.effects],[MN_TEXT,m.animators],["ADBE Mask Parade",m.masks]]);
     for(i=0;i<groups.length;i++){var group=layer.property(groups[i][0]);if(i===1&&group)group=group.property(MN_ANIMATORS);var records=groups[i][1];for(var j=records.length-1;j>=0;j--){var e=child(group,records[j].name);if(e)e.remove();}}
     if(!preserveMetadata){if(!m.was3D&&definition({presetId:m.presetId}).category==="motion-3d")layer.threeDLayer=false;saveMetadata(layer,null);}
@@ -663,7 +661,9 @@
   }
   MotionRegistry.register("ae.presets.inspect",{preflight:function(args){for(var key in args)if(Object.prototype.hasOwnProperty.call(args,key))return fail(MotionContracts.ERROR.INVALID_PRESET,"A leitura não recebe parâmetros.");return null;},run:function(){var data=inspect(),library=/** @type {any} */ (global).MotionPresetLibrary;if(library.decorateColors)library.decorateColors(data);return {changed:false,data:data,warnings:[]};}});
   MotionRegistry.register("ae.presets.adjust",{preflight:adjustPreflight,run:adjustRun});
-  MotionRegistry.register("ae.presets.apply",{preflight:function(args){return preflight(args,"apply");},run:apply});
+  // The dispatcher calls run(args, context, options); apply's third parameter is
+  // the per-layer Adjust map, so the request options must never reach it.
+  MotionRegistry.register("ae.presets.apply",{preflight:function(args){return preflight(args,"apply");},run:function(args,context){return apply(args,context);}});
   MotionRegistry.register("ae.presets.remove",{preflight:function(args){return preflight(args,"remove");},run:function(){return cameraTransition && cameraTransition.hasSelected(app.project.activeItem)?cameraTransition.remove():remove();}});
   MotionRegistry.register("ae.presets.bake",{preflight:function(args){return preflight(args,"bake");},run:function(){return cameraTransition && cameraTransition.hasSelected(app.project.activeItem)?cameraTransition.bake():bake();}});
   global.MotionPresetLibrary={validate:validate,metadata:metadata,requiredEffects:requiredEffects,header:header,markerState:markerState,verifyOwnership:verifyOwnership,definition:definition,preflight:preflight,applyLayer:applyLayer,removeLayer:removeLayer,inspectLayer:inspectLayer,locate:locate,child:child,snapshot:snapshot,restore:restore,saveMetadata:saveMetadata,snapshotMarkers:snapshotMarkers,restoreMarkers:restoreMarkers,removeMarkers:removeMarkers};

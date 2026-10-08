@@ -1,4 +1,4 @@
-import { cameraImpactSample, libraryDirection, libraryEase, libraryTiming, libraryWave, libraryOrder, libraryStudioTiming, librarySequence, libraryChoreography, type MotionLibraryOptions, type MotionLibraryPreset } from "@motion/contracts";
+import { cameraImpactSample, libraryDirection, libraryEase, libraryTiming, libraryWave, libraryOrder, libraryStudioTiming, librarySequence, libraryChoreography, librarySignatureEnvelope, librarySignatureGlyph, librarySignatureVelocity, type MotionLibraryOptions, type MotionLibraryPreset } from "@motion/contracts";
 
 export function libraryPreviewEnd(options: MotionLibraryOptions): number {
   return Math.max(3.2, options.durationFrames / 30 * 2 + .8);
@@ -25,14 +25,20 @@ export function libraryPreviewPlayback(p: MotionLibraryPreset, options: MotionLi
     opacity: 1 - Math.max(0, Math.min(1, (t - lead - shown - hold) / reset))};
 }
 
-export function librarySample(p: MotionLibraryPreset, options: MotionLibraryOptions, time: number, index = 0, count = 1): { x: number; y: number; z: number; rx: number; ry: number; rz: number; sx: number; sy: number; opacity: number; weight: number } {
+/** Overlap as the host applies it: only text transitions get an Overlap control;
+ * every other recipe runs on the host's fixed 65%. */
+function appliedOverlap(p: MotionLibraryPreset, options: MotionLibraryOptions): number {
+  return p.category.startsWith("text-") && p.mode === "transition" ? options.overlap ?? p.defaults?.overlap ?? 65 : 65;
+}
+
+export function librarySample(p: MotionLibraryPreset, options: MotionLibraryOptions, time: number, index = 0, count = 1): { x: number; y: number; z: number; rx: number; ry: number; rz: number; sx: number; sy: number; opacity: number; weight: number; progress: number } {
   const unit = options.unit === "preset" ? p.text.unit : options.unit;
-  const studio = p.collection === "studio" || p.collection === "native" || p.collection === "premium";
+  const studio = p.collection === "studio" || p.collection === "native" || p.collection === "premium" || p.collection === "signature";
   const order = options.order && options.order !== "preset" ? options.order : p.text.order ?? (p.text.random ? "random" : "forward");
   const seed = options.seed ?? p.defaults?.seed ?? 17;
   const idx = unit === "all" ? 0 : order === "random" && count > 1 ? libraryOrder(index, count, options.seed) : librarySequence(index, count, order);
   const speed = studio ? (options.speed ?? p.defaults?.speed ?? 100) / 100 : 1, age = time * speed;
-  const [a, b] = (studio ? libraryStudioTiming : libraryTiming)(time, 0, libraryPreviewEnd(options), options.durationFrames / 30, options.phase, idx, unit === "all" ? 1 : count, options.staggerFrames / 30, options.overlap ?? p.defaults?.overlap ?? 65);
+  const [a, b] = (studio ? libraryStudioTiming : libraryTiming)(time, 0, libraryPreviewEnd(options), options.durationFrames / 30, options.phase, idx, unit === "all" ? 1 : count, options.staggerFrames / 30, appliedOverlap(p, options));
   const easing=options.easing&&options.easing!=="preset"?options.easing:p.easing;
   let w = p.mode === "transition" ? 2 - libraryEase(a, easing, options.elasticity ?? p.defaults?.elasticity) - libraryEase(b, easing, options.elasticity ?? p.defaults?.elasticity) : libraryWave(age, idx, p.waveform === "none" ? "wiggle" : p.waveform, seed);
   const fadeWeight = w;
@@ -44,7 +50,8 @@ export function librarySample(p: MotionLibraryPreset, options: MotionLibraryOpti
   const sample = { x: amp * (pose ? pose[0] : xy[0] * transform(0, seed)) / 6, y: amp * (pose ? pose[1] : xy[1] * transform(1, seed)) / 6, z: amp * (pose ? pose[2] : p.position[2] * transform(2, seed)) / 6,
     rx: p.rotation[0] * amp * (pose ? pose[3] : transform(0, seed + 6)), ry: p.rotation[1] * amp * (pose ? pose[3] : transform(1, seed + 6)), rz: p.rotation[2] * amp * (pose ? pose[3] : transform(2, seed + 6)),
     sx: 1 + p.scale[0] / 100 * amp * (pose ? pose[4] : transform(0, seed + 2)), sy: 1 + p.scale[1] / 100 * amp * (pose ? pose[5] : transform(1, seed + 2)),
-    opacity: p.text.reveal === "typewriter" ? (Math.min(a, b) < (idx + 1) / (unit === "all" ? 1 : count) ? 1 - Math.min(1, amp) : 1) : p.fade ? 1 - Math.max(0, Math.min(1, (text && p.mode !== "transition" ? Math.abs(w) * .7 : fadeWeight) * amp)) : 1, weight: p.effect.startsWith("camera-") ? fadeWeight : w };
+    opacity: p.text.reveal === "typewriter" ? (Math.min(a, b) < (idx + 1) / (unit === "all" ? 1 : count) ? 1 - Math.min(1, amp) : 1) : p.fade ? 1 - Math.max(0, Math.min(1, (text && p.mode !== "transition" ? Math.abs(w) * .7 : fadeWeight) * amp)) : 1, weight: p.effect.startsWith("camera-") ? fadeWeight : w,
+    progress: Math.max(0, Math.min(1, Math.min(a, b))) };
   if (p.pivot === "edge" && !text) {
     const direction = options.direction === "preset" ? Math.abs(p.rotation[1]) > Math.abs(p.rotation[0]) ? "left" : "bottom" : options.direction;
     const dx = direction === "left" ? 36 : direction === "right" ? -36 : 0;
@@ -61,6 +68,86 @@ export function librarySample(p: MotionLibraryPreset, options: MotionLibraryOpti
     sample.z += -dx * sample.sx * Math.sin(ry) + dy * sample.sy * Math.sin(rx) * Math.cos(ry);
   }
   return sample;
+}
+
+/** Layer-wide Signature envelope inputs, exactly as the host's effect expressions
+ * compute them: progress, eased weight and normalized velocity of the curve. */
+export function signaturePreviewSample(p: MotionLibraryPreset, options: MotionLibraryOptions, time: number): { progress: number; weight: number; velocity: number; envelope(kind: string): number } {
+  const easing = options.easing && options.easing !== "preset" ? options.easing : p.easing, elastic = options.elasticity ?? p.defaults?.elasticity ?? 0;
+  const [a, b] = libraryStudioTiming(time, 0, libraryPreviewEnd(options), options.durationFrames / 30, options.phase, 0, 1, options.staggerFrames / 30, appliedOverlap(p, options));
+  const weight = p.mode === "transition" ? 2 - libraryEase(a, easing, elastic) - libraryEase(b, easing, elastic) : 0;
+  const progress = Math.max(0, Math.min(1, Math.min(a, b)));
+  const velocity = p.mode === "transition" ? librarySignatureVelocity(progress, easing, elastic, libraryEase) : 0;
+  return { progress, weight, velocity, envelope: kind => librarySignatureEnvelope(kind, progress, weight, velocity) };
+}
+
+/** Illustrative SVG filter for a Signature look at the preview's 1:6 scale; the
+ * envelopes are the host's own. Returns false when the look has no layer filter. */
+function signatureFilter(node: (tag: string, attrs: Record<string, string | number>, parent?: Element) => SVGElement, defs: Element, id: string,
+  p: MotionLibraryPreset, options: MotionLibraryOptions, time: number): boolean {
+  if (p.collection !== "signature" || p.effect === "none" || p.effect === "rgb") return false;
+  const f = node("filter", {id, x: "-40%", y: "-80%", width: "180%", height: "260%"}, defs), amount = options.intensity / 100;
+  const env = signaturePreviewSample(p, options, time), color = p.effectColor ?? [1, 1, 1];
+  const rgb = `rgb(${Math.round(color[0] * 255)},${Math.round(color[1] * 255)},${Math.round(color[2] * 255)})`;
+  const glow = (strength: number, radius: string, tint: string): void => {
+    node("feGaussianBlur", {in: "SourceGraphic", stdDeviation: radius, result: "glow-blur"}, f);
+    node("feFlood", {"flood-color": tint, "flood-opacity": Math.max(0, Math.min(1, strength)), result: "glow-color"}, f);
+    node("feComposite", {in: "glow-color", in2: "glow-blur", operator: "in", result: "glow"}, f);
+    const merge = node("feMerge", {}, f); node("feMergeNode", {in: "glow"}, merge); node("feMergeNode", {in: "SourceGraphic"}, merge);
+  };
+  if (p.effect === "film-burn") {
+    const burn = Math.min(1, p.effectAmount / 100 * env.envelope("weight") * Math.min(1, amount)), threshold = burn * 1.15 - .1;
+    node("feTurbulence", {type: "fractalNoise", baseFrequency: ".045", numOctaves: 3, seed: 17, result: "burn-noise"}, f);
+    node("feColorMatrix", {in: "burn-noise", type: "matrix", values: "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0", result: "burn-alpha"}, f);
+    const transfer = node("feComponentTransfer", {in: "burn-alpha", result: "burn-mask"}, f);
+    node("feFuncA", {type: "linear", slope: 10, intercept: -10 * threshold}, transfer);
+    node("feComposite", {in: "SourceGraphic", in2: "burn-mask", operator: "in", result: "burned"}, f);
+    node("feGaussianBlur", {in: "burned", stdDeviation: 3, result: "ember-blur"}, f);
+    node("feFlood", {"flood-color": rgb, "flood-opacity": Math.min(1, env.envelope("peak") * amount), result: "ember-color"}, f);
+    node("feComposite", {in: "ember-color", in2: "ember-blur", operator: "in", result: "ember"}, f);
+    const merge = node("feMerge", {}, f); node("feMergeNode", {in: "ember"}, merge); node("feMergeNode", {in: "burned"}, merge);
+  } else if (p.effect === "light-sweep") {
+    const order = options.order && options.order !== "preset" ? options.order : p.text.order ?? "forward";
+    const front = order === "reverse" ? 1 - env.progress : order === "edges-in" ? Math.abs(1 - 2 * env.progress) : env.progress;
+    node("feGaussianBlur", {in: "SourceAlpha", stdDeviation: 1.5, result: "relief"}, f);
+    const light = node("feSpecularLighting", {in: "relief", surfaceScale: 4, specularConstant: 1.4, specularExponent: 16, "lighting-color": rgb, result: "sweep"}, f);
+    node("fePointLight", {x: 10 + 300 * front, y: 30, z: 70}, light);
+    node("feComposite", {in: "sweep", in2: "SourceAlpha", operator: "in", result: "sweep-lit"}, f);
+    const dim = Math.pow(2, -1.1 * env.envelope("arc") * Math.min(1, amount)), exposure = node("feComponentTransfer", {in: "SourceGraphic", result: "dimmed"}, f);
+    for (const channel of ["feFuncR", "feFuncG", "feFuncB"]) node(channel, {type: "linear", slope: dim}, exposure);
+    node("feComposite", {in: "dimmed", in2: "sweep-lit", operator: "arithmetic", k1: 0, k2: 1, k3: Math.min(1.5, p.effectAmount / 90 * env.envelope("arc") * amount), k4: 0}, f);
+  } else if (p.effect === "light-rays" || p.effect === "bloom") {
+    const strength = p.effect === "light-rays" ? env.envelope("arc") * Math.min(1, p.effectAmount / 240) : env.envelope("peak");
+    glow(strength * amount, p.effect === "light-rays" ? "9 5" : String(p.effectAmount / 8), rgb);
+  } else if (p.effect === "halo") {
+    glow((.5 + .2 * libraryWave(time * (options.speed ?? p.defaults?.speed ?? 100) / 100, 0, "cosine", options.seed ?? 17)) * amount, String(p.effectAmount / 6), rgb);
+  } else if (p.effect === "anamorphic" || p.effect === "gate-slip") {
+    const reference = (p.defaults?.durationFrames ?? 30) / 30, speed = Math.min(2, reference / Math.max(.0001, options.durationFrames / 30));
+    const streak = p.effectAmount / 6 * env.envelope("velocity") * speed * amount / 2;
+    node("feGaussianBlur", {in: "SourceGraphic", stdDeviation: p.effect === "anamorphic" ? `${streak} 0` : `0 ${streak}`, result: "streak"}, f);
+    if (p.effect === "anamorphic") {
+      node("feGaussianBlur", {in: "SourceGraphic", stdDeviation: "16 .8", result: "flare-blur"}, f);
+      node("feFlood", {"flood-color": rgb, "flood-opacity": Math.min(1, env.envelope("peak") * amount), result: "flare-color"}, f);
+      node("feComposite", {in: "flare-color", in2: "flare-blur", operator: "in", result: "flare"}, f);
+      const merge = node("feMerge", {}, f); node("feMergeNode", {in: "flare"}, merge); node("feMergeNode", {in: "streak"}, merge);
+    }
+  } else if (p.effect === "ink-bleed") {
+    const spread = p.effectAmount / 6 * env.envelope("weight") * amount;
+    node("feGaussianBlur", {in: "SourceGraphic", stdDeviation: spread, result: "ink"}, f);
+    const transfer = node("feComponentTransfer", {in: "ink"}, f);
+    node("feFuncA", {type: "linear", slope: spread > .05 ? 9 : 1, intercept: spread > .05 ? -3.6 : 0}, transfer);
+  } else if (p.effect === "dust" || p.effect === "smoke") {
+    const dust = p.effect === "dust", scale = p.effectAmount / 6 * env.envelope("weight") * amount * (dust ? 2.2 : 3);
+    node("feTurbulence", {type: dust ? "turbulence" : "fractalNoise", baseFrequency: dust ? ".9" : ".035", numOctaves: dust ? 1 : 2, seed: dust ? 17 : 17 + Math.floor(env.progress * 6), result: "grain"}, f);
+    node("feDisplacementMap", {in: "SourceGraphic", in2: "grain", scale, xChannelSelector: "R", yChannelSelector: "G", result: "displaced"}, f);
+    if (!dust) node("feGaussianBlur", {in: "displaced", stdDeviation: 2 * env.envelope("tail") * amount}, f);
+  } else if (p.effect === "projector") {
+    let flicker = Math.sin((Math.floor(time * 14) + 1) * 91.7 + (options.seed ?? 17) * 1.3) * 43758.5453; flicker -= Math.floor(flicker);
+    const gain = Math.pow(2, p.effectAmount / 100 * (flicker - .4) * env.envelope("weight") * amount);
+    const transfer = node("feComponentTransfer", {}, f);
+    for (const channel of ["feFuncR", "feFuncG", "feFuncB"]) node(channel, {type: "linear", slope: gain}, transfer);
+  }
+  return true;
 }
 
 /** Project one point through the fixture camera after scale and XYZ rotation. */
@@ -85,17 +172,17 @@ export function cameraTransitionSample(p: MotionLibraryPreset, options: MotionLi
   const weight = u * u * u * (u * (u * 6 - 15) + 10), amp = options.intensity / 100;
   if (p.cameraSpec?.native) {
     const native = nativeCameraPreviewSample(p, options, time);
-    return {x: native.x, y: native.y, z: 0, rx: 0, ry: 0, rz: native.rotation, sx: native.scale, sy: native.scale, opacity: 1, weight};
+    return {x: native.x, y: native.y, z: 0, rx: 0, ry: 0, rz: native.rotation, sx: native.scale, sy: native.scale, opacity: 1, weight, progress: 1};
   }
   if (p.cameraSpec?.impact) {
     const r = impactCameraPreviewSample(p, options, time);
-    return {x: r[0]! / 6, y: r[1]! / 6, z: 0, rx: 0, ry: 0, rz: r[2]!, sx: r[3]! / 100, sy: r[3]! / 100, opacity: 1, weight};
+    return {x: r[0]! / 6, y: r[1]! / 6, z: 0, rx: 0, ry: 0, rz: r[2]!, sx: r[3]! / 100, sy: r[3]! / 100, opacity: 1, weight, progress: 1};
   }
   const shake = p.effect === "camera-shake", offset = shake ? p.position[0] / 6 * amp * weight : 0;
   return { x: Math.cos(age * 71) * offset, y: Math.sin(age * 53) * offset * .65, z: 0, rx: 0, ry: 0,
     rz: p.rotation[2] * amp * weight * (shake ? Math.cos(age * 43) : 1),
     sx: 1 + Math.max(0, p.scale[0]) / 100 * amp * weight, sy: 1 + Math.max(0, p.scale[0]) / 100 * amp * weight,
-    opacity: 1, weight };
+    opacity: 1, weight, progress: 1 };
 }
 
 /** Native filter illustration: matching CUT envelope and signed optical movement.
@@ -227,6 +314,7 @@ export function paintLibraryPreview(svg: SVGSVGElement, preset: MotionLibraryPre
     node("feDisplacementMap", { in: "SourceGraphic", in2: "noise", scale: preset.effectAmount / 3 * options.intensity / 100, xChannelSelector: "R", yChannelSelector: "G" }, f);
   }
   const fixture = node("g", {});
+  if (signatureFilter(node, defs, `signature-${preset.id}`, preset, options, time)) fixture.setAttribute("filter", `url(#signature-${preset.id})`);
   if (textMode && preset.text.mask) {
     const clip = node("clipPath", {id: `mask-${preset.id}`}, defs);
     node("rect", {x: 32, y: unit === "lines" ? 46 : 66, width: 256, height: unit === "lines" ? 78 : 44}, clip);
@@ -239,12 +327,18 @@ export function paintLibraryPreview(svg: SVGSVGElement, preset: MotionLibraryPre
     const fo = node("g", { opacity: s.opacity }, fixture);
     if (preset.text.blur) {
       const blurId = `blur-${preset.id}-${i}`, filter = node("filter", {id: blurId, x:"-100%", y:"-100%", width:"300%", height:"300%"}, defs);
-      node("feGaussianBlur", {stdDeviation: preset.text.blur / 6 * Math.max(0,s.weight) * options.intensity / 100}, filter);
+      const radius = preset.text.blur / 6 * Math.max(0,s.weight) * options.intensity / 100;
+      node("feGaussianBlur", {stdDeviation: preset.text.blurAxis === "x" ? `${radius} 0` : preset.text.blurAxis === "y" ? `0 ${radius}` : radius}, filter);
       fo.setAttribute("filter", `url(#${blurId})`);
     }
     const g = node("g", { transform: `${previewPlaneMatrix(s, baseX, baseY)} skewX(${preset.text.skew * s.weight * options.intensity / 100})`, filter: preset.effect === "blur" || preset.effect === "blur-wave" || preset.effect === "turbulent" || (preset.effect === "native-glitch" && native.displacement > 0) ? `url(#${filterId})` : "none" }, fo);
     let label = values[i] ?? "";
     if (preset.text.decode && (preset.mode !== "transition" || Math.abs(s.weight) > .02)) label = Array.from(label).map((c, j) => c === " " ? c : String.fromCharCode(65 + Math.abs(Math.floor(Math.sin(Math.floor(time * 18) * 7.7 + (i + j) * 11.3) * 1000)) % 26)).join("");
+    if ((preset.text.reveal === "resolve" || preset.text.reveal === "roll") && preset.mode === "transition" && options.intensity > 0) {
+      // The host's Character Offset: letters advance within A–Z and keep their case.
+      const offset = librarySignatureGlyph(preset.text.reveal, s.progress, s.weight, i, options.seed ?? preset.defaults?.seed ?? 17);
+      label = Array.from(label).map(c => /[A-Z]/.test(c) ? String.fromCharCode(65 + (c.charCodeAt(0) - 65 + offset) % 26) : c).join("");
+    }
     const shape = (parent: Element, color: string, dx = 0, dy = 0): void => {
       if (textMode) {
         const el = node("text", { x: dx, y: dy, fill: color, "text-anchor": "middle", "font-size": unit === "lines" ? 27 : unit === "words" ? 27 : 31, "font-family": "system-ui,sans-serif", "font-weight": 700, "letter-spacing": preset.text.tracking * s.weight * options.intensity / 600 }, parent); el.textContent = label;
@@ -265,5 +359,10 @@ export function paintLibraryPreview(svg: SVGSVGElement, preset: MotionLibraryPre
       shape(g, "#ff4966", -native.rgb, 0); shape(g, "#30c5e8", native.rgb, 0);
     }
     shape(g, preset.effect === "duotone" || preset.effect === "chroma2" ? "#fa803b" : preset.effect === "contrast" ? "#ffffff" : "currentColor");
+    if (preset.text.fill && preset.mode === "transition") {
+      // Arriving units carry the recipe's tint and return to the source fill.
+      const [r, gr, b] = preset.text.fill, tint = node("g", {opacity: Math.max(0, Math.min(1, s.weight)) * Math.min(1, options.intensity / 100)}, g);
+      shape(tint, `rgb(${Math.round(r * 255)},${Math.round(gr * 255)},${Math.round(b * 255)})`);
+    }
   }
 }

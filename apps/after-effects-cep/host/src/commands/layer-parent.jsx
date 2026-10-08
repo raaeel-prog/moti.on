@@ -169,6 +169,8 @@
         items: []
       };
     }
+    var bloqueio = MotionPreflight.unlockedLayers(selecionadas);
+    if (bloqueio) return { error: bloqueio, items: [] };
 
     var alvo = null;
     if (args.unparent !== true && args.targetLayerIndex !== 0) {

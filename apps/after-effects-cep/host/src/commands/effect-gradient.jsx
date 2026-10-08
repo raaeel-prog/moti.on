@@ -144,7 +144,7 @@
       if (found.conflict) return {error: fail(MotionContracts.ERROR.TRACK_CONFLICT, "Existe um gradiente nao gerenciado ou duplicado. Preserve-o antes de continuar.", {layerId: layerId(layer)})};
       if (found.effect && !compatible(found.effect)) return {error: fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "Atualize o Moti.on Core para acessar estes controles.")};
       if (!readOnly) {
-        if (layer.locked) return {error: fail(MotionContracts.ERROR.TRACK_CONFLICT, "Desbloqueie todas as camadas selecionadas.")};
+        if (layer.locked) return {error: MotionPreflight.unlockedLayers([layer])};
         if (!found.parade || layer.hasVideo === false || layer.nullLayer === true) return {error: fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Selecione texto, forma ou uma camada visual.")};
         if (args.action === "update" && !found.effect) return {error: fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Aplique Gradientes a todas as camadas antes de atualizar.")};
         if (args.action === "apply" && !found.effect && !found.parade.canAddProperty(ABI.native.matchName)) return {error: fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "Instale ou atualize o Moti.on Core para usar Gradientes.")};

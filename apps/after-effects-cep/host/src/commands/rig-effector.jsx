@@ -155,6 +155,8 @@
     if (selecionadas.length === 0) {
       return failure(MotionContracts.ERROR.NO_SELECTION, "Selecione ao menos uma camada.", null);
     }
+    var bloqueio = MotionPreflight.unlockedLayers(selecionadas);
+    if (bloqueio) return bloqueio;
 
     var i;
     var j;

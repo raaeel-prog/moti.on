@@ -1,5 +1,5 @@
 import type { CommandResponse } from "@motion/contracts";
-import type { I18n } from "@motion/ui-core";
+import type { I18n, MessageKey, MessageParams } from "@motion/ui-core";
 
 /** Known local preflight messages only. Unknown host text, stack traces and
  * paths never become product copy. Both languages explain the same recovery. */
@@ -228,7 +228,70 @@ const MESSAGES: Record<string, [string, string]> = {
   "A camada nao tem tamanho de origem para encaixar.": ["A camada não tem conteúdo visível mensurável para encaixar nas faces do Cubo.", "The layer has no measurable visible content to fit onto the Cube faces."]
 };
 
-export function hostFailureMessage(error: NonNullable<CommandResponse["error"]>, i18n: I18n): string {
+type HostError = NonNullable<CommandResponse["error"]>;
+type HostWarning = CommandResponse["warnings"][number];
+
+const HOST_KEY_PREFIX = "hostError.";
+
+/** Chave da lista fechada do host (`host/src/errors.jsx`), traduzida pelo
+ * catálogo. Parâmetros só escalares e curtos, como o host já garante. */
+function keyedMessage(details: unknown, i18n: I18n): string | null {
+  if (!details || typeof details !== "object") return null;
+  const record = details as Record<string, unknown>;
+  const key = record.messageKey;
+  if (typeof key !== "string" || !key.startsWith(HOST_KEY_PREFIX) || !i18n.has(key)) return null;
+  const params: MessageParams = {};
+  const raw = record.messageParams;
+  if (raw && typeof raw === "object") {
+    for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+      if ((typeof value === "number" && Number.isFinite(value)) || (typeof value === "string" && value.length <= 80)) {
+        params[name] = value;
+      }
+    }
+  }
+  return i18n.t(key as MessageKey, params);
+}
+
+/** Frases de preflight escritas no host, em português. Caminhos, quebras de
+ * linha, marcação, códigos crus e restos de exceção nunca passam. */
+function plainHostText(message: unknown): string | null {
+  if (typeof message !== "string") return null;
+  const text = message.trim();
+  if (text.length < 4 || text.length > 220) return null;
+  if (/[/\\<>{}\n\r]/.test(text)) return null;
+  if (/^[A-Z_]+$/.test(text)) return null;
+  if (/\b(Error|undefined|null|NaN|line \d+|\.jsx|\.aep)\b/i.test(text)) return null;
+  return text;
+}
+
+/**
+ * Ordem: chave traduzida enviada pelo host; frase conhecida do mapa; frase de
+ * preflight do host (só em português, que é a língua em que ela foi escrita);
+ * por fim o genérico localizado.
+ */
+export function hostFailureMessage(error: HostError, i18n: I18n): string {
+  const keyed = keyedMessage(error.details, i18n);
+  if (keyed) return keyed;
   const message = MESSAGES[error.message];
-  return message ? message[i18n.locale() === "pt-BR" ? 0 : 1] : i18n.t(error.recoverable ? "status.notCompleted" : "status.failed");
+  if (message) return message[i18n.locale() === "pt-BR" ? 0 : 1];
+  if (i18n.locale() === "pt-BR") {
+    const plain = plainHostText(error.message);
+    if (plain) return plain;
+  }
+  return i18n.t(error.recoverable ? "status.notCompleted" : "status.failed");
+}
+
+/** Avisos do host pelo mesmo caminho. Um aviso sem tradução segura é omitido
+ * em vez de mostrar texto cru em outra língua. */
+export function hostWarningMessage(warnings: readonly HostWarning[], i18n: I18n): string {
+  const parts: string[] = [];
+  for (const warning of warnings) {
+    const keyed = keyedMessage(warning.details, i18n);
+    const mapped = MESSAGES[warning.message];
+    const text = keyed
+      ?? (mapped ? mapped[i18n.locale() === "pt-BR" ? 0 : 1] : null)
+      ?? (i18n.locale() === "pt-BR" ? plainHostText(warning.message) : null);
+    if (text && !parts.includes(text)) parts.push(text);
+  }
+  return parts.join(" ");
 }

@@ -131,7 +131,8 @@
   --e1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--line-hairline);
   --e2: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--line-hairline);
   --e3: 0 16px 48px rgba(0, 0, 0, 0.8), 0 0 0 1px var(--line-hairline);
-  --dur-1: 200ms;
+  /* Onyx Vivo (2026-10-07): hover answers faster than view changes. */
+  --dur-1: 140ms;
   --dur-2: 200ms;
   --dur-3: 240ms;
   --dur-4: 260ms;
@@ -140,7 +141,8 @@
   --dur-press: 90ms;
   --dur-popover-out: 200ms;
   --dur-drawer-out: 200ms;
-  --dur-ripple: 260ms;
+  --dur-ripple: 380ms;
+  --dur-spinner: 720ms;
   --dur-live-pulse: 320ms;
   --dur-live-reduced: 1ms;
   --dur-skeleton: 320ms;
@@ -150,10 +152,11 @@
   --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-in: cubic-bezier(0.5, 0, 0.75, 0);
   --ease-std: cubic-bezier(0.25, 1, 0.5, 1);
-  --ease-pop: var(--ease-out);
+  /* Light overshoot (~6%) for surfaces that appear: one per screen at most. */
+  --ease-pop: cubic-bezier(0.34, 1.36, 0.64, 1);
   --ease-linear: linear;
   --ease-step-end: steps(1, end);
-  --stagger: 20ms;
+  --stagger: 18ms;
   --delay-none: 0ms;
   --delay-tooltip: 500ms;
   --delay-preview: 2000ms;
@@ -1300,7 +1303,9 @@ body,
   /* Below the space needed by the fixed controls, scroll the existing body.
      This preserves access to tools and anchor without overlap or hidden actions. */
   .ch-shell[data-layout="library"] .ch-content[data-browser="true"] { overflow-y: auto; }
-  .ch-shell[data-layout="library"] .ch-quick-library { flex: 0 0 auto; height: auto; min-height: 260px; width: 100%; }
+  /* Fill the body: the quick dock stays collapsed here (quick-dock.ts), so its
+     header remains reachable at the bottom; opening it scrolls the body. */
+  .ch-shell[data-layout="library"] .ch-quick-library { flex: 0 0 auto; height: auto; min-height: 100%; width: 100%; }
   .ch-shell[data-layout="library"] .ch-tool-grid { min-height: 44px; flex-basis: 44px; }
 }
 @media (max-width: 299px) {
@@ -1364,16 +1369,16 @@ body,
 .ch-folder-row[data-color]::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: var(--folder-color); opacity: .04; }
 .ch-folder-row:hover { background: var(--bg-3); }
 .ch-preset-categories .ch-folder-toggle, .ch-preset-categories .ch-folder-more, .ch-preset-categories .ch-folder-select, .ch-preset-categories .ch-folder-add { border: 0; border-radius: 0; background: transparent; color: var(--txt-2); font: inherit; font-size: 11px; padding: 0; min-width: 0; cursor: pointer; }
-.ch-preset-categories .ch-folder-toggle { flex: 0 0 24px; width: 24px; min-height: 28px; margin-right: 0; }
+.ch-preset-categories .ch-folder-toggle { flex: 0 0 16px; width: 16px; min-height: 24px; margin-right: 0; }
 .ch-preset-categories .ch-folder-toggle:disabled { visibility: hidden; }
 .ch-preset-categories .ch-folder-select { display: flex; align-items: center; gap: 4px; flex: 1; text-align: left; padding: 2px 0; min-width: 0; margin-left: -4px; }
 .ch-preset-categories .ch-folder-select[aria-pressed="true"] { color: var(--txt-1); background: var(--bg-4); }
 .ch-folder-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
 .ch-folder-icon { width: 10px; height: 7px; flex: 0 0 10px; background: currentColor; opacity: .7; border-radius: 1px; position: relative; }
 .ch-folder-icon::before { content: ""; position: absolute; left: 0; top: -2px; width: 5px; height: 3px; background: currentColor; border-radius: 1px; }
-.ch-preset-categories .ch-folder-more { flex: 0 0 24px; width: 24px; min-height: 28px; opacity: 0; }
+.ch-preset-categories .ch-folder-more { flex: 0 0 20px; width: 20px; min-height: 24px; opacity: 0; }
 .ch-folder-row:hover .ch-folder-more, .ch-folder-row:focus-within .ch-folder-more, .ch-folder-more[aria-expanded="true"] { opacity: 1; }
-.ch-preset-categories .ch-folder-add { text-align: left; width: 100%; min-height: 28px; padding: 4px 12px; color: var(--accent-hover); }
+.ch-preset-categories .ch-folder-add { text-align: left; width: 100%; min-height: 24px; padding: 4px 8px; color: var(--accent-hover); }
 .ch-folder-palette { display: flex; flex-wrap: wrap; gap: 4px; padding: 7px; background: var(--bg-3); }
 .ch-preset-categories .ch-folder-palette .ch-button { width: auto; padding: 2px 4px; min-height: 24px; }
 .ch-preset-categories .ch-folder-palette [data-color] { width: 24px; height: 24px; padding: 2px; background: var(--folder-color); color: #101010; border: 1px solid transparent; border-radius: 50%; }
@@ -1478,9 +1483,9 @@ body,
 .ch-preset-workspace .ch-preset-filters { gap: 4px; padding: 0 8px 2px; }
 .ch-preset-workspace .ch-preset-filters .ch-button { min-height: 24px; padding-top: 1px; padding-bottom: 1px; }
 .ch-preset-categories { padding-top: 2px; padding-bottom: 4px; }
-.ch-folder-row { min-height: 25px; }
+.ch-folder-row { min-height: 24px; }
 .ch-preset-categories .ch-folder-select { gap: 4px; padding-top: 2px; padding-bottom: 2px; }
-.ch-preset-categories .ch-folder-add { min-height: 26px; padding-top: 3px; padding-bottom: 3px; }
+.ch-preset-categories .ch-folder-add { min-height: 24px; padding-top: 2px; padding-bottom: 2px; }
 .ch-preset-stage .ch-preset-grid { gap: 5px; padding: 4px; }
 .ch-preset-actions { gap: 2px; }
 .ch-preset-actions .ch-button { min-height: 26px; padding-top: 2px; padding-bottom: 2px; }
@@ -1628,7 +1633,7 @@ body,
 .ch-preset-size input::-webkit-slider-runnable-track { height: 2px; border-radius: 1px; background: var(--line-strong); }
 .ch-preset-size input::-webkit-slider-thumb { -webkit-appearance: none; width: 7px; height: 10px; margin-top: -4px; border-radius: 1px; background: var(--txt-2); }
 .ch-preset-size input:hover::-webkit-slider-thumb { background: var(--txt-1); }
-.ch-preset-categories .ch-folder-select { margin-left: 0; min-height: 25px; }
+.ch-preset-categories .ch-folder-select { margin-left: 0; min-height: 24px; padding-right: 4px; }
 .ch-preset-categories .ch-folder-select[aria-pressed="true"] { background: transparent; }
 .ch-folder-row[data-selected="true"] { background: var(--accent-wash); box-shadow: inset 2px 0 var(--accent); }
 

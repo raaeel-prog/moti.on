@@ -53,6 +53,16 @@ test('icon rendering and hover match the real segmented SVG contract', () => {
   const motion = sources.at(-1);
   assert.match(motion, /button:hover[^}]+\[data-motion~="icon-gesture"\] \.ch-icon__detail/);
   assert.match(motion, /button:focus-visible[^}]+\[data-motion~="icon-gesture"\] \.ch-icon__detail/);
-  assert.doesNotMatch(motion, /\binfinite\b/);
+  // Icon gestures play once; the only loop in the sheet is real progress (the spinner).
+  for (const rule of motion.matchAll(/([^{}]+)\{[^}]*\binfinite\b[^}]*\}/g)) assert.match(rule[1], /progress-spinner/);
+  assert.doesNotMatch(motion, /icon-gesture[^}]*infinite/);
   assert.doesNotMatch(sources.join('\n'), /svg\.ch-icon-path path/);
+});
+
+test('preset previews keep their 16:9 frame and the grid adapts its column count', () => {
+  const preview = declarationsFor('.ch-shell[data-layout="library"] .ch-preset-preview');
+  assert.equal(preview.get('aspect-ratio'), '16/9');
+  assert.equal(preview.get('height'), 'auto');
+  const grid = declarationsFor('.ch-shell[data-layout="library"] .ch-preset-stage .ch-preset-grid');
+  assert.match(grid.get('grid-template-columns'), /^repeat\(auto-fill,minmax\(min\(100%,calc\(var\(--preview-size/);
 });

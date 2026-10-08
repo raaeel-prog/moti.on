@@ -269,3 +269,31 @@ test("badge mantém rótulo e banner oferece ação/fechamento sem repetir callb
 afterEach(() => {
   for (const name of ["HTMLElement", "customElements", "document", "window"]) delete globalThis[name];
 });
+
+test("ação anexada vale só para o próximo sucesso; falha a descarta", () => {
+  const doc = createFakeDocument();
+  const timer = clock();
+  const feedback = createFeedbackController(doc, { labels: () => pt, scheduler: timer.api });
+  let pressed = 0;
+  feedback.onStatus({ message: "Aplicando", state: "busy" });
+  feedback.attachToNextSuccess([{ label: "Ajustar", onPress: () => { pressed += 1; } }]);
+  feedback.onStatus({ message: "Wiggle aplicado", state: "ok" });
+  const toast = feedback.region.items[0];
+  const adjust = toast.element.getElementsByTagName("button").find((button) => button.allText === "Ajustar");
+  assert.ok(adjust, "o sucesso traz o botão Ajustar");
+  adjust.emit("click");
+  assert.equal(pressed, 1);
+
+  feedback.onStatus({ message: "Aplicando", state: "busy" });
+  feedback.onStatus({ message: "Outro aplicado", state: "ok" });
+  const all = () => [...feedback.region.items, ...(feedback.region.pending ?? [])];
+  const plain = all().find((item) => /Outro aplicado/.test(item.element.allText));
+  assert.equal(plain.element.getElementsByTagName("button").some((button) => button.allText === "Ajustar"), false);
+
+  feedback.attachToNextSuccess([{ label: "Ajustar", onPress() {} }]);
+  feedback.reportError("Falhou");
+  feedback.onStatus({ message: "Aplicando", state: "busy" });
+  feedback.onStatus({ message: "Terceiro", state: "ok" });
+  const third = all().find((item) => /Terceiro/.test(item.element.allText));
+  assert.equal(third.element.getElementsByTagName("button").some((button) => button.allText === "Ajustar"), false);
+});

@@ -130,7 +130,8 @@
   --e1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--line-hairline);
   --e2: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--line-hairline);
   --e3: 0 16px 48px rgba(0, 0, 0, 0.8), 0 0 0 1px var(--line-hairline);
-  --dur-1: 200ms;
+  /* Onyx Vivo (2026-10-07): hover answers faster than view changes. */
+  --dur-1: 140ms;
   --dur-2: 200ms;
   --dur-3: 240ms;
   --dur-4: 260ms;
@@ -139,7 +140,8 @@
   --dur-press: 90ms;
   --dur-popover-out: 200ms;
   --dur-drawer-out: 200ms;
-  --dur-ripple: 260ms;
+  --dur-ripple: 380ms;
+  --dur-spinner: 720ms;
   --dur-live-pulse: 320ms;
   --dur-live-reduced: 1ms;
   --dur-skeleton: 320ms;
@@ -149,10 +151,11 @@
   --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-in: cubic-bezier(0.5, 0, 0.75, 0);
   --ease-std: cubic-bezier(0.25, 1, 0.5, 1);
-  --ease-pop: var(--ease-out);
+  /* Light overshoot (~6%) for surfaces that appear: one per screen at most. */
+  --ease-pop: cubic-bezier(0.34, 1.36, 0.64, 1);
   --ease-linear: linear;
   --ease-step-end: steps(1, end);
-  --stagger: 20ms;
+  --stagger: 18ms;
   --delay-none: 0ms;
   --delay-tooltip: 500ms;
   --delay-preview: 2000ms;

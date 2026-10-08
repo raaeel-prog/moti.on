@@ -59,7 +59,7 @@
     if (!comp || !(comp instanceof CompItem)) {
       return failure(MotionContracts.ERROR.NO_ACTIVE_COMP, "Nenhuma composicao ativa.");
     }
-    return null;
+    return MotionPreflight.unlockedPropertyOwners(comp.selectedProperties);
   }
 
   /** @param {unknown} v @returns {unknown} */

@@ -31,7 +31,21 @@ export async function loadHostModules(fileNames, hostGlobals = {}) {
   const scope = {};
   const dollar = { global: scope };
 
-  for (const fileName of fileNames) {
+  // errors.jsx e preflight.jsx sao infraestrutura, como json.jsx: comandos e
+  // dispatcher os chamam. Sao incluidos sempre, para que cada teste nao precise
+  // lista-los, logo depois de motion-contracts.jsx (que preflight.jsx le), como
+  // no HOST_SOURCE_ORDER.
+  const infrastructure = ["src/errors.jsx", "src/preflight.jsx"].filter(
+    (name) => !fileNames.includes(name)
+  );
+  const contractsAt = fileNames.indexOf("generated/motion-contracts.jsx");
+  const ordered = [
+    ...fileNames.slice(0, contractsAt + 1),
+    ...infrastructure,
+    ...fileNames.slice(contractsAt + 1)
+  ];
+
+  for (const fileName of ordered) {
     const source = await readFile(path.join(appRoot, "host", fileName), "utf8");
 
     if (/^#target\b/m.test(source)) {

@@ -1,9 +1,9 @@
 /* The approved prototype's two-column collection and inline selection editor. */
 .ch-shell[data-layout="library"] .ch-preset-workspace-content { overflow:auto; padding:8px 12px 16px; }
-.ch-shell[data-layout="library"] .ch-preset-workspace-content[data-browse="true"] { overflow:hidden; }
+.ch-shell[data-layout="library"] .ch-preset-workspace-content[data-browse="true"] { overflow:hidden; padding:6px 12px 0; }
 .ch-shell[data-layout="library"] .ch-preset-gallery { position:relative; display:flex; flex-direction:column; height:100%; flex:1 1 auto; min-height:0; min-width:0; overflow:hidden; }
 .ch-shell[data-layout="library"] .ch-preset-scroll { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; min-width:0; overflow:hidden; padding:0 1px 2px 0; }
-.ch-shell[data-layout="library"] .ch-preset-toolbar-approved { padding:0; margin:0 0 10px; gap:8px; min-height:28px; justify-content:space-between; }
+.ch-shell[data-layout="library"] .ch-preset-toolbar-approved { padding:0; margin:0 0 6px; gap:4px; min-height:28px; justify-content:space-between; }
 .ch-shell[data-layout="library"] .ch-preset-filter-trigger { height:28px; max-width:calc(100% - 36px); min-width:0; padding:0 10px; gap:8px; white-space:nowrap; }
 .ch-preset-filter-trigger>span:not(.ch-library-chevron) { overflow:hidden; text-overflow:ellipsis; }
 .ch-preset-filter-trigger svg { width:16px; height:16px; flex-shrink:0; }
@@ -15,31 +15,38 @@
 .ch-preset-toolbar-approved[data-search-expanded="true"] .ch-preset-filter-trigger { flex:0 0 28px; padding:5px; width:28px; }
 .ch-preset-toolbar-approved[data-search-expanded="true"] .ch-preset-filter-trigger>span { display:none; }
 .ch-shell[data-layout="library"] .ch-preset-search .ch-search { border-color:var(--border-muted); border-radius:var(--radius-medium); }
-.ch-preset-filter-menu { position:absolute; z-index:20; top:36px; left:0; width:280px; max-width:100%; max-height:calc(100vh - 130px); box-sizing:border-box; overflow:auto; padding:8px; border:1px solid var(--border-muted); border-radius:var(--radius-medium); background:var(--bg-elevated); box-shadow:var(--e2); }
+/* Sized to its labels, never the trigger; it scrolls inside the gallery instead of past the panel. */
+.ch-preset-filter-menu { position:absolute; z-index:20; top:32px; left:0; width:max-content; min-width:180px; max-width:min(240px, calc(100% - 16px)); max-height:calc(100% - 36px); box-sizing:border-box; overflow:auto; padding:4px; border:1px solid var(--border-muted); border-radius:var(--radius-medium); background:var(--bg-elevated); box-shadow:var(--e2); }
 .ch-preset-filter-menu[data-open="false"] { pointer-events:none; }
-.ch-shell[data-layout="library"] .ch-preset-filter-menu .ch-preset-categories { width:100%; max-width:none; padding:4px 0; overflow:visible; }
+.ch-shell[data-layout="library"] .ch-preset-filter-menu .ch-preset-categories { width:auto; min-width:0; max-width:none; padding:2px 0 0; overflow:visible; }
 .ch-preset-filter-menu .ch-preset-footer { padding:8px 0 0; margin-top:6px; border-top:1px solid var(--border-muted); }
 .ch-preset-filter-menu .ch-preset-size { flex:1 1 100%; }
-.ch-shell[data-layout="library"] .ch-preset-filter-menu .ch-preset-filters { padding:0 0 6px; }
+.ch-shell[data-layout="library"] .ch-preset-filter-menu .ch-preset-filters { padding:0 0 4px; }
 .ch-shell[data-layout="library"] .ch-preset-browser,.ch-shell[data-layout="library"] .ch-preset-stage { display:flex; flex-direction:column; overflow:hidden; background:transparent; min-height:0; flex:1 1 auto; }
-.ch-shell[data-layout="library"] .ch-preset-stage .ch-preset-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:max-content; align-content:start; gap:8px; padding:0 1px 1px 0; flex:1 1 auto; min-height:0; max-height:none; overflow:auto; scrollbar-width:thin; }
+/* The thumbnail control sets the minimum card width; columns follow the panel width. */
+.ch-shell[data-layout="library"] .ch-preset-stage .ch-preset-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,calc(var(--preview-size,320px) * .75)),1fr)); grid-auto-rows:max-content; align-content:start; gap:6px; padding:0 1px 1px 0; flex:1 1 auto; min-height:0; max-height:none; overflow:auto; scrollbar-width:thin; }
 .ch-shell[data-layout="library"] .ch-preset-stage .ch-preset-grid--personal { display:flex; }
-.ch-shell[data-layout="library"] .ch-preset-card { position:relative; border:1px solid transparent; border-radius:var(--radius-medium); background:transparent; overflow:hidden; padding:0 0 4px; align-self:start; }
+.ch-shell[data-layout="library"] .ch-preset-card { position:relative; border:1px solid transparent; border-radius:var(--radius-medium); background:transparent; overflow:hidden; padding:0; align-self:start; }
 .ch-shell[data-layout="library"] .ch-preset-card[data-selected="true"] { border-color:var(--ch-border-default); }
-.ch-shell[data-layout="library"] .ch-preset-preview { height:var(--approved-art-height,65px); min-height:0; padding:0; margin:0; border:0; border-radius:0; background:var(--bg-elevated); box-shadow:none; color:var(--ch-text-primary); overflow:hidden; }
+.ch-shell[data-layout="library"] .ch-preset-preview { width:100%; height:auto; aspect-ratio:16/9; min-height:0; padding:0; margin:0; border:0; border-radius:0; background:var(--bg-elevated); box-shadow:none; color:var(--ch-text-primary); overflow:hidden; }
 .ch-shell[data-layout="library"] .ch-preset-preview svg { width:100%; height:100%; aspect-ratio:auto; }
 .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-actions { display:flex; align-items:center; padding:0 4px 0 0; gap:2px; min-height:26px; background:transparent; }
 .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-apply { display:block; flex:1 1 auto; min-width:0; width:0; height:26px; min-height:26px; padding:0 2px 0 7px; margin:0; border:0; border-radius:0; background:transparent; color:var(--ch-text-primary); font-size:11px; line-height:1.2; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-actions>.ch-preset-favorite { position:absolute; right:4px; top:4px; width:24px; height:24px; min-height:24px; padding:3px; border:0; border-radius:var(--radius-small); background:var(--bg-elevated); opacity:0; pointer-events:none; color:var(--ch-text-secondary); transition:opacity var(--dur-2) var(--ease-out); }
 .ch-shell[data-layout="library"] .ch-preset-card:hover .ch-preset-actions>.ch-preset-favorite,.ch-shell[data-layout="library"] .ch-preset-card:focus-within .ch-preset-actions>.ch-preset-favorite { opacity:1; pointer-events:auto; }
-.ch-shell[data-layout="library"] .ch-preset-editor { margin-top:16px; padding-top:10px; border:0; border-top:1px solid var(--border-muted); border-radius:0; background:transparent; overflow:visible; flex:0 0 auto; }
+.ch-shell[data-layout="library"] .ch-preset-editor { margin-top:6px; padding-top:6px; border:0; border-top:1px solid var(--border-muted); border-radius:0; background:transparent; overflow:visible; flex:0 0 auto; }
 .ch-shell[data-layout="library"] .ch-preset-editor .ch-preset-inspector { padding:0; margin:0; flex:0 0 auto; overflow:visible; }
-.ch-preset-approved-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; margin:4px 0 12px; }
-.ch-preset-approved-heading>span:first-child { min-width:0; overflow-wrap:anywhere; }
-.ch-shell[data-layout="library"] .ch-preset-approved-heading .ch-badge { flex:0 0 auto; border:0; background:var(--surface-hover); border-radius:var(--radius-small); font-size:11px; font-weight:400; }
-.ch-shell[data-layout="library"] .ch-preset-inspector .ch-preset-field { min-height:28px; margin:0 0 8px; padding:0; border:0; color:var(--ch-text-primary); font-size:12px; }
+.ch-preset-approved-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:20px; font-size:12px; margin:0 0 4px; }
+.ch-preset-approved-heading>span:first-child { flex:1 1 auto; min-width:0; overflow-wrap:anywhere; }
+.ch-shell[data-layout="library"] .ch-preset-approved-heading>.ch-preset-deselect { flex:0 0 24px; width:24px; height:24px; min-height:24px; padding:0; border:0; border-radius:var(--radius-small); background:transparent; color:var(--ch-text-secondary); font-size:16px; line-height:1; }
+.ch-shell[data-layout="library"] .ch-preset-approved-heading>.ch-preset-deselect:hover { background:var(--surface-hover); color:var(--ch-text-primary); }
+.ch-shell[data-layout="library"] .ch-preset-approved-heading .ch-badge { flex:0 0 auto; min-height:20px; padding:0 6px; border:0; background:var(--surface-hover); border-radius:var(--radius-small); font-size:11px; font-weight:400; }
+.ch-shell[data-layout="library"] .ch-preset-inspector .ch-preset-field { min-height:28px; margin:0 0 4px; padding:0; border:0; color:var(--ch-text-primary); font-size:12px; }
 .ch-shell[data-layout="library"] .ch-preset-inspector .ch-preset-field input { flex:0 0 58px; width:58px; height:28px; min-height:28px; padding:0 8px; border:1px solid var(--border-control); border-radius:var(--radius-input); background:var(--bg-elevated); color:var(--ch-text-secondary); font:inherit; text-align:right; }
-.ch-preset-phase-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; min-height:30px; margin-bottom:8px; font-size:12px; }
+/* Phase and duration share a row when they fit, and wrap in narrow docks. */
+.ch-shell[data-layout="library"] .ch-preset-primary-fields { display:flex; flex-wrap:wrap; align-items:center; column-gap:16px; }
+.ch-shell[data-layout="library"] .ch-preset-primary-fields>* { flex:1 1 200px; min-width:0; }
+.ch-preset-phase-row { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; min-height:30px; margin-bottom:4px; font-size:12px; }
 .ch-preset-phase { display:flex; flex:0 1 auto; gap:2px; padding:2px; border:1px solid var(--border-subtle); border-radius:var(--ch-radius-control); background:var(--bg-host); }
 .ch-preset-phase>.ch-button { flex:1 1 0; min-width:0; min-height:26px; padding:3px 8px; border:0; border-radius:var(--r-chip); background:transparent; color:var(--ch-text-secondary); white-space:nowrap; }
 .ch-preset-phase>.ch-button[aria-checked="true"] { color:var(--ch-text-primary); background:var(--surface-hover); }
@@ -63,11 +70,11 @@
 .ch-shell[data-layout="library"] .ch-preset-directions .ch-button { flex:0 0 auto; width:auto; min-width:0; font-size:11px; padding:4px 6px; border:1px solid transparent; }
 .ch-shell[data-layout="library"] .ch-preset-directions .ch-button::before { display:none; }
 .ch-shell[data-layout="library"] .ch-preset-directions .ch-button[aria-pressed="true"] { border-color:var(--ch-border-default); background:var(--surface-hover); }
-.ch-shell[data-layout="library"] .ch-preset-applybar { position:relative; z-index:2; display:flex; flex:0 0 auto; align-items:center; justify-content:space-between; flex-wrap:nowrap; gap:8px; padding:8px; margin:10px 0 0; border:0; border-top:1px solid var(--border-muted); border-radius:0; min-height:44px; background:var(--bg-elevated); box-shadow:none; }
+.ch-shell[data-layout="library"] .ch-preset-applybar { position:relative; z-index:2; display:flex; flex:0 0 auto; align-items:center; justify-content:space-between; flex-wrap:nowrap; gap:8px; padding:4px 4px 4px 8px; margin:6px 0 0; border:0; border-top:1px solid var(--border-muted); border-radius:0; min-height:36px; background:var(--bg-elevated); box-shadow:none; }
 .ch-preset-target { color:var(--ch-text-secondary); font-size:11px; min-width:0; overflow-wrap:anywhere; }
 .ch-shell[data-layout="library"] .ch-preset-primary-apply { flex:0 0 auto; white-space:nowrap; }
-.ch-shell[data-layout="library"] .ch-preset-tabs { margin:8px 12px 0; padding:0; border:0; gap:4px; }
-.ch-shell[data-layout="library"] .ch-preset-tabs .ch-button { border:0; border-radius:var(--ch-radius-control); padding:4px 10px; background:transparent; }
+.ch-shell[data-layout="library"] .ch-preset-tabs { margin:2px 12px 0; padding:0; border:0; gap:2px; }
+.ch-shell[data-layout="library"] .ch-preset-tabs .ch-button { min-height:24px; border:0; border-radius:var(--ch-radius-control); padding:2px 8px; background:transparent; font-size:12px; }
 .ch-shell[data-layout="library"] .ch-preset-tabs [aria-selected="true"] { background:var(--bg-elevated); box-shadow:none; }
 @media (prefers-reduced-motion:reduce) { .ch-preset-actions>.ch-button { transition:none!important; } }
 [data-reduced-motion="true"] .ch-preset-actions>.ch-button { transition:none!important; }
@@ -99,11 +106,14 @@
 .ch-preset-toolbar-action svg { width:16px; height:16px; }
 .ch-preset-toolbar-action.ch-preset-autoplay::before { display:none; }
 .ch-shell[data-layout="library"] .ch-preset-toolbar-action:hover,.ch-shell[data-layout="library"] .ch-preset-toolbar-action[aria-pressed="true"] { background:var(--bg-elevated); color:var(--ch-text-primary); }
-.ch-shell[data-layout="library"] .ch-preset-preview-controls { flex:0 0 auto; justify-content:flex-end; padding:0; margin:-4px 0 8px; border:0; }
+/* The thumbnail control shares the catalog toolbar instead of owning a row. */
+.ch-shell[data-layout="library"] .ch-preset-toolbar-approved>.ch-preset-preview-controls { display:flex; flex:0 0 auto; align-items:center; justify-content:flex-end; padding:0 0 0 4px; margin:0; border:0; }
 .ch-shell[data-layout="library"] .ch-preset-preview-controls .ch-preset-size { display:flex; align-items:center; gap:8px; flex:0 1 auto; min-height:28px; margin:0; color:var(--ch-text-secondary); font-size:11px; }
-.ch-shell[data-layout="library"] .ch-preset-preview-controls .ch-preset-size>span { display:inline; }
-.ch-shell[data-layout="library"] .ch-preset-preview-controls .ch-preset-size input { width:80px; flex:0 0 80px; }
-.ch-preset-toolbar-approved[data-search-expanded="true"]>.ch-preset-toolbar-action { display:none; }
+.ch-shell[data-layout="library"] .ch-preset-preview-controls .ch-preset-size>span { display:none; }
+@media (min-width:520px) { .ch-shell[data-layout="library"] .ch-preset-preview-controls .ch-preset-size>span { display:inline; } }
+.ch-shell[data-layout="library"] .ch-preset-toolbar-approved .ch-preset-size input[type="range"] { width:56px; flex:0 0 56px; height:24px; min-height:0; padding:0; border:0; border-radius:0; background:transparent; }
+@media (min-width:520px) { .ch-shell[data-layout="library"] .ch-preset-toolbar-approved .ch-preset-size input[type="range"] { width:72px; flex-basis:72px; } }
+.ch-preset-toolbar-approved[data-search-expanded="true"]>.ch-preset-toolbar-action,.ch-preset-toolbar-approved[data-search-expanded="true"]>.ch-preset-preview-controls { display:none; }
 .ch-shell[data-layout="library"] .ch-preset-settings-body .ch-preset-refine:not(.ch-preset-adjustments) { padding:8px 0; margin:4px 0; border-top:1px solid var(--border-muted); }
 .ch-shell[data-layout="library"] .ch-preset-settings-body .ch-preset-refine>summary { margin:0; padding:4px 0; color:var(--ch-text-secondary); font-size:11px; cursor:pointer; }
 .ch-shell[data-layout="library"] .ch-preset-settings-body .ch-preset-refine[open]>summary { margin-bottom:8px; }
@@ -164,7 +174,7 @@
 .ch-phase-shift-controls input { width:48px; text-align:center; }
 .ch-shell[data-layout="library"] .ch-phase-shift-controls .ch-button { flex:0 0 auto; width:auto; min-width:24px; padding:0 6px; min-height:24px; background:transparent; border:0; }
 .ch-shell[data-layout="library"] .ch-phase-adjust-actions .ch-button { flex:0 1 auto; width:auto; min-width:0; min-height:26px; font-size:11px; }
-.ch-folder-row[data-depth="0"] { background:var(--ch-surface-panel); border-top:1px solid var(--border-muted); font-weight:600; }
+.ch-folder-row[data-depth="0"] { background:var(--ch-surface-panel); border-top:1px solid var(--border-subtle); font-weight:600; }
 .ch-layer-sections { margin-top:14px; }
 .ch-layer-selection,.ch-color-list { padding:8px 0 12px 12px; }
 .ch-layer-selection-name { overflow-wrap:anywhere; padding:3px 0; color:var(--ch-text-secondary); }
@@ -194,3 +204,13 @@
   .ch-tool-tile > .ch-quick-options { opacity:1; }
   .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-actions>.ch-preset-favorite { opacity:1; pointer-events:auto; }
 }
+.ch-color-swatch-trigger { padding:0 3px; height:26px; min-height:26px; }
+.ch-color-swatch-trigger .ch-color-trigger__hex { display:none; }
+/* Long preset names wrap to a second line instead of collapsing to "Punch de im…" in narrow docks. */
+.ch-shell[data-layout="library"] .ch-preset-card .ch-preset-apply { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; height:auto; min-height:26px; max-height:34px; padding-top:4px; padding-bottom:4px; line-height:13px; white-space:normal; overflow-wrap:anywhere; }
+/* Requisitos do preset (inspector) e selo do plugin nativo no card. */
+.ch-preset-requirements { display:flex; flex-wrap:wrap; gap:4px; margin:6px 0 0; }
+.ch-preset-requirements .ch-badge { font-size:10px; }
+.ch-preset-illustrative { color:var(--ch-text-secondary); font-size:11px; line-height:1.45; margin:6px 0 0; }
+.ch-preset-card { position:relative; }
+.ch-preset-core-badge { position:absolute; top:6px; left:6px; padding:1px 5px; border-radius:var(--ch-radius-round); background:var(--ch-surface-raised); color:var(--ch-text-secondary); font-size:9px; line-height:14px; pointer-events:auto; }

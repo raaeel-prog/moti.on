@@ -1,3 +1,4 @@
+import { protectedWrite, parsesAs } from "./storage-safety.js";
 // Curve catalog adapted from the user's FX STUDIO/FxFlow, with permission.
 export interface EaseCurve { x1: number; y1: number; x2: number; y2: number }
 export interface EasePreset { id: string; name: string; curve: EaseCurve; custom?: boolean }
@@ -39,18 +40,24 @@ export function validCurve(value: unknown): value is EaseCurve {
   return [c.x1, c.y1, c.x2, c.y2].every(v => typeof v === "number" && Number.isFinite(v)) &&
     c.x1 >= 0 && c.x1 <= 1 && c.x2 >= 0 && c.x2 <= 1 && c.y1 >= -1 && c.y1 <= 2 && c.y2 >= -1 && c.y2 <= 2;
 }
+const validCustomEase = (p: EasePreset): boolean => Boolean(p) && typeof p.id === "string" && p.id.startsWith("custom-") && typeof p.name === "string" && p.name.length <= 80 && validCurve(p.curve);
 export function readEaseLibrary(storage: Pick<Storage, "getItem"> | undefined): EaseLibrary {
   try {
     const raw = JSON.parse(storage?.getItem(EASE_STORAGE_KEY) ?? "{}");
     return {
-      custom: Array.isArray(raw.custom) ? raw.custom.filter((p: EasePreset) => p && typeof p.id === "string" && p.id.startsWith("custom-") && typeof p.name === "string" && p.name.length <= 80 && validCurve(p.curve)).slice(0, 200) : [],
+      custom: Array.isArray(raw.custom) ? raw.custom.filter(validCustomEase).slice(0, 200) : [],
       favorites: Array.isArray(raw.favorites) ? raw.favorites.filter((id: unknown) => typeof id === "string").slice(0, 228) : []
     };
   } catch { return { custom: [], favorites: [] }; }
 }
-export function writeEaseLibrary(storage: Pick<Storage, "setItem"> | undefined, library: EaseLibrary): boolean {
-  try { if (!storage) return false; storage.setItem(EASE_STORAGE_KEY, JSON.stringify(library)); return true; }
-  catch { return false; }
+/** Grava preservando o anterior (storage-safety.ts). */
+export function writeEaseLibrary(storage: Pick<Storage, "getItem" | "setItem"> | undefined, library: EaseLibrary): boolean {
+  return protectedWrite(storage, EASE_STORAGE_KEY, JSON.stringify(library), raw => parsesAs(raw, value => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const data = value as { custom?: unknown; favorites?: unknown };
+    return (data.custom === undefined || (Array.isArray(data.custom) && data.custom.length <= 200 && data.custom.every(item => validCustomEase(item as EasePreset))))
+      && (data.favorites === undefined || (Array.isArray(data.favorites) && data.favorites.every(id => typeof id === "string")));
+  }));
 }
 export const DEFAULT_EASE_BUILD = { durationFrames: 15, useOpacity: true, opacityFrom: 0, opacityTo: 100,
   useScale: false, scaleFrom: 86, scaleTo: 100, useRotation: false, rotationFrom: -8, rotationTo: 0,

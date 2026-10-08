@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 const built=await build({entryPoints:[fileURLToPath(new URL('../client/src/preset-gallery.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
-const {GALLERY_PRESETS,curveProgress,cameraPoint,presetArgs,defaultLibraryOptions,galleryCategoryMatches,gallerySequenceControls}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+const {GALLERY_PRESETS,curveProgress,cameraPoint,presetArgs,defaultLibraryOptions,galleryCategoryMatches,gallerySequenceControls,signatureDurationRange}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
 test('curated and legacy presets retain unique identities and real application handlers',()=>{
-  assert.equal(GALLERY_PRESETS.length,214);assert.equal(new Set(GALLERY_PRESETS.map(p=>p.id )).size,214);
+  assert.equal(GALLERY_PRESETS.length,238);assert.equal(new Set(GALLERY_PRESETS.map(p=>p.id )).size,238);
   for(const p of GALLERY_PRESETS){
     assert.ok(p.version&&p.displayName['pt-BR']&&p.displayName['en-US']&&p.preview.fixtureId);
     assert.equal(p.operationPlan.command,p.handler);
@@ -66,6 +66,32 @@ test('premium selection comes first while legacy collection IDs remain reachable
   assert.ok(GALLERY_PRESETS.some(p=>galleryCategoryMatches('gemini',p)));
   assert.equal(GALLERY_PRESETS.filter(p=>galleryCategoryMatches('classics',p)).length,140);
   assert.ok(GALLERY_PRESETS.some(p=>p.id==='builtin.motion.arc-arrival'));
+});
+test('signature collection follows premium, filters by family and stays out of classics',()=>{
+  const signature=GALLERY_PRESETS.filter(p=>p.motion?.collection==='signature');
+  assert.equal(signature.length,24);
+  assert.deepEqual(GALLERY_PRESETS.slice(57,81),signature,'signature is the block right after premium');
+  assert.equal(GALLERY_PRESETS.filter(p=>galleryCategoryMatches('signature',p)).length,24);
+  for(const family of ['essentials','cinema','light-matter','variation'])assert.equal(GALLERY_PRESETS.filter(p=>galleryCategoryMatches(`signature-${family}`,p)).length,6,family);
+  assert.ok(!signature.some(p=>galleryCategoryMatches('classics',p)||galleryCategoryMatches('premium',p)));
+  for(const p of signature){assert.ok(galleryCategoryMatches('text',p),p.id);assert.match(p.tags,new RegExp(`signature ${p.motion.family} ${p.motion.tempo.character}`));}
+});
+test('signature timing keeps its 30 fps feel at the composition rate and inside its tempo window',()=>{
+  const burn=GALLERY_PRESETS.find(p=>p.motion?.id==='signature-film-burn').motion;
+  assert.equal(defaultLibraryOptions(burn).durationFrames,48);
+  assert.equal(defaultLibraryOptions(burn,60).durationFrames,96);
+  assert.equal(defaultLibraryOptions(burn,60).staggerFrames,4);
+  assert.equal(defaultLibraryOptions(burn,24).durationFrames,38);
+  assert.equal(defaultLibraryOptions(burn,23.976).durationFrames,38);
+  assert.deepEqual(signatureDurationRange(burn,30),[32,90]);
+  assert.deepEqual(signatureDurationRange(burn,60),[64,180]);
+  const legacy=GALLERY_PRESETS.find(p=>p.motion?.id==='arc-arrival').motion;
+  assert.equal(defaultLibraryOptions(legacy,60).durationFrames,defaultLibraryOptions(legacy).durationFrames,'other collections keep composition frames');
+  assert.deepEqual(signatureDurationRange(legacy,60),[1,600]);
+  const halo=GALLERY_PRESETS.find(p=>p.motion?.id==='signature-halo-breath').motion;
+  assert.deepEqual(signatureDurationRange(halo,60),[1,600],'loops are paced by Speed instead');
+  const decode=GALLERY_PRESETS.find(p=>p.motion?.id==='signature-decode-resolve').motion;
+  assert.equal(gallerySequenceControls(decode,defaultLibraryOptions(decode)).seed,true,'glyph variation is seeded');
 });
 test('default options preserve original direction and authored hinge choices',()=>{
   for(const {motion:p} of GALLERY_PRESETS.filter(p=>p.motion))assert.equal(defaultLibraryOptions(p).direction,p.defaults?.direction??'preset',p.id);

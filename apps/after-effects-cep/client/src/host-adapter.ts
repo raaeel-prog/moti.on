@@ -22,6 +22,7 @@ import {
   MAX_INLINE_EVALSCRIPT_CHARS,
   PROTOCOL_VERSION,
   buildDispatchCall,
+  buildFileDispatchCall,
   buildHostBootstrapCall,
   encodeForEvalScript,
   type CommandContext,
@@ -364,8 +365,19 @@ export function createAeHostAdapter(logger: {
             throw new Error(`Falha ao gravar arquivo temporário (código ${writeResult.err}).`);
           }
           
-          const encodedPath = encodeForEvalScript(tempPath.replace(/\\/g, "/"));
-          call = `(function(){try{var f=new File("${encodedPath}");f.encoding="UTF-8";var c="";if(f.open("r")){c=f.read();f.close();f.remove();}return typeof MotionAE!=="undefined"&&MotionAE.dispatch?MotionAE.dispatch(c):'{"protocolVersion":1,"ok":false,"error":{"code":"INTERNAL_ERROR","message":"MotionAE não encontrado ao tentar ler o arquivo"}}';}catch(e){return '{"protocolVersion":1,"ok":false,"error":{"code":"INTERNAL_ERROR","message":"Falha ao ler payload temporário no host"}}';}})()`;
+          // Falha completa e com o requestId deste pedido: se o host não conseguir
+          // ler o arquivo, o painel mostra o motivo em vez de esperar o timeout.
+          const readFailure = JSON.stringify({
+            protocolVersion: 1, requestId: request.requestId, ok: false, data: null, warnings: [],
+            error: {
+              code: "INTERNAL_ERROR",
+              message: "O host não conseguiu ler o pedido grande gravado em arquivo temporário.",
+              recoverable: true,
+              action: "error.action.exportLogBundle",
+              details: { reason: "TEMP_TRANSPORT_READ_FAILED", encodedChars, mayHaveMutated: false }
+            }
+          });
+          call = buildFileDispatchCall(tempPath, readFailure);
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           sendTransportFailure(

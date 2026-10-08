@@ -7,6 +7,40 @@
 > uma cópia autocontida, verificada por teste de drift, para CEP e UXP. O
 > catálogo executável de A6.2 vive em `packages/ui-motion/`.
 
+## Onyx Vivo — 07/10/2026
+
+Evolução aprovada pelo responsável em 06/10/2026 sobre o Onyx de 03/10, sem
+trocar paleta, densidade nem a grade. Onde houver divergência com as seções
+abaixo, esta prevalece.
+
+- **Movimento "vivo equilibrado"** (`motionIntensity` 5): tiles sobem 1 px no
+  hover e afundam (`scale .96`) no clique; ripple na cor da família; spinner só
+  depois de `--delay-spinner` e ✓ desenhado no sucesso, com ponto de aplicado no
+  tile; superfícies (menus, seletor de cor, toasts) entram com leve overshoot
+  (`--ease-pop`, ~6 %) a partir da origem e saem mais rápido, sem overshoot;
+  entrar numa ferramenta desliza para frente e "← Ferramentas" desliza para trás;
+  a grade entra em cascata curta (no máximo 12 passos de 18 ms) ao abrir a tela
+  ou trocar de filtro, nunca a cada tecla da busca. Transições até 320 ms;
+  feedback até 420 ms; o único laço é progresso real (spinner). Movimento
+  reduzido remove ripple, deslocamentos e cascatas e mostra o ✓ pronto.
+- **Seletor de cor no painel**: os campos de cor não dependem mais do
+  `<input type=color>` nativo, que não abre no painel mínimo de 280×280. O
+  seletor ancora abaixo/acima do campo ou vira uma folha interna em painéis
+  curtos; confirma uma vez ao fechar (Enter, Concluir ou clique fora) e Escape
+  restaura. No AE há o atalho para o seletor do sistema (`ae.ui.color-picker`).
+- **Rodapé em uma linha**: a ação principal fica à direita e as secundárias que
+  não cabem vão para "Mais ações". O "Voltar" do rodapé saiu dos editores: o
+  cabeçalho já tem "← Ferramentas".
+- **Painel baixo**: abaixo de 420 px de altura, "Ações rápidas" não abre sozinho
+  ao haver seleção (abre por clique ou fixado), e a biblioteca ocupa a altura
+  disponível.
+- **Ícones duotone animados** (aprovados em 07/10/2026): as 53 ferramentas usam
+  `packages/ui-core/src/icon-drawings.ts` — preenchimento suave na cor da
+  família, traço neutro e destaque na cor da família, que executa o gesto próprio
+  da ferramenta uma vez por hover/foco. Ícones de navegação seguem monoline e
+  parados. As cores de família continuam as do Onyx (tons suaves), escolhidas
+  pelo responsável ao ver a folha de espécimes.
+
 ## Direção atual — 03/10/2026
 
 Evoluir o estado visual do GM preservado em

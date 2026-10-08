@@ -24,7 +24,7 @@
   }
   /** @param {any} layer @returns {any} */
   function inspect(layer) {
-    if (layer.locked) return { error: failure(MotionContracts.ERROR.TRACK_CONFLICT, "Desbloqueie a camada emissora.") };
+    if (layer.locked) return { error: MotionErrors.failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "hostError.layerLocked", "Desbloqueie a camada emissora.") };
     var parade = layer.property("ADBE Effect Parade"), record = metadata(layer), found = null;
     if (!parade || !parade.canAddProperty(EFFECT)) return { error: failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "CC Particle World nao esta disponivel nesta camada/instalacao.") };
     for (var i = 1; i <= parade.numProperties; i += 1) {

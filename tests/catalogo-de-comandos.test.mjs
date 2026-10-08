@@ -53,6 +53,7 @@ const IMPLEMENTADOS_FORA_DO_CATALOGO = new Map([
   ["ae.text.variable-morph.read", "Leitura auxiliar do morph selecionado, com controles, capacidades e estado de atualização; consumida pelo painel e pelo cartão rápido."],
   ["ae.capability.probe", "Sonda de capacidades do host; não é uma ferramenta."],
   ["ae.diagnostics.echo", "Eco de diagnóstico usado pelo System Check."],
+  ["ae.ui.color-picker", "Diálogo de cor do sistema usado pelo seletor de cor do painel; não muta o projeto."],
   ["ae.layer.list", "Leitura auxiliar consumida pelos seletores de camada do painel."],
   ["ae.keys.paste", "Metade de `ae.keys.copy`, catalogado como Copy Keys."],
   ["ae.keys.reverse", "Mirror de keyframes, coberto pela §15.5 em vez do §13."],

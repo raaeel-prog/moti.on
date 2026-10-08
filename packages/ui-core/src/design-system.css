@@ -2,9 +2,9 @@
    geometry and palette are shared tokens, never prototype literals. */
 .ch-shell[data-layout="library"] { box-sizing:border-box; background:var(--bg-host); color:var(--ch-text-primary); font:var(--weight-regular) var(--font-body)/var(--line-body) var(--font-family-sans); border:0; border-radius:0; overflow:hidden; }
 .ch-shell [hidden],.ch-alert[hidden],.ch-field__error[hidden] { display:none!important; }
-.ch-shell[data-layout="library"] .ch-nav { min-height:46px; padding:8px; gap:4px; justify-content:space-between; background:transparent; border:0; }
+.ch-shell[data-layout="library"] .ch-nav { min-height:36px; padding:4px 8px; gap:4px; justify-content:space-between; background:transparent; border:0; }
 .ch-shell[data-layout="library"] .ch-nav__primary { flex-wrap:nowrap; gap:3px; }
-.ch-shell[data-layout="library"] .ch-nav__item[data-view="home"],.ch-shell[data-layout="library"] .ch-nav__item[data-view="presets"] { height:30px; min-height:30px; padding:0 12px; font-size:13px; font-weight:500; border-radius:var(--radius-medium); }
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="home"],.ch-shell[data-layout="library"] .ch-nav__item[data-view="presets"] { height:28px; min-height:28px; padding:0 12px; font-size:13px; font-weight:500; border-radius:var(--radius-medium); }
 .ch-shell[data-layout="library"] .ch-nav__utilities { gap:3px; align-self:center; }
 .ch-shell[data-layout="library"] .ch-nav__utilities>.ch-nav__item,.ch-shell[data-layout="library"] .ch-nav__more { width:28px; height:28px; min-height:28px; padding:4px; border-radius:var(--radius-medium); }
 .ch-shell[data-layout="library"] .ch-nav__item svg,.ch-shell[data-layout="library"] .ch-nav__more svg { width:16px; height:16px; }
@@ -93,3 +93,8 @@
 [data-density="compact"] .ch-tool-tile > .ch-action:first-child,
 [data-density="compact"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-action:first-child .ch-action-button { width:44px; height:44px; min-height:44px; }
 @media (max-width:339px) { .ch-tool-action-bar > .ch-tool-action-control { flex:1 1 auto; } .ch-tool-action-control .ch-action-button { width:100%; } }
+/* Twirl-down: an Adobe-style triangle replaces the platform marker and turns
+ * when the section opens (motion: disclosure-expand). */
+.ch-shell [data-motion~="disclosure-expand"] > summary { display:flex; align-items:center; gap:6px; list-style:none; cursor:pointer; }
+.ch-shell [data-motion~="disclosure-expand"] > summary::-webkit-details-marker { display:none; }
+.ch-shell [data-motion~="disclosure-expand"] > summary::before { content:""; flex:0 0 auto; width:0; height:0; border-top:4px solid transparent; border-bottom:4px solid transparent; border-left:5px solid currentColor; }

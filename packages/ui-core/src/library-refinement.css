@@ -55,3 +55,20 @@
   .ch-quick-dock-toggle .ch-library-chevron { transition: none; }
 }
 [data-reduced-motion="true"] .ch-quick-dock-toggle .ch-library-chevron { transition: none; }
+
+/* Onyx Vivo — Quick apply feedback on a tile. Motion comes from tile-ripple,
+ * progress-spinner, confirmation-check and applied-dot in @motion/ui-motion. */
+.ch-tool-tile > .ch-button:first-child { position:relative; overflow:hidden; contain:layout paint; }
+.ch-tile-feedback { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+.ch-tile-feedback > svg { position:absolute; width:26px; height:26px; overflow:visible; }
+.ch-tile-spinner circle { fill:none; stroke:var(--icon-color, var(--txt-1)); stroke-width:2; stroke-linecap:round; stroke-dasharray:38 100; }
+.ch-tile-check { opacity:0; }
+.ch-tile-check path { fill:none; stroke:var(--ok); stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
+.ch-tool-tile > .ch-button[data-feedback="success"] .ch-tile-check { opacity:1; }
+.ch-tool-tile > .ch-button[data-feedback="loading"] > .ch-icon,
+.ch-tool-tile > .ch-button[data-feedback="success"] > .ch-icon { opacity:0.16; }
+.ch-tile-applied { position:absolute; right:5px; bottom:5px; width:5px; height:5px; border-radius:50%; background:var(--icon-color, var(--accent)); pointer-events:none; }
+[data-density="compact"] .ch-tile-feedback > svg { width:20px; height:20px; }
+.ch-library-tooltip__family { display:inline-block; width:6px; height:6px; margin-right:6px; border-radius:50%; background:var(--icon-color); vertical-align:1px; }
+/* Descrição curta da ferramenta no tooltip, abaixo do nome. */
+.ch-library-tooltip__detail { display:block; max-width:220px; margin-top:2px; color:var(--ch-text-secondary); font-size:11px; line-height:1.4; white-space:normal; }

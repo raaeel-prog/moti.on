@@ -103,6 +103,14 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
     if(disposed||nav.view==="edit")return;gallery?.dispose();clearNode(content);
     if(error)content.appendChild(createAlert(doc,{title:error,tone:"info"}).element);
     gallery=createPresetGallery(doc,{...options,...(revealId?{revealId}:{}),openApplied:undefined,busy:busy||options.busy,personal:options.cache.personal,
+      saveVariant:(presetId,baseName,settings)=>{
+        // Nome livre: "Preset", "Preset (2)"… A variação nasce dos ajustes do
+        // Browse, ainda não aplicados, e não depende de ler a camada.
+        let result=variants.save(baseName.slice(0,80),presetId,settings);
+        for(let index=2;!result.ok&&result.error==="duplicate"&&index<=100;index++){const suffix=` (${index})`;result=variants.save(`${baseName.slice(0,80-suffix.length).trimEnd()}${suffix}`,presetId,settings);}
+        if(result.ok)return{ok:true,message:pt?"Variação salva. Ela aparece em Editar → Variações salvas.":"Variation saved. Find it in Edit → Saved variations."};
+        return{ok:false,message:variantErrorText(result.error)};
+      },
       personalAction:(action,rootId)=>{void personal(action,rootId);},applyPersonal:itemId=>{void applyPersonal(itemId);},previewPersonal:async itemId=>{
         const response=await options.execute("ae.presets.personal-preview",{itemId});
         if(!response.ok||!response.data)throw Error(hostError(response,pt?"Não foi possível abrir a prévia.":"Could not open preview."));
@@ -462,7 +470,7 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
     const sequenceControls=gallerySequenceControls(preset,draft);
     if(!data.cameraTransition&&sequenceControls.order)choice("order",pt?"Ordem":"Order",[["preset",pt?"Original":"Original"],["forward",pt?"Primeiro ao último":"First to last"],["reverse",pt?"Último ao primeiro":"Last to first"],["center-out",pt?"Centro para fora":"Center outward"],["edges-in",pt?"Bordas para dentro":"Edges inward"],["random",pt?"Aleatória":"Random"]]);
     if(!data.cameraTransition&&sequenceControls.seed){draft.seed??=17;numeric("seed",pt?"Variação":"Variation",0,9999);}
-    if(preset.collection==="studio"||preset.collection==="premium"||preset.collection==="native"||draft.easing==="spring"){
+    if(preset.collection==="studio"||preset.collection==="premium"||preset.collection==="native"||preset.collection==="signature"||draft.easing==="spring"){
       if((draft.easing&&draft.easing!=="preset"?draft.easing:preset.easing)==="spring"||isMixed("easing"))numeric("elasticity",pt?"Elasticidade · %":"Elasticity · %",0,100,.1);
       if(preset.category.startsWith("text-")&&preset.mode==="transition")numeric("overlap",pt?"Sobreposição · %":"Overlap · %",0,100,.1);
       if(preset.mode==="continuous")numeric("speed",pt?"Velocidade · %":"Speed · %",25,200,.1);

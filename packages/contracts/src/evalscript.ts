@@ -16,15 +16,15 @@
  * receber parâmetro, a concatenação ingênua vira vulnerabilidade.
  *
  * A regra deste módulo: **a saída é sempre ASCII imprimível**, e as únicas
- * funções autorizadas a produzir string de código são `buildDispatchCall` e
- * `buildHostBootstrapCall`. As duas passam pelo mesmo encoder; nada mais neste
- * repositório monta código para o `evalScript`.
+ * funções autorizadas a produzir string de código são `buildDispatchCall`,
+ * `buildFileDispatchCall` e `buildHostBootstrapCall`. Todas passam pelo mesmo
+ * encoder; nada mais neste repositório monta código para o `evalScript`.
  */
 
 /**
- * Acima disto, o adapter recusa o pedido antes de chamar `evalScript`. O futuro
- * transporte alternativo deverá usar arquivo temporário e checksum SHA-256,
- * mas esse caminho ainda não está implementado neste build.
+ * Acima disto, o adapter não usa o canal inline: grava o pedido num arquivo
+ * temporário e chama `buildFileDispatchCall`, que lê o arquivo no host e o
+ * remove.
  *
  * O limite não é o de uma especificação — não existe número documentado para o
  * tamanho máximo de um `evalScript`. É um teto conservador escolhido porque o
@@ -131,6 +131,21 @@ export function decodeFromHost(encoded: string): string {
  */
 export function buildDispatchCall(json: string): string {
   return `MotionAE.dispatch("${encodeForEvalScript(json)}")`;
+}
+
+/**
+ * Chamada para pedido grande, gravado antes num arquivo temporário.
+ *
+ * `failureJson` é uma `CommandResponse` completa, com o `requestId` do pedido,
+ * montada pelo cliente. Ela volta quando o arquivo não pode ser lido, está vazio
+ * ou o host não está carregado. Antes, essas falhas voltavam sem `requestId`, o
+ * cliente as descartava e o usuário só via o timeout. Nada é despachado nesses
+ * casos, então o projeto não foi alterado.
+ */
+export function buildFileDispatchCall(path: string, failureJson: string): string {
+  const file = encodeForEvalScript(path.replace(/\\/g, "/"));
+  const failure = encodeForEvalScript(failureJson);
+  return `(function(){var failure="${failure}";try{var f=new File("${file}");f.encoding="UTF-8";var c="";if(f.open("r")){c=f.read();f.close();}try{f.remove();}catch(r){}if(!c)return failure;return typeof MotionAE!=="undefined"&&MotionAE.dispatch?MotionAE.dispatch(c):failure;}catch(e){return failure;}})()`;
 }
 
 /** Caminho do host montado, relativo à raiz da extensão instalada. */

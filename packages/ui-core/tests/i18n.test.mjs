@@ -337,3 +337,15 @@ test("toda acao corretiva declarada em ERROR_META tem traducao", () => {
 afterEach(() => {
   for (const name of ["HTMLElement", "customElements", "document", "window"]) delete globalThis[name];
 });
+
+test("plural forms: the .one variant applies to exactly one item in both languages; zero reads as plural", () => {
+  const pt = createI18n({ locale: "pt-BR" }), en = createI18n({ locale: "en-US" });
+  assert.equal(pt.t("selection.layers", { count: 1 }), "1 camada selecionada");
+  assert.equal(pt.t("selection.layers", { count: 2 }), "2 camadas selecionadas");
+  assert.equal(pt.t("selection.layers", { count: 0 }), "0 camadas selecionadas");
+  assert.equal(en.t("selection.layers", { count: 1 }), "1 selected layer");
+  assert.equal(en.t("library.count", { count: 1 }), "1 tool found");
+  assert.equal(en.t("library.count", { count: 47 }), "47 tools found");
+  assert.equal(pt.t("library.count", { count: 1 }), "1 ferramenta encontrada");
+  assert.equal(pt.t("field.hexColor", { count: 1 }), pt.t("field.hexColor"), "keys without plural variants are unchanged");
+});

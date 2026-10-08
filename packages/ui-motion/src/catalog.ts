@@ -45,9 +45,9 @@ function definition(value: MutableMotionDefinition): MotionDefinition {
 
 /** A6.2 IDs 1–25 stay stable; approved compact controls extend the catalog. */
 export const MOTION_CATALOG: readonly MotionDefinition[] = Object.freeze([
-  definition({ number: 1, id: "tile-hover", kind: "transition", properties: ["transform", "background-color"], durationTokens: ["--dur-1"], durationMs: [200], easingToken: "--ease-std", reducedMotion: "paint-only" }),
+  definition({ number: 1, id: "tile-hover", kind: "transition", properties: ["transform", "background-color"], durationTokens: ["--dur-1"], durationMs: [140], easingToken: "--ease-std", reducedMotion: "paint-only" }),
   definition({ number: 2, id: "tile-press", kind: "transition", properties: ["transform"], durationTokens: ["--dur-press"], durationMs: [90], easingToken: "--ease-in", reducedMotion: "preserve" }),
-  definition({ number: 3, id: "tile-advanced", kind: "transition", properties: ["opacity", "transform"], durationTokens: ["--dur-1"], durationMs: [200], easingToken: "--ease-out", reducedMotion: "opacity-only" }),
+  definition({ number: 3, id: "tile-advanced", kind: "transition", properties: ["opacity", "transform"], durationTokens: ["--dur-1"], durationMs: [140], easingToken: "--ease-out", reducedMotion: "opacity-only" }),
   definition({ number: 4, id: "tooltip-enter", kind: "transition", properties: ["opacity", "transform"], durationTokens: ["--dur-2"], durationMs: [200], easingToken: "--ease-out", delayToken: "--delay-tooltip", reducedMotion: "opacity-only" }),
   definition({ number: 5, id: "preview-enter", kind: "transition", properties: ["opacity", "transform"], durationTokens: ["--dur-3"], durationMs: [240], easingToken: "--ease-pop", delayToken: "--delay-preview", reducedMotion: "opacity-only" }),
   definition({ number: 6, id: "preview-exit", kind: "transition", properties: ["opacity", "transform"], durationTokens: ["--dur-popover-out"], durationMs: [200], easingToken: "--ease-in", reducedMotion: "opacity-only" }),
@@ -60,21 +60,25 @@ export const MOTION_CATALOG: readonly MotionDefinition[] = Object.freeze([
   definition({ number: 13, id: "toast-enter", kind: "transition", properties: ["opacity", "transform"], durationTokens: ["--dur-3"], durationMs: [240], easingToken: "--ease-pop", reducedMotion: "opacity-only" }),
   definition({ number: 14, id: "toast-exit", kind: "transition", properties: ["opacity", "transform"], durationTokens: ["--dur-2"], durationMs: [200], easingToken: "--ease-in", reducedMotion: "opacity-only" }),
   definition({ number: 15, id: "confirmation-check", kind: "feedback", properties: ["stroke-dashoffset"], durationTokens: ["--dur-5"], durationMs: [320], easingToken: "--ease-out", reducedMotion: "static" }),
-  definition({ number: 16, id: "tile-ripple", kind: "feedback", properties: ["opacity", "transform"], durationTokens: ["--dur-ripple"], durationMs: [260], easingToken: "--ease-out", reducedMotion: "suppress" }),
+  definition({ number: 16, id: "tile-ripple", kind: "feedback", properties: ["opacity", "transform"], durationTokens: ["--dur-ripple"], durationMs: [380], easingToken: "--ease-out", reducedMotion: "suppress" }),
   definition({ number: 17, id: "live-control-pulse", kind: "feedback", properties: ["opacity"], durationTokens: ["--dur-live-pulse", "--dur-live-reduced"], durationMs: [320, 1], easingToken: "--ease-std", reducedMotion: "static" }),
-  definition({ number: 18, id: "slider-knob", kind: "transition", properties: ["transform"], durationTokens: ["--dur-1"], durationMs: [200], easingToken: "--ease-out", reducedMotion: "preserve" }),
-  definition({ number: 19, id: "slider-track", kind: "transition", properties: ["transform"], durationTokens: ["--dur-progress", "--dur-1"], durationMs: [0, 200], easingToken: "--ease-std", reducedMotion: "preserve" }),
+  definition({ number: 18, id: "slider-knob", kind: "transition", properties: ["transform"], durationTokens: ["--dur-1"], durationMs: [140], easingToken: "--ease-out", reducedMotion: "preserve" }),
+  definition({ number: 19, id: "slider-track", kind: "transition", properties: ["transform"], durationTokens: ["--dur-progress", "--dur-1"], durationMs: [0, 140], easingToken: "--ease-std", reducedMotion: "preserve" }),
   definition({ number: 20, id: "asset-skeleton", kind: "progress", properties: ["opacity", "transform"], durationTokens: ["--dur-skeleton"], durationMs: [320], easingToken: "--ease-linear", reducedMotion: "static" }),
   definition({ number: 21, id: "progress-bar", kind: "progress", properties: ["transform"], durationTokens: ["--dur-progress", "--dur-progress-reduced"], durationMs: [0, 200], easingToken: "--ease-linear", reducedMotion: "preserve" }),
-  definition({ number: 22, id: "preset-chip", kind: "transition", properties: ["background-color", "transform"], durationTokens: ["--dur-1"], durationMs: [200], easingToken: "--ease-pop", reducedMotion: "paint-only" }),
+  definition({ number: 22, id: "preset-chip", kind: "transition", properties: ["background-color", "transform"], durationTokens: ["--dur-1"], durationMs: [140], easingToken: "--ease-pop", reducedMotion: "paint-only" }),
   definition({ number: 23, id: "command-palette", kind: "transition", properties: ["opacity", "transform"], durationTokens: ["--dur-3"], durationMs: [240], easingToken: "--ease-out", reducedMotion: "opacity-only" }),
   definition({ number: 24, id: "context-alert", kind: "transition", properties: ["background-color"], durationTokens: ["--dur-2"], durationMs: [200], easingToken: "--ease-std", reducedMotion: "preserve" }),
   definition({ number: 25, id: "empty-state", kind: "transition", properties: ["opacity", "transform"], durationTokens: ["--dur-3"], durationMs: [240], easingToken: "--ease-out", reducedMotion: "opacity-only" }),
-  definition({ number: 26, id: "button-press", kind: "transition", properties: ["transform", "background-color"], durationTokens: ["--dur-press", "--dur-1"], durationMs: [90, 200], easingToken: "--ease-out", reducedMotion: "paint-only" }),
+  definition({ number: 26, id: "button-press", kind: "transition", properties: ["transform", "background-color"], durationTokens: ["--dur-press", "--dur-1"], durationMs: [90, 140], easingToken: "--ease-out", reducedMotion: "paint-only" }),
   definition({ number: 27, id: "field-expand", kind: "transition", properties: ["opacity"], durationTokens: ["--dur-3"], durationMs: [240], easingToken: "--ease-out", reducedMotion: "instant" }),
   definition({ number: 28, id: "dock-expand", kind: "transition", properties: ["opacity"], durationTokens: ["--dur-4"], durationMs: [260], easingToken: "--ease-out", reducedMotion: "instant" }),
   definition({ number: 29, id: "surface-morph", kind: "transition", properties: ["opacity", "transform"], durationTokens: ["--dur-3"], durationMs: [240], easingToken: "--ease-out", reducedMotion: "opacity-only" }),
   definition({ number: 30, id: "disclosure-expand", kind: "transition", properties: ["opacity"], durationTokens: ["--dur-3"], durationMs: [240], easingToken: "--ease-out", reducedMotion: "instant" }),
   definition({ number: 31, id: "curve-preview", kind: "transition", properties: ["opacity"], durationTokens: ["--dur-3"], durationMs: [240], easingToken: "--ease-std", reducedMotion: "static" }),
-  definition({ number: 32, id: "icon-gesture", kind: "transition", properties: ["opacity", "transform"], durationTokens: ["--dur-icon"], durationMs: [320], easingToken: "--ease-out", reducedMotion: "static" })
+  definition({ number: 32, id: "icon-gesture", kind: "transition", properties: ["opacity", "transform", "stroke-dashoffset"], durationTokens: ["--dur-icon"], durationMs: [320], easingToken: "--ease-out", reducedMotion: "static" }),
+  // Onyx Vivo (2026-10-07): the Quick apply chain on the tile and the grid entrance.
+  definition({ number: 33, id: "progress-spinner", kind: "progress", properties: ["transform"], durationTokens: ["--dur-spinner"], durationMs: [720], easingToken: "--ease-linear", delayToken: "--delay-spinner", reducedMotion: "static" }),
+  definition({ number: 34, id: "grid-stagger", kind: "transition", properties: ["opacity", "transform"], durationTokens: ["--dur-2"], durationMs: [200], easingToken: "--ease-out", delayToken: "--stagger", reducedMotion: "instant" }),
+  definition({ number: 35, id: "applied-dot", kind: "feedback", properties: ["opacity", "transform"], durationTokens: ["--dur-2"], durationMs: [200], easingToken: "--ease-pop", reducedMotion: "opacity-only" })
 ]);

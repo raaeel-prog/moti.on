@@ -121,6 +121,8 @@
         data: {}
       };
     }
+    var bloqueio = MotionPreflight.unlockedPropertyOwners(selected);
+    if (bloqueio) return { error: bloqueio, comp: null, items: [], data: {} };
 
     var start;
     var end;

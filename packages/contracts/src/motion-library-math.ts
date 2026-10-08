@@ -26,7 +26,71 @@ export function libraryEase(t: number, kind: string, elasticity?: number): numbe
     x -= 2.625 / 2.75; return 7.5625 * x * x + 0.984375;
   }
   if (kind === "flicker") return Math.max(0, Math.min(1, Math.floor(x * 12) / 12 + Math.sin(Math.floor(x * 24) * 17) * (1 - x) * 0.22));
+  if (kind === "velvet" || kind === "drift") {
+    // Cubic Bézier ease-out, (.16,1,.3,1) and (.22,1,.36,1): a confident start
+    // and a long, monotonic settle that never overshoots. y(t) = 1-(1-t)^3.
+    var x1 = kind === "velvet" ? .16 : .22, x2 = kind === "velvet" ? .3 : .36, t = x, i, cx = 1, dx;
+    for (i = 0; i < 8 && Math.abs(cx) > 1e-7; i++) {
+      cx = 3 * (1 - t) * (1 - t) * t * x1 + 3 * (1 - t) * t * t * x2 + t * t * t - x;
+      dx = 3 * (1 - t) * (1 - t) * x1 + 6 * (1 - t) * t * (x2 - x1) + 3 * t * t * (1 - x2);
+      if (Math.abs(dx) < 1e-6) break;
+      t = Math.max(0, Math.min(1, t - cx / dx));
+    }
+    if (Math.abs(cx) > 1e-6) {
+      var lo = 0, hi = 1;
+      for (i = 0; i < 40; i++) { t = (lo + hi) / 2; if (3 * (1 - t) * (1 - t) * t * x1 + 3 * (1 - t) * t * t * x2 + t * t * t < x) lo = t; else hi = t; }
+    }
+    return 1 - Math.pow(1 - t, 3);
+  }
+  if (kind === "snap") {
+    // Critically damped arrival: zero start velocity, a decisive attack and a
+    // settle without any overshoot, normalized to land exactly on 1.
+    var k = 9;
+    return (1 - (1 + k * x) * Math.exp(-k * x)) / (1 - (1 + k) * Math.exp(-k));
+  }
   return 1 - Math.pow(1 - x, 3);
+}
+
+/** Signature effect envelopes, shared verbatim by the preview and AE expressions.
+ * progress runs from 0 (hidden) to 1 (at rest) and weight is the eased offset
+ * from 1 to 0. Every transition envelope is exactly 0 at rest, so the settled
+ * text is unaltered. "peak" flares while a unit is half revealed, wherever the
+ * curve places that moment; "arc" rises and falls with progress for a light that
+ * travels across the whole reveal; "tail" fades faster than the weight;
+ * "velocity" is the normalized speed of the eased curve, for blur proportional
+ * to motion. */
+export function librarySignatureEnvelope(kind: string, progress: number, weight: number, velocity: number): number {
+  var p = Math.max(0, Math.min(1, progress)), w = Math.max(0, Math.min(1, weight));
+  if (p >= 1) return 0;
+  if (kind === "peak") return 4 * w * (1 - w);
+  if (kind === "arc") return Math.sin(Math.PI * p);
+  if (kind === "tail") return w * w;
+  if (kind === "velocity") return Math.max(0, Math.min(1, velocity));
+  return w;
+}
+
+/** Normalized speed of an eased transition at progress t; 1 saturates at 2.5×
+ * the linear rate. ease is libraryEase, passed in so the function stays
+ * self-contained when serialized into an expression. */
+export function librarySignatureVelocity(t: number, kind: string, elasticity: number, ease: (t: number, kind: string, elasticity?: number) => number): number {
+  var x = Math.max(0, Math.min(1, t)), h = .01;
+  if (x >= 1) return 0;
+  var a = ease(Math.max(0, x - h), kind, elasticity), b = ease(Math.min(1, x + h), kind, elasticity);
+  return Math.max(0, Math.min(1, Math.abs(b - a) / (Math.min(1, x + h) - Math.max(0, x - h)) / 2.5));
+}
+
+/** Deterministic Character Offset for Signature reveals; 0 once a unit settles.
+ * A resolve cycles fourteen glyphs per unit of progress and locks at 72 %,
+ * leaving the last stretch of motion on the true character. A roll counts
+ * twelve glyphs down with the eased weight and lands exactly on the source. */
+export function librarySignatureGlyph(kind: string, progress: number, weight: number, index: number, seed: number): number {
+  var p = Math.max(0, Math.min(1, progress));
+  if (p >= 1) return 0;
+  if (kind === "roll") return Math.ceil(Math.max(0, Math.min(1, weight)) * 12);
+  if (p >= .72) return 0;
+  var h = Math.sin((Math.floor(p * 14) + 1) * 12.9898 + (index + 1) * 78.233 + seed * 3.17) * 43758.5453;
+  h -= Math.floor(h);
+  return 1 + Math.floor(h * 25);
 }
 
 export function libraryTiming(time: number, start: number, end: number, duration: number,

@@ -105,6 +105,24 @@ declare const MotionUndo: {
   withUndoGroup<T>(label: string, callback: () => T): T;
 };
 
+/** Falhas com chave traduzivel (errors.jsx). */
+declare const MotionErrors: {
+  isKey(key: unknown): boolean;
+  withKey(details: Record<string, unknown> | null | undefined, key: string, params?: unknown): Record<string, unknown>;
+  failure(code: string, key: string, message: string, params?: unknown, details?: Record<string, unknown> | null): MotionCommandFailure;
+  error(key: string, message: string, params?: unknown, motionCode?: string): Error;
+  keyOf(thrown: unknown): { key: string; params: Record<string, string | number> | null } | null;
+};
+
+/** Verificacoes de camada compartilhadas (preflight.jsx). */
+declare const MotionPreflight: {
+  isLocked(layer: unknown): boolean;
+  ownerLayer(property: unknown): unknown;
+  unlockedLayers(layers: ArrayLike<unknown> | null | undefined): MotionCommandFailure | null;
+  unlockedPropertyOwners(properties: ArrayLike<unknown> | null | undefined): MotionCommandFailure | null;
+  effectAvailable(layer: unknown, matchName: string, displayName: string): MotionCommandFailure | null;
+};
+
 declare const MotionExpressions: {
   renderLoopOut(tokens: {
     type: unknown;

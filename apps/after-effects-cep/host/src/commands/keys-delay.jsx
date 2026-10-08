@@ -230,6 +230,8 @@
           data: {}
         };
       }
+      var camadasBloqueadas = MotionPreflight.unlockedLayers(layers);
+      if (camadasBloqueadas) return { error: camadasBloqueadas, comp: null, targets: [], data: {} };
       if (layers.length > 500) {
         return {
           error: failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Selecao excede 500 camadas.", null),
@@ -275,6 +277,8 @@
           data: {}
         };
       }
+      var donosBloqueados = MotionPreflight.unlockedPropertyOwners(properties);
+      if (donosBloqueados) return { error: donosBloqueados, comp: null, targets: [], data: {} };
       var totalKeys = 0;
       for (i = 0; i < properties.length; i += 1) {
         var property = /** @type {Property} */ (properties[i]);

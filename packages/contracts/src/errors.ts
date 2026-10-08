@@ -81,7 +81,10 @@ export const ERROR_META: Record<ErrorCode, ErrorMeta> = {
   LICENSE_REQUIRED: { recoverable: true, actionKey: "error.action.activateLicense" },
   MODEL_NOT_INSTALLED: { recoverable: true, actionKey: "error.action.installModel" },
   NATIVE_SERVICE_UNAVAILABLE: { recoverable: false, actionKey: "error.action.checkSystemCheck" },
-  INVALID_PRESET: { recoverable: false, actionKey: "error.action.reportIssue" },
+  // Usado tanto para preset corrompido quanto para ajuste fora da faixa. Na
+  // prática, quase sempre é ajuste: mandar o usuário ao suporte era alarme
+  // falso, e conferir os ajustes resolve os dois casos sem esconder nada.
+  INVALID_PRESET: { recoverable: true, actionKey: "error.action.checkSettings" },
   EXPRESSION_CONFLICT: { recoverable: true, actionKey: "error.action.chooseConflictMode" },
   KEYFRAME_CONFLICT: { recoverable: true, actionKey: "error.action.chooseConflictMode" },
   TRACK_CONFLICT: { recoverable: true, actionKey: "error.action.chooseTrack" },

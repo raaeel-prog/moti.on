@@ -10,7 +10,8 @@ const IDS = [
   "preview-exit", "drawer-enter", "drawer-exit", "drawer-dimmer", "drawer-stagger",
   "tab-indicator", "view-enter", "toast-enter", "toast-exit", "confirmation-check",
   "tile-ripple", "live-control-pulse", "slider-knob", "slider-track", "asset-skeleton",
-  "progress-bar", "preset-chip", "command-palette", "context-alert", "empty-state", "button-press", "field-expand", "dock-expand", "surface-morph", "disclosure-expand", "curve-preview", "icon-gesture"
+  "progress-bar", "preset-chip", "command-palette", "context-alert", "empty-state", "button-press", "field-expand", "dock-expand", "surface-morph", "disclosure-expand", "curve-preview", "icon-gesture",
+  "progress-spinner", "grid-stagger", "applied-dot"
 ];
 
 test("a folha de movimento expõe um seletor para cada item do catálogo", async () => {
@@ -57,8 +58,13 @@ test("motion reduction covers every descendant and keeps final operation states 
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.equal((css.match(/animation:none !important; transition:none !important;/g) ?? []).length, 2);
   assert.match(css, /confirmation-check[^}]*stroke-dashoffset:0/s);
-  assert.match(css, /tile-ripple[^}]*display:none/s);
-  assert.doesNotMatch(css, /\binfinite\b/);
+  // Ripple is decoration of a click: reduced motion removes it entirely.
+  assert.match(css, /\[data-reduced-motion="true"\] \[data-motion~="tile-ripple"\][^}]*display:none/s);
+  assert.match(css, /prefers-reduced-motion[\s\S]*\[data-motion~="tile-ripple"\][^}]*display:none/);
+  // The only loop is real progress: the spinner, never decoration.
+  for (const rule of css.matchAll(/([^{}]+)\{[^}]*\binfinite\b[^}]*\}/g)) {
+    assert.match(rule[1], /progress-spinner/, `loop outside progress: ${rule[1].trim()}`);
+  }
   for (const declaration of css.matchAll(/transition:([^;]+);/g)) assert.doesNotMatch(declaration[1], /\b(?:width|height|flex-basis|clip-path)\b/);
 });
 

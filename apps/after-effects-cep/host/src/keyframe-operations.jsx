@@ -581,9 +581,12 @@
         try { restoreProperty(/** @type {MotionPropertySnapshot} */ (plan.originals[r]), null); } catch (rollback) { failed = true; }
       }
       try { restoreSelections(plan.originals); } catch (selectionRollback) { failed = true; }
-      var failure = /** @type {Error & {motionCode?: string}} */ (new Error(failed ? "Falha ao restaurar keyframes. Use Desfazer." : "O host recusou a escrita; os keyframes foram restaurados."));
-      failure.motionCode = failed ? MotionContracts.ERROR.ROLLBACK_FAILED : MotionContracts.ERROR.HOST_OPERATION_FAILED;
-      throw failure;
+      throw MotionErrors.error(
+        failed ? "hostError.rollbackIncomplete" : "hostError.writeRefusedRestored",
+        failed ? "Falha ao restaurar keyframes. Use Desfazer." : "O host recusou a escrita; os keyframes foram restaurados.",
+        null,
+        failed ? MotionContracts.ERROR.ROLLBACK_FAILED : MotionContracts.ERROR.HOST_OPERATION_FAILED
+      );
     }
     return { changed: plan.targets.length > 0, warnings: [], data: { propertyCount: plan.targets.length } };
   }

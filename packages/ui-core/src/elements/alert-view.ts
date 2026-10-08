@@ -109,7 +109,7 @@ export function mountAlertView(doc: Document, root: HTMLElement, options: AlertO
     for (const action of actionOptions) {
       const button = element(doc, "button", "ch-toast__action", action.label);
       button.setAttribute("type", "button");
-      button.setAttribute("data-motion", "tile-hover tile-press");
+      button.setAttribute("data-motion", "button-press");
       button.addEventListener("click", () => {
         if (!canInteract() || button.disabled) return;
         action.onPress();

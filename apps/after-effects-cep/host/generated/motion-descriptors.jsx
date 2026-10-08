@@ -1207,6 +1207,19 @@
         "en-US": "Moti.on: clean project",
         "pt-BR": "Moti.on: limpar projeto"
       }
+    },
+    "ae.ui.color-picker": {
+      id: "ae.ui.color-picker",
+      requirements: [],
+      destructive: false,
+      mutates: false,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.none",
+      undoLabels: {
+        "en-US": "",
+        "pt-BR": ""
+      }
     }
   };
 

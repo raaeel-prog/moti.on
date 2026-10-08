@@ -93,7 +93,7 @@
             "error.action.retryLater",
             "error.action.activateLicense",
             "error.action.installModel",
-            "error.action.reportIssue",
+            "error.action.checkSettings",
             "error.action.chooseConflictMode",
             "error.action.chooseTrack",
             "error.action.chooseAnotherAsset",

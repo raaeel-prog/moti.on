@@ -14,6 +14,7 @@
  */
 import { closeOpenDropdown, mountDropdownView, validateDropdownOptions, type SelectFieldOptions } from "./elements/dropdown-view.js";
 import { registerMotiDropdown } from "./elements/moti-dropdown.js";
+import { closeOpenColorPicker, createColorPicker, supportsColorOverlay } from "./elements/color-view.js";
 export type { SelectFieldOptions, SelectFieldOption } from "./elements/dropdown-view.js";
 import { attachScrubbableNumber } from "./scrubbable-number.js";
 import { createI18n, type I18n } from "./i18n.js";
@@ -720,6 +721,20 @@ export function normalizeHexColor(value: string): string | null {
  */
 export function colorField(doc: Document, options: ColorFieldOptions): HTMLElement {
   const field = fieldRoot(doc, options);
+  // O seletor nativo do Chromium do CEP não abre em painéis curtos (mínimo do
+  // AE: 280×280). Onde há overlay, o seletor vive dentro do painel.
+  if (supportsColorOverlay(doc)) {
+    field.root.className += " ch-field--color";
+    const picker = createColorPicker(doc, {
+      id: options.id, label: options.label, value: normalizeHexColor(options.value) ?? "#000000",
+      onCommit: options.onCommit,
+      ...(options.description ? { description: options.description } : {}),
+      ...(options.disabled ? { disabled: true } : {}),
+      ...(options.disabledReason ? { disabledReason: options.disabledReason } : {})
+    });
+    field.control.appendChild(picker.trigger);
+    return field.root;
+  }
   const input = createElement(doc, "input", "ch-color") as HTMLInputElement;
   input.type = "color";
 
@@ -1109,6 +1124,7 @@ export function createShell(options: ShellOptions): Shell {
 
   function render(): void {
     closeOpenDropdown(doc);
+    closeOpenColorPicker(doc, true);
     refreshChrome();
     const view = currentView();
     if (!view) return;
@@ -1131,6 +1147,10 @@ export function createShell(options: ShellOptions): Shell {
       viewContent = createElement(doc, "div", "ch-view-body");
       viewContent.setAttribute("data-motion", "view-enter");
       viewContent.setAttribute("data-active", String(renderedView !== view.id));
+      // Opening a tool from the grid moves forward; "← Ferramentas" moves back.
+      const direction = renderedView === "home" && view.id === "tools" ? "forward"
+        : renderedView === "tools" && view.id === "home" ? "back" : "none";
+      viewContent.setAttribute("data-direction", direction);
       content.appendChild(viewContent);
     }
     renderedView = view.id;

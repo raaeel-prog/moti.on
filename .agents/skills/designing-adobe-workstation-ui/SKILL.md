@@ -23,7 +23,7 @@ Use these defaults unless a specific screen requires a documented override:
 
 - `VISUAL_DENSITY: 3/10` — compact but not crowded.
 - `LAYOUT_VARIANCE: 2/10` — orderly, predictable, grid-aligned.
-- `MOTION_INTENSITY: 2/10` — functional feedback only.
+- `MOTION_INTENSITY: 5/10` — "Onyx Vivo": every motion explains a state, with a light, bounded personality (approved 2026-10-06).
 - `HOST_AFFINITY: 9/10` — visually belongs inside Adobe.
 - `DECORATION_LEVEL: 1/10` — almost no decoration without function.
 
@@ -157,7 +157,9 @@ Use motion only to explain state:
 - 140–280 ms disclosure transitions when runtime performance is stable;
 - 420 ms is the absolute ceiling for one-shot confirmation feedback;
 - no looping decoration;
-- no parallax, spring bounce, or animated gradient in the panel shell;
+- surfaces that appear (menus, pickers, toasts) may use the light overshoot of `--ease-pop` on entry only; exits accelerate without overshoot; no parallax, multi-bounce springs or animated gradients in the panel shell;
+- the Quick apply chain on a tile is ripple → spinner only after `--delay-spinner` → drawn check → applied dot; grids may cascade on entry or filter change (capped), never while typing;
+- the only loop allowed is real progress (the spinner);
 - respect the effective reduced-motion preference (`internal OR system`) and keep its toggle in Settings → Interface;
 - animate only `transform` and `opacity` for motion; never animate layout while the user is dragging a slider.
 

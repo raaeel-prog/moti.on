@@ -43,9 +43,9 @@ const LAYOUT_PROPERTIES = new Set([
 ]);
 
 test("o catálogo preserva os 25 IDs originais e acrescenta controles aprovados", () => {
-  assert.equal(MOTION_CATALOG.length, 32);
+  assert.equal(MOTION_CATALOG.length, 35);
   assert.deepEqual(MOTION_CATALOG.slice(0, 25).map((entry) => entry.id), EXPECTED_IDS);
-  assert.deepEqual(MOTION_CATALOG.map((entry) => entry.number), Array.from({ length: 32 }, (_, index) => index + 1));
+  assert.deepEqual(MOTION_CATALOG.map((entry) => entry.number), Array.from({ length: 35 }, (_, index) => index + 1));
 });
 
 test("layout animado fica restrito a expansões explícitas e durações usam tokens", () => {

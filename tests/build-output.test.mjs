@@ -187,6 +187,9 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       // sistema de modulos, e quatro copias do mesmo reconhecimento de efeito
       // gerenciado divergiriam.
       "MotionEffects",
+      // Chaves de mensagem de falha (lista fechada) que o dispatcher repassa ao
+      // painel. Interno: só monta falhas e lê marcas de exceção.
+      "MotionErrors",
       "MotionExpressions",
       // Internal grouped-control writer; host mutations still pass through dispatch.
       "MotionGroupedControls",
@@ -220,6 +223,9 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       // Internal pure Bézier geometry shared by the word morph and its tests.
       // It never touches AE layers; all host mutations still pass through dispatch.
       "MotionMorphGeometry",
+      // Verificações de camada comuns aos preflights (camada bloqueada, efeito
+      // ausente). Só lê o projeto; nenhuma mutação passa por aqui.
+      "MotionPreflight",
       "MotionPresetLibrary",
       // Internal phase composition and ownership shared with the inspected library.
       "MotionPresetPhases",
@@ -230,6 +236,10 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       // porque Parallax e Cylinder ja precisam do mesmo bloco, e duas copias de
       // "onde comeca e onde termina" divergiriam no primeiro caso de borda.
       "MotionRigMeta",
+      // Signature text looks used only by the preset library's effect stage.
+      // No dispatch surface and no Undo group: it receives the library's own
+      // owned-effect and expression helpers and resolves parameters by match name.
+      "MotionSignatureEffects",
       // Native text outlining shared by word reveal and proximity morph.
       // It has no dispatch surface and preserves only temporary conversion data.
       "MotionTextGlyphOutlines",

@@ -42,6 +42,10 @@
       totalPropriedades < MAX_PROPRIEDADES ? totalPropriedades : MAX_PROPRIEDADES;
 
     var alguma3D = false;
+    // Tipo e bloqueio por camada: o painel usa para avisar, antes do clique,
+    // que um preset de texto precisa de texto e que uma camada esta bloqueada.
+    var textos = 0;
+    var bloqueadas = 0;
     var identity = [String(/** @type {any} */ (comp).id)];
     var somaDeDuracoes = 0;
     var i;
@@ -51,6 +55,8 @@
       if (!camada) continue;
       identity.push("L" + camada.index);
       if (camada.threeDLayer === true) alguma3D = true;
+      if (typeof TextLayer !== "undefined" && camada instanceof TextLayer) textos += 1;
+      if (camada.locked === true) bloqueadas += 1;
       if (typeof camada.outPoint === "number" && typeof camada.inPoint === "number") {
         somaDeDuracoes += camada.outPoint - camada.inPoint;
       }
@@ -98,6 +104,8 @@
       selectionHasKeyframes: comKeyframes > 0,
       selectionHasExpressions: comExpressao > 0,
       selectionIs3D: alguma3D,
+      selectionTextLayerCount: textos,
+      selectionLockedLayerCount: bloqueadas,
       averageLayerDurationSeconds:
         camadasLidas > 0 ? Math.round((somaDeDuracoes / camadasLidas) * 1000) / 1000 : null,
       selectionTruncated: totalCamadas > MAX_CAMADAS || totalPropriedades > MAX_PROPRIEDADES
@@ -141,6 +149,8 @@
         selectionHasKeyframes: false,
         selectionHasExpressions: false,
         selectionIs3D: false,
+        selectionTextLayerCount: 0,
+        selectionLockedLayerCount: 0,
         averageLayerDurationSeconds: null,
         selectionTruncated: false
       });

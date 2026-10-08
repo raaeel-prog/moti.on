@@ -2,6 +2,7 @@ import { MOTION_LIBRARY_PREMIUM_PRESETS } from "./motion-library-premium.js";
 import { MOTION_LIBRARY_STUDIO_PRESETS } from "./motion-library-studio.js";
 import { MOTION_LIBRARY_CAMERA_PRESETS } from "./motion-library-camera.js";
 import { MOTION_LIBRARY_NATIVE_PRESETS } from "./motion-library-native.js";
+import { MOTION_LIBRARY_SIGNATURE_PRESETS } from "./motion-library-signature.js";
 
 /**
  * Original, declarative Moti.on animation library.
@@ -25,7 +26,14 @@ export interface MotionLibraryPreset {
   referenceIndex: number | null;
   /** Exact master-spec overlay recipe; does not apply directly to user layers. */
   cameraSpec?: { id: string; blur: "none" | "gaussian" | "lens"; exposure?: number; native?: { style: number; angle: number }; impact?: CameraImpactSpec };
-  collection?: "studio" | "gemini" | "native" | "premium";
+  collection?: "studio" | "gemini" | "native" | "premium" | "signature";
+  /** Signature gallery family; absent on every other collection. */
+  family?: "essentials" | "cinema" | "light-matter" | "variation";
+  /** Authored tempo character, in frames at the 30 fps reference. A kinetic
+   * look depends on velocity, so its window is narrow; a cinematic look keys
+   * its effects to progress and keeps its character at any duration; a loop
+   * is paced by Speed. The window bounds the panel's duration control. */
+  tempo?: { character: "kinetic" | "cinematic" | "loop"; minFrames: number; maxFrames: number };
   /** Original multi-axis trajectory; optional to preserve legacy recipes. */
   choreography?: {
     path: "linear" | "arc" | "spiral" | "rebound" | "swing";
@@ -35,7 +43,7 @@ export interface MotionLibraryPreset {
   /** Curated initial controls; omitted values use the legacy library defaults. */
   defaults?: Partial<MotionLibraryOptions>;
   mode: "transition" | "continuous" | "static";
-  easing: "smooth" | "cubic" | "overshoot" | "bounce" | "flicker" | "silk" | "glide" | "spring";
+  easing: "smooth" | "cubic" | "overshoot" | "bounce" | "flicker" | "silk" | "glide" | "spring" | "velvet" | "drift" | "snap";
   /** Nominal offsets/amplitudes in pixels for a 1080-pixel-high composition. */
   position: [number, number, number];
   /** X, Y and Z offsets/amplitudes in degrees. */
@@ -64,11 +72,24 @@ export interface MotionLibraryPreset {
     | "camera-distort"
     | "camera-shake"
     | "camera-zoom"
-    | "camera-spin";
+    | "camera-spin"
+    | "film-burn"
+    | "light-sweep"
+    | "light-rays"
+    | "bloom"
+    | "anamorphic"
+    | "gate-slip"
+    | "ink-bleed"
+    | "dust"
+    | "smoke"
+    | "projector"
+    | "halo";
   /** Effect-specific nominal amount; zero when no effect is requested. */
   effectAmount: number;
   /** Screen-space direction: 0° right, 90° down, 180° left, 270° up. */
   effectAngle: number;
+  /** Light or glow color of a Signature look, RGB 0–1. */
+  effectColor?: [number, number, number];
   text: {
     unit: "characters" | "words" | "lines" | "all";
     random: boolean;
@@ -80,8 +101,14 @@ export interface MotionLibraryPreset {
     order?: "forward" | "reverse" | "center-out" | "edges-in" | "random";
     /** Per-unit text blur in nominal pixels; independent of whole-layer effects. */
     blur?: number;
-    /** Discrete per-unit reveal; independent of geometric easing. */
-    reveal?: "typewriter";
+    /** Discrete per-unit reveal; independent of geometric easing. A resolve
+     * cycles glyphs and locks each unit as it settles; a roll counts glyphs
+     * down to the source character. */
+    reveal?: "typewriter" | "resolve" | "roll";
+    /** Per-unit fill color while a unit arrives, returning to the source fill. */
+    fill?: [number, number, number];
+    /** Restrict per-unit blur to one axis for a directional motion streak. */
+    blurAxis?: "x" | "y";
   };
   pivot: "anchor" | "edge";
 }
@@ -172,7 +199,7 @@ export function isMotionLibraryOptions(value: unknown): value is MotionLibraryOp
     const number = options[key];
     if (typeof number !== "number" || !Number.isFinite(number) || number < minimum || number > maximum) return false;
   }
-  if (Object.prototype.hasOwnProperty.call(options, "easing") && !["preset", "smooth", "cubic", "overshoot", "bounce", "flicker", "silk", "glide", "spring"].includes(options.easing as string)) return false;
+  if (Object.prototype.hasOwnProperty.call(options, "easing") && !["preset", "smooth", "cubic", "overshoot", "bounce", "flicker", "silk", "glide", "spring", "velvet", "drift", "snap"].includes(options.easing as string)) return false;
   if (Object.prototype.hasOwnProperty.call(options, "order") && !["preset", "forward", "reverse", "center-out", "edges-in", "random"].includes(options.order as string)) return false;
   if (Object.prototype.hasOwnProperty.call(options, "seed") && (typeof options.seed !== "number" || !Number.isInteger(options.seed) || options.seed < 0 || options.seed > 9999)) return false;
   return (options.phase === "in" || options.phase === "out" || options.phase === "both")
@@ -1790,5 +1817,6 @@ export const MOTION_LIBRARY_PRESETS: readonly MotionLibraryPreset[] = [
   },
   ...MOTION_LIBRARY_CAMERA_PRESETS,
   ...MOTION_LIBRARY_NATIVE_PRESETS,
-  ...MOTION_LIBRARY_PREMIUM_PRESETS
+  ...MOTION_LIBRARY_PREMIUM_PRESETS,
+  ...MOTION_LIBRARY_SIGNATURE_PRESETS
 ];

@@ -85,6 +85,7 @@ const SHARED_THEME_SOURCES = [
   path.join(packages, "ui-core", "src", "design-system.css"),
   path.join(packages, "ui-core", "src", "preset-approved.css"),
   path.join(packages, "ui-core", "src", "scrubbable-number.css"),
+  path.join(packages, "ui-core", "src", "overlay-controls.css"),
   path.join(packages, "ui-motion", "src", "motion.css")
 ];
 

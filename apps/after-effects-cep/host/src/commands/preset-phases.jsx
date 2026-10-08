@@ -104,7 +104,8 @@
   /** @param {any} layer @param {any} root @param {string} role @param {any} context @param {any[]} components @param {any[]} plans */
   function renderSlot(layer,root,role,context,components,plans){
     var s=root.slots[role],m=s.meta,p=lib.definition({presetId:s.presetId});m.markerInstance=root.instance;
-    var plan={layer:layer,comp:layer.containingComp,p:p,args:m.options,meta:m,created:[],snapshots:[],locale:context.locale||"pt-BR",deferMetadata:true,deferMarkers:true};plans.push(plan);lib.applyLayer(plan);
+    // Masked recipes need the text bounds; mid-layer is at rest between the phases.
+    var plan={layer:layer,comp:layer.containingComp,p:p,args:m.options,meta:m,created:[],snapshots:[],locale:context.locale||"pt-BR",deferMetadata:true,deferMarkers:true,rect:layer.sourceRectAtTime((layer.inPoint+layer.outPoint)/2,false)};plans.push(plan);lib.applyLayer(plan);
     var retained=[];for(var i=0;i<m.expressions.length;i++){var item=m.expressions[i];if(item.path[0]!==TR){retained.push(item);continue;}
       var prop=lib.locate(layer,item.path),known=false;for(var j=0;j<root.shared.length;j++)if(MotionJson.stringify(root.shared[j].path)===MotionJson.stringify(item.path))known=true;
       if(!known){var base=lib.snapshot(prop);base.expression=item.original;base.enabled=item.enabled;root.shared.push(base);}
@@ -183,7 +184,7 @@
       for(i=plans.length-1;i>=0;i--){try{var plan=plans[i];lib.restore(plan.layer,plan.snapshots);for(var j=plan.created.length-1;j>=0;j--){var item=plan.created[j],g=lib.locate(plan.layer,item.group),e=lib.child(g,item.name);if(e)e.remove();}}catch(partialError){failed=true;}}
       for(i=done.length-1;i>=0;i--)try{var d=/** @type {any} */ (done[i]);erase(d.q.layer,d.root);d.q.layer.comment=d.q.comment;d.q.layer.threeDLayer=d.q.was3D;
         if(d.oldRoot){components=[];for(r=0;r<ROLES.length;r++)if(d.oldRoot.slots[ROLES[r]])renderSlot(d.q.layer,d.oldRoot,ROLES[r],context,components,[]);combine(d.q.layer,d.oldRoot,components);save(d.q.layer,d.oldRoot);lib.restoreMarkers(d.q.layer,d.oldRoot,d.q.markers);}
-        else if(d.q.old){var m=d.q.old;lib.applyLayer({layer:d.q.layer,comp:prepared.comp,p:lib.definition({presetId:m.presetId}),args:m.options,meta:m,created:[],snapshots:[],locale:context.locale||"pt-BR"});lib.restoreMarkers(d.q.layer,m,d.q.markers);d.q.layer.comment=d.q.comment;}
+        else if(d.q.old){var m=d.q.old;lib.applyLayer({layer:d.q.layer,comp:prepared.comp,p:lib.definition({presetId:m.presetId}),args:m.options,meta:m,created:[],snapshots:[],locale:context.locale||"pt-BR",rect:d.q.layer.sourceRectAtTime((d.q.layer.inPoint+d.q.layer.outPoint)/2,false)});lib.restoreMarkers(d.q.layer,m,d.q.markers);d.q.layer.comment=d.q.comment;}
       }catch(rollbackError){failed=true;}
       if(failed){var failure=/** @type {any} */ (new Error("Falha ao restaurar as fases; use Desfazer."));failure.motionCode=MotionContracts.ERROR.ROLLBACK_FAILED;throw failure;}throw problem;
     }return {changed:true,data:{appliedCount:prepared.batch.length,phase:args.phase},warnings:[]};

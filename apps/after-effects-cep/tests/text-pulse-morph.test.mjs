@@ -17,9 +17,9 @@ function fixture() {
   doc.characterRange = () => doc;
   const prop = { value: doc, numKeys: 0, expression: "" };
   const empty = { numProperties: 0, canAddProperty: () => true };
-  const source = { id: 1, comment: "User note", enabled: true, locked: false, inPoint: 0, outPoint: 24, parent: null, property: name => name === "ADBE Text Properties" ? { property: n => n === "ADBE Text Document" ? prop : empty } : empty };
+  const source = { id: 1, comment: "User note", enabled: true, locked: false, inPoint: 0, outPoint: 24, parent: null, setTrackMatte() {}, property: name => name === "ADBE Text Properties" ? { property: n => n === "ADBE Text Document" ? prop : empty } : empty };
   const comp = new CompItem(source);
-  const scope = { MotionContracts: { ERROR, PULSE_PRESETS }, MotionJson: JSON, MotionVerticalPulseLegacy: { readMeta: () => null }, MotionTextGlyphOutlines: {}, MotionMorphGeometry: {}, app: { project: { activeItem: comp } }, CompItem, isFinite };
+  const scope = { MotionContracts: { ERROR, PULSE_PRESETS }, MotionJson: JSON, MotionVerticalPulseLegacy: { readMeta: () => null }, MotionTextGlyphOutlines: {}, MotionMorphGeometry: {}, app: { project: { activeItem: comp } }, CompItem, isFinite, TrackMatteType: { ALPHA: 1 } };
   scope.$ = { global: scope }; vm.createContext(scope); vm.runInContext(registrySource, scope); scope.MotionRegistry.register("ae.text.vertical-pulse", { preflight: () => null, run: () => ({}) }); vm.runInContext(moduleSource, scope);
   return { scope, source, comp, doc, prop, host: scope.MotionPulseMorph };
 }
@@ -148,7 +148,7 @@ test("Pulse gradient positions and colors move continuously and close every cycl
   const expressions = [-1, 1].map(end => f.host.gradientPointExpression(m, end)).concat([false, true].map(end => f.host.gradientColorExpression(m, end)));
   for (const preset of Object.keys(PULSE_PRESETS)) for (const expression of expressions) {
     const start = evaluate(f, preset, 0, expression, reference), end = evaluate(f, preset, 1, expression, reference), middle = evaluate(f, preset, .25, expression, reference);
-    assert.deepEqual(start, end);assert.ok(start.some((value, i) => Math.abs(value - middle[i]) > .001));
+    assert.deepEqual(Array.from(start), Array.from(end));assert.ok(start.some((value, i) => Math.abs(value - middle[i]) > .001));
     for (const fraction of [.13, .32, .58, .999999]) {
       const a = evaluate(f, preset, fraction, expression, reference), b = evaluate(f, preset, fraction + .000001, expression, reference);
       assert.ok(a.every(Number.isFinite));assert.ok(a.every((value, i) => Math.abs(value - b[i]) < .02));
@@ -163,5 +163,33 @@ test("Pulse late wave glyph remains visible for its entire delayed material tail
     const late = evaluate(f, 'liquid', .84, expression, reference, { animationMode, waveSpread: 100, fluidity: 100 });
     assert.ok(late > 10, animationMode);
     assert.equal(evaluate(f, 'liquid', 1, expression, reference, { animationMode, waveSpread: 100, fluidity: 100 }), 0);
+  }
+});
+
+test("Pulse ownership signature skips the native Ramp no-value separator", () => {
+  const f=fixture();f.scope.PropertyValueType={NO_VALUE:0};
+  const separator={name:'',matchName:'ADBE Ramp-0008',propertyValueType:0,numProperties:0,numKeys:0,expression:''};
+  Object.defineProperty(separator,'value',{get(){throw Error('Native separator has no value');}});
+  assert.doesNotThrow(()=>f.host.signature({name:'Ramp',matchName:'ADBE Ramp',numProperties:1,property:()=>separator}));
+});
+
+test("Pulse organic lobes grow from the stroke caps while the middle stays joined to the core", () => {
+  const f=fixture(),expression=f.host.pathExpression({start:0,characterCount:1},glyph,0);
+  const ref={points:()=>[[0,-50],[0,0],[50,0],[50,50]],inTangents:()=>Array.from({length:4},()=>[1,0]),outTangents:()=>Array.from({length:4},()=>[1,0])};
+  for(const preset of Object.keys(PULSE_PRESETS)){
+    const t=PULSE_PRESETS[preset].timing,phase=(t.attackEnd+t.holdEnd)/2,out=evaluate(f,preset,phase,expression,ref);
+    assert.deepEqual(Array.from(out.vertices[1]),[0,0]);assert.deepEqual(Array.from(out.vertices[2]),[50,0]);
+    assert.ok(Math.abs(out.vertices[0][0])>1&&Math.abs(out.vertices[3][0]-50)>1,preset+' grows curved cap volumes');
+  }
+});
+
+
+test("Pulse alpha windows follow each glyph core and exclude the center throughout all directions", () => {
+  const f=fixture(),m={start:0,characterCount:9};
+  for(const preset of Object.keys(PULSE_PRESETS))for(const animationMode of ['uniform','left-to-right','right-to-left','center-out'])for(const index of [0,4,8])for(const phase of [.1,.3,.55,.8,1]){
+    const g={...glyph,textIndex:index+1},opts={animationMode,waveSpread:100},top=evaluate(f,preset,phase,f.host.capPositionExpression(m,g,-1),reference,opts),bottom=evaluate(f,preset,phase,f.host.capPositionExpression(m,g,1),reference,opts);
+    const core=evaluate(f,preset,phase,f.host.kernel(m,index)+'Math.max(.2,1+(peak/100-1)*p);',reference,opts);
+    assert.ok(Math.abs((top[1]+300)+50*.78*core)<1e-6);assert.ok(Math.abs((bottom[1]-300)-50*.78*core)<1e-6);
+    assert.ok(top[1]+300<0&&bottom[1]-300>0,'center is excluded even during rebound');
   }
 });

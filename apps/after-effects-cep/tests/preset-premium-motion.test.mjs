@@ -7,7 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { loadHostModules } from './host-harness.mjs';
 
 const compiled = await build({
-  stdin: { contents: 'export * from "./motion-library.ts"; export * from "./motion-library-math.ts";', resolveDir: fileURLToPath(new URL('../../../packages/contracts/src', import.meta.url)) },
+  stdin: { contents: 'export * from "./motion-library.ts"; export * from "./motion-library-math.ts"; export * from "./motion-library-requirements.ts";', resolveDir: fileURLToPath(new URL('../../../packages/contracts/src', import.meta.url)) },
   bundle: true, format: 'esm', platform: 'node', write: false
 });
 const contracts = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);

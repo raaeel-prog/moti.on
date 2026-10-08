@@ -2070,6 +2070,21 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsCancel: false,
     undoLabelKey: "undo.ae.project.clean",
     timeoutMs: 60000
+  },
+  {
+    // Abre o seletor de cor do sistema pelo ExtendScript (`$.colorPicker`). É a
+    // saída que independe do tamanho do painel. O diálogo é modal e o usuário
+    // decide quanto tempo fica nele, por isso o timeout longo.
+    id: "ae.ui.color-picker",
+    hosts: ["after-effects"],
+    requirements: [],
+    destructive: false,
+    mutates: false,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.none",
+    timeoutMs: 600_000
   }
 ] as const;
 

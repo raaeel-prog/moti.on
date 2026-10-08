@@ -93,6 +93,7 @@ export {
   MAX_INLINE_CHARS,
   MAX_INLINE_EVALSCRIPT_CHARS,
   buildDispatchCall,
+  buildFileDispatchCall,
   buildHostBootstrapCall,
   decodeFromHost,
   encodeForEvalScript,
@@ -121,6 +122,7 @@ export {
 
 export * from "./motion-library.js";
 export * from "./motion-library-math.js";
+export * from "./motion-library-requirements.js";
 export * from "./preset-workspace.js";
 
 export * from "./text-effects.js";

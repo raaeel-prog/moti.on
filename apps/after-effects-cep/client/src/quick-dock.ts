@@ -26,6 +26,8 @@ const COPY = {
   "en-US": { title: "Quick actions", noComp: "No composition", empty: "No selection", selected: (n: number) => `${n} ${n === 1 ? "layer" : "layers"}`, pin: "Keep quick actions open", unpin: "Unpin quick actions", pinned: "Pinned", automatic: "Automatic", manual: "Manual" }
 };
 const DOCK_MS = MOTION_CATALOG.find(motion => motion.id === "dock-expand")!.durationMs[0]!;
+/** Below this panel height the automatic opening would hide the tool grid. */
+const SHORT_PANEL_HEIGHT = 420;
 let sequence = 0;
 function contains(parent: HTMLElement, node: EventTarget | null): boolean {
   let current = node as Node | null;
@@ -126,7 +128,9 @@ export function createQuickDock(doc: Document, options: QuickDockOptions): Quick
   function reconcile(): void {
     if (!alive) return;
     const interacting = pointerInside || contains(body, doc.activeElement) || context.busy;
-    const requested = pinned || (manual ?? (context.hasComp && context.selectionCount > 0));
+    const height = doc.defaultView?.innerHeight;
+    const short = typeof height === "number" && height > 0 && height < SHORT_PANEL_HEIGHT;
+    const requested = pinned || (manual ?? (context.hasComp && context.selectionCount > 0 && !short));
     setOpen(requested || (open && interacting));
     const label = pinned ? copy.unpin : copy.pin;
     pin.setAttribute("aria-label", label); pin.title = label;
@@ -146,7 +150,8 @@ export function createQuickDock(doc: Document, options: QuickDockOptions): Quick
   const Observer = (win as (Window & { ResizeObserver?: typeof ResizeObserver }) | null)?.ResizeObserver;
   const observer = Observer ? new Observer(resize) : null;
   observer?.observe(options.content);
-  win?.addEventListener("resize", resize);
+  const onWindowResize = (): void => { reconcile(); resize(); };
+  win?.addEventListener("resize", onWindowResize);
   element.setAttribute("data-open", "false"); body.setAttribute("data-open", "false");
   body.setAttribute("aria-hidden", "true"); toggle.setAttribute("aria-expanded", "false");
   stopTabbing(); reconcile();
@@ -164,7 +169,7 @@ export function createQuickDock(doc: Document, options: QuickDockOptions): Quick
     },
     dispose() {
       alive = false; clearTimeout(transitionTimer); clearTimeout(blurTimer);
-      observer?.disconnect(); win?.removeEventListener("resize", resize); restoreTabbing();
+      observer?.disconnect(); win?.removeEventListener("resize", onWindowResize); restoreTabbing();
     }
   };
 }

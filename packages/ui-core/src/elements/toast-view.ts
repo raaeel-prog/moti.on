@@ -75,14 +75,14 @@ export function mountToastView(doc: Document, root: HTMLElement, options: ToastV
   const actions = (options.actions ?? []).map(action => {
     const button = element(doc, "button", "ch-toast__action", action.label);
     button.setAttribute("type", "button");
-    button.setAttribute("data-motion", "tile-hover tile-press");
+    button.setAttribute("data-motion", "button-press");
     row.appendChild(button);
     return button;
   });
   if (actions.length) content.appendChild(row);
   const dismissButton = element(doc, "button", "ch-toast__dismiss", "×");
   dismissButton.setAttribute("type", "button");
-  dismissButton.setAttribute("data-motion", "tile-hover tile-press");
+  dismissButton.setAttribute("data-motion", "button-press");
   root.appendChild(dismissButton);
   let valid = true;
   let rendered: ToastPresentation | undefined;

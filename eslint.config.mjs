@@ -153,6 +153,8 @@ export default [
         MotionMenuCommand: "readonly",
         MotionRigMeta: "readonly",
         MotionUndo: "readonly",
+        MotionErrors: "readonly",
+        MotionPreflight: "readonly",
         MotionRegistry: "readonly",
         MotionAE: "readonly"
       }

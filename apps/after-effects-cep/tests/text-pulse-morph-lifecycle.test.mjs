@@ -46,10 +46,13 @@ async function fixture() {
       if(['ADBE Slider Control','ADBE Color Control','ADBE Layer Control'].includes(name))g.prop(name+'-0001',name==='ADBE Color Control'?[1,1,1,1]:0);
       if(name==='ADBE Vector Group'){g.group('ADBE Vectors Group');const t=g.group('ADBE Vector Transform Group');for(const [key,value]of Object.entries({'ADBE Vector Anchor':[0,0],'ADBE Vector Position':[0,0],'ADBE Vector Scale':[100,100],'ADBE Vector Rotation':0,'ADBE Vector Skew':0,'ADBE Vector Group Opacity':100}))t.prop(key,value);}
       if(name==='ADBE Vector Shape - Group')g.prop('ADBE Vector Shape',{vertices:[[0,0],[1,1]],inTangents:[[0,0],[0,0]],outTangents:[[0,0],[0,0]],closed:true});
+      if(name==='ADBE Vector Shape - Rect')for(const[key,value]of Object.entries({'ADBE Vector Rect Size':[100,100],'ADBE Vector Rect Position':[0,0]}))g.prop(key,value);
+      if(name==='ADBE Turbulent Displace')for(const[key,value]of Object.entries({'ADBE Turbulent Displace-0002':50,'ADBE Turbulent Displace-0003':100,'ADBE Turbulent Displace-0006':0,'ADBE Turbulent Displace-0008':0,'ADBE Turbulent Displace-0009':1,'ADBE Turbulent Displace-0010':0}))g.prop(key,value);
       if(name==='ADBE Vector Filter - Merge')g.prop('ADBE Vector Merge Type',1);
       if(name==='ADBE Vector Graphic - Fill')for(const[key,value]of Object.entries({'ADBE Vector Fill Color':[1,1,1],'ADBE Vector Fill Opacity':100,'ADBE Vector Fill Rule':1}))g.prop(key,value);
       if(name==='ADBE Vector Graphic - Stroke')for(const[key,value]of Object.entries({'ADBE Vector Stroke Color':[1,1,1],'ADBE Vector Stroke Opacity':100,'ADBE Vector Stroke Width':1}))g.prop(key,value);
       if(name==='ADBE Ramp')for(const[key,value]of Object.entries({'ADBE Ramp-0001':[0,0],'ADBE Ramp-0002':[0,0,0,1],'ADBE Ramp-0003':[0,100],'ADBE Ramp-0004':[1,1,1,1],'ADBE Ramp-0005':1,'ADBE Ramp-0006':0,'ADBE Ramp-0007':0}))g.prop(key,value);
+      if(name==='ADBE Gaussian Blur 2')for(const[key,value]of Object.entries({'ADBE Gaussian Blur 2-0001':0,'ADBE Gaussian Blur 2-0002':1,'ADBE Gaussian Blur 2-0003':0}))g.prop(key,value);
       if(name==='ADBE Glo2')for(const[key,value]of Object.entries({'ADBE Glo2-0002':60,'ADBE Glo2-0003':10,'ADBE Glo2-0004':1,'ADBE Glo2-0007':1}))g.prop(key,value);
       return g;
     }
@@ -62,11 +65,12 @@ async function fixture() {
       if(kind==='shape')this.groups.push(new Group(this,'ADBE Root Vectors Group'));
       if(kind==='text'){const t=new Group(this,'ADBE Text Properties');const d={text:'A',font:'Fixture',fontSize:100,tracking:0,justification:1,leading:120,autoLeading:false,horizontalScale:100,verticalScale:100,baselineShift:0,fauxBold:false,fauxItalic:false,allCaps:false,smallCaps:false,applyFill:true,fillColor:[1,1,1],applyStroke:false,boxText:false,baselineLocs:[0,0,60,0]};d.characterRange=()=>({...d});const p=t.prop('ADBE Text Document',d);p._value=d;p.valueAtTime=()=>d;Object.defineProperty(p,'value',{get:()=>d});t.group('ADBE Text Animators');this.groups.push(t);}
     }
+    setTrackMatte(layer,type){this.trackMatteLayer=layer;this.trackMatteType=type;this.hasTrackMatte=!!layer;if(layer)layer.enabled=false;}
     get index(){if(this.deleted)throw Error('deleted native layer');return this.comp.items.indexOf(this)+1;}
     get numProperties(){return this.groups.length;}
     property(key){return typeof key==='number'?this.groups[key-1]:this.groups.find(g=>g.matchName===key);}
     moveBefore(other){this.comp.items.splice(this.comp.items.indexOf(this),1);this.comp.items.splice(this.comp.items.indexOf(other),0,this);}
-    duplicate(){const l=new Layer(this.comp,'null');l.isBackup=true;for(const key of ['name','comment','enabled','parent','inPoint','outPoint','motionBlur','blendingMode','pulseRole'])l[key]=this[key];const copy=(p,parent)=>{if(p instanceof Group){const g=new Group(parent,p.matchName);g.name=p.name;g.items=p.items.map(child=>copy(child,g));return g;}const q=new Property(parent,p.matchName,p._value);q.name=p.name;q.expression=p.expression;q.expressionEnabled=p.expressionEnabled;q.keys=clone(p.keys);q.linkedLayer=p.linkedLayer;return q;};l.groups=this.groups.map(g=>copy(g,l));this.comp.items.splice(this.index-1,0,l);return l;}
+    duplicate(){const l=new Layer(this.comp,'null');l.isBackup=true;for(const key of ['name','comment','enabled','parent','inPoint','outPoint','motionBlur','blendingMode','pulseRole','trackMatteLayer','trackMatteType','hasTrackMatte'])l[key]=this[key];const copy=(p,parent)=>{if(p instanceof Group){const g=new Group(parent,p.matchName);g.name=p.name;g.items=p.items.map(child=>copy(child,g));return g;}const q=new Property(parent,p.matchName,p._value);q.name=p.name;q.expression=p.expression;q.expressionEnabled=p.expressionEnabled;q.keys=clone(p.keys);q.linkedLayer=p.linkedLayer;return q;};l.groups=this.groups.map(g=>copy(g,l));this.comp.items.splice(this.index-1,0,l);return l;}
     remove(){if(this.isBackup&&faults.cleanupAfter!==undefined){if(faults.cleanupAfter--===0){delete faults.cleanupAfter;throw Error('injected backup cleanup');}}if(faults.remove===this){delete faults.remove;throw Error('injected layer removal');}const index=this.comp.items.indexOf(this);if(index<0)throw Error('deleted native layer');this.comp.items.splice(index,1);this.deleted=true;}
   }
   class CompItem {
@@ -82,7 +86,7 @@ async function fixture() {
   scope.MotionRegistry.register('ae.text.vertical-pulse',{preflight:()=>null,run:()=>null});
   const contour={vertices:[[0,-40],[50,-40],[50,40],[0,40]],inTangents:[[0,0],[0,0],[0,0],[0,0]],outTangents:[[0,0],[0,0],[0,0],[0,0]],closed:true};
   const fixtureGlyph={textIndex:1,sourceIndex:0,character:'A',center:[25,0],bounds:{left:0,top:-40,width:50,height:80},contours:[contour]};
-  const hostGlobals={...scope,CompItem,Shape,KeyframeInterpolationType:{LINEAR:'LINEAR'},app:{project:{activeItem:comp,numItems:0}},MotionJson:JSON,MotionContracts:{ERROR:errors,PULSE_PRESETS},MotionVerticalPulseLegacy:{readMeta:()=>null},MotionTextGlyphOutlines:{extract:()=>({glyphs:[fixtureGlyph],vertexCount:4}),bounds:()=>fixtureGlyph.bounds}};
+  const hostGlobals={...scope,CompItem,Shape,TrackMatteType:{ALPHA:1},KeyframeInterpolationType:{LINEAR:'LINEAR'},app:{project:{activeItem:comp,numItems:0}},MotionJson:JSON,MotionContracts:{ERROR:errors,PULSE_PRESETS},MotionVerticalPulseLegacy:{readMeta:()=>null},MotionTextGlyphOutlines:{extract:()=>({glyphs:[fixtureGlyph],vertexCount:4}),bounds:()=>fixtureGlyph.bounds}};
   const moduleSource=await readFile(new URL('../host/src/commands/text-pulse-morph.jsx',import.meta.url),'utf8');
   const factory=new Function('$',...Object.keys(hostGlobals),moduleSource);factory({global:hostGlobals},...Object.values(hostGlobals));
   const host=hostGlobals.MotionPulseMorph,handler=scope.MotionRegistry.get('ae.text.vertical-pulse'),reader=scope.MotionRegistry.get('ae.text.vertical-pulse.read');
@@ -92,7 +96,7 @@ async function fixture() {
 }
 
 test('V4 creation, repeated apply, read and complete removal retain original source',async()=>{
-  const f=await fixture(),a=pulsePresetArgs('impact',30),doc=f.doc();f.run(a);assert.equal(f.comp.numLayers,4);const ids=f.comp.items.map(l=>l.id);assert.equal(f.reader.run({}).data.rigVersion,4);assert.equal(f.run(a).changed,false);assert.deepEqual(f.comp.items.map(l=>l.id),ids);assert.equal(f.doc(),doc);f.run({action:'remove'});assert.deepEqual(f.comp.items,[f.source]);assert.equal(f.source.enabled,true);assert.equal(f.source.comment,'User note');
+  const f=await fixture(),a=pulsePresetArgs('impact',30),doc=f.doc();f.run(a);assert.equal(f.comp.numLayers,5);const ids=f.comp.items.map(l=>l.id);assert.equal(f.reader.run({}).data.rigVersion,4);assert.equal(f.run(a).changed,false);assert.deepEqual(f.comp.items.map(l=>l.id),ids);assert.equal(f.doc(),doc);f.run({action:'remove'});assert.deepEqual(f.comp.items,[f.source]);assert.equal(f.source.enabled,true);assert.equal(f.source.comment,'User note');
 });
 
 test('Apply preserves previous controls when a later native setValue fails',async()=>{
@@ -100,11 +104,11 @@ test('Apply preserves previous controls when a later native setValue fails',asyn
 });
 
 test('adding sparks then failing metadata commit rolls back without deleted references',async()=>{
-  const f=await fixture();f.run(pulsePresetArgs('impact',30));const old=f.source.comment;let first=true;Object.defineProperty(f.source,'comment',{get:()=>old,set:()=>{if(first){first=false;throw Error('injected metadata commit');}}});assert.throws(()=>f.run(pulsePresetArgs('electric',30)),error=>error.message==='injected metadata commit');assert.equal(f.comp.numLayers,4);assert.equal(f.reader.run({}).data.preset,'impact');
+  const f=await fixture();f.run(pulsePresetArgs('impact',30));const old=f.source.comment;let first=true;Object.defineProperty(f.source,'comment',{get:()=>old,set:()=>{if(first){first=false;throw Error('injected metadata commit');}}});assert.throws(()=>f.run(pulsePresetArgs('electric',30)),error=>error.message==='injected metadata commit');assert.equal(f.comp.numLayers,5);assert.equal(f.reader.run({}).data.preset,'impact');
 });
 
 test('Remove rollback reconnects electric sparks to the recovered matter',async()=>{
-  const f=await fixture();f.run(pulsePresetArgs('electric',30));f.faults.remove=f.controller();assert.throws(()=>f.run({action:'remove'}),/injected layer removal/);assert.equal(f.comp.numLayers,5);assert.equal(f.reader.run({}).data.rigVersion,4);const link=f.member('sparks').property('ADBE Effect Parade').property('Moti.on Pulse · Matter').property(1);assert.equal(link.linkedLayer,f.member('matter'));
+  const f=await fixture();f.run(pulsePresetArgs('electric',30));f.faults.remove=f.controller();assert.throws(()=>f.run({action:'remove'}),/injected layer removal/);assert.equal(f.comp.numLayers,6);assert.equal(f.reader.run({}).data.rigVersion,4);const link=f.member('sparks').property('ADBE Effect Parade').property('Moti.on Pulse · Matter').property(1);assert.equal(link.linkedLayer,f.member('matter'));
 });
 
 test('Update keeps controller identity, time, animated controls and original document',async()=>{
@@ -117,11 +121,11 @@ test('Bake budget counts the sixteen evaluated vertices in every spark path',asy
 });
 
 test('modified member source identity is an ownership conflict before Remove',async()=>{
-  const f=await fixture();f.run(pulsePresetArgs('impact',30));const member=f.member('core'),metadata=f.host.meta(member);metadata.sourceId+=100;member.comment='[Moti.on.pulse.v4]'+encodeURIComponent(JSON.stringify(metadata));assert.equal(f.handler.preflight({action:'remove'}).code,'TRACK_CONFLICT');assert.equal(f.comp.numLayers,4);
+  const f=await fixture();f.run(pulsePresetArgs('impact',30));const member=f.member('core'),metadata=f.host.meta(member);metadata.sourceId+=100;member.comment='[Moti.on.pulse.v4]'+encodeURIComponent(JSON.stringify(metadata));assert.equal(f.handler.preflight({action:'remove'}).code,'TRACK_CONFLICT');assert.equal(f.comp.numLayers,5);
 });
 
 test('modified electric material link is rejected before deletion',async()=>{
-  const f=await fixture();f.run(pulsePresetArgs('electric',30));f.member('sparks').property('ADBE Effect Parade').property('Moti.on Pulse · Matter').property(1).setValue(f.source.index);assert.equal(f.handler.preflight({action:'remove'}).code,'TRACK_CONFLICT');assert.equal(f.comp.numLayers,5);
+  const f=await fixture();f.run(pulsePresetArgs('electric',30));f.member('sparks').property('ADBE Effect Parade').property('Moti.on Pulse · Matter').property(1).setValue(f.source.index);assert.equal(f.handler.preflight({action:'remove'}).code,'TRACK_CONFLICT');assert.equal(f.comp.numLayers,6);
 });
 
 
@@ -142,7 +146,7 @@ test('Bake partial keyframe failure restores expressions and removes written key
 });
 
 test('duplicated owned member is rejected before Remove can leave an orphan',async()=>{
-  const f=await fixture();f.run(pulsePresetArgs('impact',30));const duplicate=f.member('core').duplicate();duplicate.isBackup=false;assert.equal(f.handler.preflight({action:'remove'})?.code,'TRACK_CONFLICT');assert.equal(f.comp.numLayers,5);
+  const f=await fixture();f.run(pulsePresetArgs('impact',30));const duplicate=f.member('core').duplicate();duplicate.isBackup=false;assert.equal(f.handler.preflight({action:'remove'})?.code,'TRACK_CONFLICT');assert.equal(f.comp.numLayers,6);
 });
 
 test('legacy control restoration creates every key before metadata and restores interpolation after ease',async()=>{
@@ -155,17 +159,26 @@ test('legacy control restoration creates every key before metadata and restores 
 
 test('prior V4 material upgrades on Apply without replacing the controller or animated controls',async()=>{
   const f=await fixture(),args=pulsePresetArgs('impact',30);f.run(args);
-  const controller=f.controller(),start=controller.inPoint,oldMembers=f.meta().members.map(x=>x.id),old=f.meta();delete old.renderRevision;
+  const controller=f.controller(),start=controller.inPoint,old=f.meta();f.member('matter').setTrackMatte(null,0);f.member('fade').remove();old.members=old.members.filter(x=>x.role!=='fade');const oldMembers=old.members.map(x=>x.id);delete old.renderRevision;
   f.source.comment='User note\n[Moti.on.pulse.v4]'+encodeURIComponent(JSON.stringify(old));
   f.control('glow').setValueAtTime(.25,20);f.control('glow').setValueAtTime(1,80);const keys=clone(f.control('glow').keys);
-  assert.equal(f.run(args).changed,true);assert.equal(f.meta().renderRevision,2);assert.equal(f.controller(),controller);assert.equal(controller.inPoint,start);assert.deepEqual(f.control('glow').keys,keys);assert.equal(f.comp.numLayers,4);
+  assert.equal(f.run(args).changed,true);assert.equal(f.meta().renderRevision,6);assert.equal(f.controller(),controller);assert.equal(controller.inPoint,start);assert.deepEqual(f.control('glow').keys,keys);assert.equal(f.comp.numLayers,5);
   assert.ok(f.meta().members.every(x=>!oldMembers.includes(x.id)));assert.equal(f.run(args).changed,false);
-  const effects=f.member('matter').property('ADBE Effect Parade');assert.equal(effects.property(2).matchName,'ADBE Ramp');assert.equal(effects.property(3).matchName,'ADBE Glo2');
+  const effects=f.member('matter').property('ADBE Effect Parade');assert.equal(effects.property(2).matchName,'ADBE Turbulent Displace');assert.equal(effects.property(3).matchName,'ADBE Ramp');assert.equal(effects.property(4).matchName,'ADBE Glo2');assert.equal(f.member('fade').property('ADBE Effect Parade').property(2).matchName,'ADBE Gaussian Blur 2');assert.equal(f.member('matter').trackMatteLayer,f.member('fade'));assert.equal(f.member('fade').enabled,false);
 });
 
 test('prior V4 upgrade rolls back controls and members when gradient creation fails',async()=>{
-  const f=await fixture();f.run(pulsePresetArgs('impact',30));const old=f.meta();delete old.renderRevision;f.source.comment='User note\n[Moti.on.pulse.v4]'+encodeURIComponent(JSON.stringify(old));
+  const f=await fixture();f.run(pulsePresetArgs('impact',30));const old=f.meta();f.member('matter').setTrackMatte(null,0);f.member('fade').remove();old.members=old.members.filter(x=>x.role!=='fade');delete old.renderRevision;f.source.comment='User note\n[Moti.on.pulse.v4]'+encodeURIComponent(JSON.stringify(old));
   const ids=f.comp.items.map(l=>l.id),comment=f.source.comment,controls=f.reader.run({}).data.controls,addShape=f.comp.layers.addShape;
   f.comp.layers.addShape=()=>{const l=addShape(),fx=l.property('ADBE Effect Parade'),add=fx.addProperty;fx.addProperty=function(name){if(name==='ADBE Ramp')throw Error('injected gradient creation');return add.call(this,name);};return l;};
   assert.throws(()=>f.run(pulsePresetArgs('plasma',30)),/injected gradient creation/);assert.equal(f.source.comment,comment);assert.deepEqual(f.comp.items.map(l=>l.id),ids);assert.deepEqual(f.reader.run({}).data.controls,controls);
+});
+
+
+test('alpha fade ownership protects external edits and consumers before Remove',async()=>{
+  const f=await fixture();f.run(pulsePresetArgs('impact',30));const matter=f.member('matter'),fade=f.member('fade'),layers=f.comp.numLayers;
+  matter.trackMatteLayer=null;assert.equal(f.handler.preflight({action:'remove'}).code,'TRACK_CONFLICT');assert.equal(f.comp.numLayers,layers);matter.setTrackMatte(fade,1);
+  const external=f.comp.add('shape');external.setTrackMatte(fade,1);assert.equal(f.handler.preflight({action:'remove'}).code,'TRACK_CONFLICT');external.remove();
+  fade.property('ADBE Root Vectors Group').property(1).property('ADBE Vectors Group').property(1).property('ADBE Vector Rect Position').expression='value;';
+  assert.equal(f.handler.preflight({action:'remove'}).code,'TRACK_CONFLICT');
 });

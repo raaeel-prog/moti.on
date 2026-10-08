@@ -46,13 +46,22 @@ function chavesDeIcone(nomeDoMapa) {
   return [...bloco.matchAll(/^\s{2}([a-zA-Z]+):/gm)].map((m) => m[1]);
 }
 
+/** Ferramentas desenhadas no catalogo duotone (Onyx Vivo, aprovado em 2026-10-07). */
+function chavesDuotone() {
+  const fonte = lerFonte("packages/ui-core/src/icon-drawings.ts");
+  const inicio = fonte.indexOf("export const DUOTONE_DRAWINGS = {");
+  assert.ok(inicio >= 0, "DUOTONE_DRAWINGS nao encontrado");
+  const fim = fonte.indexOf("\n} as const", inicio);
+  return [...fonte.slice(inicio, fim).matchAll(/^\s{2}([a-zA-Z]+): \{/gm)].map((m) => m[1]);
+}
+
 test("toda ferramenta da grade tem desenho e glifo de icone", () => {
   const ids = idsDeFerramenta();
-  const desenhos = chavesDeIcone("ICON_PATHS");
+  const desenhos = [...chavesDeIcone("ICON_PATHS"), ...chavesDuotone()];
   const glifos = chavesDeIcone("ICON_FALLBACKS");
 
   const semDesenho = ids.filter((id) => !desenhos.includes(id));
-  assert.deepEqual(semDesenho, [], `ferramenta sem entrada em ICON_PATHS: ${semDesenho.join(", ")}`);
+  assert.deepEqual(semDesenho, [], `ferramenta sem desenho em ICON_PATHS ou DUOTONE_DRAWINGS: ${semDesenho.join(", ")}`);
 
   // O glifo textual e o que aparece num runtime sem createElementNS. Sem ele a
   // ferramenta existe mas o ladrilho fica mudo.
@@ -94,6 +103,12 @@ test("os desenhos SVG sao distintos entre si", () => {
   // que nada acusasse. O guarda do glifo existia; o do desenho, nao. E o SVG e
   // justamente o que aparece no CEP, onde `createElementNS` existe.
   assert.deepEqual(valoresRepetidos(paresDeIcone("ICON_PATHS")), [], "ha desenho de icone repetido");
+});
+
+test("os desenhos duotone sao distintos entre si e nao repetem os de navegacao", async () => {
+  const { DUOTONE_DRAWINGS, duotoneStaticPath } = await import("../../../packages/ui-core/dist/icon-drawings.js");
+  const pares = [...paresDeIcone("ICON_PATHS"), ...Object.entries(DUOTONE_DRAWINGS).map(([id, desenho]) => [id, duotoneStaticPath(desenho)])];
+  assert.deepEqual(valoresRepetidos(pares), [], "ha desenho duotone repetido");
 });
 
 test("o registro de ferramentas cobre os comandos P1 do master spec", async () => {

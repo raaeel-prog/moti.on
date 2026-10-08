@@ -1,3 +1,4 @@
+import { protectedWrite, parsesAs } from "./storage-safety.js";
 /** Gradient editor. Commands and host context are injected by the CEP composition root. */
 import {
   GRADIENT_PARAMETER_KEYS, GRADIENT_PRESETS, GRADIENT_SCALARS, cloneGradientSettings, isGradientSettings,
@@ -12,17 +13,20 @@ type Key = Parameters<I18n["t"]>[0];
 type StorageAccess = Pick<Storage, "getItem" | "setItem">;
 export interface PersonalGradient { id: string; name: string; settings: GradientSettingsV1 }
 export const GRADIENT_STORAGE_KEY = "motion.gradient.library.v1";
+const validPersonalGradient = (p: PersonalGradient): boolean => Boolean(p) && typeof p.id === "string" && p.id.startsWith("custom-")
+  && typeof p.name === "string" && p.name.trim().length > 0 && p.name.length <= 80 && isGradientSettings(p.settings);
 export function readGradientLibrary(storage?: StorageAccess): PersonalGradient[] {
   try {
     const raw: unknown = JSON.parse(storage?.getItem(GRADIENT_STORAGE_KEY) ?? "[]");
-    return Array.isArray(raw) ? raw.filter((p: PersonalGradient) => p && typeof p.id === "string" && p.id.startsWith("custom-")
-      && typeof p.name === "string" && p.name.trim().length > 0 && p.name.length <= 80 && isGradientSettings(p.settings))
+    return Array.isArray(raw) ? raw.filter(validPersonalGradient)
       .slice(0, 200).map((p: PersonalGradient) => ({ ...p, settings: cloneGradientSettings(p.settings) })) : [];
   } catch { return []; }
 }
+/** Grava preservando o anterior (storage-safety.ts): um registro que a leitura
+ * não aproveitou por inteiro fica guardado antes de ser substituído. */
 export function writeGradientLibrary(storage: StorageAccess | undefined, presets: PersonalGradient[]): boolean {
-  try { if (!storage) return false; storage.setItem(GRADIENT_STORAGE_KEY, JSON.stringify(presets)); return true; }
-  catch { return false; }
+  return protectedWrite(storage, GRADIENT_STORAGE_KEY, JSON.stringify(presets),
+    raw => parsesAs(raw, value => Array.isArray(value) && value.length <= 200 && value.every(item => validPersonalGradient(item as PersonalGradient))));
 }
 export function gradientValue(settings: GradientSettingsV1, key: string): unknown {
   const match = /^stops\.(\d)\.(enabled|color|position)$/.exec(key);
@@ -85,7 +89,6 @@ export interface GradientEditorOptions {
   execute(args: GradientArgs): Promise<CommandResponse>;
   error(response: CommandResponse): string;
   busy?(value: boolean): void;
-  back(): void;
 }
 export interface GradientEditor {
   element: HTMLElement; actions: HTMLElement;
@@ -389,11 +392,10 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
   const remove = actionButton("gradient-remove", "gradient.remove", "destructive", () => { void mutate("remove"); });
   const apply = actionButton("gradient-apply", "gradient.apply", "primary", () => { void mutate(allApplied() ? "update" : "apply"); });
   apply.element.classList.add("ch-panel-action-bar__primary");
-  const back = actionButton("gradient-back", "action.backToTools", "tertiary", () => { if (!running) options.back(); });
   const retry = createActionButton(doc, { id: "gradient-refresh", label: i18n.t("gradient.refresh"), variant: "tertiary", onPress: () => { void refresh(true); } });
   element.appendChild(retry.element);
   renderFields(); updateChrome();
   return { element, actions, refresh: () => refresh(), dispose() {
-    alive = false; readSequence++; for (const control of [...controls, apply, background, remove, back, retry]) control.setDisabled(true, i18n.t("gradient.reading"));
+    alive = false; readSequence++; for (const control of [...controls, apply, background, remove, retry]) control.setDisabled(true, i18n.t("gradient.reading"));
   } };
 }

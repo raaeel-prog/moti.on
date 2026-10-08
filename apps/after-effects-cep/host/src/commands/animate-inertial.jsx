@@ -120,6 +120,8 @@
         desired: ""
       };
     }
+    var bloqueio = MotionPreflight.unlockedPropertyOwners(selecionadas);
+    if (bloqueio) return { error: bloqueio, items: [], desired: "" };
 
     var desired = MotionExpressions.renderInertial({
       amplitude: args.amplitude,

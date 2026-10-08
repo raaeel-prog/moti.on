@@ -1,3 +1,25 @@
+## 2026-10-07 — Erros que explicam, camadas bloqueadas e presets que dizem o que pedem
+- Falhas chegam ao painel com motivo e solução: o host envia uma chave de mensagem de uma lista fechada, traduzida em PT/EN; frases de preflight em português aparecem em vez de "Não foi possível concluir"; avisos passam pelo mesmo filtro. Ajuste fora da faixa deixou de mandar o usuário ao suporte.
+- Camada bloqueada é recusada antes de qualquer alteração em mais 10 ferramentas (Inertial, Jump, Cortar keys, Delay, Inverter valores, Parent, Effector, Separar formas, Trim Paths, Fast Edit), sempre com o mesmo código e mensagem. Fast Edit restaura sozinho se o After Effects recusar uma escrita no meio.
+- Galeria mostra o que cada preset exige (texto, 3D, Moti.on Core, Cycore) e desativa Aplicar com o motivo quando a seleção não serve. A lista de efeitos exigidos é uma função só, usada pelo host e pela galeria.
+- Painel lembra aba, categoria, busca, preset e ajustes não aplicados; "Salvar como variação" direto da galeria; tooltip com descrição da ferramenta; aviso de sucesso com "Ajustar". Preferências, gradientes e curvas pessoais guardam cópia antes de sobrescrever um registro ilegível.
+- `npm run check` PASS (2.227 testes, contraste 152 pares). Chromium PASS em 280/360/720 px, PT/EN. After Effects real NOT RUN. Minificação e virtualização da galeria rejeitadas por medição; Desfazer no aviso não implementado por falta de API segura. [Entrega e limites](docs/implementation/2026-10-07-evolucao-confiabilidade.md).
+
+## 2026-10-07 — Coleção Signature: 24 presets de texto premium
+- Nova coleção **Signature** na galeria, em quatro famílias: Entrada e saída, Cinema, Luz e matéria, e Variação. São 24 receitas originais com entrada e saída independentes, entre elas Filme em chamas, Feixe de luz, Feixe anamórfico, Tinta que se espalha, Poeira que se forma, Decodificar e revelar e Rolagem de slot.
+- Cada receita declara seu caráter de tempo. Nas cinemáticas, o visual se mantém em qualquer duração; nas cinéticas, o rastro acompanha a velocidade real; os loops são guiados por Velocidade. As durações são autorais a 30 fps e convertidas para o fps da composição, e o campo Duração fica limitado à janela da receita.
+- Curvas novas: Aveludada, Cauda longa e Precisa. São monotônicas, sem overshoot e terminam exatamente no alvo.
+- Só efeitos nativos e Cycore, resolvidos por match name. No repouso o texto volta idêntico ao original.
+- Correções de bugs existentes: presets com máscara aplicados pela galeria (`word-curtain`, `smooth-word-slide`) e presets contínuos aplicados pelo painel falhavam no host; o rollback de fases agora termina limpo.
+- `npm run check` PASS (2.190 testes). After Effects 26.5 real: 24 de 24 aplicados sem erro de expressão, 22 de 22 idênticos no repouso, Undo em um passo, re-aplicar, ajustar e remover PASS. Painel CEP instalado, larguras, salvar e reabrir NOT RUN. O Filme em chamas segue em ajuste. [Entrega e limites](docs/implementation/2026-10-07-signature-text-presets.md).
+## 2026-10-07 — Onyx Vivo: seletor de cor, rodapés e movimento
+
+- Campos de cor ganharam um seletor dentro do painel: abre inteiro em qualquer tamanho, inclusive no mínimo de 280×280, onde o seletor nativo não abria. Área de saturação/brilho, matiz, hex, cor anterior, recentes e atalho para o seletor do sistema (`ae.ui.color-picker`). Confirma uma vez ao fechar; Escape restaura. Vale para Caixa de texto, Neon, Formas, Revelação, Pulso, Gradientes e Presets → Cores.
+- Rodapés dos editores em uma linha, com "Mais ações" para o que não cabe e sem o "Voltar" duplicado; em painel baixo, "Ações rápidas" não abre sozinho e a grade volta a aparecer; "1 camada selecionada"; nomes de presets em duas linhas.
+- Movimento "vivo equilibrado": tile sobe e afunda, ripple na cor da família, spinner só quando o comando demora, ✓ desenhado e ponto de aplicado no Quick; menus, seletor e toasts entram com leve mola; troca de tela com direção; cascata curta na grade; seções com triângulo animado. Movimento reduzido preservado.
+- 53 ícones duotone (aprovados): preenchimento suave e destaque na cor da família, com gesto próprio por ferramenta no hover (Wiggle treme, Órbita gira, Salto quica, Controle de tempo gira o ponteiro, Cortar traçados desenha o traço…). Cores de família mantidas nos tons suaves do Onyx, como na folha de espécimes; dica do tile com ponto da família.
+- `npm run check` PASS (2.190 testes, contraste 152 pares). Chromium PASS: 17/17 de interface e 7/7 de movimento. After Effects real, instalação e Premiere NOT RUN. [Entrega e limites](docs/implementation/2026-10-07-onyx-vivo.md).
+
 ## 2026-10-06 — Impacto e tremor: dez transições de corte
 
 - Novo filtro **Impacto e tremor** em Transições, com Punch de impacto, Impacto de luz, Onda de choque, Zoom com tremor, Tremor sísmico, Câmera na mão, Chicote lateral, Torção de impacto, Batida dupla e Impacto cinematográfico. Cada uma combina um estilo de tremor com punch, zoom in/out, flash com glow, onda e desfoque, usando só efeitos nativos do AE, sobre a mesma pré-comp de ajuste com marcador CUT.
