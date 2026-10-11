@@ -27,8 +27,30 @@ if(WIN32)
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/pipl-win.cmake"
         DEPENDS resources/MotionCorePiPL.r host/MotionCoreVersion.h cmake/pipl-win.cmake
         VERBATIM)
+    # Gradient GPU path on Windows: DirectX 12 compute shaders compiled by dxc
+    # (Windows SDK) and embedded as byte arrays, so nothing extra ships next to the .aex.
+    set(MOTION_WINDOWS_KITS_BIN "C:/Program Files (x86)/Windows Kits/10/bin")
+    file(GLOB MOTION_DXC_DIRS LIST_DIRECTORIES true "${MOTION_WINDOWS_KITS_BIN}/10.*/x64")
+    list(SORT MOTION_DXC_DIRS COMPARE NATURAL ORDER DESCENDING)
+    find_program(MOTION_DXC dxc
+        HINTS "${MOTION_WINDOWS_KITS_BIN}/${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}/x64" ${MOTION_DXC_DIRS}
+        REQUIRED)
+    set(GRADIENT_SHADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
+    set(GRADIENT_SHADER_HEADERS "")
+    foreach(kernel alpha base box copy diffusion extract accumulate finish)
+        set(header "${GRADIENT_SHADER_DIR}/gradient_d3d12_${kernel}.h")
+        add_custom_command(OUTPUT "${header}"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${GRADIENT_SHADER_DIR}"
+            COMMAND "${MOTION_DXC}" -nologo -T cs_6_0 -E gradient_${kernel} -Gis -O3
+                -Fh "${header}" -Vn g_gradient_${kernel}
+                "${CMAKE_CURRENT_SOURCE_DIR}/host/GradientD3D12.hlsl"
+            DEPENDS host/GradientD3D12.hlsl host/GradientMath.inc
+            VERBATIM)
+        list(APPEND GRADIENT_SHADER_HEADERS "${header}")
+    endforeach()
+    add_custom_target(gradient-d3d12-shaders DEPENDS ${GRADIENT_SHADER_HEADERS})
     add_library(MotionCore MODULE host/MotionCore.cpp host/Transition.cpp host/Gradient.cpp
-        host/GradientKernel.cpp host/GradientMetalStub.cpp
+        host/GradientKernel.cpp host/GradientMetalStub.cpp host/GradientD3D12.cpp
         "${AESDK_ROOT}/Examples/Util/MissingSuiteError.cpp"
         "${AESDK_ROOT}/Examples/Util/AEGP_SuiteHandler.cpp"
         "${PIPL_RC}")
@@ -39,7 +61,13 @@ if(WIN32)
     target_include_directories(MotionCore PRIVATE
         "${AESDK_ROOT}/Examples/Headers" "${AESDK_ROOT}/Examples/Headers/SP"
         "${AESDK_ROOT}/Examples/Headers/Win" "${AESDK_ROOT}/Examples/Resources"
-        "${AESDK_ROOT}/Examples/Util" host)
+        "${AESDK_ROOT}/Examples/Util" host "${GRADIENT_SHADER_DIR}")
+    add_dependencies(MotionCore gradient-d3d12-shaders)
+    target_link_libraries(MotionCore PRIVATE d3d12)
+    option(MOTION_GRADIENT_QA_TRACE "Write local Gradient host diagnostics for verification builds" OFF)
+    if(MOTION_GRADIENT_QA_TRACE)
+        target_compile_definitions(MotionCore PRIVATE MOTION_GRADIENT_QA_TRACE=1)
+    endif()
     set_target_properties(MotionCore PROPERTIES PREFIX "" SUFFIX ".aex" OUTPUT_NAME MotionCore
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
@@ -145,6 +173,16 @@ if(BUILD_TESTING)
     target_compile_features(quickbar-protocol-tests PRIVATE cxx_std_17)
     target_compile_options(quickbar-protocol-tests PRIVATE ${MOTION_KEEP_ASSERTS} /utf-8)
     add_test(NAME quickbar-protocol COMMAND quickbar-protocol-tests)
+    # CPU × DirectX 12 parity on the default GPU (falls back to WARP); 77 = no device.
+    add_executable(gradient-d3d12-tests tests/GradientD3D12Tests.cpp host/GradientKernel.cpp host/GradientD3D12.cpp)
+    add_dependencies(gradient-d3d12-tests gradient-d3d12-shaders)
+    target_compile_features(gradient-d3d12-tests PRIVATE cxx_std_17)
+    target_compile_definitions(gradient-d3d12-tests PRIVATE NOMINMAX)
+    target_include_directories(gradient-d3d12-tests PRIVATE host "${GRADIENT_SHADER_DIR}")
+    target_compile_options(gradient-d3d12-tests PRIVATE ${MOTION_KEEP_ASSERTS} /utf-8)
+    target_link_libraries(gradient-d3d12-tests PRIVATE d3d12 dxgi)
+    add_test(NAME gradient-d3d12 COMMAND gradient-d3d12-tests)
+    set_tests_properties(gradient-d3d12 PROPERTIES SKIP_RETURN_CODE 77)
     endif()
     if(APPLE)
     add_executable(gradient-metal-tests tests/GradientMetalTests.mm host/GradientKernel.cpp host/GradientMetal.mm)

@@ -1,6 +1,9 @@
 #include "MotionCore.h"
 #include "GradientKernel.h"
 #include "GradientMetal.h"
+#ifdef _WIN32
+#include "GradientD3D12.h"
+#endif
 #include "AEFX_SuiteHelper.h"
 #include "AE_EffectGPUSuites.h"
 #include <cstdio>
@@ -9,11 +12,21 @@
 #ifdef MOTION_GRADIENT_QA_TRACE
 #include <atomic>
 #include <mutex>
+#include <cstdlib>
+#include <string>
 #include <thread>
 static std::atomic<int> gradientQARenders{0};
+// QA builds only: /tmp on macOS, %TEMP% on Windows.
+static std::string GradientTracePath() {
+#ifdef _WIN32
+    const char* temp=std::getenv("TEMP"); return std::string(temp?temp:".")+"\\motion-gradient-native-trace.txt";
+#else
+    return "/tmp/motion-gradient-native-trace.txt";
+#endif
+}
 static void GradientThreadTrace(const char* stage, bool gpu, int active, A_long time) {
     static std::mutex mutex; std::lock_guard<std::mutex> lock(mutex);
-    if (auto file=std::fopen("/tmp/motion-gradient-native-trace.txt","a")) {
+    if (auto file=std::fopen(GradientTracePath().c_str(),"a")) {
         std::fprintf(file,"%s gpu=%d active=%d thread=%zu time=%ld\n",stage,gpu,active,
             std::hash<std::thread::id>{}(std::this_thread::get_id()),long(time)); std::fclose(file);
     }
@@ -25,7 +38,7 @@ struct GradientTraceScope {
 };
 static void GradientTrace(const char* stage, bool gpu, int format, const PF_EffectWorld* input, const PF_EffectWorld* output, PF_Err error) {
     static std::mutex mutex; std::lock_guard<std::mutex> lock(mutex);
-    if (auto file=std::fopen("/tmp/motion-gradient-native-trace.txt","a")) {
+    if (auto file=std::fopen(GradientTracePath().c_str(),"a")) {
         std::fprintf(file,"%s gpu=%d format=%d input=%dx%d@%d,%d output=%dx%d error=%d\n",stage,gpu,format,
             input?int(input->width):0,input?int(input->height):0,input?int(input->origin_x):0,input?int(input->origin_y):0,
             output?int(output->width):0,output?int(output->height):0,int(error)); std::fclose(file);
@@ -44,7 +57,20 @@ enum { G_INPUT, G_MODE, G_CENTER_X, G_CENTER_Y, G_SCALE, G_ASPECT, G_ANGLE,
     G_FOCUS_RADIUS, G_FOCUS_SOFTNESS, G_GRAIN, G_ANIMATION, G_DURATION,
     G_PHASE, G_COLOR_PROCESSING, G_STOP_START, G_SCHEMA = 54, G_COUNT = 55 };
 static_assert(MOTION_GRADIENT_FLAGS == (PF_OutFlag_DEEP_COLOR_AWARE | PF_OutFlag_I_EXPAND_BUFFER | PF_OutFlag_NON_PARAM_VARY), "Gradient flags drift");
+#ifdef _WIN32
+static_assert(MOTION_GRADIENT_FLAGS2 == (PF_OutFlag2_SUPPORTS_SMART_RENDER | PF_OutFlag2_FLOAT_COLOR_AWARE | PF_OutFlag2_SUPPORTS_THREADED_RENDERING | PF_OutFlag2_SUPPORTS_GPU_RENDER_F32 | PF_OutFlag2_SUPPORTS_DIRECTX_RENDERING), "Gradient flags2 drift");
+#else
 static_assert(MOTION_GRADIENT_FLAGS2 == (PF_OutFlag2_SUPPORTS_SMART_RENDER | PF_OutFlag2_FLOAT_COLOR_AWARE | PF_OutFlag2_SUPPORTS_THREADED_RENDERING | PF_OutFlag2_SUPPORTS_GPU_RENDER_F32), "Gradient flags2 drift");
+#endif
+
+/** GPU frameworks with a Gradient backend on this platform: Metal (macOS), DirectX 12 (Windows). */
+static bool GradientGPUFramework(PF_GPU_Framework framework) {
+#ifdef _WIN32
+    return framework == PF_GPU_Framework_DIRECTX;
+#else
+    return framework == PF_GPU_Framework_METAL;
+#endif
+}
 
 static PF_Err GradientParams(PF_InData* in_data, PF_OutData* out_data) {
     PF_ParamDef def{};
@@ -168,7 +194,7 @@ static PF_Err GradientPreRender(PF_InData* in, PF_OutData* out, PF_PreRenderExtr
     frame->outputRect = Empty(source.result_rect) ? PF_LRect{} : Intersect(extra->input->output_request.rect,Expand(source.result_rect,padding));
     extra->output->result_rect = frame->outputRect; extra->output->max_result_rect = maximum;
     extra->output->solid = FALSE;
-    if (extra->input->what_gpu == PF_GPU_Framework_METAL && extra->input->gpu_data)
+    if (GradientGPUFramework(extra->input->what_gpu) && extra->input->gpu_data)
         extra->output->flags |= PF_RenderOutputFlag_GPU_RENDER_POSSIBLE;
     extra->output->pre_render_data = frame.release(); extra->output->delete_pre_render_data_func = DeleteFrame;
     return PF_Err_NONE;
@@ -220,8 +246,22 @@ static PF_Err GradientRender(PF_InData* in, PF_OutData* out, PF_EffectWorld* inp
     if (!err) err=world->PF_GetPixelFormat(output,&destFormat);
     if (err) return err; if (format!=destFormat) return PF_Err_BAD_CALLBACK_PARAM;
     if (gpu) {
-        if (!extra || extra->input->what_gpu!=PF_GPU_Framework_METAL || format!=PF_PixelFormat_GPU_BGRA128) return PF_Err_BAD_CALLBACK_PARAM;
+        if (!extra || !GradientGPUFramework(extra->input->what_gpu) || format!=PF_PixelFormat_GPU_BGRA128) return PF_Err_BAD_CALLBACK_PARAM;
         AEFX_SuiteScoper<PF_GPUDeviceSuite1> suite(in,kPFGPUDeviceSuite,kPFGPUDeviceSuiteVersion1,out);
+#ifdef _WIN32
+        // DirectX 12: AE's GPU worlds are ID3D12Resource buffers (BGRA float32).
+        void *src=nullptr,*dst=nullptr;
+        err=suite->GetGPUWorldData(in->effect_ref,input,&src);
+        if (!err) err=suite->GetGPUWorldData(in->effect_ref,output,&dst);
+        if (err) return err;
+        std::string message;
+        auto status=gr::render_d3d12(static_cast<gr::D3D12Backend*>(const_cast<void*>(extra->input->gpu_data)),
+            {src,int(input->width),int(input->height),size_t(input->rowbytes),int(input->origin_x),int(input->origin_y)},
+            {dst,int(output->width),int(output->height),size_t(output->rowbytes),int(frame.outputRect.left),int(frame.outputRect.top)},
+            frame.frame,&message,Abort,in);
+        if (!message.empty()) std::snprintf(out->return_msg,sizeof(out->return_msg),"%s",message.c_str());
+        return StatusError(status);
+#else
         PF_GPUDeviceInfo info{}; err=suite->GetDeviceInfo(in->effect_ref,extra->input->device_index,&info);
         void *src=nullptr,*dst=nullptr;
         if (!err) err=suite->GetGPUWorldData(in->effect_ref,input,&src);
@@ -234,6 +274,7 @@ static PF_Err GradientRender(PF_InData* in, PF_OutData* out, PF_EffectWorld* inp
             frame.frame,{&memory,AllocateGPU,ReleaseGPU},&message,Abort,in);
         if (!message.empty()) std::snprintf(out->return_msg,sizeof(out->return_msg),"%s",message.c_str());
         return memory.error ? memory.error : StatusError(status);
+#endif
     }
     switch(format) {
         case PF_PixelFormat_ARGB32: return RenderCPU<PF_Pixel8>(in,*input,*output,frame,PF_MAX_CHAN8,extra!=nullptr);
@@ -258,7 +299,7 @@ static PF_Err GradientSmartRender(PF_InData* in, PF_OutData* out, PF_SmartRender
 extern "C" DllExport PF_Err GradientMain(PF_Cmd cmd,PF_InData* in,PF_OutData* out,PF_ParamDef* params[],PF_LayerDef* output,void* extra) {
     try {
         switch(cmd) {
-            case PF_Cmd_ABOUT: std::snprintf(out->return_msg,sizeof(out->return_msg),"Moti.on Gradient 1.0\rEditable gradients, depth, glow and optical diffusion. CPU / Metal.");return PF_Err_NONE;
+            case PF_Cmd_ABOUT: std::snprintf(out->return_msg,sizeof(out->return_msg),"Moti.on Gradient 1.0\rEditable gradients, depth, glow and optical diffusion. CPU / Metal / DirectX 12.");return PF_Err_NONE;
             case PF_Cmd_GLOBAL_SETUP: out->my_version=MOTION_GRADIENT_VERSION;out->out_flags=MOTION_GRADIENT_FLAGS;out->out_flags2=MOTION_GRADIENT_FLAGS2;return PF_Err_NONE;
             case PF_Cmd_PARAMS_SETUP:return GradientParams(in,out);
             case PF_Cmd_SMART_PRE_RENDER:return GradientPreRender(in,out,static_cast<PF_PreRenderExtra*>(extra));
@@ -279,14 +320,29 @@ extern "C" DllExport PF_Err GradientMain(PF_Cmd cmd,PF_InData* in,PF_OutData* ou
                 out->out_flags2 &= ~PF_OutFlag2_SUPPORTS_GPU_RENDER_F32;
                 if (!e || !e->input || !e->output) return PF_Err_BAD_CALLBACK_PARAM;
                 e->output->gpu_data=nullptr;
-                if (e->input->what_gpu!=PF_GPU_Framework_METAL) return PF_Err_NONE;
+                // Any other framework (CUDA, OpenCL) declines: AE then renders this effect on the CPU.
+                if (!GradientGPUFramework(e->input->what_gpu)) return PF_Err_NONE;
                 AEFX_SuiteScoper<PF_GPUDeviceSuite1> suite(in,kPFGPUDeviceSuite,kPFGPUDeviceSuiteVersion1,out);
                 PF_GPUDeviceInfo info{};auto err=suite->GetDeviceInfo(in->effect_ref,e->input->device_index,&info);if(err)return err;
                 if(!info.compatibleB || !info.devicePV || !info.command_queuePV)return PF_Err_NONE;
+#ifdef _WIN32
+                e->output->gpu_data=gr::create_d3d12_backend(info.devicePV,info.command_queuePV);
+#else
                 e->output->gpu_data=gr::create_metal_backend(info.devicePV);
+#endif
                 if(e->output->gpu_data)out->out_flags2|=PF_OutFlag2_SUPPORTS_GPU_RENDER_F32;return PF_Err_NONE;
             }
-            case PF_Cmd_GPU_DEVICE_SETDOWN: {auto e=static_cast<PF_GPUDeviceSetdownExtra*>(extra);if(e && e->input)gr::destroy_metal_backend(static_cast<gr::MetalBackend*>(e->input->gpu_data));return PF_Err_NONE;}
+            case PF_Cmd_GPU_DEVICE_SETDOWN: {
+                auto e=static_cast<PF_GPUDeviceSetdownExtra*>(extra);
+                if(e && e->input && GradientGPUFramework(e->input->what_gpu)) {
+#ifdef _WIN32
+                    gr::destroy_d3d12_backend(static_cast<gr::D3D12Backend*>(e->input->gpu_data));
+#else
+                    gr::destroy_metal_backend(static_cast<gr::MetalBackend*>(e->input->gpu_data));
+#endif
+                }
+                return PF_Err_NONE;
+            }
             case PF_Cmd_RENDER: {
                 if(!params || !params[0])return PF_Err_BAD_CALLBACK_PARAM;
                 GradientFrame f;auto err=ReadGradient(in,out,params,f.frame);if(err)return err;

@@ -1,5 +1,6 @@
-// This single source is compiled as C++ and embedded as Metal source. Keep its
-// arithmetic float-only and its structs plain: CPU/GPU share the exact formulas.
+// This single source is compiled as C++, embedded as Metal source and compiled as
+// HLSL (GradientD3D12.hlsl). Keep its arithmetic float-only and its structs plain:
+// CPU/GPU share the exact formulas. No brace returns or HLSL keywords (out, noise).
 GRADIENT_CODE(
 struct GPixel { float r, g, b, a; };
 struct GStop { float r, g, b, position; };
@@ -17,10 +18,12 @@ struct GParams {
 inline float g_clamp(float x, float lo, float hi) { return fmin(hi, fmax(lo,x)); }
 inline float g_smooth(float x) { x=g_clamp(x,0.f,1.f); return x*x*(3.f-2.f*x); }
 inline float g_mix(float a,float b,float t) { return a+(b-a)*t; }
-inline GPixel g_zero() { return {0,0,0,0}; }
-inline GPixel g_add(GPixel a,GPixel b) { return {a.r+b.r,a.g+b.g,a.b+b.b,a.a+b.a}; }
-inline GPixel g_sub(GPixel a,GPixel b) { return {a.r-b.r,a.g-b.g,a.b-b.b,a.a-b.a}; }
-inline GPixel g_mul(GPixel a,float x) { return {a.r*x,a.g*x,a.b*x,a.a*x}; }
+// Built through g_px: C++, Metal and HLSL all accept this form (HLSL has no brace returns).
+inline GPixel g_px(float r,float g,float b,float a) { GPixel o; o.r=r; o.g=g; o.b=b; o.a=a; return o; }
+inline GPixel g_zero() { return g_px(0,0,0,0); }
+inline GPixel g_add(GPixel a,GPixel b) { return g_px(a.r+b.r,a.g+b.g,a.b+b.b,a.a+b.a); }
+inline GPixel g_sub(GPixel a,GPixel b) { return g_px(a.r-b.r,a.g-b.g,a.b-b.b,a.a-b.a); }
+inline GPixel g_mul(GPixel a,float x) { return g_px(a.r*x,a.g*x,a.b*x,a.a*x); }
 inline GPixel g_lerp(GPixel a,GPixel b,float t) { return g_add(a,g_mul(g_sub(b,a),t)); }
 inline uint g_hash(uint x) { x^=x>>16; x*=0x7feb352du; x^=x>>15; x*=0x846ca68bu; return x^(x>>16); }
 inline float g_random(int x,int y,uint seed) {
@@ -56,7 +59,7 @@ inline GPixel g_palette(GParams p,float t) {
         }
     }
     float amount=b.position>a.position?g_smooth((t-a.position)/(b.position-a.position)):0.f;
-    return {g_mix(a.r,b.r,amount),g_mix(a.g,b.g,amount),g_mix(a.b,b.b,amount),1};
+    return g_px(g_mix(a.r,b.r,amount),g_mix(a.g,b.g,amount),g_mix(a.b,b.b,amount),1);
 }
 inline GPixel g_base(GParams p,int x,int y,float alpha,float blurredAlpha) {
     if(alpha<=0) return g_zero();
@@ -74,13 +77,13 @@ inline GPixel g_base(GParams p,int x,int y,float alpha,float blurredAlpha) {
         // with fractional cycles, offset, depth or turbulence.
         t=1.f-fabs(angular*2.f-1.f);
     }
-    float noise=g_noise(fx/p.turbulenceScale+p.loopCos*1.7f,
+    float swirl=g_noise(fx/p.turbulenceScale+p.loopCos*1.7f,
                         fy/p.turbulenceScale+p.loopSin*1.7f,uint(p.seed));
-    noise+=.5f*g_noise(fx*2.f/p.turbulenceScale-p.loopSin,
+    swirl+=.5f*g_noise(fx*2.f/p.turbulenceScale-p.loopSin,
                       fy*2.f/p.turbulenceScale+p.loopCos,uint(p.seed)^0x68bc21ebu);
     float bulge=p.bulge*fmax(0.f,1.f-radial*radial*4.f);
     float depth=p.depth*(alpha-blurredAlpha);
-    t=(t+bulge+depth+noise*p.turbulence*.25f)*p.cycles+p.offset+p.loopPhase*2.f;
+    t=(t+bulge+depth+swirl*p.turbulence*.25f)*p.cycles+p.offset+p.loopPhase*2.f;
     return g_mul(g_palette(p,t),g_clamp(alpha,0.f,1.f));
 }
 inline float g_focus(GParams p,int x,int y) {
@@ -101,21 +104,21 @@ inline GPixel g_finish(GParams p,GPixel base,GPixel halo,int x,int y) {
     // dividing by a nearly-zero blurred alpha would amplify rounding noise.
     float energy=fmax(0.f,fmax(base.r,fmax(base.g,base.b)));
     float gain=p.glow/(1.f+p.highlightProtection*energy);
-    GPixel out=g_add(base,g_mul(halo,gain));
-    out.a=g_clamp(base.a+(1.f-base.a)*g_clamp(halo.a*gain,0.f,1.f),0.f,1.f);
-    if(out.a<=0) return g_zero();
+    GPixel res=g_add(base,g_mul(halo,gain));
+    res.a=g_clamp(base.a+(1.f-base.a)*g_clamp(halo.a*gain,0.f,1.f),0.f,1.f);
+    if(res.a<=0) return g_zero();
     if(p.colorProcessing==1) {
-        out.r=g_encode(out.r/out.a)*out.a;
-        out.g=g_encode(out.g/out.a)*out.a;
-        out.b=g_encode(out.b/out.a)*out.a;
+        res.r=g_encode(res.r/res.a)*res.a;
+        res.g=g_encode(res.g/res.a)*res.a;
+        res.b=g_encode(res.b/res.a)*res.a;
     }
     if(p.grain>0) {
         int ix=int(floor((float(x)+.5f)/p.dx)),iy=int(floor((float(y)+.5f)/p.dy));
         float n1=g_random(ix,iy,uint(p.seed)^0x34ab26e1u)*2.f-1.f;
         float n2=g_random(ix,iy,uint(p.seed)^0x85e01249u)*2.f-1.f;
-        float grain=(n1*p.loopCos+n2*p.loopSin)*p.grain*.12f*out.a;
-        out.r+=grain;out.g+=grain;out.b+=grain;
+        float grain=(n1*p.loopCos+n2*p.loopSin)*p.grain*.12f*res.a;
+        res.r+=grain;res.g+=grain;res.b+=grain;
     }
-    return out;
+    return res;
 }
 )
