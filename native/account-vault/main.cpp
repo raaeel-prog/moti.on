@@ -7,6 +7,8 @@
 #elif defined(_WIN32)
 #include <windows.h>
 #include <wincred.h>
+#include <fcntl.h>
+#include <io.h>
 #endif
 static bool decode(const std::string& s, std::string& out) {
  if(s.size()%2) return false;
@@ -14,6 +16,10 @@ static bool decode(const std::string& s, std::string& out) {
 }
 static std::string encode(const std::string& s){const char* hex="0123456789abcdef";std::string out;for(unsigned char c:s){out+=hex[c>>4];out+=hex[c&15];}return out;}
 int main(int argc,char**){
+#if defined(_WIN32)
+ // Text mode would turn "\n" into "\r\n"; runtime.cjs expects the exact protocol line.
+ _setmode(_fileno(stdin),_O_BINARY);_setmode(_fileno(stdout),_O_BINARY);
+#endif
  if(argc!=1){std::cout<<"1\terror\n";return 1;}
  std::string line;char c;while(std::cin.get(c)&&c!='\n'){if(line.size()>=12000){std::cout<<"1\terror\n";return 1;}line+=c;}
  std::vector<std::string> parts;size_t start=0,pos;while((pos=line.find('\t',start))!=std::string::npos){parts.push_back(line.substr(start,pos-start));start=pos+1;}parts.push_back(line.substr(start));

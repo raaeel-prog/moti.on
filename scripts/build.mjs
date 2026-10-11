@@ -129,9 +129,10 @@ await writeFile(DESCRIPTORS_ES5_PATH, await renderDescriptorsModule(), "utf8");
 await copyAppShell("premiere-uxp", "premiere-uxp");
 await copyAppShell("after-effects-cep", "after-effects-cep");
 
-// Cofre da conta (Keychain). Binario universal: o Node do CEP procura
-// bin/<plataforma>-<arquitetura>, e o After Effects pode rodar nativo ou sob Rosetta.
-// Fora do macOS o build segue sem o cofre; a Conta mostra "armazenamento indisponivel".
+// Cofre da conta (Keychain no macOS, Gerenciador de Credenciais no Windows). O
+// Node do CEP procura bin/<plataforma>-<arquitetura>; no macOS o binario e
+// universal porque o After Effects pode rodar nativo ou sob Rosetta. Sem
+// compilador o build segue sem o cofre; a Conta mostra "armazenamento indisponivel".
 if (process.platform === "darwin") {
   const vaultDir = path.join(dist, "after-effects-cep", "account", "bin");
   const vaultBinary = path.join(vaultDir, "darwin-arm64", "motion-account-vault");
@@ -168,6 +169,8 @@ function buildWindowsVault(output) {
   const source = path.join(root, "native", "account-vault", "main.cpp");
   writeFileSync(script, [
     "@echo off",
+    // vcvars64.bat chama o vswhere pelo PATH; sem isso imprime um erro inofensivo.
+    `set "PATH=${path.dirname(vswhere)};%PATH%"`,
     `call "${vcvars}" >nul || exit /b 1`,
     `cl /nologo /std:c++17 /O2 /EHsc /MT /utf-8 "${source}" /Fo"${work}\\\\" /Fe"${output}" Advapi32.lib || exit /b 1`
   ].join("\r\n") + "\r\n", "utf8");

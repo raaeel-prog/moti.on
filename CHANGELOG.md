@@ -1,3 +1,9 @@
+## 2026-10-11 — Windows: build, testes e instalação verificados
+- Projeto movido do Google Drive para `C:\dev\Moti.on`; Visual Studio 2022 Build Tools (C++ + CMake) instalado por winget.
+- `npm ci`, lint, build e `npm test` PASS no Windows (2.365 testes, mesma contagem do Mac). `MotionCore.aex` compilado com MSVC: 4/4 testes de kernel, PiPL `CodeWin64X86` embutido, 4 pontos de entrada exportados, CRT estático. `update-windows.ps1` instalou o `.aex` e o painel em modo desenvolvedor.
+- Correção: o cofre da conta no Windows respondia `\r\n` (stdout do CRT em modo texto) e o `runtime.cjs` recusava toda resposta com `VAULT_UNAVAILABLE` — o login Google não persistiria. Stdin/stdout em modo binário só no `_WIN32`; novo `tests/account-vault-runtime.test.mjs` faz ida e volta real no Gerenciador de Credenciais. Build do cofre sem o falso erro do `vswhere`.
+- `scripts/verify-ae-native.jsx`: verificação dos 4 efeitos nativos dentro do After Effects (projeto descartável, PNG por efeito, `result.json`). After Effects para Windows NOT RUN (ainda não instalado). Detalhes em `docs/WINDOWS.md` §5.
+
 ## 2026-10-08 — Suavização: gestos diretos, aplicação segura e janela flutuante
 - Editor de curva no estilo do vídeo de referência: gráfico de velocidade arrastável (para baixo suaviza mais), curva de valor com pontos inseridos por clique simples (forma preservada) e arrastados no mesmo gesto, Shift para ajuste fino, Escape cancela, Back/Elastic/Bounce com In/InOut/Out, curva anterior tracejada, ponto ativo destacado.
 - Aplicação segura: o host revalida a assinatura da seleção antes de escrever (`STALE_SELECTION`), keys geradas por pontos/Elastic/Bounce são substituídas em vez de acumuladas (sessão devolvida pelo host), respostas atrasadas são descartadas, Live só ao concluir o gesto com um Desfazer por ajuste.

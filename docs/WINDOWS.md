@@ -5,9 +5,10 @@ projeto continua sendo **funcionar nos dois sistemas**: nada do fluxo do Mac foi
 alterado (o build nativo do Mac foi recompilado e passou 5/5 testes dos kernels;
 `npm run lint`, `npm run build` e os 2365 testes de `npm test` passaram no Mac).
 
-> Estado: tudo abaixo para Windows está `IMPLEMENTED_NOT_HOST_VERIFIED` — foi
-> escrito no Mac, sem Windows/Visual Studio/After Effects para Windows à mão. A
-> primeira tarefa no Windows é rodar e corrigir o que aparecer.
+> Estado (2026-10-11, Windows 11 Pro 26200, Node 24.18, VS 2022 Build Tools
+> 17.14): build, testes e instalação **verificados no Windows** (ver §5). Ainda
+> `IMPLEMENTED_NOT_HOST_VERIFIED`: efeitos e painel dentro do After Effects
+> para Windows, e o login Google real.
 
 ## 1. Preparar a máquina (uma vez)
 
@@ -27,7 +28,7 @@ sincronizando o tempo todo deixam tudo lento e geram conflitos. Copie para uma
 pasta local, sem o `node_modules` do Mac:
 
 ```powershell
-robocopy "G:\Meu Drive\Moti.on\implementation" "C:\dev\Moti.on\implementation" /E /XD node_modules /XF .DS_Store
+robocopy "G:\Meu Drive\Moti.on\implementation" "C:\dev\Moti.on\implementation" /E /XD node_modules cmake-3.29.3-macos-universal /XF .DS_Store cmake.tar.gz
 robocopy "G:\Meu Drive\Moti.on\AfterEffectsSDK_26.5_win" "C:\dev\Moti.on\AfterEffectsSDK_26.5_win" /E
 ```
 
@@ -44,9 +45,15 @@ git config core.autocrlf false
 git status
 ```
 
-O trabalho da conta Google / admin / modo desenvolvedor ainda **não está
-commitado** (branch `codex/plugin-review`); ele vem junto na cópia. Vale fazer um
-commit dele no Windows logo no início.
+O trabalho da conta Google / admin / modo desenvolvedor foi commitado no Windows
+em 2026-10-11 (`561b9b9`, branch `codex/plugin-review`). O projeto de trabalho
+agora é `C:\dev\Moti.on\implementation`; a pasta do Drive ficou só como cópia.
+
+Visual Studio Build Tools com C++ e CMake, sem abrir o instalador:
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.CMake.Project --includeRecommended"
+```
 
 ## 3. Atualizar e instalar (um clique)
 
@@ -85,16 +92,44 @@ Remover: `scripts\uninstall-ae-dev.ps1`.
 
 ## 5. Primeira sessão no Windows — checklist
 
-1. `npm ci`, `npm run lint`, `npm run build`, `npm test` — tudo verde.
-2. `plugin\build-windows.ps1` — confirmar que o PiPL compila e os 4 testes de
-   kernel passam com MSVC. Arquivos tocados para isso: `plugin/CMakeLists.txt`
-   (ramo `WIN32`), `plugin/resources/MotionCorePiPL.r` (entradas
-   `CodeWin64X86`), `plugin/host/GradientMetalStub.cpp`.
-3. Instalar e abrir o AE: os 4 efeitos aparecem em *Moti.on* (Glitch Core, Wave
-   Core, Native Transition, Gradient)? matchNames e disk IDs são os mesmos do
-   Mac, então projetos `.aep` abrem nos dois.
-4. Painel abre em modo desenvolvedor; depois testar `-RealLicense` + login Google.
-5. Registrar a evidência como pede `/testing-adobe-hosts`.
+Resultado da primeira sessão (2026-10-11):
+
+| # | Verificação | Resultado |
+|---|---|---|
+| 1 | `npm ci` / `npm run lint` / `npm run build` | **PASS** |
+| 1 | `npm test` | **PASS** — 2365/2365 (mesma contagem do Mac) |
+| 2 | `plugin\build-windows.ps1` (MSVC 17.14, SDK 10.0.26100) | **PASS** — `MotionCore.aex` gerado; 4/4 testes de kernel |
+| 2 | `.aex`: exports e PiPL | **PASS** — `GlitchMain`, `WaveMain`, `TransitionMain`, `GradientMain` exportados; recurso `PiPL` 16000 com `CodeWin64X86`; só depende de `KERNEL32.dll` (CRT estático) |
+| 2 | Cofre da conta (`motion-account-vault.exe`) | **PASS** depois de correção — ver abaixo; `tests/account-vault-runtime.test.mjs` |
+| 3 | `scripts\update-windows.ps1` (instala `.aex` + painel) | **PASS** — `.aex` em `MediaCore` com hash igual ao do build; painel em `%APPDATA%\Adobe\CEP\extensions\com.motion.plugin.ae` com `developer-unlock`; `PlayerDebugMode` = 1 |
+| 3 | Efeitos dentro do After Effects | **NOT RUN** — AE ainda não instalado nesta máquina |
+| 4 | Painel no AE / login Google real | **NOT RUN** |
+
+Correções feitas no Windows:
+
+- **Cofre da conta respondia `\r\n`:** o stdout do CRT em modo texto troca `\n`
+  por `\r\n`, e `account/runtime.cjs` exige a linha exata do protocolo. Toda
+  leitura ou escrita virava `VAULT_UNAVAILABLE` (o login nunca persistiria).
+  `native/account-vault/main.cpp` agora põe stdin/stdout em modo binário só no
+  `_WIN32`; o teste novo faz ida e volta real no Gerenciador de Credenciais
+  pelo próprio `runtime.cjs`.
+- `scripts/build.mjs`: o `vcvars64.bat` procura o `vswhere` no PATH e imprimia
+  um erro inofensivo; o script temporário agora põe a pasta do Installer no PATH.
+- npm 11 não roda o `postinstall` do esbuild sem `allowScripts`; não faz falta,
+  o binário vem do `@esbuild/win32-x64`.
+
+Verificação dos efeitos no After Effects (falta rodar): com o AE fechado,
+
+```powershell
+& "C:\Program Files\Adobe\Adobe After Effects 2026\Support Files\AfterFX.exe" -r "C:\dev\Moti.on\implementation\scripts\verify-ae-native.jsx"
+```
+
+O script cria um projeto descartável, confere se os 4 matchNames estão em
+`app.effects`, aplica cada efeito num sólido, salva um PNG por efeito e grava
+`artifacts\ae-native-verify\result.json`. Depois: abrir o painel em modo
+desenvolvedor e, por fim, `-RealLicense` + login Google. Registrar a evidência
+como pede `/testing-adobe-hosts`. matchNames e disk IDs são os mesmos do Mac,
+então projetos `.aep` abrem nos dois.
 
 ## 6. Fase 2 — GPU NVIDIA e AMD no Windows
 
