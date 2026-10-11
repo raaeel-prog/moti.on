@@ -819,6 +819,9 @@ const ptBR = {
   "ease.quick.needsPair": "Este modo precisa de dois keyframes consecutivos selecionados por propriedade.",
   "ease.quick.outsideHost": "Abra esta janela dentro do After Effects.",
   "ease.quick.ready": "Pronto para aplicar a {count} keyframe(s).",
+  "ease.quickBar.add": "Mostrar na barra rápida da timeline: {name}",
+  "ease.quickBar.remove": "Tirar da barra rápida da timeline: {name}",
+  "ease.quickBar.hint": "★ Os favoritos formam a barra rápida da timeline (até 10). Sem favoritos, ela mostra Ease, In, Out, InOut e Linear.",
   "ease.preset.in": "In",
   "ease.preset.out": "Out",
   "ease.preset.inOut": "InOut",
@@ -1610,6 +1613,9 @@ export type MessageKey =
   | "ease.quick.needsPair"
   | "ease.quick.outsideHost"
   | "ease.quick.ready"
+  | "ease.quickBar.add"
+  | "ease.quickBar.remove"
+  | "ease.quickBar.hint"
   | "ease.preset.in"
   | "ease.preset.out"
   | "ease.preset.inOut"
@@ -2613,6 +2619,9 @@ const enUS: Record<MessageKey, string> = {
   "ease.quick.needsPair": "This mode needs two consecutive selected keyframes per property.",
   "ease.quick.outsideHost": "Open this window inside After Effects.",
   "ease.quick.ready": "Ready to apply to {count} keyframe(s).",
+  "ease.quickBar.add": "Show in the timeline quick bar: {name}",
+  "ease.quickBar.remove": "Remove from the timeline quick bar: {name}",
+  "ease.quickBar.hint": "★ Favourites make up the timeline quick bar (up to 10). With none, it shows Ease, In, Out, InOut and Linear.",
   "ease.preset.in": "In",
   "ease.preset.out": "Out",
   "ease.preset.inOut": "InOut",

@@ -39,7 +39,7 @@ import { EASE_PRESETS, readEaseAutoOpen, readEaseLibrary, readEaseLive, writeEas
 import { createEaseController, type EaseApplyOutcome, type EaseController } from "./ease-controller.js";
 import { EASE_NAVIGATE_EVENT, createEaseApplyLock, createEaseSync, readSharedDraft } from "./ease-sync.js";
 import { PANEL_EXTENSION_ID, createCepEvents, type CepEvents } from "./cep-events.js";
-import { createQuickBar, type QuickBar, type QuickBarItem } from "./quick-bar.js";
+import { createQuickBar, quickBarPresets, type QuickBar, type QuickBarItem } from "./quick-bar.js";
 import { cepNativeFiles } from "./native-gesture.js";
 import type { GradientReadData } from "@motion/contracts";
 import {
@@ -6248,18 +6248,18 @@ let easeSync: ReturnType<typeof createEaseSync> | null = null;
 let cepEvents: CepEvents | null = null;
 /** Native bar next to the pointer in the Timeline (plugin/gesture/QuickBar.mm). */
 let quickBar: QuickBar | null = null;
-/** What the bar offers: the editor's quick chips, then up to four favourites. */
+/** What the bar offers: the starred presets of the ease library, or the five standard ones (see quickBarPresets). */
 function quickBarItems(i18n: I18n): QuickBarItem[] {
-  const quick: [string, Parameters<I18n["t"]>[0]][] = [["ease", "ease.preset.ease"], ["cubic-in", "ease.preset.in"], ["cubic-out", "ease.preset.out"], ["cubic-in-out", "ease.preset.inOut"], ["linear", "ease.preset.linear"]];
   const library = readEaseLibrary(easeStorage());
-  const all = [...EASE_PRESETS, ...library.custom];
-  const items: QuickBarItem[] = [];
-  for (const [id, key] of quick) { const preset = all.find(p => p.id === id); if (preset) items.push({ id, label: `${i18n.t(key)} · ${preset.name}`, curve: preset.curve }); }
-  for (const id of library.favorites) {
-    if (items.length >= 9 || items.some(item => item.id === id)) continue;
-    const preset = all.find(p => p.id === id); if (preset) items.push({ id, label: preset.name, curve: preset.curve });
-  }
-  return items;
+  return quickBarPresets(library.favorites, [...EASE_PRESETS, ...library.custom], [
+    ["ease", i18n.t("ease.preset.ease")], ["cubic-in", i18n.t("ease.preset.in")], ["cubic-out", i18n.t("ease.preset.out")],
+    ["cubic-in-out", i18n.t("ease.preset.inOut")], ["linear", i18n.t("ease.preset.linear")]
+  ]);
+}
+/** Resolves when no tool is writing to the host (bounded: a stuck flag must not block forever). */
+async function waitWhileBusy(limitMs = 3000): Promise<void> {
+  const until = Date.now() + limitMs;
+  while (state.busy && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 40));
 }
 function quickBarCurve(id: string): EaseCurve | null {
   return [...EASE_PRESETS, ...readEaseLibrary(easeStorage()).custom].find(p => p.id === id)?.curve ?? null;
@@ -6372,13 +6372,17 @@ function startEaseSurfaces(shell: Shell, i18n: I18n, client: Client): () => void
     items: () => quickBarItems(i18n),
     labels: () => ({ editor: i18n.t("ease.quick.fullEditor"), close: i18n.t("ease.quick.close"), title: i18n.t("ease.quick.title") }),
     // Same path as the panel's Apply: the preset becomes the draft, the controller writes it once (one Undo).
-    onPick: (id, signature) => {
+    // The quick bar serializes picks, so a click made while another write is
+    // finishing waits for it instead of being discarded as "busy".
+    onPick: async (id, signature) => {
       const curve = quickBarCurve(id);
-      if (!curve || state.context?.selectionSignature !== signature) return;
+      if (!curve) return;
+      await waitWhileBusy();
+      if (state.context?.selectionSignature !== signature) return;
       state.ease = { ...state.ease, mode: "bezier", points: [], ...curve };
       easeEditorHandle?.setDraft(state.ease);
       easeSync?.publish(state.ease, controller.session());
-      void controller.apply();
+      await controller.apply();
     },
     onEditor: () => { cepEvents?.requestOpenExtension(PANEL_EXTENSION_ID); state.activeTool = "ease"; shell.navigate("ease"); }
   });

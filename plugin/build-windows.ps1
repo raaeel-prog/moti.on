@@ -5,8 +5,9 @@
 # Windows. Por padrao o SDK e procurado ao lado da pasta do projeto
 # (..\..\AfterEffectsSDK_26.5_win); defina AESDK_ROOT para outro caminho.
 #
-# Saida: plugin\build-win\Release\MotionCore.aex. Gradient roda na CPU no
-# Windows (o caminho de GPU e Metal, so macOS).
+# Saida: plugin\build-win\Release\MotionCore.aex (efeitos; Gradient roda na CPU
+# no Windows, o caminho de GPU e Metal, so macOS) e MotionGestureBridge.aex
+# (AEGP Live Gestures: barra rapida na timeline e arraste nativo).
 
 param(
   [string]$AeSdkRoot = $env:AESDK_ROOT,
@@ -55,6 +56,8 @@ if (-not $SkipTests) {
   if ($LASTEXITCODE) { throw "Testes dos kernels falharam." }
 }
 
-$Output = Join-Path $BuildDir "Release\MotionCore.aex"
-if (-not (Test-Path $Output)) { throw "MotionCore.aex não foi gerado em $Output." }
-Write-Host "Plug-in de desenvolvimento: $Output"
+foreach ($Name in @("MotionCore.aex", "MotionGestureBridge.aex")) {
+  $Output = Join-Path $BuildDir "Release\$Name"
+  if (-not (Test-Path $Output)) { throw "$Name não foi gerado em $Output." }
+  Write-Host "Plug-in de desenvolvimento: $Output"
+}

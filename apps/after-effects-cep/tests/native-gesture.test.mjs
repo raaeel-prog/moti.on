@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 const bundled=await build({entryPoints:['apps/after-effects-cep/client/src/native-gesture.ts'],bundle:true,write:false,format:'esm',platform:'node'});
-const {createNativeGestures,cepGestureFiles}=await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
+const {createNativeGestures,cepGestureFiles,cepNativeFiles}=await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function fixture(delay=0){
   let reply,opened=false,value=100;const writes=[],states=[];
@@ -49,6 +49,55 @@ test('CEP gesture files resolve the installed extension when USER_DATA points ou
       '/Users/rael/Library/Caches/Moti.on/Gestures/request.json'
     ]);
   }finally{globalThis.CSInterface=originalCS;globalThis.SystemPath=originalPaths;}
+});
+function withCep(extension,userData,run){
+  const originalCS=globalThis.CSInterface,originalPaths=globalThis.SystemPath;
+  globalThis.SystemPath={EXTENSION:'extension',USER_DATA:'userData'};
+  globalThis.CSInterface=class {getSystemPath(kind){return kind==='extension'?extension:userData;}};
+  try{return run();}finally{globalThis.CSInterface=originalCS;globalThis.SystemPath=originalPaths;}
+}
+function recordingFs(paths){return {cep:{fs:{readFile(path){paths.push(path);return {err:0,data:'ok'};},writeFile(path){paths.push(path);return {err:0};},rename(a,b){paths.push(a,b);return {err:0};},deleteFile(){return {err:0};}}}};}
+test('CEP native files on Windows use the profile AppData\\Local folder the AEGP creates',()=>{
+  const paths=[];
+  withCep('C:/Users/Ana Lima/AppData/Roaming/Adobe/CEP/extensions/com.motion.plugin.ae','C:/Users/Ana Lima/AppData/Roaming',()=>{
+    const files=cepGestureFiles(recordingFs(paths));
+    assert.equal(files.read('handshake.json'),'ok');files.write('{}');
+  });
+  assert.deepEqual(paths,[
+    'C:/Users/Ana Lima/AppData/Local/Moti.on/Gestures/handshake.json',
+    'C:/Users/Ana Lima/AppData/Local/Moti.on/Gestures/request.tmp',
+    'C:/Users/Ana Lima/AppData/Local/Moti.on/Gestures/request.tmp',
+    'C:/Users/Ana Lima/AppData/Local/Moti.on/Gestures/request.json'
+  ]);
+});
+test('CEP native files on Windows accept backslashes, another drive and the quick bar folder',()=>{
+  const paths=[];
+  withCep('D:\\Users\\rael\\AppData\\Roaming\\Adobe\\CEP\\extensions\\com.motion.plugin.ae\\','',()=>{
+    cepNativeFiles(recordingFs(paths),'QuickBar').read('event.json');
+  });
+  assert.deepEqual(paths,['D:/Users/rael/AppData/Local/Moti.on/QuickBar/event.json']);
+});
+test('CEP native files refuse unknown or traversing extension paths instead of guessing a folder',()=>{
+  for(const extension of [
+    'C:/Program Files/Common Files/Adobe/CEP/extensions/com.motion.plugin.ae',
+    'C:/Users/../Windows/AppData/Roaming/Adobe/CEP/extensions/com.motion.plugin.ae',
+    'C:/Users/rael/AppData/Roaming/Adobe/CEP/extensions/other.extension',
+    '//server/share/Users/rael/AppData/Roaming/Adobe/CEP/extensions/com.motion.plugin.ae'
+  ])assert.equal(withCep(extension,'',()=>cepNativeFiles(recordingFs([]),'QuickBar')),undefined,extension);
+});
+test('CEP native files publish a request even when the platform rename refuses to replace with another code',()=>{
+  const root='C:/Users/rael/AppData/Local/Moti.on/Gestures';
+  const disk=new Map([[`${root}/request.json`,'old']]);
+  withCep('C:/Users/rael/AppData/Roaming/Adobe/CEP/extensions/com.motion.plugin.ae','',()=>{
+    const files=cepGestureFiles({cep:{fs:{
+      readFile(path){return disk.has(path)?{err:0,data:disk.get(path)}:{err:3,data:''};},
+      writeFile(path,data){disk.set(path,data);return {err:0};},
+      rename(from,to){if(disk.has(to))return {err:1};disk.set(to,disk.get(from));disk.delete(from);return {err:0};},
+      deleteFile(path){disk.delete(path);return {err:0};}
+    }}});
+    files.write('next');
+  });
+  assert.equal(disk.get(`${root}/request.json`),'next');assert.equal(disk.has(`${root}/request.tmp`),false);
 });
 test('CEP gesture files replace an already-published request before the next drag',()=>{
   const originalCS=globalThis.CSInterface,originalPaths=globalThis.SystemPath;

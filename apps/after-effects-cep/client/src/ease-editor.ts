@@ -246,6 +246,7 @@ export function createEaseEditor(doc: Document, options: EaseEditorOptions): Eas
     onInput: value => { query = value.toLowerCase().trim(); drawLibrary(); } }));
   const favoriteFilter = button(doc, { label: "☆", onClick: () => { favoritesOnly = !favoritesOnly; favoriteFilter.setAttribute("aria-pressed", String(favoritesOnly)); drawLibrary(); } });
   favoriteFilter.setAttribute("aria-label", t("ease.favorites")); favoriteFilter.title = t("ease.favorites"); favoriteFilter.setAttribute("aria-pressed", "false"); shelfHeader.appendChild(favoriteFilter);
+  shelf.appendChild(createElement(doc, "p", "ch-hint ch-ease-quickbar-hint", t("ease.quickBar.hint")));
   const grid = createElement(doc, "div", "ch-ease-grid"); shelf.appendChild(grid);
   const progress = (c: EaseCurve, time: number): number => {
     const cubic = (u: number, a: number, b: number): number => 3 * (1 - u) ** 2 * u * a + 3 * (1 - u) * u * u * b + u ** 3;
@@ -290,7 +291,8 @@ export function createEaseEditor(doc: Document, options: EaseEditorOptions): Eas
         const favorites = library.favorites.includes(preset.id) ? library.favorites.filter(id => id !== preset.id) : [...library.favorites, preset.id];
         if (persist({ ...library, favorites })) drawLibrary();
       } });
-      favorite.classList.add("ch-ease-star"); favorite.title = `${t("ease.favorites")}: ${preset.name}`; favorite.setAttribute("aria-label", favorite.title); favorite.setAttribute("aria-pressed", String(library.favorites.includes(preset.id))); tile.appendChild(favorite);
+      // A star also puts the preset in the timeline quick bar (quick-bar.ts → quickBarPresets): say so.
+      favorite.classList.add("ch-ease-star"); favorite.title = t(library.favorites.includes(preset.id) ? "ease.quickBar.remove" : "ease.quickBar.add", { name: preset.name }); favorite.setAttribute("aria-label", favorite.title); favorite.setAttribute("aria-pressed", String(library.favorites.includes(preset.id))); tile.appendChild(favorite);
       if (preset.custom) {
         const remove = button(doc, { label: "×", onClick: () => {
           if (persist({ custom: library.custom.filter(p => p.id !== preset.id), favorites: library.favorites.filter(id => id !== preset.id) })) drawLibrary();

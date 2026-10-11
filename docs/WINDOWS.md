@@ -89,7 +89,7 @@ Remover: `scripts\uninstall-ae-dev.ps1`.
 | Modo desenvolvedor | `install-ae-dev.sh --dev-unlock` | `install-ae-dev.ps1 -DevUnlock` |
 | Motor nativo | `MotionCore.plugin` (Rez, Mach-O) | `MotionCore.aex` (PiPLtool, `plugin/cmake/pipl-win.cmake`) |
 | Gradient | CPU + GPU Metal | **CPU** (GPU = fase 2, abaixo) |
-| Barra rápida nativa / gestos (`plugin/gesture`) | AppKit | **ainda não portado** — o painel detecta a ausência e segue sem ela |
+| Barra rápida na timeline + arraste nativo (AEGP Live Gestures) | `MotionGestureBridge.plugin` (AppKit, `plugin/gesture/*.mm`) | `MotionGestureBridge.aex` (Win32 + GDI+, `plugin/gesture/win/`); mesmo protocolo de arquivos, pasta `%USERPROFILE%\AppData\Local\Moti.on\{QuickBar,Gestures}` |
 
 ## 5. Primeira sessão no Windows — checklist
 
@@ -146,6 +146,61 @@ Armadilhas encontradas no AE 26.5 para Windows:
   `MotionCore.aex`, e o cache `HKCU\Software\Adobe\After Effects\26.5\PluginCache`
   grava `Ignore = 1`. Isso vem dos loaders do MediaCore (Premiere). O loader de
   efeitos do AE carrega o PiPL normalmente, e os 4 efeitos funcionam.
+
+### Barra rápida na timeline (2026-10-11)
+
+Portada para Windows como o plug-in AEGP `MotionGestureBridge.aex`, que hospeda
+também o arraste nativo de parâmetros dos presets. O código fica em
+`plugin/gesture/win/`; `build-windows.ps1` compila e `install-dev.ps1` instala
+junto com o `MotionCore.aex`.
+
+- `QuickBarWin.cpp`: janela popup em camadas, dona = janela principal do AE
+  (`AEGP_GetMainHWND`), por isso fica acima do AE e nunca acima de outros
+  apps. Não ativa (`WS_EX_NOACTIVATE`, `MA_NOACTIVATE`): a Timeline mantém o
+  teclado. Desenho em GDI+ (cantos, sombra, glifos de curva), fade + escala
+  (só fade sem animações do Windows), DPI por monitor e tooltips. Esc e clique
+  fora fecham, por hooks `WH_KEYBOARD`/`WH_MOUSE` locais à thread do AE, ativos
+  só com a barra visível.
+- `GestureBridgeWin.cpp`: mesma validação do `GestureBridge.mm` (camada ativa e
+  destravada, Slider com o nome exato, sem keys/expressão, faixa, um Desfazer,
+  watchdog de 4 s).
+- `NativeJson.h` / `QuickBarProtocol.h`: JSON estrito e limitado e as regras da
+  barra, independentes da localidade (`from_chars`/`to_chars`); testes em
+  `plugin/tests/QuickBarProtocolTests.cpp` (ctest `quickbar-protocol`).
+- Painel: `native-gesture.ts` resolve a pasta no Windows a partir do caminho da
+  própria extensão (perfil em `AppData\Roaming`). Caminhos com `..`, UNC ou
+  fora do perfil são recusados.
+
+Verificação no AE 26.5: handshakes dos dois módulos criados ao abrir; seleção
+nova de keyframes → painel pede a barra → `visible: true`; cliques em
+Ease/In/Out/InOut/Linear chegam como `pick` e o preset é gravado nas keys
+(Bezier, influência conferida via ExtendScript); a barra continua aberta após
+aplicar; Esc/clique fora/× geram `dismiss`; "Editor completo" gera `editor`.
+**PASS.**
+
+Correções depois do primeiro teste com o mouse (mesmo dia):
+
+- **Trocar de preset não funcionava**: o painel aceitava só eventos com número
+  de sequência *maior* que o último. Um evento com relógio adiantado (gravado na
+  investigação) calava todos os cliques seguintes. Agora qualquer número
+  diferente é clique novo; o arquivo só muda num clique.
+- Clique durante uma aplicação em andamento era descartado como "ocupado" em
+  silêncio; agora espera a aplicação atual e vale o último clique.
+- Verificação com o mouse no AE 26.5: InOut → In → Ease → InOut → Linear →
+  Out → In → Ease seguidos, sem fechar sozinha; as keys terminam com a curva do
+  último clique e continuam selecionadas. **PASS.**
+- Favoritos: a barra mostra só os presets com ★ na biblioteca (até 10; sem
+  favoritos, os 5 padrão). A ★ diz "Mostrar na barra rápida da timeline" e a
+  barra aberta se atualiza ao marcar/desmarcar.
+- `event.json` de dispensa traz `reason` (`escape`, `close` ou
+  `press:<mensagem>:<classe da janela>`) para diagnóstico; o painel ignora.
+- Revisão de código aplicada: nenhuma exceção C++ atravessa os hooks/idle do
+  AE; ids inteiros validados; JSON recusa `\u0000` e UTF-8 inválido; janela
+  recriada limpa quando o AE recria a janela principal.
+
+Arraste nativo de parâmetros (Gestures) compilado e com handshake,
+mas o arraste em si no AE é **NOT RUN**. Leitor de tela (MSAA/UIA) não
+implementado na barra: os mesmos presets ficam acessíveis no painel.
 
 Falta: aplicar ferramentas pelo painel numa composição real e, por fim,
 `-RealLicense` + login Google. matchNames e disk IDs são os mesmos do Mac, então

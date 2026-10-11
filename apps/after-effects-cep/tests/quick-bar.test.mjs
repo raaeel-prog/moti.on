@@ -7,7 +7,7 @@ async function load(file) {
   const built = await build({ entryPoints: [fileURLToPath(new URL(`../client/src/${file}`, import.meta.url))], bundle: true, platform: "node", format: "esm", write: false });
   return import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);
 }
-const { createQuickBar } = await load("quick-bar.ts");
+const { createQuickBar, quickBarPresets, QUICK_BAR_MAX_FAVORITES } = await load("quick-bar.ts");
 
 const TOKEN = "16780E7C-F9EF-4142-B49F-4ADACC00649A";
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -23,7 +23,8 @@ function nativeFolder({ capabilities = ["quick-bar"], event = null } = {}) {
   return {
     requests,
     files: { read: name => files.get(name), write: text => requests.push(JSON.parse(text)) },
-    click(kind, signature, id) { files.set("event.json", JSON.stringify({ version: 1, sequence: ++sequence, kind, signature, id })); }
+    click(kind, signature, id) { files.set("event.json", JSON.stringify({ version: 1, sequence: ++sequence, kind, signature, id })); },
+    setEvent(event) { files.set("event.json", JSON.stringify(event)); }
   };
 }
 
@@ -40,6 +41,31 @@ function mount(native, overrides = {}) {
   return { bar, picks, editors, set: next => { context = { ...context, ...next }; } };
 }
 const ops = native => native.requests.map(r => r.operation);
+
+const CURVE = { x1: 0.4, y1: 0, x2: 0.2, y2: 1 };
+const PRESETS = ["ease", "cubic-in", "cubic-out", "cubic-in-out", "linear", "back", "mine", ...Array.from({ length: 12 }, (_, i) => `p${i}`)]
+  .map(id => ({ id, name: `Name ${id}`, curve: CURVE }));
+const DEFAULTS = [["ease", "Ease"], ["cubic-in", "In"], ["cubic-out", "Out"], ["cubic-in-out", "InOut"], ["linear", "Linear"]];
+
+test("without favourites the bar offers the five standard presets", () => {
+  const items = quickBarPresets([], PRESETS, DEFAULTS);
+  assert.deepEqual(items.map(i => i.id), ["ease", "cubic-in", "cubic-out", "cubic-in-out", "linear"]);
+  assert.equal(items[1].label, "In · Name cubic-in");
+});
+
+test("with favourites the bar offers only them, in the order they were starred", () => {
+  const items = quickBarPresets(["mine", "linear", "back"], PRESETS, DEFAULTS);
+  assert.deepEqual(items.map(i => i.id), ["mine", "linear", "back"]);
+  assert.equal(items[0].label, "Name mine");
+  assert.deepEqual(items[0].curve, CURVE);
+});
+
+test("favourites that no longer exist are skipped; the bar is capped", () => {
+  assert.deepEqual(quickBarPresets(["deleted"], PRESETS, DEFAULTS).map(i => i.id).length, 5, "only stale ids: back to the defaults");
+  const many = quickBarPresets(PRESETS.map(p => p.id), PRESETS, DEFAULTS);
+  assert.equal(many.length, QUICK_BAR_MAX_FAVORITES);
+  assert.ok(QUICK_BAR_MAX_FAVORITES <= 12, "the native bar accepts at most 12 items");
+});
 
 test("a new keyframe selection shows the bar once, with token, items and labels", async () => {
   const native = nativeFolder();
@@ -73,6 +99,52 @@ test("a pick is forwarded with its selection; the bar stays up for the next comp
   native.click("pick", "OTHER", "ease"); await wait(20);
   assert.equal(picks.length, 1, "a click for another selection is ignored");
   assert.deepEqual(ops(native), ["show"]);
+  bar.dispose();
+});
+
+test("every new click counts even after an event with a sequence from the future", async () => {
+  const native = nativeFolder();
+  const { bar, picks } = mount(native);
+  await wait(20);
+  native.setEvent({ version: 1, sequence: Date.now() + 1e6, kind: "pick", signature: "S1", id: "ease" }); await wait(20);
+  native.setEvent({ version: 1, sequence: Date.now(), kind: "pick", signature: "S1", id: "linear" }); await wait(20);
+  assert.deepEqual(picks.map(p => p.id), ["ease", "linear"], "a lower sequence is still a new click: the native file only changes on a click");
+  bar.dispose();
+});
+
+test("clicks while a preset is still applying are queued and the latest one wins", async () => {
+  const native = nativeFolder();
+  const applied = [];
+  let release;
+  const { bar } = mount(native, {
+    onPick: id => new Promise(resolve => { applied.push(id); release = resolve; })
+  });
+  await wait(20);
+  native.click("pick", "S1", "ease"); await wait(20);
+  native.click("pick", "S1", "linear"); await wait(15);
+  native.click("pick", "S1", "cubic-in"); await wait(15);
+  assert.deepEqual(applied, ["ease"], "one apply at a time");
+  release(); await wait(30);
+  assert.deepEqual(applied, ["ease", "cubic-in"], "the intermediate click is superseded by the latest");
+  release(); await wait(20);
+  native.click("pick", "S1", "linear"); await wait(20);
+  assert.deepEqual(applied, ["ease", "cubic-in", "linear"], "after the queue drains, the next click applies at once");
+  release();
+  bar.dispose();
+});
+
+test("changing the favourites updates an open bar in place, without re-popping it", async () => {
+  const native = nativeFolder();
+  let items = ITEMS;
+  const { bar } = mount(native, { items: () => items });
+  await wait(20);
+  items = [...ITEMS, { id: "back", label: "Back", curve: { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 } }];
+  await wait(20);
+  assert.deepEqual(ops(native), ["show", "show"], "same selection, new items: one refresh");
+  assert.equal(native.requests[1].signature, "S1");
+  assert.deepEqual(native.requests[1].items.map(i => i.id), ["ease", "back"]);
+  await wait(20);
+  assert.equal(native.requests.length, 2, "nothing more while the items stay the same");
   bar.dispose();
 });
 

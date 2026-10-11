@@ -5,8 +5,10 @@ foreach(var CL AESDK_ROOT HOST_DIR INPUT OUTPUT WORK_DIR)
     message(FATAL_ERROR "pipl-win.cmake: ${var} not set")
   endif()
 endforeach()
-set(RR "${WORK_DIR}/MotionCorePiPL.rr")
-set(RRC "${WORK_DIR}/MotionCorePiPL.rrc")
+# Intermediate names follow the output, so several PiPLs can build in parallel.
+get_filename_component(STEM "${OUTPUT}" NAME_WE)
+set(RR "${WORK_DIR}/${STEM}.rr")
+set(RRC "${WORK_DIR}/${STEM}.rrc")
 execute_process(COMMAND "${CL}" /nologo /I "${AESDK_ROOT}/Examples/Headers"
     /I "${AESDK_ROOT}/Examples/Resources" /I "${HOST_DIR}" /EP "${INPUT}"
   OUTPUT_FILE "${RR}" RESULT_VARIABLE result)

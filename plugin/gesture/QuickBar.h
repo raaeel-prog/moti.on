@@ -3,3 +3,8 @@
 void QuickBarStart();
 void QuickBarIdle();
 void QuickBarStop();
+#ifdef _WIN32
+// Windows: the bar is an owned popup of AE's main window (AEGP_GetMainHWND), so
+// it stays above AE, never above other apps, and hides with AE when minimised.
+void QuickBarSetOwner(void* mainWindow);
+#endif

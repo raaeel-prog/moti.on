@@ -1,3 +1,13 @@
+## 2026-10-11 — Windows: barra rápida na timeline
+- A barra que aparece junto ao cursor ao selecionar keyframes agora existe no Windows: novo plug-in AEGP `MotionGestureBridge.aex` (Win32 + GDI+, `plugin/gesture/win/`), com o mesmo protocolo de arquivos do Mac. Ele não rouba o foco da Timeline, fica preso à janela do AE, anima com fade + escala (só fade sem animações do Windows), respeita o DPI por monitor e fecha com Esc ou clique fora.
+- O mesmo plug-in porta o arraste nativo de parâmetros dos presets (um Desfazer, watchdog). Compilado e com handshake.
+- O painel encontra a pasta do plug-in no Windows (`%USERPROFILE%\AppData\Local\Moti.on`) a partir do caminho da própria extensão e recusa caminhos estranhos. A publicação do pedido aceita qualquer código de recusa do `rename` do CEP.
+- `build-windows.ps1` / `install-dev.ps1` compilam e instalam os dois `.aex`.
+- Trocar entre presets na barra: cada clique novo é aceito (antes um evento com relógio adiantado calava os seguintes) e um clique durante uma aplicação espera por ela, valendo o último. Verificado com o mouse no AE 26.5.
+- Favoritos: a barra mostra só os presets marcados com ★ na Suavização (até 10; sem favoritos, Ease, In, Out, InOut e Linear), atualiza na hora ao marcar, e a ★ diz que leva o preset para a barra.
+- Revisão de código: barreira de exceção nos hooks do AE, ids inteiros validados, JSON recusa `\u0000`/UTF-8 inválido, dispensa registra o motivo.
+- Testes: `npm test` 2.376/2.376, ctest 5/5 (novo `quickbar-protocol`). After Effects 26.5: barra aparece, presets aplicados e trocados em sequência, dispensa e Editor completo PASS. Arraste nativo de parâmetros NOT RUN.
+
 ## 2026-10-11 — Windows: build, instalação e efeitos nativos verificados no After Effects
 - Projeto movido do Google Drive para `C:\dev\Moti.on`; Visual Studio 2022 Build Tools (C++ + CMake) instalado por winget.
 - `npm ci`, lint, build e `npm test` PASS no Windows (2.365 testes, mesma contagem do Mac). `MotionCore.aex` compilado com MSVC: 4/4 testes de kernel, PiPL `CodeWin64X86` embutido, 4 pontos de entrada exportados, CRT estático. `update-windows.ps1` instalou o `.aex` e o painel em modo desenvolvedor.

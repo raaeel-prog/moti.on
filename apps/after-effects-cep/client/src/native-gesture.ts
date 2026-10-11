@@ -19,23 +19,39 @@ interface CepFs {
 declare const CSInterface: new()=>{getSystemPath(type:string):string};
 declare const SystemPath:{USER_DATA:string;EXTENSION:string};
 
-/** Fixed, private macOS path. Never accepts a host/user-supplied filesystem path. */
+/** Fixed, private per-user path. Never accepts a host/user-supplied filesystem path. */
 export function cepGestureFiles(view:Window|null):GestureFiles|undefined {return cepNativeFiles(view,"Gestures");}
 
-/** `~/Library/Caches/Moti.on/<folder>`, resolved from CEP's own paths only. */
+/** One profile segment: no separators, no `.`/`..`, nothing a path could be steered with. */
+const SEGMENT="(?!\\.{1,2}(?:/|$))[^/\\\\:*?\"<>|]+";
+
+/**
+ * The folder the Live Gestures AEGP creates, resolved from CEP's own paths only:
+ * - macOS: `~/Library/Caches/Moti.on/<folder>` (QuickBar.mm, GestureBridge.mm);
+ * - Windows: `<profile>\AppData\Local\Moti.on\<folder>` (NativeFilesWin.h), where
+ *   the profile is the one holding this extension under `AppData\Roaming`.
+ */
+function nativeRoot(extension:string,userData:string,folder:NativeFolder):string|undefined {
+  const windows=/^[A-Za-z]:[\\/]/.test(extension);
+  if(windows){
+    const path=extension.replace(/\\/g,"/");
+    const profile=new RegExp(`^([A-Za-z]:/Users/${SEGMENT})/AppData/Roaming/Adobe/CEP/extensions/com\\.motion\\.plugin\\.ae/?$`).exec(path);
+    return profile?`${profile[1]}/AppData/Local/Moti.on/${folder}`:undefined;
+  }
+  // USER_DATA differs between CEP versions (some append Adobe/CEP). The
+  // extension path has a known suffix and is the reliable macOS fallback.
+  const installed=new RegExp(`^(/Users/${SEGMENT})/Library/Application Support/Adobe/CEP/extensions/com\\.motion\\.plugin\\.ae/?$`).exec(extension);
+  const userRoot=new RegExp(`^(/Users/${SEGMENT})/Library/Application Support(?:/Adobe(?:/CEP)?)?/?$`).exec(userData);
+  const home=installed?.[1]??userRoot?.[1];
+  return home?`${home}/Library/Caches/Moti.on/${folder}`:undefined;
+}
+
 export function cepNativeFiles(view:Window|null,folder:NativeFolder):NativeFiles|undefined {
   const fs=(view as (Window&{cep?:{fs?:CepFs}})|null)?.cep?.fs;
   if(!fs||typeof CSInterface==="undefined"||typeof SystemPath==="undefined")return;
   const paths=new CSInterface();
-  // USER_DATA differs between CEP versions (some append Adobe/CEP). The
-  // extension path has a known suffix and is the reliable macOS fallback.
-  const extension=paths.getSystemPath(SystemPath.EXTENSION);
-  const installed=/^(\/Users\/[^/]+)\/Library\/Application Support\/Adobe\/CEP\/extensions\/com\.motion\.plugin\.ae\/?$/.exec(extension);
-  const userData=paths.getSystemPath(SystemPath.USER_DATA);
-  const userRoot=/^(\/Users\/[^/]+)\/Library\/Application Support(?:\/Adobe(?:\/CEP)?)?\/?$/.exec(userData);
-  const home=installed?.[1]??userRoot?.[1];
-  if(!home)return;
-  const root=`${home}/Library/Caches/Moti.on/${folder}`;
+  const root=nativeRoot(paths.getSystemPath(SystemPath.EXTENSION),paths.getSystemPath(SystemPath.USER_DATA),folder);
+  if(!root)return;
   const report=(stage:string,code:number):void=>{try{fs.writeFile(`${root}/client-status.json`,JSON.stringify({version:1,stage,code}));}catch{/* A diagnostic must never interrupt the gesture. */}};
   return {
     read(name){const result=fs.readFile(`${root}/${name}`);return result.err===0&&typeof result.data==="string"&&result.data.length<=4096?result.data:undefined;},
@@ -43,12 +59,12 @@ export function cepNativeFiles(view:Window|null,folder:NativeFolder):NativeFiles
       const temporary=`${root}/request.tmp`,target=`${root}/request.json`;
       const written=fs.writeFile(temporary,text);
       if(written.err!==0){report("write",written.err);throw Error("gesture-write");}
-      // CEP's rename does not replace an existing destination (err 10 on AE/macOS).
-      // Retire only a previously published request, then atomically publish the
-      // complete temporary file. The native reader may briefly see no request,
-      // but can never observe a partially written one.
+      // CEP's rename does not replace an existing destination (err 10 on AE/macOS;
+      // other codes on Windows). Retire only a previously published request, then
+      // atomically publish the complete temporary file. The native reader may
+      // briefly see no request, but can never observe a partially written one.
       let renamed=fs.rename(temporary,target);
-      if(renamed.err===10){
+      if(renamed.err!==0&&fs.readFile(target).err===0){
         const retired=fs.deleteFile(target);
         if(retired.err===0)renamed=fs.rename(temporary,target);
         else{report("retire",retired.err);fs.deleteFile(temporary);throw Error("gesture-rename");}
