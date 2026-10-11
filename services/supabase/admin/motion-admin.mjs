@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Moti.on license administration. Runs only on the administrator's Mac: the service key
-// is read from the Keychain item written by scripts/setup.mjs (or MOTION_ADMIN_URL/MOTION_ADMIN_KEY).
-import { execFileSync } from "node:child_process";
+// Moti.on license administration. Runs only on the administrator's computer: the service key
+// is read from the Keychain (macOS) or Credential Manager (Windows) entry written by
+// scripts/setup.mjs (or MOTION_ADMIN_URL/MOTION_ADMIN_KEY).
+import { adminCredential } from "../scripts/admin-credential.mjs";
 
 const HELP = `Moti.on — administração de licenças
 
@@ -18,8 +19,11 @@ Atalhos em inglês: users, pending, grant, revoke, release, block, unblock, audi
 
 function credentials() {
   if (process.env.MOTION_ADMIN_URL && process.env.MOTION_ADMIN_KEY) return { url: process.env.MOTION_ADMIN_URL, serviceKey: process.env.MOTION_ADMIN_KEY };
-  try { return JSON.parse(execFileSync("security", ["find-generic-password", "-s", "com.motion.admin", "-a", "default", "-w"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })); }
-  catch { console.error("Credencial de administração não encontrada. Rode services/supabase/scripts/setup.mjs primeiro."); process.exit(1); }
+  let stored = null;
+  try { stored = adminCredential().read(); } catch { /* reported below */ }
+  if (stored && typeof stored.url === "string" && typeof stored.serviceKey === "string") return stored;
+  console.error("Credencial de administração não encontrada. Rode services/supabase/scripts/setup.mjs primeiro.");
+  process.exit(1);
 }
 const COMMANDS = new Set(["usuarios", "users", "pendentes", "pending", "aprovar", "grant", "revogar", "revoke", "liberar", "release", "bloquear", "block", "desbloquear", "unblock", "historico", "audit"]);
 if (!COMMANDS.has(process.argv[2])) { console.log(HELP); process.exit(0); }

@@ -20,11 +20,11 @@ A sessão fica no Keychain do macOS (`motion-account-vault`), nunca em texto pur
    ```bash
    node services/supabase/scripts/setup.mjs SEU_PROJECT_REF
    ```
-   Ele cria a chave de assinatura (`~/.motion-admin/`), aplica as tabelas, publica a função, grava `apps/after-effects-cep/account/config.json` e guarda a credencial de admin no Keychain.
+   Ele cria a chave de assinatura (`~/.motion-admin/`), aplica as tabelas, publica a função, grava `apps/after-effects-cep/account/config.json` e guarda a credencial de admin no Keychain (macOS) ou no Gerenciador de Credenciais (Windows — rode `npm run build` antes, com o Visual Studio Build Tools, para existir o cofre `motion-account-vault.exe`).
 3. Google Cloud Console → APIs e serviços → **Tela de consentimento OAuth** (Externo, nome Moti.on) → **Credenciais → Criar ID do cliente OAuth → Aplicativo da Web**. URI de redirecionamento autorizado: `https://SEU_PROJECT_REF.supabase.co/auth/v1/callback`.
 4. Supabase → Authentication → **Sign In / Providers → Google**: ative e cole Client ID e Client Secret.
 5. Supabase → Authentication → **URL Configuration → Redirect URLs**: adicione `http://127.0.0.1:*/motion/**`.
-6. Rode `Atualizar Moti.on.command`, abra o painel, entre com Google e aprove a sua própria conta.
+6. Rode `Atualizar Moti.on.command` (macOS) ou, no Windows, `"Atualizar Moti.on.cmd" -RealLicense` (sem o modo desenvolvedor, para o login valer de verdade), abra o painel, entre com Google e aprove a sua própria conta com `node services/supabase/admin/motion-admin.mjs aprovar <seu-email>`.
 
 Enquanto a tela de consentimento estiver em modo *Teste*, só os e-mails cadastrados como "usuários de teste" no Google conseguem entrar. Publique o app no Google quando for liberar para outras pessoas (escopos `openid email profile` não exigem verificação).
 

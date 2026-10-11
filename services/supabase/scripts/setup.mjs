@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "n
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { adminCredential, npxInvocation } from "./admin-credential.mjs";
 
 const ref = process.argv[2];
 if (!/^[a-z0-9]{20}$/.test(ref ?? "")) {
@@ -17,9 +18,16 @@ if (!/^[a-z0-9]{20}$/.test(ref ?? "")) {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const servicesDir = path.join(root, "services");
 const CLI = ["--yes", "supabase@2.120.0"];
-const supabase = (args, options = {}) => execFileSync("npx", [...CLI, ...args, "--workdir", servicesDir], { stdio: options.capture ? ["inherit", "pipe", "inherit"] : "inherit", encoding: "utf8" });
+const supabase = (args, options = {}) => {
+  const npx = npxInvocation([...CLI, ...args, "--workdir", servicesDir]);
+  return execFileSync(npx.command, npx.args, { stdio: options.capture ? ["inherit", "pipe", "inherit"] : "inherit", encoding: "utf8" });
+};
+// Fail before touching the project when the OS secret store is not usable (Windows needs the built vault).
+const admin = adminCredential();
+admin.read();
 
-// The private lease key never leaves this Mac except into the function secret store.
+// The private lease key never leaves this computer except into the function secret store.
+// On Windows the user profile folder is private by default ACLs (mode bits are ignored there).
 const keyDir = path.join(homedir(), ".motion-admin");
 const privatePath = path.join(keyDir, `lease-${ref}.pem`);
 mkdirSync(keyDir, { recursive: true, mode: 0o700 });
@@ -52,8 +60,8 @@ if (!publishableKey || !serviceKey) { console.error("Não foi possível ler as c
 const url = `https://${ref}.supabase.co`;
 // Public values only: URL, publishable key and the lease verification key.
 writeFileSync(path.join(root, "apps/after-effects-cep/account/config.json"), JSON.stringify({ url, publishableKey, leasePublicKey: publicPem }, null, 2) + "\n");
-// The service key is administrator-only and stays in the macOS Keychain.
-execFileSync("security", ["add-generic-password", "-U", "-s", "com.motion.admin", "-a", "default", "-w", JSON.stringify({ url, serviceKey })]);
+// The service key is administrator-only and stays in the OS secret store (Keychain / Credential Manager).
+admin.write({ url, serviceKey });
 
 console.log(`
 Serviço pronto. Falta só a parte do Google (feita uma vez, no navegador):
@@ -62,5 +70,5 @@ Serviço pronto. Falta só a parte do Google (feita uma vez, no navegador):
   • Supabase → Authentication → Sign In / Providers → Google: ative e cole Client ID e Client Secret
   • Supabase → Authentication → URL Configuration → Redirect URLs: adicione
       http://127.0.0.1:*/motion/**
-Depois rode "Atualizar Moti.on.command" e libere a sua conta com:
+Depois rode "Atualizar Moti.on.command" (macOS) ou "Atualizar Moti.on.cmd -RealLicense" (Windows) e libere a sua conta com:
   node services/supabase/admin/motion-admin.mjs grant <seu-email>`);
