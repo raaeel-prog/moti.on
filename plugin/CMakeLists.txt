@@ -48,9 +48,33 @@ if(WIN32)
             VERBATIM)
         list(APPEND GRADIENT_SHADER_HEADERS "${header}")
     endforeach()
+    # Gradient GPU path for NVIDIA (After Effects' "Mercury GPU Acceleration (CUDA)"):
+    # GradientCuda.cu → PTX (nvcc) → byte array; loaded at runtime with the driver API.
+    # Optional: without the CUDA Toolkit the plug-in builds with DirectX 12 + CPU only.
+    find_program(MOTION_NVCC nvcc HINTS "$ENV{CUDA_PATH}/bin" "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.8/bin")
+    if(MOTION_NVCC)
+        set(GRADIENT_PTX "${GRADIENT_SHADER_DIR}/gradient_cuda.ptx")
+        set(GRADIENT_PTX_HEADER "${GRADIENT_SHADER_DIR}/gradient_cuda_ptx.h")
+        add_custom_command(OUTPUT "${GRADIENT_PTX_HEADER}"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${GRADIENT_SHADER_DIR}"
+            # compute_52 PTX: the driver JIT-compiles it for any NVIDIA GPU from Maxwell on.
+            COMMAND "${MOTION_NVCC}" -ptx -arch=compute_52 -Wno-deprecated-gpu-targets -allow-unsupported-compiler
+                -ccbin "${CMAKE_CXX_COMPILER}" -I "${CMAKE_CURRENT_SOURCE_DIR}/host"
+                -o "${GRADIENT_PTX}" "${CMAKE_CURRENT_SOURCE_DIR}/host/GradientCuda.cu"
+            COMMAND "${CMAKE_COMMAND}" -DINPUT=${GRADIENT_PTX} -DOUTPUT=${GRADIENT_PTX_HEADER} -DNAME=g_gradient_cuda_ptx
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed-bytes.cmake"
+            DEPENDS host/GradientCuda.cu host/GradientMath.inc cmake/embed-bytes.cmake
+            VERBATIM)
+        list(APPEND GRADIENT_SHADER_HEADERS "${GRADIENT_PTX_HEADER}")
+        set(GRADIENT_CUDA_SOURCES host/GradientCuda.cpp)
+        message(STATUS "Gradient CUDA backend: ${MOTION_NVCC}")
+    else()
+        set(GRADIENT_CUDA_SOURCES "")
+        message(WARNING "CUDA Toolkit (nvcc) not found: Gradient builds without the NVIDIA CUDA path.")
+    endif()
     add_custom_target(gradient-d3d12-shaders DEPENDS ${GRADIENT_SHADER_HEADERS})
     add_library(MotionCore MODULE host/MotionCore.cpp host/Transition.cpp host/Gradient.cpp
-        host/GradientKernel.cpp host/GradientMetalStub.cpp host/GradientD3D12.cpp
+        host/GradientKernel.cpp host/GradientMetalStub.cpp host/GradientD3D12.cpp ${GRADIENT_CUDA_SOURCES}
         "${AESDK_ROOT}/Examples/Util/MissingSuiteError.cpp"
         "${AESDK_ROOT}/Examples/Util/AEGP_SuiteHandler.cpp"
         "${PIPL_RC}")
@@ -64,6 +88,9 @@ if(WIN32)
         "${AESDK_ROOT}/Examples/Util" host "${GRADIENT_SHADER_DIR}")
     add_dependencies(MotionCore gradient-d3d12-shaders)
     target_link_libraries(MotionCore PRIVATE d3d12)
+    if(MOTION_NVCC)
+        target_compile_definitions(MotionCore PRIVATE MOTION_GRADIENT_CUDA=1)
+    endif()
     option(MOTION_GRADIENT_QA_TRACE "Write local Gradient host diagnostics for verification builds" OFF)
     if(MOTION_GRADIENT_QA_TRACE)
         target_compile_definitions(MotionCore PRIVATE MOTION_GRADIENT_QA_TRACE=1)
@@ -183,6 +210,17 @@ if(BUILD_TESTING)
     target_link_libraries(gradient-d3d12-tests PRIVATE d3d12 dxgi)
     add_test(NAME gradient-d3d12 COMMAND gradient-d3d12-tests)
     set_tests_properties(gradient-d3d12 PROPERTIES SKIP_RETURN_CODE 77)
+    if(MOTION_NVCC)
+    # CPU × CUDA parity on the first NVIDIA GPU; 77 = no NVIDIA driver/device.
+    add_executable(gradient-cuda-tests tests/GradientCudaTests.cpp host/GradientKernel.cpp host/GradientCuda.cpp)
+    add_dependencies(gradient-cuda-tests gradient-d3d12-shaders)
+    target_compile_features(gradient-cuda-tests PRIVATE cxx_std_17)
+    target_compile_definitions(gradient-cuda-tests PRIVATE NOMINMAX)
+    target_include_directories(gradient-cuda-tests PRIVATE host "${GRADIENT_SHADER_DIR}")
+    target_compile_options(gradient-cuda-tests PRIVATE ${MOTION_KEEP_ASSERTS} /utf-8)
+    add_test(NAME gradient-cuda COMMAND gradient-cuda-tests)
+    set_tests_properties(gradient-cuda PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
     endif()
     if(APPLE)
     add_executable(gradient-metal-tests tests/GradientMetalTests.mm host/GradientKernel.cpp host/GradientMetal.mm)

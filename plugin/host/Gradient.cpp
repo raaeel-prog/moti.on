@@ -3,6 +3,9 @@
 #include "GradientMetal.h"
 #ifdef _WIN32
 #include "GradientD3D12.h"
+#ifdef MOTION_GRADIENT_CUDA
+#include "GradientCuda.h"
+#endif
 #endif
 #include "AEFX_SuiteHelper.h"
 #include "AE_EffectGPUSuites.h"
@@ -44,8 +47,18 @@ static void GradientTrace(const char* stage, bool gpu, int format, const PF_Effe
             output?int(output->width):0,output?int(output->height):0,int(error)); std::fclose(file);
     }
 }
+#include <cstdarg>
+/** Free-form QA line (GPU device setup, pre-render decisions). */
+static void GradientNote(const char* format, ...) {
+    static std::mutex mutex; std::lock_guard<std::mutex> lock(mutex);
+    if (auto file=std::fopen(GradientTracePath().c_str(),"a")) {
+        va_list args; va_start(args,format); std::vfprintf(file,format,args); va_end(args);
+        std::fputc('\n',file); std::fclose(file);
+    }
+}
 #else
 static void GradientTrace(const char*, bool, int, const PF_EffectWorld*, const PF_EffectWorld*, PF_Err) {}
+static void GradientNote(const char*, ...) {}
 #endif
 
 namespace gr = motion::gradient;
@@ -63,9 +76,15 @@ static_assert(MOTION_GRADIENT_FLAGS2 == (PF_OutFlag2_SUPPORTS_SMART_RENDER | PF_
 static_assert(MOTION_GRADIENT_FLAGS2 == (PF_OutFlag2_SUPPORTS_SMART_RENDER | PF_OutFlag2_FLOAT_COLOR_AWARE | PF_OutFlag2_SUPPORTS_THREADED_RENDERING | PF_OutFlag2_SUPPORTS_GPU_RENDER_F32), "Gradient flags2 drift");
 #endif
 
-/** GPU frameworks with a Gradient backend on this platform: Metal (macOS), DirectX 12 (Windows). */
+/**
+ * GPU frameworks with a Gradient backend on this platform: Metal (macOS);
+ * DirectX 12 and, on NVIDIA, CUDA (Windows — AE's default on NVIDIA cards).
+ */
 static bool GradientGPUFramework(PF_GPU_Framework framework) {
 #ifdef _WIN32
+#ifdef MOTION_GRADIENT_CUDA
+    if (framework == PF_GPU_Framework_CUDA) return gr::cuda_available();
+#endif
     return framework == PF_GPU_Framework_DIRECTX;
 #else
     return framework == PF_GPU_Framework_METAL;
@@ -196,6 +215,8 @@ static PF_Err GradientPreRender(PF_InData* in, PF_OutData* out, PF_PreRenderExtr
     extra->output->solid = FALSE;
     if (GradientGPUFramework(extra->input->what_gpu) && extra->input->gpu_data)
         extra->output->flags |= PF_RenderOutputFlag_GPU_RENDER_POSSIBLE;
+    GradientNote("pre-render what_gpu=%d gpu_data=%d bitdepth=%d possible=%d",int(extra->input->what_gpu),
+        extra->input->gpu_data!=nullptr,int(extra->input->bitdepth),(extra->output->flags&PF_RenderOutputFlag_GPU_RENDER_POSSIBLE)!=0);
     extra->output->pre_render_data = frame.release(); extra->output->delete_pre_render_data_func = DeleteFrame;
     return PF_Err_NONE;
 }
@@ -249,6 +270,26 @@ static PF_Err GradientRender(PF_InData* in, PF_OutData* out, PF_EffectWorld* inp
         if (!extra || !GradientGPUFramework(extra->input->what_gpu) || format!=PF_PixelFormat_GPU_BGRA128) return PF_Err_BAD_CALLBACK_PARAM;
         AEFX_SuiteScoper<PF_GPUDeviceSuite1> suite(in,kPFGPUDeviceSuite,kPFGPUDeviceSuiteVersion1,out);
 #ifdef _WIN32
+#ifdef MOTION_GRADIENT_CUDA
+        if (extra->input->what_gpu==PF_GPU_Framework_CUDA) {
+            // CUDA: AE's GPU worlds are device pointers; intermediates come from AE's pool.
+            PF_GPUDeviceInfo info{}; err=suite->GetDeviceInfo(in->effect_ref,extra->input->device_index,&info);
+            void *src=nullptr,*dst=nullptr;
+            if (!err) err=suite->GetGPUWorldData(in->effect_ref,input,&src);
+            if (!err) err=suite->GetGPUWorldData(in->effect_ref,output,&dst);
+            if (err) return err;
+            GPUMemoryContext memory{in,suite.operator->(),extra->input->device_index}; std::string message;
+            const gr::CudaMemory pool{&memory,
+                [](void* c,size_t bytes){return reinterpret_cast<unsigned long long>(AllocateGPU(c,bytes));},
+                [](void* c,unsigned long long p){ReleaseGPU(c,reinterpret_cast<void*>(p));}};
+            auto status=gr::render_cuda(static_cast<gr::CudaBackend*>(const_cast<void*>(extra->input->gpu_data)),info.command_queuePV,
+                {reinterpret_cast<unsigned long long>(src),int(input->width),int(input->height),size_t(input->rowbytes),int(input->origin_x),int(input->origin_y)},
+                {reinterpret_cast<unsigned long long>(dst),int(output->width),int(output->height),size_t(output->rowbytes),int(frame.outputRect.left),int(frame.outputRect.top)},
+                frame.frame,pool,&message,Abort,in);
+            if (!message.empty()) std::snprintf(out->return_msg,sizeof(out->return_msg),"%s",message.c_str());
+            return memory.error ? memory.error : StatusError(status);
+        }
+#endif
         // DirectX 12: AE's GPU worlds are ID3D12Resource buffers (BGRA float32).
         void *src=nullptr,*dst=nullptr;
         err=suite->GetGPUWorldData(in->effect_ref,input,&src);
@@ -299,7 +340,7 @@ static PF_Err GradientSmartRender(PF_InData* in, PF_OutData* out, PF_SmartRender
 extern "C" DllExport PF_Err GradientMain(PF_Cmd cmd,PF_InData* in,PF_OutData* out,PF_ParamDef* params[],PF_LayerDef* output,void* extra) {
     try {
         switch(cmd) {
-            case PF_Cmd_ABOUT: std::snprintf(out->return_msg,sizeof(out->return_msg),"Moti.on Gradient 1.0\rEditable gradients, depth, glow and optical diffusion. CPU / Metal / DirectX 12.");return PF_Err_NONE;
+            case PF_Cmd_ABOUT: std::snprintf(out->return_msg,sizeof(out->return_msg),"Moti.on Gradient 1.0\rEditable gradients, depth, glow and optical diffusion. CPU / Metal / DirectX 12 / CUDA.");return PF_Err_NONE;
             case PF_Cmd_GLOBAL_SETUP: out->my_version=MOTION_GRADIENT_VERSION;out->out_flags=MOTION_GRADIENT_FLAGS;out->out_flags2=MOTION_GRADIENT_FLAGS2;return PF_Err_NONE;
             case PF_Cmd_PARAMS_SETUP:return GradientParams(in,out);
             case PF_Cmd_SMART_PRE_RENDER:return GradientPreRender(in,out,static_cast<PF_PreRenderExtra*>(extra));
@@ -324,18 +365,34 @@ extern "C" DllExport PF_Err GradientMain(PF_Cmd cmd,PF_InData* in,PF_OutData* ou
                 if (!GradientGPUFramework(e->input->what_gpu)) return PF_Err_NONE;
                 AEFX_SuiteScoper<PF_GPUDeviceSuite1> suite(in,kPFGPUDeviceSuite,kPFGPUDeviceSuiteVersion1,out);
                 PF_GPUDeviceInfo info{};auto err=suite->GetDeviceInfo(in->effect_ref,e->input->device_index,&info);if(err)return err;
-                if(!info.compatibleB || !info.devicePV || !info.command_queuePV)return PF_Err_NONE;
+                // CUDA hands over a CUdevice ordinal (0 for the first GPU, i.e. a null pointer) and may use
+                // the default (null) stream: only its context is required. Metal/DirectX need device and queue.
+                const bool cuda=e->input->what_gpu==PF_GPU_Framework_CUDA;
+                const bool usable=info.compatibleB && (cuda ? info.contextPV!=nullptr : info.devicePV && info.command_queuePV);
+                GradientNote("device-setup what_gpu=%d index=%d compatible=%d device=%d context=%d queue=%d",int(e->input->what_gpu),
+                    int(e->input->device_index),int(info.compatibleB),info.devicePV!=nullptr,info.contextPV!=nullptr,info.command_queuePV!=nullptr);
+                if(!usable)return PF_Err_NONE;
+                std::string setupError;
 #ifdef _WIN32
-                e->output->gpu_data=gr::create_d3d12_backend(info.devicePV,info.command_queuePV);
-#else
-                e->output->gpu_data=gr::create_metal_backend(info.devicePV);
+#ifdef MOTION_GRADIENT_CUDA
+                if (cuda) e->output->gpu_data=gr::create_cuda_backend(info.contextPV,&setupError);
+                else
 #endif
+                e->output->gpu_data=gr::create_d3d12_backend(info.devicePV,info.command_queuePV,&setupError);
+#else
+                e->output->gpu_data=gr::create_metal_backend(info.devicePV,&setupError);
+#endif
+                GradientNote("device-setup backend=%d error=%s",e->output->gpu_data!=nullptr,setupError.c_str());
                 if(e->output->gpu_data)out->out_flags2|=PF_OutFlag2_SUPPORTS_GPU_RENDER_F32;return PF_Err_NONE;
             }
             case PF_Cmd_GPU_DEVICE_SETDOWN: {
                 auto e=static_cast<PF_GPUDeviceSetdownExtra*>(extra);
                 if(e && e->input && GradientGPUFramework(e->input->what_gpu)) {
 #ifdef _WIN32
+#ifdef MOTION_GRADIENT_CUDA
+                    if (e->input->what_gpu==PF_GPU_Framework_CUDA) gr::destroy_cuda_backend(static_cast<gr::CudaBackend*>(e->input->gpu_data));
+                    else
+#endif
                     gr::destroy_d3d12_backend(static_cast<gr::D3D12Backend*>(e->input->gpu_data));
 #else
                     gr::destroy_metal_backend(static_cast<gr::MetalBackend*>(e->input->gpu_data));

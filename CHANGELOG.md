@@ -1,3 +1,9 @@
+## 2026-10-11 — Windows: Gradient na GPU (CUDA e DirectX 12)
+- CUDA (NVIDIA): GradientCuda.cu sobre o mesmo GradientMath.inc, PTX embutido e carregado pela API de driver (nvcuda.dll dinâmico; sem NVIDIA o plug-in segue na CPU). Verificado no After Effects 26.5 com RTX 3080: rastreio gpu=1, quadro idêntico ao da CPU (máx. 1/255). Corrigido: o setup recusava o CUDA porque o dispositivo 0 chega como ponteiro nulo.
+- DirectX 12: pronto e com paridade (RTX 3080 e WARP), mas este AE só oferece CUDA/Software para efeitos.
+- Paridade CPU×GPU 14/14 nos dois caminhos; 1080p ~36–46 ms vs 517 ms na CPU. CUDA Toolkit 12.8 é opcional no build.
+- Configuração da conta (setup.mjs/motion-admin.mjs) funciona no Windows; arraste nativo de parâmetros verificado no AE.
+
 ## 2026-10-11 — Windows: barra rápida na timeline
 - A barra que aparece junto ao cursor ao selecionar keyframes agora existe no Windows: novo plug-in AEGP `MotionGestureBridge.aex` (Win32 + GDI+, `plugin/gesture/win/`), com o mesmo protocolo de arquivos do Mac. Ele não rouba o foco da Timeline, fica preso à janela do AE, anima com fade + escala (só fade sem animações do Windows), respeita o DPI por monitor e fecha com Esc ou clique fora.
 - O mesmo plug-in porta o arraste nativo de parâmetros dos presets (um Desfazer, watchdog). Compilado e com handshake.
