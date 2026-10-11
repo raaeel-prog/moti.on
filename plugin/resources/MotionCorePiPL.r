@@ -1,15 +1,21 @@
 #include "AEConfig.h"
 #include "AE_EffectVers.h"
 #include "MotionCoreVersion.h"
+#ifndef AE_OS_WIN
 #include <AE_General.r>
+#endif
 
 resource 'PiPL' (16000) {
     {
         Kind { AEEffect },
         Name { MOTION_CORE_NAME },
         Category { MOTION_CORE_CATEGORY },
+#ifdef AE_OS_WIN
+        CodeWin64X86 { "GlitchMain" },
+#else
         CodeMacIntel64 { "GlitchMain" },
         CodeMacARM64 { "GlitchMain" },
+#endif
         AE_PiPL_Version { 2, 0 },
         AE_Effect_Spec_Version { PF_PLUG_IN_VERSION, PF_PLUG_IN_SUBVERS },
         AE_Effect_Version { MOTION_CORE_VERSION },
@@ -26,8 +32,12 @@ resource 'PiPL' (16001) {
         Kind { AEEffect },
         Name { MOTION_WAVE_NAME },
         Category { MOTION_CORE_CATEGORY },
+#ifdef AE_OS_WIN
+        CodeWin64X86 { "WaveMain" },
+#else
         CodeMacIntel64 { "WaveMain" },
         CodeMacARM64 { "WaveMain" },
+#endif
         AE_PiPL_Version { 2, 0 },
         AE_Effect_Spec_Version { PF_PLUG_IN_VERSION, PF_PLUG_IN_SUBVERS },
         AE_Effect_Version { MOTION_CORE_VERSION },
@@ -44,8 +54,12 @@ resource 'PiPL' (16002) {
         Kind { AEEffect },
         Name { MOTION_TRANSITION_NAME },
         Category { MOTION_CORE_CATEGORY },
+#ifdef AE_OS_WIN
+        CodeWin64X86 { "TransitionMain" },
+#else
         CodeMacIntel64 { "TransitionMain" },
         CodeMacARM64 { "TransitionMain" },
+#endif
         AE_PiPL_Version { 2, 0 },
         AE_Effect_Spec_Version { PF_PLUG_IN_VERSION, PF_PLUG_IN_SUBVERS },
         AE_Effect_Version { MOTION_TRANSITION_VERSION },
@@ -62,8 +76,12 @@ resource 'PiPL' (16003) {
         Kind { AEEffect },
         Name { MOTION_GRADIENT_NAME },
         Category { MOTION_CORE_CATEGORY },
+#ifdef AE_OS_WIN
+        CodeWin64X86 { "GradientMain" },
+#else
         CodeMacIntel64 { "GradientMain" },
         CodeMacARM64 { "GradientMain" },
+#endif
         AE_PiPL_Version { 2, 0 },
         AE_Effect_Spec_Version { PF_PLUG_IN_VERSION, PF_PLUG_IN_SUBVERS },
         AE_Effect_Version { MOTION_GRADIENT_VERSION },

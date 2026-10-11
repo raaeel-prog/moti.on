@@ -1,4 +1,4 @@
-# Instala o painel Moti.on para desenvolvimento no After Effects.
+﻿# Instala o painel Moti.on para desenvolvimento no After Effects.
 #
 # ATENCAO: o destino NAO e uma pasta do After Effects.
 # `%APPDATA%\Adobe\CEP\extensions` e compartilhada por todos os hosts CEP da
@@ -11,7 +11,14 @@
 # para eliminar rapidamente essa variavel.
 
 param(
-  [switch]$EnableDebugMode
+  [switch]$EnableDebugMode,
+  # Modo desenvolvedor: dispensa a licenca so nesta instalacao local (mesmo
+  # arquivo account/developer-unlock do install-ae-dev.sh). Sem a flag ele e
+  # removido, para testar o login real.
+  [switch]$DevUnlock,
+  # Liga so o PlayerDebugMode (necessario para carregar a extensao nao
+  # assinada), sem instalar o .debug do inspetor remoto.
+  [switch]$AllowUnsigned
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,9 +33,31 @@ if (-not (Test-Path $Source)) {
 
 New-Item -ItemType Directory -Force -Path $TargetRoot | Out-Null
 if (Test-Path $Target) {
+  # Atualizacao reversivel: a instalacao anterior vai para artifacts/install-backups.
+  $Backup = Join-Path $ProjectRoot ("artifacts\install-backups\ae-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+  New-Item -ItemType Directory -Force -Path $Backup | Out-Null
+  Copy-Item -Recurse -Force $Target (Join-Path $Backup "previous")
+  Write-Host "Backup da instalação anterior: $Backup\previous"
   Remove-Item -Recurse -Force $Target
 }
 Copy-Item -Recurse -Force $Source $Target
+
+$UnlockFile = Join-Path $Target "account\developer-unlock"
+if ($DevUnlock) {
+  New-Item -ItemType Directory -Force -Path (Split-Path $UnlockFile) | Out-Null
+  Set-Content -Path $UnlockFile -Value "Instalação de desenvolvimento: licença dispensada." -Encoding UTF8
+  Write-Host "Modo desenvolvedor ativo: o plugin funciona sem licença nesta máquina."
+}
+elseif (Test-Path $UnlockFile) {
+  Remove-Item -Force $UnlockFile
+}
+
+if ($AllowUnsigned -and -not $EnableDebugMode) {
+  $RegistryPath = "HKCU:\Software\Adobe\CSXS.12"
+  New-Item -Force -Path $RegistryPath | Out-Null
+  New-ItemProperty -Path $RegistryPath -Name "PlayerDebugMode" -PropertyType String -Value "1" -Force | Out-Null
+  Write-Host "PlayerDebugMode habilitado para CSXS.12 (extensão de desenvolvimento não assinada)."
+}
 
 if ($EnableDebugMode) {
   $RegistryPath = "HKCU:\Software\Adobe\CSXS.12"

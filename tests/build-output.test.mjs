@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import process from "node:process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -44,6 +46,12 @@ const EXPECTED_DIST_FILES = [
   "after-effects-cep/CSXS/manifest.xml",
   // Fronteira Node da conta: carregada via cep_node.require por client/src/account.ts.
   "after-effects-cep/account/runtime.cjs",
+  // Cofre da conta: Keychain no macOS; Gerenciador de Credenciais no Windows,
+  // compilado so quando o Visual Studio existe (scripts/build.mjs avisa se faltar).
+  ...(process.platform === "darwin" ? ["after-effects-cep/account/bin/darwin-arm64/motion-account-vault", "after-effects-cep/account/bin/darwin-x64/motion-account-vault"] : []),
+  ...(process.platform === "win32" && existsSync(path.join(root, "dist/after-effects-cep/account/bin/win32-x64/motion-account-vault.exe")) ? ["after-effects-cep/account/bin/win32-x64/motion-account-vault.exe"] : []),
+  // Valores publicos do servico, gerados por services/supabase/scripts/setup.mjs.
+  ...(existsSync(path.join(root, "apps/after-effects-cep/account/config.json")) ? ["after-effects-cep/account/config.json"] : []),
   "after-effects-cep/assets/control-presets/catalog.json",
   ...presetFiles.map(file => `after-effects-cep/assets/control-presets/${file}`),
   "after-effects-cep/client/index.html",

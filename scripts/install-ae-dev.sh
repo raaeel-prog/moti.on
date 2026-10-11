@@ -23,7 +23,24 @@ fi
 mkdir -p "$TARGET"
 rsync -a "$SOURCE/" "$TARGET/"
 
-if [[ "${1:-}" == "--enable-debug" ]]; then
+# Modo desenvolvedor: dispensa a licenca so nesta instalacao local. Sem a flag,
+# o arquivo e removido, para testar o login real com a mesma pasta.
+DEV_UNLOCK=0; DEBUG=0
+for ARG in "$@"; do
+  case "$ARG" in
+    --dev-unlock) DEV_UNLOCK=1 ;;
+    --enable-debug) DEBUG=1 ;;
+  esac
+done
+if [[ "$DEV_UNLOCK" == 1 ]]; then
+  mkdir -p "$TARGET/account"
+  echo "Instalação de desenvolvimento: licença dispensada." > "$TARGET/account/developer-unlock"
+  echo "Modo desenvolvedor ativo: o plugin funciona sem licença nesta máquina."
+else
+  rm -f "$TARGET/account/developer-unlock"
+fi
+
+if [[ "$DEBUG" == 1 ]]; then
   defaults write com.adobe.CSXS.12 PlayerDebugMode 1
   echo "PlayerDebugMode habilitado para CSXS.12."
 

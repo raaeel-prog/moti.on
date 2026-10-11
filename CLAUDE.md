@@ -9,3 +9,5 @@ For every UI task, invoke `/designing-adobe-workstation-ui` and `/building-cross
 For any current or uncertain Adobe API, provider policy, manifest permission or release rule, invoke `/researching-adobe-capabilities` before implementation.
 
 Do not claim an Adobe feature is complete without the evidence required by `/testing-adobe-hosts`. Mark real-host work that has not been executed as `IMPLEMENTED_NOT_HOST_VERIFIED`.
+
+No Windows (ou ao continuar o trabalho de outro computador), leia antes `docs/WINDOWS.md`: setup, instalação com `Atualizar Moti.on.cmd`, diferenças por sistema, próxima fase (GPU DirectX 12) e o contexto que estava só na memória do Claude no Mac. O plugin deve continuar funcionando no macOS e no Windows.

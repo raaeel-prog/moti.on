@@ -1,5 +1,7 @@
 import { syncThemeTokens } from "./sync-theme.mjs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -40,6 +42,8 @@ for (const entry of Object.values(controlCatalog)) {
  */
 const EXCLUDED_BASENAMES = new Set([
   ".debug",
+  // Liberacao de licenca do desenvolvedor: gravada so pelo instalador local.
+  "developer-unlock",
   // `tsc -b` emite `apps/*/dist/` antes deste copiador rodar. Sem excluir o
   // diretorio inteiro, `fs.cp` replica essa arvore compilada dentro do pacote
   // do host (`dist/premiere-uxp/dist/...`). Mesmo quando todos os arquivos
@@ -124,6 +128,56 @@ await writeFile(DESCRIPTORS_ES5_PATH, await renderDescriptorsModule(), "utf8");
 
 await copyAppShell("premiere-uxp", "premiere-uxp");
 await copyAppShell("after-effects-cep", "after-effects-cep");
+
+// Cofre da conta (Keychain). Binario universal: o Node do CEP procura
+// bin/<plataforma>-<arquitetura>, e o After Effects pode rodar nativo ou sob Rosetta.
+// Fora do macOS o build segue sem o cofre; a Conta mostra "armazenamento indisponivel".
+if (process.platform === "darwin") {
+  const vaultDir = path.join(dist, "after-effects-cep", "account", "bin");
+  const vaultBinary = path.join(vaultDir, "darwin-arm64", "motion-account-vault");
+  await mkdir(path.dirname(vaultBinary), { recursive: true });
+  execFileSync("clang++", ["-std=c++17", "-O2", "-arch", "arm64", "-arch", "x86_64", "-mmacosx-version-min=11.0",
+    path.join(root, "native", "account-vault", "main.cpp"), "-framework", "Security", "-framework", "CoreFoundation", "-o", vaultBinary], { stdio: "inherit" });
+  execFileSync("codesign", ["--force", "--sign", "-", "--identifier", "com.motion.account.vault", vaultBinary], { stdio: "ignore" });
+  await mkdir(path.join(vaultDir, "darwin-x64"), { recursive: true });
+  await cp(vaultBinary, path.join(vaultDir, "darwin-x64", "motion-account-vault"));
+} else if (process.platform === "win32") {
+  // Windows: mesmo main.cpp, Gerenciador de Credenciais (wincred). Compilado com
+  // MSVC localizado pelo vswhere; CRT estatico para nao depender do redistribuivel.
+  // Sem Visual Studio o build segue sem o cofre, como antes.
+  const vaultBinary = path.join(dist, "after-effects-cep", "account", "bin", "win32-x64", "motion-account-vault.exe");
+  if (!buildWindowsVault(vaultBinary)) {
+    console.warn("Aviso: Visual Studio (C++) não encontrado; cofre da conta não compilado. Login Google ficará indisponível; use o modo desenvolvedor.");
+  }
+}
+
+function buildWindowsVault(output) {
+  const vswhere = path.join(process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)",
+    "Microsoft Visual Studio", "Installer", "vswhere.exe");
+  let vcvars;
+  try {
+    vcvars = execFileSync(vswhere, ["-latest", "-products", "*", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+      "-find", "VC\\Auxiliary\\Build\\vcvars64.bat"], { encoding: "utf8" }).trim().split(/\r?\n/)[0] ?? "";
+  } catch { return false; }
+  if (!vcvars) return false;
+  const work = path.join(dist, ".vault-obj");
+  mkdirSync(work, { recursive: true });
+  mkdirSync(path.dirname(output), { recursive: true });
+  // Um .cmd temporario evita as regras de aspas do `cmd /c` com caminhos com espaco.
+  const script = path.join(work, "build-vault.cmd");
+  const source = path.join(root, "native", "account-vault", "main.cpp");
+  writeFileSync(script, [
+    "@echo off",
+    `call "${vcvars}" >nul || exit /b 1`,
+    `cl /nologo /std:c++17 /O2 /EHsc /MT /utf-8 "${source}" /Fo"${work}\\\\" /Fe"${output}" Advapi32.lib || exit /b 1`
+  ].join("\r\n") + "\r\n", "utf8");
+  try {
+    execFileSync("cmd.exe", ["/d", "/c", script], { stdio: "inherit" });
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+  return true;
+}
 
 // O host do After Effects e montado, nao copiado: a diretiva #target e emitida
 // aqui para que os fontes permanecam JavaScript verificavel por ferramenta.

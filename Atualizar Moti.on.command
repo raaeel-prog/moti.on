@@ -10,6 +10,6 @@ if [[ -d '/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/Motio
 else
   /bin/bash plugin/install-dev.sh
 fi
-/bin/bash scripts/install-ae-dev.sh
+/bin/bash scripts/install-ae-dev.sh --dev-unlock
 printf '\nInstalação concluída. Reabra o After Effects.\n'
 read -r -p 'Pressione Return para fechar: ' REPLY

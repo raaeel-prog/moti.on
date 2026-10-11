@@ -33,3 +33,11 @@ A revisão geral ainda não está concluída. O endpoint Supabase de conta/sincr
 Os editores genéricos de ferramentas permitem ajustar controles estáticos reconhecidos; leitura especializada de todas as estruturas persistentes e remoção segura de cada tipo ainda precisam de cobertura. Controles animados ficam bloqueados para preservar animação.
 
 Configuração ausente é apresentada na Conta e não autoriza operações criativas. Este build não deve ser anunciado como entrega online pronta nem como validado no Adobe.
+
+## Atualização — conta Google e administração
+
+- Função `motion-account` (Supabase Edge), migração `motion_admin_device`, `services/supabase/scripts/setup.mjs` e `services/supabase/admin/motion-admin.mjs` implementados. Guia: `docs/ACCOUNT_ADMIN.md`.
+- Cofre do Keychain compilado no build (binário universal, assinatura ad hoc); gravação/leitura/remoção verificadas no Keychain real. Assinatura de concessão no formato da função verificada pelo runtime do painel.
+- Primeiro computador de conta aprovada ativa sozinho no login/atualização. Bloqueio por licença agora usa `LICENSE_REQUIRED` em vez de `INTERNAL_ERROR`.
+- Suíte completa: 2365 testes, 1 falha de inventário de dist corrigida e reexecutada (PASS).
+- Projeto Supabase, cliente OAuth Google e login real no After Effects: NOT RUN — dependem das contas do dono.

@@ -45,8 +45,11 @@ exports.createRuntime = function createRuntime(openBrowser) {
       call.on("timeout", () => call.destroy(new Error("NETWORK_TIMEOUT"))); call.on("error", reject); call.end(body);
     });
   } };
+  // Identifies the computer for the owner in the admin list; never sent anywhere else.
+  const deviceName = (require("os").hostname().replace(/\.local$/i, "").split("").filter(c => c.charCodeAt(0) > 31 && c.charCodeAt(0) !== 127).join("").trim() || "Moti.on").slice(0, 80);
   return {
     config,
+    deviceName,
     transport,
     vault: { read: key => vault("read", key), write: (key, value) => vault("write", key, value).then(() => {}), remove: key => vault("remove", key).then(() => {}) },
     crypto: {

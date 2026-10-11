@@ -63,7 +63,8 @@ export default [
       "tests/**/*.mjs",
       "packages/*/scripts/**/*.mjs",
       "packages/*/tests/**/*.mjs",
-      "apps/*/tests/**/*.mjs"
+      "apps/*/tests/**/*.mjs",
+      "services/supabase/**/*.mjs"
     ],
     languageOptions: {
       ecmaVersion: 2023,

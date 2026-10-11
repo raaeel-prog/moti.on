@@ -1,5 +1,5 @@
 import { button, createElement } from "@motion/ui-core";
-import { loadAccount } from "../account.js";
+import { isDeveloperUnlocked, loadAccount } from "../account.js";
 import type { AccountClient, AccountSnapshot } from "@motion/account-client";
 export function createAccountView(doc: Document, locale: string): { element: HTMLElement; dispose(): void } {
   const pt = locale === "pt-BR", element = createElement(doc, "section", "ch-settings-section");
@@ -10,6 +10,7 @@ export function createAccountView(doc: Document, locale: string): { element: HTM
   function render(client: AccountClient, snapshot: AccountSnapshot): void {
     if (disposed) return; while (body.firstChild) body.removeChild(body.firstChild);
     const text = (value: string): void => { body.appendChild(createElement(doc, "p", "ch-hint", value)); };
+    if (isDeveloperUnlocked()) text(pt ? "Modo desenvolvedor: licença dispensada nesta instalação." : "Developer mode: license not required on this installation.");
     const action = (label: string, work: () => Promise<unknown>): void => { body.appendChild(button(doc, { label, disabled: busy, onClick: () => {
       if (busy || disposed) return; busy = true; render(client, client.snapshot());
       void work().catch(() => {}).finally(() => { busy = false; render(client, client.snapshot()); });

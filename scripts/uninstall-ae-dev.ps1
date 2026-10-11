@@ -1,4 +1,4 @@
-# Remove a instalacao de desenvolvimento do painel Moti.on.
+﻿# Remove a instalacao de desenvolvimento do painel Moti.on.
 #
 # POR QUE ISTO EXISTE, e nao e conveniencia.
 #

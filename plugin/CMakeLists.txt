@@ -2,14 +2,48 @@ cmake_minimum_required(VERSION 3.20)
 set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 set(CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "NO")
 set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "Minimum macOS version")
-project(MotionCore VERSION 1.4.0 LANGUAGES CXX OBJCXX)
-if(NOT APPLE)
-    message(FATAL_ERROR "This bundle target currently supports macOS only.")
+project(MotionCore VERSION 1.4.0 LANGUAGES CXX)
+if(NOT APPLE AND NOT WIN32)
+    message(FATAL_ERROR "MotionCore supports macOS and Windows only.")
 endif()
 set(AESDK_ROOT "$ENV{AESDK_ROOT}" CACHE PATH "Adobe After Effects SDK root")
 if(NOT EXISTS "${AESDK_ROOT}/Examples/Headers/AE_Effect.h")
     message(FATAL_ERROR "Set AESDK_ROOT to the extracted Adobe After Effects SDK root.")
 endif()
+# Kernel tests must keep assert() active in every configuration.
+set(MOTION_KEEP_ASSERTS "$<IF:$<CXX_COMPILER_ID:MSVC>,/UNDEBUG,-UNDEBUG>")
+if(WIN32)
+    # Windows: MotionCore.aex. Same sources and PiPL as macOS; Gradient renders
+    # on the CPU (no Metal). Static CRT so AE needs no VC++ redistributable.
+    if(NOT MSVC)
+        message(FATAL_ERROR "Build MotionCore.aex with Visual Studio (MSVC) — the SDK PiPL tooling needs cl.exe.")
+    endif()
+    set(PIPL_RC "${CMAKE_CURRENT_BINARY_DIR}/MotionCorePiPL.rc")
+    add_custom_command(OUTPUT "${PIPL_RC}"
+        COMMAND "${CMAKE_COMMAND}" -DCL=${CMAKE_CXX_COMPILER} -DAESDK_ROOT=${AESDK_ROOT}
+            -DHOST_DIR=${CMAKE_CURRENT_SOURCE_DIR}/host
+            -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/resources/MotionCorePiPL.r
+            -DOUTPUT=${PIPL_RC} -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/pipl-win.cmake"
+        DEPENDS resources/MotionCorePiPL.r host/MotionCoreVersion.h cmake/pipl-win.cmake
+        VERBATIM)
+    add_library(MotionCore MODULE host/MotionCore.cpp host/Transition.cpp host/Gradient.cpp
+        host/GradientKernel.cpp host/GradientMetalStub.cpp
+        "${AESDK_ROOT}/Examples/Util/MissingSuiteError.cpp"
+        "${AESDK_ROOT}/Examples/Util/AEGP_SuiteHandler.cpp"
+        "${PIPL_RC}")
+    target_compile_features(MotionCore PRIVATE cxx_std_17)
+    target_compile_definitions(MotionCore PRIVATE MSWindows WIN32 _WINDOWS NOMINMAX
+        _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(MotionCore PRIVATE /utf-8 /EHsc)
+    target_include_directories(MotionCore PRIVATE
+        "${AESDK_ROOT}/Examples/Headers" "${AESDK_ROOT}/Examples/Headers/SP"
+        "${AESDK_ROOT}/Examples/Headers/Win" "${AESDK_ROOT}/Examples/Resources"
+        "${AESDK_ROOT}/Examples/Util" host)
+    set_target_properties(MotionCore PROPERTIES PREFIX "" SUFFIX ".aex" OUTPUT_NAME MotionCore
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+else()
+enable_language(OBJCXX)
 set(MOTION_CODESIGN_IDENTITY "-" CACHE STRING "Signing identity; - is development ad-hoc only")
 execute_process(COMMAND xcrun --show-sdk-path OUTPUT_VARIABLE MACOS_SDK
     OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
@@ -55,32 +89,35 @@ add_custom_command(TARGET MotionCore POST_BUILD
     COMMAND /bin/bash "${CMAKE_CURRENT_SOURCE_DIR}/verify-bundle.sh"
         "$<TARGET_BUNDLE_DIR:MotionCore>"
     VERBATIM)
+endif()
 include(CTest)
 if(BUILD_TESTING)
     add_executable(glitch-kernel-tests tests/GlitchKernelTests.cpp)
     target_compile_features(glitch-kernel-tests PRIVATE cxx_std_17)
     target_include_directories(glitch-kernel-tests PRIVATE host)
-    target_compile_options(glitch-kernel-tests PRIVATE -UNDEBUG)
+    target_compile_options(glitch-kernel-tests PRIVATE ${MOTION_KEEP_ASSERTS})
     add_test(NAME glitch-kernel COMMAND glitch-kernel-tests)
     add_executable(wave-kernel-tests tests/WaveKernelTests.cpp)
     target_compile_features(wave-kernel-tests PRIVATE cxx_std_17)
     target_include_directories(wave-kernel-tests PRIVATE host)
-    target_compile_options(wave-kernel-tests PRIVATE -UNDEBUG)
+    target_compile_options(wave-kernel-tests PRIVATE ${MOTION_KEEP_ASSERTS})
     add_test(NAME wave-kernel COMMAND wave-kernel-tests)
     add_executable(transition-kernel-tests tests/TransitionKernelTests.cpp)
     target_compile_features(transition-kernel-tests PRIVATE cxx_std_17)
     target_include_directories(transition-kernel-tests PRIVATE host)
-    target_compile_options(transition-kernel-tests PRIVATE -UNDEBUG)
+    target_compile_options(transition-kernel-tests PRIVATE ${MOTION_KEEP_ASSERTS})
     add_test(NAME transition-kernel COMMAND transition-kernel-tests)
     add_executable(gradient-kernel-tests tests/GradientKernelTests.cpp host/GradientKernel.cpp)
     target_compile_features(gradient-kernel-tests PRIVATE cxx_std_17)
     target_include_directories(gradient-kernel-tests PRIVATE host)
-    target_compile_options(gradient-kernel-tests PRIVATE -UNDEBUG)
+    target_compile_options(gradient-kernel-tests PRIVATE ${MOTION_KEEP_ASSERTS})
     add_test(NAME gradient-kernel COMMAND gradient-kernel-tests)
+    if(APPLE)
     add_executable(gradient-metal-tests tests/GradientMetalTests.mm host/GradientKernel.cpp host/GradientMetal.mm)
     target_compile_features(gradient-metal-tests PRIVATE cxx_std_17)
     target_include_directories(gradient-metal-tests PRIVATE host)
-    target_compile_options(gradient-metal-tests PRIVATE -UNDEBUG)
+    target_compile_options(gradient-metal-tests PRIVATE ${MOTION_KEEP_ASSERTS})
     target_link_libraries(gradient-metal-tests PRIVATE "-framework Foundation" "-framework Metal")
     add_test(NAME gradient-metal COMMAND gradient-metal-tests)
+    endif()
 endif()

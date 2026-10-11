@@ -348,7 +348,7 @@ export function createAeHostAdapter(logger: {
       if (request.mutates) {
         let allowed = false; try { allowed = await authorizeMutation(); } catch { /* Fail closed. */ }
         if (!allowed) {
-          sendTransportFailure(request, onResult, "INTERNAL_ERROR", "Uma licença beta ativa é necessária. Abra Configurações → Conta.", { reason: "LICENSE_REQUIRED", mayHaveMutated: false });
+          sendTransportFailure(request, onResult, "LICENSE_REQUIRED", "Uma licença beta ativa é necessária. Abra Configurações → Conta.", { reason: "LICENSE_REQUIRED", mayHaveMutated: false });
           return;
         }
       }

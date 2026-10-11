@@ -133,6 +133,8 @@ export function createAccountClient(options: AccountClientOptions): AccountClien
           if (result.state !== state || !/^[a-zA-Z0-9._~-]{8,2048}$/.test(result.code)) throw new AccountError("OAUTH_STATE_INVALID");
           const body = await request("/auth/v1/token?grant_type=pkce", { auth_code: result.code, code_verifier: verifier });
           ensureEpoch(expected); await acceptSession(body); await license("status");
+          // The first computer of an approved account activates itself; a second one waits for an explicit choice.
+          if (licenseState === "inactive") await license("activate");
         } finally { await current.close(); if (login === current) login = null; }
       });
     },
@@ -145,7 +147,7 @@ export function createAccountClient(options: AccountClientOptions): AccountClien
       emit();
       if (token && configured) { try { await options.transport.request({ method: "POST", url: `${config!.url}/auth/v1/logout?scope=local`, headers: { apikey: config!.publishableKey, Authorization: `Bearer ${token}` } }); } catch { /* Local logout has completed; remote revocation can be unavailable offline. */ } }
     },
-    async refresh() { await attempt(async () => { await refreshAuth(); await license("status"); }); },
+    async refresh() { await attempt(async () => { await refreshAuth(); await license("status"); if (licenseState === "inactive") await license("activate"); }); },
     async activateDevice() { await attempt(() => license("activate")); },
     async deactivateDevice(target) { await attempt(() => license("deactivate", target)); },
     canMutate() { const result = permitted(); if (result) lastSeen = Math.max(lastSeen, now()); return result; },
