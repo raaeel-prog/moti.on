@@ -1,6 +1,7 @@
 // Verificacao no After Effects (Windows) dos 4 efeitos nativos do MotionCore.aex.
-// Rodar com: AfterFX.exe -r "<repo>\scripts\verify-ae-native.jsx"
-// (projeto descartavel, nada e salvo). Saida: artifacts\ae-native-verify\result.json
+// Rodar com o AE ja aberto: AfterFX.exe -r "<repo>\scripts\verify-ae-native.jsx"
+// (com o AE fechado, o 26.5 no Windows abre e sai sem rodar o script).
+// Projeto descartavel, nada e salvo. Saida: artifacts\ae-native-verify\result.json
 // e um PNG por efeito. Tambem roda no macOS (afterfx -r / File > Scripts).
 (function () {
   var here = Folder(File($.fileName).parent.parent.fsName + "/artifacts/ae-native-verify");

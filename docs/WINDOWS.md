@@ -6,9 +6,10 @@ alterado (o build nativo do Mac foi recompilado e passou 5/5 testes dos kernels;
 `npm run lint`, `npm run build` e os 2365 testes de `npm test` passaram no Mac).
 
 > Estado (2026-10-11, Windows 11 Pro 26200, Node 24.18, VS 2022 Build Tools
-> 17.14): build, testes e instalação **verificados no Windows** (ver §5). Ainda
-> `IMPLEMENTED_NOT_HOST_VERIFIED`: efeitos e painel dentro do After Effects
-> para Windows, e o login Google real.
+> 17.14, After Effects 26.5): build, testes, instalação, os 4 efeitos nativos e a
+> abertura do painel **verificados no Windows** (ver §5). Ainda
+> `IMPLEMENTED_NOT_HOST_VERIFIED`: ferramentas aplicadas pelo painel e o login
+> Google real.
 
 ## 1. Preparar a máquina (uma vez)
 
@@ -65,7 +66,7 @@ Dê dois cliques em **`Atualizar Moti.on.cmd`** (equivalente ao
    (`account/bin/win32-x64/motion-account-vault.exe`, Gerenciador de
    Credenciais do Windows) se houver Visual Studio;
 3. compila `MotionCore.aex` (`plugin/build-windows.ps1`) e instala em
-   `C:\Program Files\Common Files\Adobe\Common\Plug-ins\7.0\MediaCore`
+   `C:\Program Files\Adobe\Common\Plug-ins\7.0\MediaCore`
    (`plugin/install-dev.ps1`, pede administrador; faz backup). Se falhar, avisa e
    segue — o painel funciona, só os efeitos nativos ficam indisponíveis;
 4. instala o painel em `%APPDATA%\Adobe\CEP\extensions\com.motion.plugin.ae` em
@@ -102,8 +103,9 @@ Resultado da primeira sessão (2026-10-11):
 | 2 | `.aex`: exports e PiPL | **PASS** — `GlitchMain`, `WaveMain`, `TransitionMain`, `GradientMain` exportados; recurso `PiPL` 16000 com `CodeWin64X86`; só depende de `KERNEL32.dll` (CRT estático) |
 | 2 | Cofre da conta (`motion-account-vault.exe`) | **PASS** depois de correção — ver abaixo; `tests/account-vault-runtime.test.mjs` |
 | 3 | `scripts\update-windows.ps1` (instala `.aex` + painel) | **PASS** — `.aex` em `MediaCore` com hash igual ao do build; painel em `%APPDATA%\Adobe\CEP\extensions\com.motion.plugin.ae` com `developer-unlock`; `PlayerDebugMode` = 1 |
-| 3 | Efeitos dentro do After Effects | **NOT RUN** — AE ainda não instalado nesta máquina |
-| 4 | Painel no AE / login Google real | **NOT RUN** |
+| 3 | Efeitos dentro do After Effects 26.5 (x89) | **PASS** — `scripts/verify-ae-native.jsx`: os 4 matchNames em `app.effects` (categoria *Moti.on*), aplicados num sólido e renderizados sem erro. Glitch fatia com RGB split, Wave ondula as bordas, Gradient renderiza (CPU), Transition fica igual à base nos valores padrão |
+| 4 | Painel no AE em modo desenvolvedor | **PASS** — abre sem licença; Ferramentas (44), Suavização e Presets; rodapé "Sem composição" vindo do host |
+| 4 | Ferramentas aplicadas pelo painel / login Google real | **NOT RUN** |
 
 Correções feitas no Windows:
 
@@ -118,7 +120,13 @@ Correções feitas no Windows:
 - npm 11 não roda o `postinstall` do esbuild sem `allowScripts`; não faz falta,
   o binário vem do `@esbuild/win32-x64`.
 
-Verificação dos efeitos no After Effects (falta rodar): com o AE fechado,
+- **Pasta do `.aex` estava errada:** `install-dev.ps1` copiava para
+  `C:\Program Files\Common Files\Adobe\Common\...`, que o AE não varre. No
+  Windows a pasta comum é `C:\Program Files\Adobe\Common\Plug-ins\7.0\MediaCore`
+  (confirmado no `Plugin Loading.log`). O script agora instala lá e apaga a cópia
+  do caminho antigo.
+
+Para verificar os efeitos de novo: com o **AE já aberto** e pronto,
 
 ```powershell
 & "C:\Program Files\Adobe\Adobe After Effects 2026\Support Files\AfterFX.exe" -r "C:\dev\Moti.on\implementation\scripts\verify-ae-native.jsx"
@@ -126,10 +134,22 @@ Verificação dos efeitos no After Effects (falta rodar): com o AE fechado,
 
 O script cria um projeto descartável, confere se os 4 matchNames estão em
 `app.effects`, aplica cada efeito num sólido, salva um PNG por efeito e grava
-`artifacts\ae-native-verify\result.json`. Depois: abrir o painel em modo
-desenvolvedor e, por fim, `-RealLicense` + login Google. Registrar a evidência
-como pede `/testing-adobe-hosts`. matchNames e disk IDs são os mesmos do Mac,
-então projetos `.aep` abrem nos dois.
+`artifacts\ae-native-verify\result.json`.
+
+Armadilhas encontradas no AE 26.5 para Windows:
+
+- `AfterFX.exe -r script.jsx` com o **AE fechado** abre e sai sozinho ~30 ms
+  depois de ficar pronto (estados `kStateAppRunning` → `kStatePrepareToQuit` no
+  Sentry, sem crash e sem rodar o script). Com o AE aberto, o `-r` repassa o
+  script para a instância e funciona.
+- O `Plugin Loading.log` diz "No loaders recognized this plugin" para o
+  `MotionCore.aex`, e o cache `HKCU\Software\Adobe\After Effects\26.5\PluginCache`
+  grava `Ignore = 1`. Isso vem dos loaders do MediaCore (Premiere). O loader de
+  efeitos do AE carrega o PiPL normalmente, e os 4 efeitos funcionam.
+
+Falta: aplicar ferramentas pelo painel numa composição real e, por fim,
+`-RealLicense` + login Google. matchNames e disk IDs são os mesmos do Mac, então
+projetos `.aep` abrem nos dois.
 
 ## 6. Fase 2 — GPU NVIDIA e AMD no Windows
 

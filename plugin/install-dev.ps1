@@ -11,8 +11,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$TargetRoot = Join-Path $env:CommonProgramFiles "Adobe\Common\Plug-ins\7.0\MediaCore"
+# No Windows a pasta comum fica em Program Files\Adobe\Common (o Plugin Loading.log
+# do AE 26.5 so varre essa); "Common Files\Adobe\Common" nao e carregada.
+$TargetRoot = Join-Path $env:ProgramFiles "Adobe\Common\Plug-ins\7.0\MediaCore"
 $Target = Join-Path $TargetRoot "MotionCore.aex"
+# Destino errado usado pela primeira versao deste script (2026-10-11).
+$StaleTarget = Join-Path $env:CommonProgramFiles "Adobe\Common\Plug-ins\7.0\MediaCore\MotionCore.aex"
 
 if (-not (Test-Path $Source)) {
   throw "MotionCore.aex não encontrado em $Source. Rode plugin\build-windows.ps1 antes."
@@ -43,6 +47,10 @@ try {
 }
 catch {
   throw "Não foi possível substituir $Target. Feche o After Effects e tente de novo."
+}
+if (Test-Path $StaleTarget) {
+  Remove-Item -Force $StaleTarget
+  Write-Host "Removida cópia antiga fora da pasta do AE: $StaleTarget"
 }
 Write-Host "Instalado: $Target"
 Write-Host "Reinicie o After Effects para carregar o novo binário."
