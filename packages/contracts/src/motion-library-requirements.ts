@@ -81,7 +81,7 @@ export function motionLibraryRequirements(p: MotionLibraryPreset): MotionLibrary
     layer: p.category.startsWith("text-") ? "text" : "visual",
     motionCore: effects.includes(MOTION_CORE_PRESET_EFFECT),
     cycore: effects.some((name) => name.startsWith("CC ")),
-    threeD: p.category === "motion-3d",
+    threeD: p.category === "motion-3d" || p.text.dimension === "3d",
     effects
   };
 }

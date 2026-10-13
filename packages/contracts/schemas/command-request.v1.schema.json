@@ -1391,6 +1391,45 @@
           }
         }
       ]
+    },
+    "presetTextEffectAdjustArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "presetId",
+        "options"
+      ],
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/presetTarget"
+        },
+        "presetId": {
+          "$ref": "#/$defs/presetOpaqueId"
+        },
+        "options": {
+          "$ref": "#/$defs/motionLibraryOptions"
+        }
+      }
+    },
+    "presetTextEffectActionArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "action"
+      ],
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/presetTarget"
+        },
+        "action": {
+          "enum": [
+            "remove",
+            "reset"
+          ]
+        }
+      }
     }
   },
   "allOf": [
@@ -1782,6 +1821,44 @@
           "args": {
             "type": "object",
             "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.presets.text-effect-adjust"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/presetTextEffectAdjustArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.presets.text-effect-action"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/presetTextEffectActionArgs"
           }
         }
       }

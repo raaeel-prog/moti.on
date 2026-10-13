@@ -4,6 +4,7 @@ import { MOTION_LIBRARY_CAMERA_PRESETS } from "./motion-library-camera.js";
 import { MOTION_LIBRARY_NATIVE_PRESETS } from "./motion-library-native.js";
 import { MOTION_LIBRARY_SIGNATURE_PRESETS } from "./motion-library-signature.js";
 import { MOTION_LIBRARY_MOMENTUM_PRESETS } from "./motion-library-momentum.js";
+import { MOTION_LIBRARY_TEXT_PRESETS } from "./motion-library-text.js";
 
 /**
  * Original, declarative Moti.on animation library.
@@ -27,9 +28,13 @@ export interface MotionLibraryPreset {
   referenceIndex: number | null;
   /** Exact master-spec overlay recipe; does not apply directly to user layers. */
   cameraSpec?: { id: string; blur: "none" | "gaussian" | "lens"; exposure?: number; native?: { style: number; angle: number }; impact?: CameraImpactSpec };
-  collection?: "studio" | "gemini" | "native" | "premium" | "signature" | "momentum";
+  collection?: "studio" | "gemini" | "native" | "premium" | "signature" | "momentum" | "text";
   /** Signature gallery family; absent on every other collection. */
   family?: "essentials" | "cinema" | "light-matter" | "variation";
+  /** Text family independent of Signature's gallery family. */
+  textFamily?: "fade" | "position" | "rotate" | "scale" | "tracking" | "mask" | "typewriter" | "decode" | "combination" | "loop";
+  /** Stable useful variant with its own original, localized label. */
+  textVariant?: { id: string; name: { "pt-BR": string; "en-US": string } };
   /** Authored tempo character, in frames at the 30 fps reference. A kinetic
    * look depends on velocity, so its window is narrow; a cinematic look keys
    * its effects to progress and keeps its character at any duration; a loop
@@ -95,6 +100,12 @@ export interface MotionLibraryPreset {
   effectColor?: [number, number, number];
   text: {
     unit: "characters" | "words" | "lines" | "all";
+    /** Real per-segment 3D text; legacy recipes remain 2D unless explicitly set. */
+    dimension?: "2d" | "3d";
+    /** Segment pivot grouping; omitted means the effective selector unit. */
+    grouping?: "characters" | "words" | "lines" | "all";
+    /** Per-segment animator anchor offset in nominal pixels at 1080px height. */
+    pivot?: [number, number, number];
     random: boolean;
     decode: boolean;
     tracking: number;
@@ -1845,5 +1856,6 @@ export const MOTION_LIBRARY_PRESETS: readonly MotionLibraryPreset[] = [
   ...MOTION_LIBRARY_NATIVE_PRESETS,
   ...MOTION_LIBRARY_PREMIUM_PRESETS,
   ...MOTION_LIBRARY_SIGNATURE_PRESETS,
-  ...MOTION_LIBRARY_MOMENTUM_PRESETS
+  ...MOTION_LIBRARY_MOMENTUM_PRESETS,
+  ...MOTION_LIBRARY_TEXT_PRESETS
 ];

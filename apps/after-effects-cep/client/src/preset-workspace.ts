@@ -56,6 +56,7 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
   let disposed=false, epoch=0, busy=false, readSequence=0, activeRead=0, gallery:ReturnType<typeof createPresetGallery>|undefined;
   let revealId:string|undefined;
   let snapshot:PresetInspection|undefined,draft:MotionLibraryOptions|undefined,dirty=false,stale=false;
+  let variantComponent:"in"|"out"|"effect"="in";
   const savedDrafts=options.cache.editDrafts??(options.cache.editDrafts=new Map());
   let restoredPhases:PresetPhaseDrafts|undefined,disposeTools:(()=>void)|undefined;
   let pointerHeld=false,redrawPending=false,pointerRelease:ReturnType<typeof setTimeout>|undefined;
@@ -111,7 +112,7 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
   function tabState():void {content.setAttribute("data-browse",String((nav.view??"browse")==="browse"));tabs.hidden=false;for(const [tab,view] of [[browse,"browse"],[edit,"edit"]] as const){tab.setAttribute("aria-selected",String((nav.view??"browse")===view));tab.setAttribute("aria-controls",content.id);tab.tabIndex=(nav.view??"browse")===view?0:-1;tab.disabled=isBusy();}content.setAttribute("aria-labelledby",nav.view==="edit"?edit.id:browse.id);}
   tabs.addEventListener("keydown",event=>{if(!isBusy()&&["ArrowLeft","ArrowRight","Home","End"].includes(event.key)){event.preventDefault();switchView(event.key==="Home"?"browse":event.key==="End"?"edit":nav.view==="edit"?"browse":"edit");(nav.view==="edit"?edit:browse).focus();}});
   function switchView(view:"browse"|"edit",initial=false):void {
-    if(!initial&&(isBusy()||nav.view===view))return;rememberDraft();disposeTools?.();disposeTools=undefined;disposeNumbers(dirty&&Boolean(snapshot?.phases?.length));nav.view=view;epoch++;activeRead=0;needsInspection=view==="edit"&&dirty&&Boolean(retainedPhaseEditor);gallery?.dispose();gallery=undefined;noticeAlert?.dispose();noticeAlert=undefined;noticeKey="";clearNode(content);notice=undefined;tabState();
+    if(!initial&&(isBusy()||nav.view===view))return;rememberDraft();disposeTools?.();disposeTools=undefined;disposeNumbers(dirty&&Boolean(snapshot?.phases?.length||snapshot?.textEffect));nav.view=view;epoch++;activeRead=0;needsInspection=view==="edit"&&dirty&&Boolean(retainedPhaseEditor);gallery?.dispose();gallery=undefined;noticeAlert?.dispose();noticeAlert=undefined;noticeKey="";clearNode(content);notice=undefined;tabState();
     if(view==="browse")drawBrowse();else{drawEdit();void inspect();}polling?.refresh();
   }
   function showError(message:string):void {error=message;if(nav.view==="edit"){if(snapshot?.target)stale=true;drawEdit();}else drawBrowse();}
@@ -166,7 +167,7 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
     if(isColorPickerOpen(doc)||hasColorDraft(doc))return;
     if(pointerHeld){deferredInspection={data:next,force,epoch};return;}
     options.onInspection?.(next);
-    if(!force&&snapshot?.state===next.state&&snapshot?.target?.fingerprint===next.target?.fingerprint&&(sameTarget(next.target,snapshot?.target)||(!next.target&&!snapshot?.target))&&snapshot?.message===next.message&&snapshot?.presetId===next.presetId&&snapshot?.frameRate===next.frameRate&&snapshot?.dropFrame===next.dropFrame&&JSON.stringify(snapshot?.phases)===JSON.stringify(next.phases)&&JSON.stringify(snapshot?.targets)===JSON.stringify(next.targets)&&JSON.stringify(snapshot?.mixedKeys)===JSON.stringify(next.mixedKeys)&&JSON.stringify(snapshot?.colorTarget)===JSON.stringify(next.colorTarget)&&JSON.stringify(snapshot?.selection)===JSON.stringify(next.selection)&&JSON.stringify(snapshot?.tools)===JSON.stringify(next.tools)){needsInspection=false;updateNotice();return;}
+    if(!force&&snapshot?.state===next.state&&snapshot?.target?.fingerprint===next.target?.fingerprint&&(sameTarget(next.target,snapshot?.target)||(!next.target&&!snapshot?.target))&&snapshot?.message===next.message&&snapshot?.presetId===next.presetId&&snapshot?.frameRate===next.frameRate&&snapshot?.dropFrame===next.dropFrame&&JSON.stringify(snapshot?.phases)===JSON.stringify(next.phases)&&JSON.stringify(snapshot?.textEffect)===JSON.stringify(next.textEffect)&&JSON.stringify(snapshot?.targets)===JSON.stringify(next.targets)&&JSON.stringify(snapshot?.mixedKeys)===JSON.stringify(next.mixedKeys)&&JSON.stringify(snapshot?.colorTarget)===JSON.stringify(next.colorTarget)&&JSON.stringify(snapshot?.selection)===JSON.stringify(next.selection)&&JSON.stringify(snapshot?.tools)===JSON.stringify(next.tools)){needsInspection=false;updateNotice();return;}
     if(!force&&dirty&&draftKey(snapshot)===draftKey(next)){stale=true;needsInspection=false;updateNotice();return;}
     if(!force)rememberDraft();else forgetDraft();
     disposeNumbers();
@@ -244,6 +245,13 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
   function canSaveVariant():boolean {
     return !isBusy()&&!activeRead&&!dirty&&!stale&&invalidNumbers.size===0&&snapshot?.state==="ready"&&!snapshot.cameraTransition&&!snapshot.mixedKeys?.length&&Boolean(snapshot.target&&snapshot.presetId&&snapshot.options&&isMotionLibraryOptions(snapshot.options));
   }
+  function variantSource(data:PresetInspection):{presetId?:string;options?:MotionLibraryOptions}{
+    if(data.phases?.length||data.textEffect){
+      const components=[...(data.phases??[]).map(phase=>({key:phase.phase,...phase})),...(data.textEffect?[{key:"effect" as const,...data.textEffect}]:[])];
+      return components.find(component=>component.key===variantComponent)??components[0]??{};
+    }
+    return data;
+  }
   function variantErrorText(code:PresetVariantError):string {
     const messages:Record<PresetVariantError,[string,string]>={
       unavailable:["Armazenamento local indisponível. As variações não podem ser salvas.","Local storage is unavailable. Variations cannot be saved."],
@@ -266,7 +274,7 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
   }
   async function saveVariant(updateId?:string):Promise<void> {
     if(!canSaveVariant()||!snapshot?.target||!snapshot.presetId)return;
-    const expected={...snapshot.target},expectedTargets=JSON.stringify(snapshot.targets??[]),presetId=snapshot.presetId,name=variantName,token=++epoch;
+    const expected={...snapshot.target},expectedTargets=JSON.stringify(snapshot.targets??[]),presetId=variantSource(snapshot).presetId,name=variantName,token=++epoch;
     busy=true;tabState();drawEdit();
     try{
       const response=await options.execute("ae.presets.inspect",{});
@@ -275,10 +283,11 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
         stale=true;variantError=true;variantStatus=hostError(response,pt?"Não foi possível conferir o preset aplicado. Recarregue a seleção antes de salvar.":"Could not verify the applied preset. Reload the selection before saving.");return;
       }
       const current=response.data as PresetInspection;
-      if(current.state!=="ready"||current.cameraTransition||Boolean(current.mixedKeys?.length)||!sameTarget(current.target,expected)||current.target?.fingerprint!==expected.fingerprint||JSON.stringify(current.targets??[])!==expectedTargets||current.presetId!==presetId||!current.options||!isMotionLibraryOptions(current.options)){
+      const source=variantSource(current);
+      if(current.state!=="ready"||current.cameraTransition||Boolean(current.mixedKeys?.length)||!sameTarget(current.target,expected)||current.target?.fingerprint!==expected.fingerprint||JSON.stringify(current.targets??[])!==expectedTargets||!presetId||source.presetId!==presetId||!source.options||!isMotionLibraryOptions(source.options)){
         stale=true;variantError=true;variantStatus=pt?"A seleção ou os ajustes mudaram. Recarregue os valores antes de salvar a variação.":"The selection or settings changed. Reload the values before saving the variation.";return;
       }
-      const saved=updateId?variants.update(updateId,presetId,current.options):variants.save(name,presetId,current.options);
+      const saved=updateId?variants.update(updateId,presetId,source.options):variants.save(name,presetId,source.options);
       const message=updateId?(pt?"Variação atualizada com os ajustes aplicados.":"Variation updated with the applied settings."):(pt?"Variação salva neste painel.":"Variation saved in this panel.");
       if(acceptVariantResult(saved,message)&&saved.ok){selectedVariant=updateId??saved.items[saved.items.length-1]!.id;if(!updateId)variantName="";}
     }catch{
@@ -291,6 +300,11 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
     section.appendChild(createElement(doc,"summary","",pt?"Variações salvas":"Saved variations"));
     section.addEventListener("toggle",()=>{variantsOpen=section.open;});
     const body=createElement(doc,"div","ch-preset-variants-body");section.appendChild(body);content.appendChild(section);
+    if(snapshot?.phases?.length||snapshot?.textEffect){
+      const components=[...(snapshot.phases??[]).map(phase=>({value:phase.phase,label:phase.phase==="in"?(pt?"Entrada":"Entrance"):(pt?"Saída":"Exit")})),...(snapshot.textEffect?[{value:"effect",label:pt?"Efeito contínuo":"Continuous effect"}]:[])];
+      if(!components.some(component=>component.value===variantComponent))variantComponent=components[0]!.value as typeof variantComponent;
+      body.appendChild(selectField(doc,{id:`${workspaceId}-variant-component`,label:pt?"Componente a salvar":"Component to save",value:variantComponent,disabled:isBusy(),options:components,onChange:value=>{variantComponent=value as typeof variantComponent;}}));
+    }
     const result=variants.read();
     const storageError=result.ok?"":variantErrorText(result.error);
     const items=result.ok?result.items:[];
@@ -437,9 +451,10 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
     content.setAttribute("data-editor","other");
     disposeNumbers(dirty&&Boolean(snapshot?.phases?.length));noticeAlert?.dispose();noticeAlert=undefined;noticeKey="";clearNode(content);editApply=undefined;copyButton=undefined;notice=createElement(doc,"div","ch-workspace-notice");content.appendChild(notice);
     const data=snapshot;
-    if(data?.state==="ready"&&data.phases?.length){
+    if(data?.state==="ready"&&(data.phases?.length||data.textEffect)){
       phaseEditor=retainedPhaseEditor??createPresetPhaseEditor(doc,{locale:options.locale,inspection:data,busy:isBusy(),...(restoredPhases?{drafts:restoredPhases}:{}),
         reveal:revealPreset,
+        copyEffect:effect=>{options.cache.copied={presetId:effect.presetId,options:{...effect.options}};transferStatus=pt?"Efeito copiado. Cole na camada de destino.":"Effect copied. Paste on the destination layer.";updateTransferContext();},
         copy:phase=>{options.cache.copied={presetId:phase.presetId,options:{...phase.options}};transferStatus=pt?"Fase copiada. Selecione a camada de destino e cole.":"Phase copied. Select the destination layer and paste.";updateTransferContext();},
         execute:(command,args)=>{void phaseCommand(command,args);},onDirty:value=>{dirty=value;updateTransferContext();},
         ...(gestures.available()&&data.target&&!data.targets?.length?{live:{start:(phase,key)=>{if(isBusy()||stale||dirty||options.canMutate?.()===false)return false;const hostValue=Number(phase.options[key as keyof MotionLibraryOptions]);if(!Number.isFinite(hostValue))return false;gestures.start(data.target!,phase,key,hostValue);return liveActive;},update:value=>gestures.update(value),finish:(canceled,value)=>{void gestures.finish(canceled,value);}}}: {})});retainedPhaseEditor=undefined;restoredPhases=undefined;

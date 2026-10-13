@@ -557,6 +557,8 @@ export interface RigMetadata {
 | `ae.presets.phase-adjust` | Ajustar uma fase preservando os controles e o timing da outra | After Effects | P1 |
 | `ae.presets.phase-action` | Remover ou restaurar uma fase inspecionada | After Effects | P1 |
 | `ae.presets.phase-timing` | Deslocar em frames o marcador próprio de uma fase | After Effects | P1 |
+| `ae.presets.text-effect-adjust` | Ajustar o efeito contínuo de texto preservando entrada e saída | After Effects | P1 |
+| `ae.presets.text-effect-action` | Remover ou restaurar o efeito contínuo sem marcadores de transição | After Effects | P1 |
 | `ae.presets.color-adjust` | Ajustar cores estáticas inspecionadas preservando estilos e animações | After Effects | P1 |
 | `ae.presets.adjust` | Ajustar preset inspecionado com alvo e valores revalidados | After Effects | P1 |
 | `ae.presets.personal` | Adicionar, listar e remover referências de pastas locais com .ffx, imagens, áudio, vídeo e projetos .aep | After Effects | P1 |

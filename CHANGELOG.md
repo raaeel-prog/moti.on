@@ -1,3 +1,10 @@
+## 2026-10-13 — Texto v3: caracteres, palavras, linhas e Effects
+- 108 receitas próprias de texto, incluindo 20 com 3D real por segmento; entrada, saída e efeito contínuo independentes em metadata v3.
+- Comandos de ajuste/reset/remoção do efeito, migração durante edição, preflight de agrupamento e rollback. Source Text e estilos permanecem editáveis.
+- Preview interativo editável, filtros 2D/3D/família e 108 vídeos + 108 posters originais renderizados no AE. Carregamento sob demanda, scrub, pausa e descarte de mídia.
+- Check 2.391/2.391; AE 26.5x89: 108 aplicações, oito fixtures de lifecycle e um Undo real PASS. Browser PT/EN em 280/360/480/720 px PASS.
+- Estudo nativo de 48 FFX BadFX, um preset instalado do Composer e quatro comparações locais por família. Inventário completo/fórmulas do Composer, instalação do candidato e distribuição assinada permanecem pendentes; ver `docs/implementation/text-presets-v3-delivery.md`.
+
 ## 2026-10-11 — Windows: Gradient na GPU (CUDA e DirectX 12)
 - CUDA (NVIDIA): GradientCuda.cu sobre o mesmo GradientMath.inc, PTX embutido e carregado pela API de driver (nvcuda.dll dinâmico; sem NVIDIA o plug-in segue na CPU). Verificado no After Effects 26.5 com RTX 3080: rastreio gpu=1, quadro idêntico ao da CPU (máx. 1/255). Corrigido: o setup recusava o CUDA porque o dispositivo 0 chega como ponteiro nulo.
 - DirectX 12: pronto e com paridade (RTX 3080 e WARP), mas este AE só oferece CUDA/Software para efeitos.

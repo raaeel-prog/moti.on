@@ -1,0 +1,12 @@
+import {readFile,writeFile} from 'node:fs/promises';
+import {spawn} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {groupConditionalBranches,toAsciiExtendScript} from './build-extendscript.mjs';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),evidence=path.join(root,'artifacts/text-presets');
+const job={runId:randomUUID(),host:path.join(root,'dist/after-effects-cep/host/index.jsx').replaceAll('\\','/'),report:path.join(evidence,'ae-lifecycle.json').replaceAll('\\','/')};
+const script=path.join(evidence,'lifecycle-job.jsx');await writeFile(script,toAsciiExtendScript(groupConditionalBranches(`(function(){var job=${JSON.stringify(job)};\n${await readFile(new URL('./text-presets-lifecycle.jsx',import.meta.url),'utf8')}\n}());`),'lifecycle-job.jsx'));
+const child=spawn(path.join(process.env.MOTION_AE_DIRECTORY||'C:/Program Files/Adobe/Adobe After Effects 2026/Support Files','AfterFX.com'),['-m','-noui','-r',script],{windowsHide:true,stdio:'ignore'});console.log(`Isolated lifecycle PID ${child.pid}`);
+const timer=setTimeout(()=>child.kill(),600000);const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});clearTimeout(timer);
+if(code!==0)throw Error(`AE exited ${code}`);const report=JSON.parse(await readFile(job.report,'utf8'));if(report.runId!==job.runId||report.status!=='PASS')throw Error(`${report.status}: ${report.error?.message}`);console.log(`PASS ${report.cases.length} real host lifecycle cases`);

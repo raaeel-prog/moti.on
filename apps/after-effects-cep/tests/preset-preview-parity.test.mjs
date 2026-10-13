@@ -16,6 +16,13 @@ const effectParameters = {'ADBE Slider Control': [1], 'ADBE Gaussian Blur 2': [1
 
 async function hostFor(p, args, text = false) {
   const f = await fixture({text});
+  if(p.travel==='offscreen'||p.pivot==='offset'){
+    // Match the gallery's measured geometry at 1:6, rather than compare travel
+    // measured from a different layer size and position.
+    f.layer.transform.property('ADBE Anchor Point').setValue([0,0,0]);
+    f.layer.transform.property('ADBE Position').setValue([960,588,0]);
+    f.layer.sourceRectAtTime=()=>({left:-216,top:-210,width:432,height:342});
+  }
   const {Group} = f, add = Group.prototype.addProperty;
   // Signature looks only add effects; motion is what this suite compares.
   f.scope.MotionSignatureEffects ??= {apply() {}};

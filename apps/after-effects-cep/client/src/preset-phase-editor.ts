@@ -1,6 +1,7 @@
 import {attachCompactNumberEditing, attachScrubbableNumber, button, createActionButton, createElement, createI18n, createIcon, selectField} from "@motion/ui-core";
-import {MOTION_SETTLE_DEFAULTS, type PresetInspection, type PresetPhaseInspection} from "@motion/contracts";
+import {MOTION_SETTLE_DEFAULTS, type PresetInspection, type PresetPhaseInspection, type PresetTextEffectInspection} from "@motion/contracts";
 import {defaultLibraryOptions, GALLERY_PRESETS, gallerySequenceControls, presetEasingChoices, settleFieldLabels} from "./preset-gallery.js";
+import {createTextPresetPreview} from "./text-preset-preview.js";
 import {formatPresetOffset,parsePresetOffset} from "./preset-timecode.js";
 
 /** Session-only drafts; property and layer references never leave the host. */
@@ -9,7 +10,7 @@ export type PresetPhaseDrafts = Record<string,PresetPhaseDraft>;
 
 export function createPresetPhaseEditor(doc:Document, options:{
   locale:string; inspection:PresetInspection; busy:boolean;
-  reveal(id:string):void; copy(phase:PresetPhaseInspection):void;
+  reveal(id:string):void; copy(phase:PresetPhaseInspection):void; copyEffect?(effect:PresetTextEffectInspection):void;
   execute(command:string,args:Record<string,unknown>):void;
   onDirty(dirty:boolean):void;
   drafts?:PresetPhaseDrafts;
@@ -27,43 +28,47 @@ export function createPresetPhaseEditor(doc:Document, options:{
   selected.appendChild(createElement(doc,"strong","",data.layerName??""));element.appendChild(selected);
   const section=doc.createElement("details");section.className="ch-edit-section";section.open=true;
   section.appendChild(createElement(doc,"summary","",pt?"Presets":"Presets"));element.appendChild(section);
-  for(const phase of data.phases??[]){
+  const components: Array<PresetPhaseInspection | (PresetTextEffectInspection & {phase:"effect"})> = [...(data.phases??[]), ...(data.textEffect?[{...data.textEffect,phase:"effect" as const}]:[])];
+  for(const phase of components){
+    const isEffect=phase.phase==="effect", roleLabel=isEffect?(pt?"Efeito contínuo":"Continuous effect"):phase.phase==="in"?(pt?"Entrada":"In"):(pt?"Saída":"Out");
     const preset=GALLERY_PRESETS.find(item=>item.motion?.id===phase.presetId)?.motion;if(!preset)continue;
     const row=doc.createElement("details");row.className="ch-phase-instance";row.open=true;row.dataset.phase=phase.phase;
     const title=createElement(doc,"summary","ch-phase-heading");
-    title.appendChild(createElement(doc,"span","ch-phase-title",`${phase.phase==="in"?(pt?"Entrada":"In"):(pt?"Saída":"Out")}: ${preset.name[pt?"pt-BR":"en-US"]}`));
+    title.appendChild(createElement(doc,"span","ch-phase-title",`${roleLabel}: ${preset.name[pt?"pt-BR":"en-US"]}`));
     row.appendChild(title);section.appendChild(row);
     const actions=createElement(doc,"div","ch-phase-actions");row.appendChild(actions);
-    const command=(action:"remove"|"reset"):void=>{if(!disposed&&!options.busy&&!blocked)options.execute("ae.presets.phase-action",{target:data.target,phase:phase.phase,action});};
+    const command=(action:"remove"|"reset"):void=>{if(!disposed&&!options.busy&&!blocked)options.execute(isEffect?"ae.presets.text-effect-action":"ae.presets.phase-action",{target:data.target,...(!isEffect?{phase:phase.phase}:{}),action});};
     for(const [label,variant,onClick] of [
       [pt?"Revelar":"Reveal","tertiary",()=>options.reveal(phase.presetId)],
-      [pt?"Copiar":"Copy","tertiary",()=>options.copy(phase)],
+      [pt?"Copiar":"Copy","tertiary",()=>{if(isEffect)options.copyEffect?.(phase);else options.copy(phase);}],
       [pt?"Remover":"Remove","destructive",()=>command("remove")],
       [pt?"Restaurar":"Reset","tertiary",()=>command("reset")]
     ] as const){const action=button(doc,{label,variant,disabled:options.busy,onClick});action.classList.add("ch-phase-link");actions.appendChild(action);if(variant==="destructive"||label===(pt?"Restaurar":"Reset"))hostActions.push(action);}
     const body=createElement(doc,"div","ch-phase-parameters");row.appendChild(body);
     const dragHint=createElement(doc,"p","ch-preset-hint");dragHint.hidden=true;body.appendChild(dragHint);
     const saved=options.drafts?.[phase.phase],draft={...(saved?.options??phase.options)},valid=new Map<string,boolean>(),numberInputs=new Map<string,HTMLInputElement>();let dirty=false;
+    const preview=preset.category.startsWith("text-")?createTextPresetPreview(doc,{locale:options.locale,preset,settings:()=>draft,sample:"Make it\nMoti.on",onSample:()=>{}}):undefined;
+    if(preview){body.appendChild(preview.element);cleanups.push(()=>preview.dispose());}
     const applyLabel=pt?"Aplicar ajustes":"Apply changes",unchangedReason=pt?"Altere um parâmetro para aplicar.":"Change a parameter to apply.";
     const applyControl=createActionButton(doc,{id:`phase-${phase.instance}-${phase.phase}-apply`,label:applyLabel,variant:"primary",disabled:true,disabledReason:unchangedReason,onPress:()=>{
-      if(!disposed&&!options.busy&&!blocked)options.execute("ae.presets.phase-adjust",{target:data.target,phase:phase.phase,presetId:phase.presetId,options:draft});
+      if(!disposed&&!options.busy&&!blocked)options.execute(isEffect?"ae.presets.text-effect-adjust":"ae.presets.phase-adjust",{target:data.target,...(!isEffect?{phase:phase.phase}:{}),presetId:phase.presetId,options:draft});
     }});
     const apply=applyControl.button;applyControl.element.classList.add("ch-phase-primary-action");
     const update=():void=>{
       const invalid=[...valid.values()].some(value=>!value);
       dirty=JSON.stringify(draft)!==JSON.stringify(phase.options);
       if(dirty||invalid)dirtyPhases.add(phase.phase);else dirtyPhases.delete(phase.phase);
-      reportDirty();apply.disabled=options.busy||blocked||!dirty||invalid;
+      preview?.refresh();reportDirty();apply.disabled=options.busy||blocked||!dirty||invalid;
       const reason=options.busy||blockedBusy?i18n.t("phaseEditor.wait"):blocked?i18n.t("phaseEditor.reloadSelection"):invalid?i18n.t("phaseEditor.correctFields"):!dirty?unchangedReason:undefined;
       applyControl.setDisabled(apply.disabled,reason);
     };
     refreshers.push(update);
-    const numeric=(key:"durationFrames"|"intensity"|"staggerFrames"|"elasticity"|"overlap"|"seed"|"settleAmount"|"settleCount"|"settleDamping",label:string,min:number,max:number,integer=true):void=>{
+    const numeric=(key:"durationFrames"|"intensity"|"staggerFrames"|"elasticity"|"overlap"|"speed"|"seed"|"settleAmount"|"settleCount"|"settleDamping",label:string,min:number,max:number,integer=true):void=>{
       const field=createElement(doc,"label","ch-phase-field");field.appendChild(createElement(doc,"span","",label));
-      const input=doc.createElement("input");input.id=`phase-${phase.instance}-${phase.phase}-${key}`;input.type="text";input.inputMode=integer?"numeric":"decimal";input.value=String(draft[key]??defaultLibraryOptions(preset)[key]??0);input.setAttribute("aria-label",`${phase.phase==="in"?(pt?"Entrada":"In"):(pt?"Saída":"Out")} · ${label}`);input.disabled=options.busy;
+      const input=doc.createElement("input");input.id=`phase-${phase.instance}-${phase.phase}-${key}`;input.type="text";input.inputMode=integer?"numeric":"decimal";input.value=String(draft[key]??defaultLibraryOptions(preset)[key]??0);input.setAttribute("aria-label",`${roleLabel} · ${label}`);input.disabled=options.busy;
       input.min=String(min);input.max=String(max);input.step=integer?"1":"0.1";numberInputs.set(key,input);if(saved?.numbers[key]!==undefined)input.value=saved.numbers[key];
       const error=createElement(doc,"p","ch-field__error");error.id=`${input.id}-error`;error.hidden=true;error.setAttribute("aria-live","polite");error.setAttribute("aria-atomic","true");
-      const live=options.live&&phase.controls.some(control=>control.key===key);
+      const live=!isEffect&&options.live&&phase.controls.some(control=>control.key===key);
       input.title=live?(pt?"Clique para digitar. Arraste para ajustar; Shift: fino, Alt: amplo.":"Click to type. Drag to adjust; Shift: fine, Alt: coarse."):(pt?"Clique para digitar. Arraste ao vivo ainda indisponível.":"Click to type. Live dragging is currently unavailable.");
       const validate=():void=>{
         if(options.busy||blocked)return;
@@ -76,27 +81,29 @@ export function createPresetPhaseEditor(doc:Document, options:{
       };
       input.addEventListener("input",validate);input.addEventListener("change",validate);field.appendChild(input);body.appendChild(field);body.appendChild(error);
       if(saved)validate();
-      if(live){let dragging=false;field.classList.add("ch-phase-scrub-row");cleanups.push(attachScrubbableNumber(input,{hitTarget:field,onGestureStart:value=>{dragging=options.live!.start(phase,key,value);if(!dragging){dragHint.textContent=pt?"O arraste ao vivo não pôde começar nesta seleção.":"Live dragging could not start for this selection.";dragHint.hidden=false;}else dragHint.hidden=true;return dragging;},onInput:value=>{if(dragging)options.live!.update(value);},onGestureEnd:(value,canceled)=>{if(!dragging)return;dragging=false;options.live!.finish(canceled,value);}}));}
+      if(live){let dragging=false;field.classList.add("ch-phase-scrub-row");cleanups.push(attachScrubbableNumber(input,{hitTarget:field,onGestureStart:value=>{dragging=options.live!.start(phase as PresetPhaseInspection,key,value);if(!dragging){dragHint.textContent=pt?"O arraste ao vivo não pôde começar nesta seleção.":"Live dragging could not start for this selection.";dragHint.hidden=false;}else dragHint.hidden=true;return dragging;},onInput:value=>{if(dragging)options.live!.update(value);},onGestureEnd:(value,canceled)=>{if(!dragging)return;dragging=false;options.live!.finish(canceled,value);}}));}
       else cleanups.push(attachCompactNumberEditing(input));
     };
     const choice=(key:"direction"|"easing"|"unit"|"order",label:string,choices:[string,string][]):void=>{
       const field=selectField(doc,{id:`phase-${phase.instance}-${phase.phase}-${key}`,label,value:String(draft[key]??"preset"),disabled:options.busy,options:choices.map(([value,label])=>({value,label})),onChange:value=>{draft[key]=value as never;update();}});field.className+=" ch-phase-field";body.appendChild(field);
     };
-    numeric("durationFrames",pt?"Duração · frames":"Duration · frames",1,600);
+    if(!isEffect)numeric("durationFrames",pt?"Duração · frames":"Duration · frames",1,600);
+    else numeric("speed",pt?"Velocidade · %":"Speed · %",25,200,false);
     numeric("intensity",pt?"Intensidade · %":"Intensity · %",0,300,false);
     if(!options.live){dragHint.textContent=pt?"Arraste ao vivo indisponível nesta sessão. Você ainda pode digitar e aplicar ajustes.":"Live dragging is unavailable in this session. You can still type and apply changes.";dragHint.hidden=false;}
     if(preset.position.some(value=>value!==0)||preset.pivot==="edge")choice("direction",pt?"Direção":"Direction",[["preset",pt?"Original":"Original"],["bottom",pt?"Inferior":"Bottom"],["left",pt?"Esquerda":"Left"],["right",pt?"Direita":"Right"],["top",pt?"Superior":"Top"]]);
-    choice("easing",pt?"Curva":"Curve",presetEasingChoices(options.locale));
+    if(!isEffect)choice("easing",pt?"Curva":"Curve",presetEasingChoices(options.locale));
     if(preset.category.startsWith("text-")){
       choice("unit",pt?"Animar por":"Animate by",[["preset",pt?"Original":"Original"],["characters",pt?"Caracteres":"Characters"],["words",pt?"Palavras":"Words"],["lines",pt?"Linhas":"Lines"],["all",pt?"Tudo":"All"]]);
-      numeric("staggerFrames",pt?"Intervalo · frames":"Stagger · frames",0,60);
+      if(!isEffect)numeric("staggerFrames",pt?"Intervalo · frames":"Stagger · frames",0,60);
       choice("order",pt?"Ordem":"Order",[["preset",pt?"Original":"Original"],["forward",pt?"Em sequência":"Forward"],["reverse",pt?"Reversa":"Reverse"],["center-out",pt?"Centro para bordas":"Center out"],["edges-in",pt?"Bordas para centro":"Edges in"],["random",pt?"Aleatória":"Random"]]);
-      if(["studio","native","premium","signature"].includes(preset.collection??""))numeric("overlap",pt?"Sobreposição · %":"Overlap · %",0,100);
+      if(!isEffect&&["studio","native","premium","signature","text","momentum"].includes(preset.collection??""))numeric("overlap",pt?"Sobreposição · %":"Overlap · %",0,100);
     }
     if(draft.easing==="spring"||preset.easing==="spring")numeric("elasticity",pt?"Elasticidade · %":"Elasticity · %",0,100);
     const curve=draft.easing&&draft.easing!=="preset"?draft.easing:preset.easing;
     if(curve==="settle-wave"||curve==="settle-hop")for(const [key,label,min,max] of settleFieldLabels(curve,options.locale)){draft[key]??=MOTION_SETTLE_DEFAULTS[curve][key];numeric(key,label,min,max,false);}
     if(gallerySequenceControls(preset,draft).seed)numeric("seed",pt?"Variação":"Variation",0,9999);
+    if(!isEffect){
     const timing=createElement(doc,"div","ch-phase-field ch-phase-shift");timing.appendChild(createElement(doc,"span","",pt?"Deslocar transição":"Shift transition"));
     const controls=createElement(doc,"div","ch-phase-shift-controls");timing.appendChild(controls);
     const shift=(frames:number):void=>{if(!options.busy&&!blocked&&Number.isInteger(frames)&&frames!==0&&Math.abs(frames)<=600)options.execute("ae.presets.phase-timing",{target:data.target,phase:phase.phase,frames});};
@@ -109,7 +116,7 @@ export function createPresetPhaseEditor(doc:Document, options:{
       action.appendChild(icon);hostActions.push(action);return action;
     };
     controls.appendChild(shiftButton(-1));
-    const zero=formatPresetOffset(0,data.frameRate??24,data.dropFrame),amount=doc.createElement("input");amount.id=`phase-${phase.instance}-${phase.phase}-offset`;amount.type="text";amount.value=zero;amount.disabled=options.busy;amount.setAttribute("aria-label",`${phase.phase==="in"?(pt?"Entrada":"In"):(pt?"Saída":"Out")} · ${pt?"Deslocamento em frames":"Frame offset"}`);amount.title=pt?"Digite frames relativos ou HH:MM:SS:FF e pressione Enter. As setas movem um frame. Arraste ao vivo indisponível neste controle.":"Enter relative frames or HH:MM:SS:FF and press Enter. Arrows move one frame. Live dragging is unavailable on this control.";
+    const zero=formatPresetOffset(0,data.frameRate??24,data.dropFrame),amount=doc.createElement("input");amount.id=`phase-${phase.instance}-${phase.phase}-offset`;amount.type="text";amount.value=zero;amount.disabled=options.busy;amount.setAttribute("aria-label",`${roleLabel} · ${pt?"Deslocamento em frames":"Frame offset"}`);amount.title=pt?"Digite frames relativos ou HH:MM:SS:FF e pressione Enter. As setas movem um frame. Arraste ao vivo indisponível neste controle.":"Enter relative frames or HH:MM:SS:FF and press Enter. Arrows move one frame. Live dragging is unavailable on this control.";
     if(saved)amount.value=saved.offset;
     draftReaders.push(()=>[phase.phase,{options:{...draft},numbers:Object.fromEntries([...numberInputs].map(([key,input])=>[key,input.value])),offset:amount.value}]);
     const offsetError=createElement(doc,"p","ch-field__error");offsetError.id=`${amount.id}-error`;offsetError.hidden=true;offsetError.setAttribute("aria-live","polite");offsetError.setAttribute("aria-atomic","true");
@@ -131,6 +138,7 @@ export function createPresetPhaseEditor(doc:Document, options:{
       if(event.key==="Escape"){event.preventDefault();amount.value=zero;validateOffset();amount.blur();}
     });cleanups.push(attachCompactNumberEditing(amount));controls.appendChild(amount);
     controls.appendChild(shiftButton(1));body.appendChild(timing);body.appendChild(offsetError);
+    }else draftReaders.push(()=>[phase.phase,{options:{...draft},numbers:Object.fromEntries([...numberInputs].map(([key,input])=>[key,input.value])),offset:""}]);
     const footer=createElement(doc,"div","ch-phase-adjust-actions");footer.appendChild(button(doc,{label:pt?"Descartar":"Discard",variant:"tertiary",disabled:options.busy,onClick:()=>{options.onDirty(false);options.execute("ae.presets.inspect",{});}}));footer.appendChild(applyControl.element);body.appendChild(footer);update();
   }
   return {element,drafts:()=>Object.fromEntries(draftReaders.map(read=>read())),setBlocked(value,busy=false){blocked=value;blockedBusy=busy;for(const action of hostActions){action.disabled=options.busy||blocked;action.title=blocked?(busy?i18n.t("phaseEditor.wait"):i18n.t("phaseEditor.reloadSelection")):action.getAttribute("aria-label")??action.textContent??"";}for(const input of Array.from(element.getElementsByTagName("input")))input.disabled=options.busy||blocked;for(const select of Array.from(element.getElementsByTagName("select")))select.disabled=options.busy||blocked;for(const refresh of refreshers)refresh();},dispose(){disposed=true;for(const cleanup of cleanups)cleanup();}};

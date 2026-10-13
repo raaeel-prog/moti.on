@@ -26,6 +26,8 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
   "undo.ae.presets.phase-adjust": {"pt-BR": "Moti.on: ajustar fase", "en-US": "Moti.on: adjust phase"},
   "undo.ae.presets.phase-action": {"pt-BR": "Moti.on: editar fase", "en-US": "Moti.on: edit phase"},
   "undo.ae.presets.phase-timing": {"pt-BR": "Moti.on: deslocar fase", "en-US": "Moti.on: shift phase"},
+  "undo.ae.presets.text-effect-adjust": {"pt-BR": "Moti.on: ajustar efeito de texto", "en-US": "Moti.on: adjust text effect"},
+  "undo.ae.presets.text-effect-action": {"pt-BR": "Moti.on: editar efeito de texto", "en-US": "Moti.on: edit text effect"},
   "undo.ae.presets.color-adjust": {"pt-BR": "Moti.on: ajustar cor", "en-US": "Moti.on: adjust color"},
   "undo.ae.text.word-reveal": {"pt-BR": "Moti.on: revelação com caixas", "en-US": "Moti.on: word box reveal"},
   "undo.ae.text.variable-morph": {"pt-BR": "Moti.on: morph por proximidade", "en-US": "Moti.on: proximity font morph"},

@@ -220,6 +220,32 @@
         "pt-BR": "Moti.on: deslocar fase"
       }
     },
+    "ae.presets.text-effect-adjust": {
+      id: "ae.presets.text-effect-adjust",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.text-effect-adjust",
+      undoLabels: {
+        "en-US": "Moti.on: adjust text effect",
+        "pt-BR": "Moti.on: ajustar efeito de texto"
+      }
+    },
+    "ae.presets.text-effect-action": {
+      id: "ae.presets.text-effect-action",
+      requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+      destructive: false,
+      mutates: true,
+      allowsNoopSuccess: false,
+      supportsDryRun: false,
+      undoLabelKey: "undo.ae.presets.text-effect-action",
+      undoLabels: {
+        "en-US": "Moti.on: edit text effect",
+        "pt-BR": "Moti.on: editar efeito de texto"
+      }
+    },
     "ae.presets.color-adjust": {
       id: "ae.presets.color-adjust",
       requirements: ["hasProject", "hasActiveComp"],

@@ -6,7 +6,7 @@ const built=await build({entryPoints:[fileURLToPath(new URL('../client/src/prese
 const {GALLERY_PRESETS,curveProgress,cameraPoint,presetArgs,defaultLibraryOptions,galleryCategoryMatches,gallerySequenceControls,signatureDurationRange}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
 test('curated and legacy presets retain unique identities and real application handlers',()=>{
-  assert.equal(GALLERY_PRESETS.length,232);assert.equal(new Set(GALLERY_PRESETS.map(p=>p.id )).size,232);
+  assert.equal(GALLERY_PRESETS.length,356);assert.equal(new Set(GALLERY_PRESETS.map(p=>p.id )).size,356);
   for(const p of GALLERY_PRESETS){
     assert.ok(p.version&&p.displayName['pt-BR']&&p.displayName['en-US']&&p.preview.fixtureId);
     assert.equal(p.operationPlan.command,p.handler);

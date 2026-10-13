@@ -25,10 +25,11 @@ test('camera overlay previews start neutral, peak at CUT, and settle without fad
   }
 });
 
-test('every transition previews a transparent start, readable rest and transparent exit',()=>{
+test('every fading transition previews a transparent start, readable rest and transparent exit',()=>{
   const transitions=GALLERY_PRESETS.filter(p=>p.motion?.mode==='transition'&&!p.motion.effect.startsWith('camera-'));
-  assert.equal(transitions.length,149);
+  assert.equal(transitions.length,259);
   for(const {motion:p} of transitions){
+    if(!p.fade)continue; // Geometric Momentum transitions clear the frame without opacity animation.
     const o={...defaultLibraryOptions(p),phase:'both'},end=libraryPreviewEnd(o);
     for(let index=0;index<7;index++){
       assert.equal(librarySample(p,o,0,index,7).opacity,0,`${p.id} start`);

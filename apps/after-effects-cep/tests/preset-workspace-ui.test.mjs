@@ -278,6 +278,16 @@ for(const [kind,label,message] of [['preset','Aplicar .ffx','Preset aplicado'],[
 function variantStorage(){let value=null;return {getItem:()=>value,setItem:(key,next)=>{value=next;},raw:()=>value};}
 function nameVariant(f,name){const input=f.workspace.element.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Nome da variação');input.value=name;input.emit('input');}
 
+test('saving a continuous effect from a combined rig retains its own recipe and controls',async t=>{
+  const storage=variantStorage(),f=await fixture(t,{storage,phases:2});
+  f.state.textEffect={presetId:'text-v3-characters-loop-drift',instance:'one-effect',options:{...options,speed:75,intensity:45,phase:'both'},controls:[]};
+  f.win.emit('focus');await setImmediate();
+  const component=f.workspace.element.getElementsByTagName('select').find(node=>node.id.endsWith('-variant-component'));
+  assert.ok(component);component.value='effect';component.emit('change');
+  nameVariant(f,'Efeito independente');f.button('Salvar preset aplicado').click();await setImmediate();
+  const saved=JSON.parse(storage.raw()).items[0];assert.equal(saved.presetId,f.state.textEffect.presetId);assert.equal(saved.options.speed,75);assert.equal(saved.options.intensity,45);
+});
+
 test('saved variations stay collapsed, persist between workspaces and load without mutating the host',async t=>{
   const storage=variantStorage();
   await t.test('save inspected settings',async child=>{

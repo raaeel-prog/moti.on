@@ -1,0 +1,38 @@
+/* Trusted scratch-project validation through the production dispatcher. */
+var report={status:"RUNNING",runId:job.runId,hostVersion:app.version,userProjectGuard:false,cases:[]};
+function writeReport(){var f=File(job.report);f.encoding="UTF-8";if(!f.open("w"))throw Error(f.error);f.write(MotionJson.stringify(report));f.close();}
+function check(value,message){if(!value)throw Error(message);}
+function command(id,args){return MotionJson.parse(MotionAE.dispatch(MotionJson.stringify({protocolVersion:MotionContracts.PROTOCOL_VERSION,requestId:"lifecycle-"+report.cases.length+"-"+id,command:"ae.presets."+id,args:args||{},context:{host:"after-effects",hostVersion:app.version,locale:"en-US"},options:{preserveSelection:true}})));}
+function apply(id,phase){var response=command("apply",{presetId:id,phase:phase||"in",direction:"preset",durationFrames:30,intensity:100,staggerFrames:2,unit:"preset",easing:"preset",order:"preset",overlap:65,speed:50,elasticity:30,seed:17});check(response.ok,"Apply "+id+": "+MotionJson.stringify(response.error));}
+function inspect(){var r=command("inspect",{});check(r.ok&&r.data.state==="ready","Inspection not ready");return r.data;}
+function sourceSignature(source){var d=source.value,signature={text:d.text,font:d.font,fontSize:d.fontSize,fillColor:d.fillColor,justification:d.justification,keys:source.numKeys};if(d.characterRange){var first=d.characterRange(0,1),last=d.characterRange(d.text.length-1,d.text.length);signature.first={size:first.fontSize,fill:first.fillColor};signature.last={size:last.fontSize,fill:last.fillColor};}return MotionJson.stringify(signature);}
+try{
+  $.evalFile(File(job.host));
+  if(!app.project||app.project.numItems!==0||app.project.file){report.status="ABORTED_USER_PROJECT_GUARD";writeReport();return;}
+  report.userProjectGuard=true;app.beginSuppressDialogs();
+  var fixtures=[{name:"short",text:"M",fps:24},{name:"multiline",text:"A\u00e7\u00e3o\rMoti.on\rTexto",fps:30},{name:"paragraph",text:"Editable paragraph text with multiple lines and accents: \u00e1\u00e9\u00ed\u00f3\u00fa",fps:60,box:true},{name:"unicode",text:"Ol\u00e1 \ud83d\udc69\u200d\ud83d\udcbb \u4f60\u597d \u0627\u0644\u0639\u0631\u0628\u064a\u0629",fps:24000/1001},{name:"mixed-styles",text:"Moti.on styles",fps:30000/1001,mixed:true},{name:"parenting",text:"Parented editable text",fps:25,parent:true},{name:"user-animation",text:"Animated source text",fps:30,keys:true},{name:"3d",text:"Depth per character",fps:24,threeD:true}];
+  var i,f,comp,layer,source,doc,parent,state,before,phases,effect,signature,selection,originalApply,armed,response;
+  for(i=0;i<fixtures.length;i++){
+    f=fixtures[i];comp=app.project.items.addComp("Moti.on lifecycle "+f.name,640,360,1,6,f.fps);
+    if(f.parent)parent=comp.layers.addNull();
+    layer=f.box?comp.layers.addBoxText([480,200],f.text):comp.layers.addText(f.text);source=layer.property("ADBE Text Properties").property("ADBE Text Document");doc=source.value;doc.font="ArialMT";doc.fontSize=42;doc.fillColor=[.92,.92,.94];
+    if(f.mixed){doc.characterRange(0,4).fontSize=58;doc.characterRange(0,4).fillColor=[.2,.6,1];}
+    source.setValue(doc);if(f.keys){source.setValueAtTime(0,doc);source.setValueAtTime(5,doc);layer.property("ADBE Transform Group").property("ADBE Position").setValueAtTime(0,[200,160]);layer.property("ADBE Transform Group").property("ADBE Position").setValueAtTime(5,[400,180]);}
+    if(f.parent){layer.parent=parent;parent.selected=false;}
+    comp.openInViewer();comp.time=2;layer.selected=true;signature=sourceSignature(source);
+    apply(f.threeD?"text-v3-characters-rotate-pitch-3d":"text-v3-characters-position-rise","in");apply("text-v3-characters-fade-cascade","out");before=inspect();phases=MotionJson.stringify(before.phases);
+    apply("text-v3-characters-loop-drift");state=inspect();check(MotionJson.stringify(state.phases)===phases,"Effect changed phases");check(layer.property("ADBE Marker").numKeys===2,"Effect created timing marker");
+    var options=state.textEffect.options;options.speed=75;options.intensity=45;response=command("text-effect-adjust",{target:state.target,presetId:state.textEffect.presetId,options:options});check(response.ok,"Effect adjustment failed");state=inspect();check(state.textEffect.options.speed===75,"Effect speed was not retained");effect=MotionJson.stringify(state.textEffect);
+    apply("text-v3-characters-position-rise","in");state=inspect();check(MotionJson.stringify(state.textEffect)===effect,"Replacing entrance changed effect");check(MotionJson.stringify(state.phases[1])===MotionJson.stringify(before.phases[1]),"Replacing entrance changed exit");
+    originalApply=MotionPresetLibrary.applyLayer;armed=true;MotionPresetLibrary.applyLayer=function(plan){originalApply(plan);if(armed){armed=false;throw Error("Injected fixture failure");}};
+    try{response=command("phase-apply",{presetId:"text-v3-characters-fade-cascade",phase:"in",direction:"preset",durationFrames:30,intensity:80,staggerFrames:2,unit:"preset"});}finally{MotionPresetLibrary.applyLayer=originalApply;}
+    check(!response.ok,"Partial failure did not reject");check(MotionJson.stringify(inspect().phases)===MotionJson.stringify(state.phases),"Partial failure lost phases");check(MotionJson.stringify(inspect().textEffect)===effect,"Partial failure lost effect");
+    state=inspect();response=command("text-effect-action",{target:state.target,action:"remove"});check(response.ok,"Effect removal failed");state=inspect();check(state.phases.length===2&&!state.textEffect,"Effect removal lost a transition");
+    response=command("phase-action",{target:state.target,phase:"in",action:"remove"});check(response.ok,"Entrance removal failed");state=inspect();response=command("phase-action",{target:state.target,phase:"out",action:"remove"});check(response.ok,"Exit removal failed");
+    check(layer.comment==="","Last removal did not restore comment");check(layer.property("ADBE Effect Parade").numProperties===0,"Owned effects remained");check(layer.property("ADBE Text Properties").property("ADBE Text Animators").numProperties===0,"Owned animators remained");check(!layer.threeDPerChar&&!layer.threeDLayer,"3D state was not restored");check(sourceSignature(source)===signature,"Source text or mixed styles changed");check(comp.selectedLayers.length===1&&comp.selectedLayers[0].id===layer.id,"Selection changed");
+    if(f.parent)check(layer.parent.id===parent.id,"Parent changed");if(f.keys)check(layer.property("ADBE Transform Group").property("ADBE Position").numKeys===2,"User animation changed");
+    report.cases.push({name:f.name,status:"PASS",frameRate:f.fps,sourcePreserved:true,selectionPreserved:true,independentComponents:true,partialFailureRollback:true});writeReport();
+  }
+  report.undo={status:"NOT RUN",reason:"API fixtures exercise production undo grouping; one user Undo requires an interactive Adobe check."};
+  report.status="PASS";writeReport();app.project.close(CloseOptions.DO_NOT_SAVE_CHANGES);app.endSuppressDialogs(false);app.quit();
+}catch(error){report.status="FAIL";report.error={message:String(error),line:error.line||0};try{writeReport();}catch(ignored){}if(report.userProjectGuard){app.project.close(CloseOptions.DO_NOT_SAVE_CHANGES);app.endSuppressDialogs(false);app.quit();}}

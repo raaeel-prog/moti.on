@@ -46,7 +46,7 @@ export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
       return vm.runInNewContext(this.expression, {
         time, inPoint: layer.inPoint, outPoint: layer.outPoint, value: this.value, thisComp: comp,
         thisLayer: {marker: layer.markers.expressionAPI()},
-        textIndex: unitIndex + 1, textTotal: unitCount, transform: {scale: layer.transform.property('ADBE Scale').valueAtTime(time, true)},
+        textIndex: unitIndex + 1, textTotal: unitCount, transform: {scale: layer.transform.property('ADBE Scale').valueAtTime(time, true),anchorPoint:layer.transform.property('ADBE Anchor Point').value,get rotation(){return layer.transform.property('ADBE Rotate Z').valueAtTime(time);}},
         effect: name => index => layer.effects.property(name).property(index).value
       });
     }
@@ -61,7 +61,7 @@ export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
     }
     get numProperties() { return this.children.length; }
     property(key) { return typeof key === 'number' ? this.children[key - 1] : this.children.find(p => p.name === key || p.matchName === key); }
-    canAddProperty(name) { return name === 'ADBE Slider Control' || name === 'ADBE Gaussian Blur 2'; }
+    canAddProperty(name) { return name === 'ADBE Slider Control' || name === 'ADBE Point Control' || name === 'ADBE Gaussian Blur 2'; }
     addProperty(name) {
       let p;
       if (this.matchName === 'ADBE Text Animator Properties') p = new Property(name, 0, this);
@@ -73,6 +73,7 @@ export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
       } else if (name === 'ADBE Gaussian Blur 2') {
         p = new Group(name, this, {'ADBE Gaussian Blur 2-0001': 0, 'ADBE Gaussian Blur 2-0003': 0});
       } else if (name === 'ADBE Slider Control') p = new Group(name, this, {'ADBE Slider Control-0001': 0});
+      else if (name === 'ADBE Point Control') p = new Group(name, this, {'ADBE Point Control-0001': [0,0]});
       else throw new Error(`Unexpected mock property ${name}`);
       p.remove = () => { this.children.splice(this.children.indexOf(p), 1); mutations++; };
       this.children.push(p); mutations++;
@@ -85,14 +86,16 @@ export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
       this.markers = new Markers(this);
       this.effects = new Group('ADBE Effect Parade', this);
       this.transform = new Group('ADBE Transform Group', this, {'ADBE Anchor Point': [50,50,0], 'ADBE Position': [300,200,0], 'ADBE Scale': [100,100,100], 'ADBE Rotate X': 0, 'ADBE Rotate Y': 0, 'ADBE Rotate Z': 0, 'ADBE Opacity': 100});
-      if (isText) { this.sourceText = 'Editable words\rSecond line'; this.text = new Group('ADBE Text Properties', this); this.text.children.push(new Group('ADBE Text Animators', this.text)); }
+      if (isText) { this.sourceText = 'Editable words\rSecond line'; this.text = new Group('ADBE Text Properties', this); this._threeDPerChar=false;this.text.children.push(new Group('ADBE Text Animators', this.text));this.text.children.push(new Group('ADBE Text More Options',this.text,{'ADBE Text Anchor Point Option':1,'ADBE Text Anchor Point Align':[0,0]})); }
     }
+    get threeDPerChar(){return this._threeDPerChar;}
+    set threeDPerChar(v){this._threeDPerChar=v;if(v)this.threeDLayer=true;}
     get numProperties() { return this.text ? 4 : 3; }
     property(name) { const all = [this.effects, this.transform, this.markers, this.text]; return typeof name === 'number' ? all[name - 1] : all.find(p => p?.matchName === name); }
     sourceRectAtTime() { return {left: 0, top: 0, width: 100, height: 100}; }
   }
   class CompItem {
-    constructor() { Object.assign(this, {id: 100, height, time: .2, frameDuration: 1 / fps, layers: []}); }
+    constructor() { Object.assign(this, {id: 100, width:height*16/9, height, time: .2, frameDuration: 1 / fps, layers: []}); }
     get selectedLayers() { return this.layers.filter(l => l.selected); }
   }
   const comp = new CompItem(), layer = new Layer(text); comp.layers.push(layer);

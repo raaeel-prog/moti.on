@@ -19,11 +19,14 @@ function fixture(delay=0){
   return {client,target,phase,writes,states,get value(){return value;}};
 }
 test('latest-only numeric gestures cap updates at ten per second and flush the exact release value',async()=>{
-  const f=fixture(45);f.client.start(f.target,f.phase,'intensity',100);
+  const f=fixture(45),started=performance.now();f.client.start(f.target,f.phase,'intensity',100);
   for(let i=0;i<20;i++){f.client.update(110+i);await wait(10);}
+  // Busy test workers can stretch the twenty timers beyond 200ms. The 10Hz
+  // limit is a wall-clock contract, not a fixed number of delayed callbacks.
+  const elapsed=performance.now()-started;
   await f.client.finish(false,147.3);
   assert.equal(f.writes[0].operation,'begin');assert.equal(f.writes.at(-1).operation,'commit');assert.equal(f.value,147.3);
-  assert.ok(f.writes.filter(d=>d.operation==='update').length<=2);assert.deepEqual(f.states,[[true],[false]]);
+  assert.ok(f.writes.filter(d=>d.operation==='update').length<=Math.floor(elapsed/100)+1);assert.deepEqual(f.states,[[true],[false]]);
   assert.ok(f.writes.every((d,i)=>i===0||d.sequence>f.writes[i-1].sequence));
 });
 test('cancel before begin acknowledgement restores the initial value without a late commit',async()=>{

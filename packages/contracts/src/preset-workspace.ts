@@ -25,6 +25,8 @@ export interface PresetInspection {
   /** A generated transition overlay; phase/direction belong to layer presets. */
   cameraTransition?: boolean;
   phases?: PresetPhaseInspection[];
+  /** Independent continuous Text Animator; never owns IN/OUT markers. */
+  textEffect?: PresetTextEffectInspection;
   frameRate?: number;
   dropFrame?: boolean;
   /** Native live-gesture capability is explicitly opt-in after host proof. */
@@ -48,6 +50,24 @@ export interface PresetPhaseInspection {
   options: MotionLibraryOptions;
   markerTime: number | null;
   controls: {key: keyof MotionLibraryOptions; name: string; type: "number"; min: number; max: number; unit: string}[];
+}
+
+export interface PresetTextEffectInspection {
+  presetId: string;
+  instance: string;
+  options: MotionLibraryOptions;
+  controls: PresetPhaseInspection["controls"];
+}
+
+export interface PresetTextEffectAdjustArgs {
+  target: PresetTarget;
+  presetId: string;
+  options: MotionLibraryOptions;
+}
+
+export interface PresetTextEffectActionArgs {
+  target: PresetTarget;
+  action: "remove" | "reset";
 }
 
 export interface PresetPhaseAdjustArgs {

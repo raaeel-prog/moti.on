@@ -157,6 +157,13 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsDryRun: false, supportsCancel: false,
     undoLabelKey: `undo.ae.presets.phase-${action}`, timeoutMs: 60_000
   })),
+  ...["adjust", "action"].map((action): CommandDescriptor => ({
+    id: `ae.presets.text-effect-${action}`, hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false, mutates: true, allowsNoopSuccess: false,
+    supportsDryRun: false, supportsCancel: false,
+    undoLabelKey: `undo.ae.presets.text-effect-${action}`, timeoutMs: 60_000
+  })),
   {
     id: "ae.presets.color-adjust", hosts: ["after-effects"],
     requirements: ["hasProject", "hasActiveComp"],

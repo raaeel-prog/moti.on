@@ -1,0 +1,37 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {setImmediate} from 'node:timers/promises';
+import {build} from 'esbuild';
+import {fileURLToPath} from 'node:url';
+import {createCepDocument} from './cep-dom.mjs';
+import {createFakeWindow} from '../../../packages/ui-core/tests/fake-dom.mjs';
+const built=await build({stdin:{contents:'export * from "./client/src/text-preset-preview.ts";export {MOTION_LIBRARY_PRESETS,MOTION_LIBRARY_DEFAULTS} from "@motion/contracts";',resolveDir:fileURLToPath(new URL('..',import.meta.url))},bundle:true,platform:'node',format:'esm',write:false});
+const api=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`),preset=api.MOTION_LIBRARY_PRESETS.find(p=>p.id==='text-v3-characters-position-rise');
+const settings={...api.MOTION_LIBRARY_DEFAULTS,...preset.defaults};
+const asset={video:'original.mp4',poster:'original.jpg',hash:'a'.repeat(64),durationSeconds:4,text:'Original',options:settings};
+const manifest=value=>({schemaVersion:1,presets:{[preset.id]:value}});
+test('reference manifest rejects remote media, traversal, malformed hashes and invalid recipe options',()=>{
+  assert.deepEqual(api.textReferenceAsset(manifest(asset),preset.id),asset);
+  for(const invalid of [{video:'https://example.test/video.mp4'},{video:'../private.mp4'},{poster:'data:image/png,x'},{hash:'fake'},{durationSeconds:Infinity},{text:'x'.repeat(181)},{options:{...settings,speed:999}}])assert.equal(api.textReferenceAsset(manifest({...asset,...invalid}),preset.id),undefined);
+});
+test('focused preview edits sample, loads reference only on demand, scrubs and disposes late async work',async t=>{
+  const previous={window:globalThis.window,IntersectionObserver:globalThis.IntersectionObserver};
+  const doc=createCepDocument(),win=createFakeWindow();doc.defaultView=win;globalThis.window=win;
+  const createNS=doc.createElementNS.bind(doc);doc.createElementNS=(...args)=>{const node=createNS(...args);node.style={};return node;};
+  let visible,frame=0,requested=0,resolver,edited='';const frames=new Map();
+  win.requestAnimationFrame=callback=>{frames.set(++frame,callback);return frame;};win.cancelAnimationFrame=id=>frames.delete(id);
+  globalThis.IntersectionObserver=class {constructor(callback){visible=callback;}observe(target){this.target=target;}disconnect(){}};
+  const preview=api.createTextPresetPreview(doc,{locale:'en-US',preset,settings:()=>settings,sample:'Original',onSample:value=>{edited=value;},loadReference:()=>{requested++;return new Promise(resolve=>{resolver=resolve;});}});
+  t.after(()=>{preview.dispose();Object.assign(globalThis,previous);});
+  const button=name=>preview.element.getElementsByTagName('button').find(node=>node.allText===name),video=preview.element.getElementsByTagName('video')[0],sample=preview.element.getElementsByTagName('textarea')[0];
+  assert.equal(requested,0);assert.equal(video.getAttribute('src'),undefined);
+  sample.value='Ação 👩‍💻\nMoti.on';sample.emit('input');assert.equal(edited,sample.value);
+  button('AE render').click();assert.equal(requested,1);resolver(manifest(asset));await setImmediate();assert.equal(video.getAttribute('src'),'../assets/text-previews/original.mp4');
+  const scrub=preview.element.getElementsByTagName('input')[0];scrub.value='.25';scrub.emit('input');assert.equal(video.currentTime,1);
+  visible([{target:preview.element,isIntersecting:false}]);assert.equal(video.getAttribute('src'),undefined);
+  visible([{target:preview.element,isIntersecting:true}]);assert.ok(video.getAttribute('src'));
+  button('Interactive simulation').click();assert.equal(video.getAttribute('src'),undefined);button('Play').click();assert.equal(frames.size,1);
+  win.emit('blur');assert.equal(frames.size,0);preview.dispose();button('Play').click();assert.equal(frames.size,0);
+  const late=api.createTextPresetPreview(doc,{locale:'en-US',preset,settings:()=>settings,sample:'Late',onSample:()=>{},loadReference:()=>new Promise(resolve=>{resolver=resolve;})});
+  late.element.getElementsByTagName('button').find(node=>node.allText==='AE render').click();late.dispose();resolver(manifest(asset));await setImmediate();assert.equal(late.element.getElementsByTagName('video')[0].getAttribute('src'),undefined);
+});

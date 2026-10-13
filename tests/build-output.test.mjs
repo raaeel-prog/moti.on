@@ -39,6 +39,9 @@ const dist = path.join(root, "dist");
 const presetSource = path.join(root, "apps/after-effects-cep/assets/control-presets");
 const controlCatalog = JSON.parse(await readFile(path.join(presetSource, "catalog.json"), "utf8"));
 const presetFiles = [...new Set(Object.values(controlCatalog).map(entry => entry.file))];
+const textPreviewSource=path.join(root,"apps/after-effects-cep/assets/text-previews");
+const textManifest=JSON.parse(await readFile(path.join(textPreviewSource,"manifest.json"),"utf8"));
+const textPreviewFiles=["manifest.json",...Object.values(textManifest.presets).flatMap(entry=>[entry.video,entry.poster])];
 const EXPECTED_DIST_FILES = [
   "BUILD_INFO.json",
 
@@ -54,6 +57,7 @@ const EXPECTED_DIST_FILES = [
   ...(existsSync(path.join(root, "apps/after-effects-cep/account/config.json")) ? ["after-effects-cep/account/config.json"] : []),
   "after-effects-cep/assets/control-presets/catalog.json",
   ...presetFiles.map(file => `after-effects-cep/assets/control-presets/${file}`),
+  ...textPreviewFiles.map(file=>`after-effects-cep/assets/text-previews/${file}`),
   "after-effects-cep/client/index.html",
   "after-effects-cep/client/lib/CSInterface.js",
   "after-effects-cep/client/main.js",

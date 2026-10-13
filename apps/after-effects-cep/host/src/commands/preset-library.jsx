@@ -154,7 +154,7 @@
     if (!meta) return null;
     for (var i = 0; i < meta.expressions.length; i++) {
       var p = locate(layer, meta.expressions[i].path);
-      if (!p || p.expression.indexOf(prefix(meta)) !== 0) return fail(MotionContracts.ERROR.EXPRESSION_CONFLICT, "Uma expressão do preset foi alterada. Desfaça essa alteração antes de ajustar ou remover o preset.");
+      if (!p || p.expression.indexOf(prefix(meta)) !== 0 || (meta.expressions[i].managed && p.expression !== meta.expressions[i].managed)) return fail(MotionContracts.ERROR.EXPRESSION_CONFLICT, "Uma expressão do preset foi alterada. Desfaça essa alteração antes de ajustar ou remover o preset.");
     }
     var groups = /** @type {any} */ ([[MN_EFFECTS, meta.effects], [MN_TEXT, meta.animators], ["ADBE Mask Parade", meta.masks]]);
     for (i = 0; i < groups.length; i++) {
@@ -177,7 +177,7 @@
     if(Object.prototype.hasOwnProperty.call(args,"easing")&&args.easing!=="preset"&&args.easing!=="smooth"&&args.easing!=="cubic"&&args.easing!=="overshoot"&&args.easing!=="bounce"&&args.easing!=="flicker"&&args.easing!=="silk"&&args.easing!=="glide"&&args.easing!=="spring"&&args.easing!=="velvet"&&args.easing!=="drift"&&args.easing!=="snap"&&args.easing!=="settle-wave"&&args.easing!=="settle-hop")return fail(MotionContracts.ERROR.INVALID_PRESET,"Suavização inválida.");
     var optional=["elasticity","overlap","speed","settleAmount","settleCount","settleDamping"];
     for(var o=0;o<optional.length;o++){var option=optional[o];if(!option||!Object.prototype.hasOwnProperty.call(args,option))continue;
-      var v=args[option],min=option==="speed"?25:option==="settleCount"?.5:0,max=option==="speed"?200:option==="settleCount"?8:100;
+      var v=args[option],min=option==="speed"?25:option==="settleCount"?0.5:0,max=option==="speed"?200:option==="settleCount"?8:100;
       if(typeof v!=="number"||!isFinite(v)||v<min||v>max)return fail(MotionContracts.ERROR.INVALID_PRESET,"Elasticidade, sobreposição, velocidade ou assentamento fora do limite.");
     }
     if (args.unit !== "preset" && args.unit !== "characters" && args.unit !== "words" && args.unit !== "lines" && args.unit !== "all") return fail(MotionContracts.ERROR.INVALID_PRESET,"Divisão de texto inválida.");
@@ -191,7 +191,7 @@
   function usesNativeCore(p) { return p.effect === "native-rgb" || p.effect === "native-glitch"; }
   /** Collections authored on Studio timing and its Speed/Overlap controls.
    * @param {any} p @returns {boolean} */
-  function studioTimed(p) { return p.collection==="studio"||p.collection==="native"||p.collection==="premium"||p.collection==="signature"||p.collection==="momentum"; }
+  function studioTimed(p) { return p.collection==="studio"||p.collection==="native"||p.collection==="premium"||p.collection==="signature"||p.collection==="momentum"||p.collection==="text"; }
   /** @param {string} kind @returns {boolean} */
   function isSettle(kind) { return kind==="settle-wave"||kind==="settle-hop"; }
   /** Option, then recipe default, then the curve's own default.
@@ -211,9 +211,9 @@
   }
   /** Layer space to composition space through 2D parents, pre-expression, at
    * time t: [a,b,c,d,e,f] with x'=a*x+c*y+e and y'=b*x+d*y+f. Null for 3D.
-   * @param {any} layer @param {number} time @returns {number[]|null} */
+   * @param {any} layer @param {number} time @returns {any} */
   function compAffine(layer,time) {
-    var m=[1,0,0,1,0,0],l=layer,guard=0;
+    var m=/** @type {any} */ ([1,0,0,1,0,0]),l=layer,guard=0;
     while(l&&guard++<64){
       if(l.threeDLayer)return null;
       var tr=l.property(MN_TRANSFORM),A=tr.property("ADBE Anchor Point").valueAtTime(time,true),P=tr.property("ADBE Position").valueAtTime(time,true),S=tr.property("ADBE Scale").valueAtTime(time,true),r=tr.property("ADBE Rotate Z").valueAtTime(time,true)*Math.PI/180;
@@ -228,20 +228,20 @@
    * direction expressed in the parent's space, where Position lives.
    * @param {any} plan @param {number[]} xy @returns {{distance:number,unit:number[]}} */
   function offscreenTravel(plan,xy) {
-    var l=plan.layer,comp=plan.comp,p=plan.p,length=Math.sqrt(xy[0]*xy[0]+xy[1]*xy[1]);
+    var l=plan.layer,comp=plan.comp,p=plan.p,vector=/** @type {any} */ (xy),length=Math.sqrt(vector[0]*vector[0]+vector[1]*vector[1]);
     if(length<.000001)throw new Error("O preset não define uma direção de saída.");
-    var ux=xy[0]/length,uy=xy[1]/length,times=[],distance=0,i,j;
+    var ux=vector[0]/length,uy=vector[1]/length,times=[],distance=0,i,j;
     if(plan.args.phase!=="out")times.push(l.inPoint);
     if(plan.args.phase!=="in")times.push(Math.max(l.inPoint,l.outPoint-comp.frameDuration));
     var amp=Math.max(1,plan.args.intensity/100),grow=Math.max(1,1+Math.max(p.scale[0],p.scale[1])/100*amp),inflate=p.rotation[2]||grow>1?grow:0;
     for(i=0;i<times.length;i++){
       var m=compAffine(l,times[i]);if(!m)throw new Error("Este preset sai do quadro em 2D. Use uma camada 2D, sem parent 3D.");
       var rect=l.sourceRectAtTime(times[i],false),A=l.property(MN_TRANSFORM).property("ADBE Anchor Point").valueAtTime(times[i],true);
-      var xs=[rect.left,rect.left+rect.width],ys=[rect.top,rect.top+rect.height],minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+      var xs=/** @type {any} */ ([rect.left,rect.left+rect.width]),ys=/** @type {any} */ ([rect.top,rect.top+rect.height]),minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
       for(j=0;j<4;j++){var x=xs[j%2],y=ys[j>1?1:0],cx=m[0]*x+m[2]*y+m[4],cy=m[1]*x+m[3]*y+m[5];minX=Math.min(minX,cx);maxX=Math.max(maxX,cx);minY=Math.min(minY,cy);maxY=Math.max(maxY,cy);}
       distance=Math.max(distance,core.libraryOffscreenDistance(m[0]*A[0]+m[2]*A[1]+m[4],m[1]*A[0]+m[3]*A[1]+m[5],minX,minY,maxX,maxY,inflate,ux,uy,comp.width,comp.height,Math.max(8,.02*Math.max(comp.width,comp.height))));
     }
-    var unit=[ux,uy];
+    var unit=/** @type {any} */ ([ux,uy]);
     if(l.parent){
       var pm=compAffine(l.parent,times[0]),det=pm?pm[0]*pm[3]-pm[2]*pm[1]:0;
       if(Math.abs(det)<.000000001)throw new Error("A escala do parent é zero; não há como medir a saída do quadro.");
@@ -254,7 +254,7 @@
   function liveValues(layer,meta) {
     if(!meta||!meta.controls)return null;
     var out=/** @type {any} */ ({direction:meta.options&&meta.options.direction,travelComputed:meta.travelComputed}),keys=["center","travel"],found=false;
-    for(var i=0;i<keys.length;i++){var name=meta.controls[keys[i]],e=name&&child(layer.property(MN_EFFECTS),name),prop=e&&e.property(1);if(prop&&!prop.numKeys&&!prop.expression){out[keys[i]]=prop.value;found=true;}}
+    for(var i=0;i<keys.length;i++){var name=meta.controls[keys[i]||""],e=name&&child(layer.property(MN_EFFECTS),name),prop=e&&e.property(1);if(prop&&!prop.numKeys&&!prop.expression){out[keys[i]||""]=prop.value;found=true;}}
     return found?out:null;
   }
   /** Signature looks whose texture or sequence depends on the seed.
@@ -271,6 +271,10 @@
   function requiredEffects(p) { return /** @type {any} */ (global).MotionLibraryCore.libraryRequiredEffects(p); }
   /** @param {any} args @param {string} action @param {boolean=} migration @param {any[]=} selectedOverride @param {any=} phaseOwner @returns {MotionCommandFailure|null} */
   function preflight(args, action, migration, selectedOverride, phaseOwner) {
+    var combined=/** @type {any} */ (global).MotionPresetPhases;
+    if(!phaseOwner&&combined&&action==="apply"&&combined.isTextEffect(args))return combined.effectPreflight(args,"apply");
+    if(!phaseOwner&&combined&&action==="apply"&&definition(args)&&definition(args).collection==="text"&&definition(args).mode==="transition")return combined.transitionPreflight(args);
+    if(!phaseOwner&&combined&&action!=="apply"&&combined.hasSelected())return combined.removePreflight(args,action);
     if (action === "apply") { var validation = validate(args); if (validation) return validation; }
     else { for (var k in args) if (Object.prototype.hasOwnProperty.call(args,k)&&!(action==="remove"&&(k==="target"||k==="targets"))) return fail(MotionContracts.ERROR.INVALID_PRESET,"Esta ação não recebe esse parâmetro."); }
     var comp = app.project && app.project.activeItem;
@@ -359,10 +363,11 @@
       "var w="+(p.mode === "transition" ? "2-ease(u[0],"+MotionJson.stringify(kind)+easeTail+")-ease(u[1],"+MotionJson.stringify(kind)+easeTail+(settles?",1":"")+")" : "wave(age,idx,"+MotionJson.stringify(p.waveform === "none" ? "wiggle" : p.waveform)+",seed)")+";var fadeWeight=w;\n"+
       (p.mode === "transition" && p.waveform !== "none" ? "w+=wave(age,idx,"+MotionJson.stringify(p.waveform)+",seed)*Math.abs(w)*0.25;\n" : "")+
       (p.choreography ? "var choreography="+core.libraryChoreography.toString()+";var pose=choreography(Math.max(0,Math.min(1,Math.min(u[0],u[1]))),w,"+p.position.join(",")+","+MotionJson.stringify(p.choreography.path)+","+MotionJson.stringify(p.choreography.distribution||"uniform")+",rawIndex,seed,"+(typeof p.choreography.turns==="number"?p.choreography.turns:1)+","+MotionJson.stringify(args.direction)+");\n" : "")+
+      ((p.text.reveal==="resolve"||p.text.reveal==="roll")&&p.collection!=="signature"?"var glyph="+core.librarySignatureGlyph.toString()+";\n":"")+
       // Signature looks share one progress, velocity and envelope with the preview.
       (p.collection==="signature" ? "var envelope="+core.librarySignatureEnvelope.toString()+";var glyph="+core.librarySignatureGlyph.toString()+";var sp=Math.max(0,Math.min(1,Math.min(u[0],u[1])));var sv="+(p.mode==="transition"?"("+core.librarySignatureVelocity.toString()+")(sp,"+MotionJson.stringify(args.easing&&args.easing!=="preset"?args.easing:p.easing)+",elastic,ease)":"0")+";\n" : "");
   }
-  /** @param {any} meta @param {string} key @param {number} fallback @returns {string} */
+  /** @param {any} meta @param {string} key @param {number|string} fallback @returns {string} */
   function controlExpression(meta,key,fallback){return meta.controls&&meta.controls[key]?"effect("+MotionJson.stringify(meta.controls[key])+")(1)":String(fallback);}
   /** @param {any} plan @param {any[]} path @param {string} expression */
   function express(plan,path,expression) {
@@ -372,6 +377,7 @@
     var known = false;
     for (var i=0;i<plan.meta.expressions.length;i++) if (MotionJson.stringify(plan.meta.expressions[i].path) === MotionJson.stringify(path)) known=true;
     if (!known) plan.meta.expressions.push({path:path,original:prop.expression,enabled:prop.expressionEnabled});
+    for (i=0;i<plan.meta.expressions.length;i++) if (MotionJson.stringify(plan.meta.expressions[i].path) === MotionJson.stringify(path)) plan.meta.expressions[i].managed=expression;
     prop.expression=expression;prop.expressionEnabled=true;
     prop.valueAtTime(Math.max(plan.layer.inPoint,Math.min(plan.layer.outPoint-plan.comp.frameDuration,plan.comp.time)),false);
     if (prop.expressionError) throw new Error("O After Effects recusou a expressão do preset: "+prop.expressionError);
@@ -481,6 +487,7 @@
   /** @param {any} plan */
   function textAnimation(plan){
     var p=plan.p,xy=core.libraryDirection(p.position[0],p.position[1],plan.args.direction),a=animator(plan,"Movimento");
+    if(p.text.pivot&&(p.text.pivot[0]||p.text.pivot[1]||p.text.pivot[2]))textProperty(plan,a,"ADBE Text Anchor Point 3D",[p.text.pivot[0]*plan.comp.height/1080,p.text.pivot[1]*plan.comp.height/1080,p.text.pivot[2]*plan.comp.height/1080]);
     if(p.choreography){
       // One vector selector maps nominal pixels to independent X/Y/Z paths.
       // Separate animators keep rotation, tracking and scale from borrowing the
@@ -491,7 +498,7 @@
         a=animator(plan,"Escala");textProperty(plan,a,"ADBE Text Scale 3D",[100+p.scale[0],100+p.scale[1],100+p.scale[2]]);
         textSelector(plan,a,"[pose[4]*amp*100,pose[5]*amp*100,w*amp*100];");
       }
-      if(p.rotation[2]){a=animator(plan,"Rotação");textProperty(plan,a,"ADBE Text Rotation",p.rotation[2]);textSelector(plan,a,"pose[3]*amp*100;");}
+      if(p.rotation[2]||p.text.dimension==="3d"&&(p.rotation[0]||p.rotation[1])){a=animator(plan,"Rotação");textProperty(plan,a,"ADBE Text Rotation",p.rotation[2]);if(p.text.dimension==="3d"){if(p.rotation[0])textProperty(plan,a,"ADBE Text Rotation X",p.rotation[0]);if(p.rotation[1])textProperty(plan,a,"ADBE Text Rotation Y",p.rotation[1]);}textSelector(plan,a,"pose[3]*amp*100;");}
       if(p.text.tracking||p.text.skew){
         a=animator(plan,"Tipografia");
         if(p.text.tracking)textProperty(plan,a,"ADBE Text Tracking Amount",p.text.tracking);
@@ -502,14 +509,15 @@
     textProperty(plan,a,"ADBE Text Position 3D",[xy[0]*plan.comp.height/1080,xy[1]*plan.comp.height/1080,p.position[2]*plan.comp.height/1080]);
     textProperty(plan,a,"ADBE Text Scale 3D",[100+p.scale[0],100+p.scale[1],100+p.scale[2]]);
     textProperty(plan,a,"ADBE Text Rotation",p.rotation[2]);
+    if(p.text.dimension==="3d"){if(p.rotation[0])textProperty(plan,a,"ADBE Text Rotation X",p.rotation[0]);if(p.rotation[1])textProperty(plan,a,"ADBE Text Rotation Y",p.rotation[1]);}
     if(p.text.tracking)textProperty(plan,a,"ADBE Text Tracking Amount",p.text.tracking);
     if(p.text.skew)textProperty(plan,a,"ADBE Text Skew",p.text.skew);
     textSelector(plan,a,"[w*amp*100,w*amp*100,w*amp*100];");
     }
     if(p.fade){a=animator(plan,"Opacidade");textProperty(plan,a,"ADBE Text Opacity",0);textSelector(plan,a,p.text.reveal==="typewriter"?"Math.min(u[0],u[1])<(idx+1)/total?Math.min(1,amp)*100:0;":p.mode==="transition"?"var opacity=Math.max(0,Math.min(1,fadeWeight*amp));[opacity*100,opacity*100,opacity*100];":"var opacity=Math.abs(w)*Math.min(1,amp)*.7;[opacity*100,opacity*100,opacity*100];");}
-    if(p.text.blur){a=animator(plan,"Foco");var blur=p.text.blur*plan.comp.height/1080;textProperty(plan,a,"ADBE Text Blur",[p.text.blurAxis==="y"?0:blur,p.text.blurAxis==="x"?0:blur]);textSelector(plan,a,"var b=Math.max(0,w)*amp*100;[b,b,b];");}
+    if(p.text.blur){a=animator(plan,"Foco");var blur=p.text.blur*plan.comp.height/1080;textProperty(plan,a,"ADBE Text Blur",[p.text.blurAxis==="y"?0:blur,p.text.blurAxis==="x"?0:blur]);textSelector(plan,a,"var b="+(p.mode==="transition"?"Math.max(0,w)":"Math.abs(w)")+"*amp*100;[b,b,b];");}
     // The fill tints arriving units and returns to the editable source fill at rest.
-    if(p.text.fill&&p.mode==="transition"){a=animator(plan,"Cor");textProperty(plan,a,"ADBE Text Fill Color",[p.text.fill[0],p.text.fill[1],p.text.fill[2],1]);textSelector(plan,a,"var c=Math.max(0,Math.min(1,fadeWeight))*Math.min(1,amp)*100;[c,c,c];");}
+    if(p.text.fill){a=animator(plan,"Cor");textProperty(plan,a,"ADBE Text Fill Color",[p.text.fill[0],p.text.fill[1],p.text.fill[2],1]);textSelector(plan,a,"var c="+(p.mode==="transition"?"Math.max(0,Math.min(1,fadeWeight))":"(.5+.5*w)")+"*Math.min(1,amp)*100;[c,c,c];");}
     if((p.text.reveal==="resolve"||p.text.reveal==="roll")&&p.mode==="transition"){a=animator(plan,"Glifos");textProperty(plan,a,"ADBE Text Character Offset",30);textSelector(plan,a,"var g=glyph("+MotionJson.stringify(p.text.reveal)+",Math.min(u[0],u[1]),fadeWeight,rawIndex,seed)*(amp>0?100/30:0);[g,g,g];");}
     if(p.text.decode){a=animator(plan,"Decodificação");textProperty(plan,a,"ADBE Text Character Offset",30);textSelector(plan,a,"var amount=Math.round(Math.sin(Math.floor((time-inPoint)*18)*7.7+textIndex*11.3)*30)*"+(p.mode==="transition"?"Math.max(0,Math.min(1,w))":"1")+"*amp;[amount*100/30,amount*100/30,amount*100/30];");}
     if(p.text.mask){
@@ -536,7 +544,7 @@
         // rotation's frame. Anchor Point is never changed.
         var rz=p.rotation[2],q=(p.choreography?"pose[3]":"w")+"*amp";
         body=(unit?"var travel="+controlExpression(plan.meta,"travel",0)+";":"")+"var q="+q+",d="+rz+"*q*Math.PI/180,c="+controlExpression(plan.meta,"center","transform.anchorPoint")+",a=transform.anchorPoint,s=transform.scale;"+
-          "var vx=(c[0]-a[0])*s[0]/100,vy=(c[1]-a[1])*s[1]/100,r0=(transform.rotation-"+rz+"*q)*Math.PI/180;"+
+          "var vx=(c[0]-a[0])*s[0]/100,vy=(c[1]-a[1])*s[1]/100,r0=(transform.rotation-("+rz+")*q)*Math.PI/180;"+
           "var ex=vx*(1-Math.cos(d))+vy*Math.sin(d),ey=vy*(1-Math.cos(d))-vx*Math.sin(d);"+
           "["+terms[0]+"+ex*Math.cos(r0)-ey*Math.sin(r0),"+terms[1]+"+ex*Math.sin(r0)+ey*Math.cos(r0)"+(terms.length>2?","+terms[2]:"")+"];";
       }
@@ -604,7 +612,7 @@
     if(studioTimed(p)){
       if(isText(p)&&p.mode==="transition")extras.push({key:"overlap",pt:"Sobreposição (%)",en:"Overlap (%)",fallback:65});
       if(p.mode==="continuous")extras.push({key:"speed",pt:"Velocidade (%)",en:"Speed (%)",fallback:100});
-      if(p.collection==="premium"||p.collection==="signature"&&signatureSeeded(p))extras.push({key:"seed",pt:"Variação",en:"Variation",fallback:17});
+      if(p.collection==="text"||p.collection==="premium"||p.collection==="signature"&&signatureSeeded(p))extras.push({key:"seed",pt:"Variação",en:"Variation",fallback:17});
     }
     if(extras.length){
       if(!m.controls)m.controls={};
@@ -621,6 +629,8 @@
   }
   /** @param {any} args @param {any} context @param {any=} layerOptions @returns {MotionCommandResult} */
   function apply(args,context,layerOptions){
+    var combined=/** @type {any} */ (global).MotionPresetPhases;if(!layerOptions&&combined&&combined.isTextEffect(args))return combined.effectRun(args,context,"apply");
+    if(!layerOptions&&combined&&definition(args)&&definition(args).collection==="text"&&definition(args).mode==="transition")return combined.transitionRun(args,context);
     var comp=/** @type {any} */ (app.project.activeItem),layers=comp.selectedLayers,p=definition(args),plans=/** @type {any[]} */ ([]),i;
     try{
       for(i=0;i<layers.length;i++){
@@ -684,7 +694,7 @@
     for(i=0;i<ordered.length;i++){
       var item=inspectLayer(ordered[i],comp);
       if(item.state!=="ready")return {state:"multiple",message:"Selecione camadas com o mesmo preset e controles editáveis. "+(item.layerName?item.layerName+": ":"")+item.message};
-      if(item.phases)return {state:"multiple",message:"Selecione uma camada para editar suas fases de entrada e saída."};
+      if(item.phases||item.textEffect)return {state:"multiple",message:"Selecione uma camada para editar suas fases de entrada e saída."};
       if(item.cameraTransition)return {state:"multiple",message:"Edite uma pré-comp de transição de cada vez."};
       if(first&&first.presetId!==item.presetId)return {state:"multiple",message:"As camadas têm receitas diferentes. Selecione camadas com o mesmo preset para editar em conjunto."};
       if(first)for(var key in first.options)if(Object.prototype.hasOwnProperty.call(first.options,key)&&first.options[key]!==item.options[key])mixed[key]=true;
@@ -799,7 +809,7 @@
     if(expected||actual){if(!(expected instanceof Array)||!(actual instanceof Array)||expected.length!==actual.length)return fail(MotionContracts.ERROR.INVALID_PRESET,"A seleção de camadas mudou. Nada foi removido.");for(var i=0;i<actual.length;i++)if(!matches(expected[i],actual[i]))return fail(MotionContracts.ERROR.INVALID_PRESET,"A seleção de camadas mudou. Nada foi removido.");}
     return null;
   }
-  MotionRegistry.register("ae.presets.remove",{preflight:function(args){return preflight(args,"remove");},run:function(args){var error=preflight(args,"remove");if(error){var invalid=/** @type {any} */ (new Error(error.message));invalid.motionCode=error.code;throw invalid;}return cameraTransition && cameraTransition.hasSelected(app.project.activeItem)?cameraTransition.remove():remove();}});
+  MotionRegistry.register("ae.presets.remove",{preflight:function(args){return preflight(args,"remove");},run:function(args){var error=preflight(args,"remove");if(error){var invalid=/** @type {any} */ (new Error(error.message));invalid.motionCode=error.code;throw invalid;}var combined=/** @type {any} */ (global).MotionPresetPhases;if(combined&&combined.hasSelected())return combined.remove(args);return cameraTransition && cameraTransition.hasSelected(app.project.activeItem)?cameraTransition.remove():remove();}});
   MotionRegistry.register("ae.presets.bake",{preflight:function(args){return preflight(args,"bake");},run:function(){return cameraTransition && cameraTransition.hasSelected(app.project.activeItem)?cameraTransition.bake():bake();}});
   global.MotionPresetLibrary={validate:validate,metadata:metadata,requiredEffects:requiredEffects,header:header,markerState:markerState,verifyOwnership:verifyOwnership,definition:definition,preflight:preflight,applyLayer:applyLayer,removeLayer:removeLayer,inspectLayer:inspectLayer,locate:locate,child:child,snapshot:snapshot,restore:restore,saveMetadata:saveMetadata,snapshotMarkers:snapshotMarkers,restoreMarkers:restoreMarkers,removeMarkers:removeMarkers,liveValues:liveValues};
 }($.global));

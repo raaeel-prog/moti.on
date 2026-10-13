@@ -1,6 +1,7 @@
 import { attachScrubbableNumber, button, createActionButton, type ActionButtonController, clearNode, createElement, createIcon, createBadge, createEmptyState, createI18n, searchField, selectField, type PanelPreferences } from "@motion/ui-core";
 import { MOTION_LIBRARY_PRESETS, MOTION_LIBRARY_DEFAULTS, MOTION_SETTLE_DEFAULTS, motionLibraryRequirements, type MotionLibraryRequirements, type MotionLibraryPreset, type MotionLibraryOptions, type PersonalPresetCatalog, type PersonalPresetItem, type PersonalPresetPreview, type PresetDefinitionV1, type QuickContext } from "@motion/contracts";
 import { paintLibraryPreview, libraryPreviewPlayback, libraryPreviewEnd, cameraPreviewPlayback } from "./motion-library-preview.js";
+import {createTextPresetPreview} from "./text-preset-preview.js";
 import { createPersonalMediaPreview } from "./personal-media-preview.js";
 import { normalizeSearch } from "./quick-library.js";
 
@@ -157,7 +158,7 @@ export const GALLERY_PRESETS: GalleryPreset[] = [
     category: motion.id.startsWith("camera-") ? "camera-transitions" : motion.category, hosts: ["after-effects"], minHostVersion: { "after-effects": "25.0" },
     requirements: [transition ? "active-composition" : motion.category.startsWith("text-") ? "selected-text-layers" : "selected-visual-layers"],
     operationPlan: { command: handler, args: params },
-    tags: `${motion.collection ?? ""} ${motion.family ?? ""} ${motion.tempo?.character ?? ""} ${motion.category} ${motion.easing} ${motion.effect} ${motion.waveform} ${motion.choreography?.path ?? ""} ${motion.choreography?.distribution ?? ""} ${momentumTags(motion)}${motion.name["pt-BR"]} ${motion.name["en-US"]}`,
+    tags: `${motion.collection ?? ""} ${motion.family ?? ""} ${motion.tempo?.character ?? ""} ${motion.category} ${motion.easing} ${motion.effect} ${motion.waveform} ${motion.choreography?.path ?? ""} ${motion.choreography?.distribution ?? ""} ${momentumTags(motion)}${motion.name["pt-BR"]} ${motion.name["en-US"]} ${motion.textFamily ?? ""} ${motion.textVariant?.id ?? ""} ${motion.text.dimension ?? ""}`.replace(/\s+/g," ").trim(),
     curve: cameraCurve, preview: { renderer: "motion", fixtureId: `${motion.id}-v1` },
     handler, applyMode: transition ? "precomp" : "layers", reapplyPolicy: "adjust-managed", motion, params
   }; }),
@@ -185,7 +186,7 @@ export function galleryCategoryMatches(category: string, preset: GalleryPreset):
   return category === "all" || category === "animation" && Boolean(preset.motion) && !preset.category.startsWith("camera") ||
     category === "motion" && preset.category.startsWith("motion-") || category === "text" && preset.category.startsWith("text-") ||
     category === "studio" && preset.motion?.collection === "studio" || category === "gemini" && preset.motion?.collection === "gemini" ||
-    category === "classics" && Boolean(preset.motion) && preset.motion?.collection !== "premium" && preset.motion?.collection !== "signature" && preset.motion?.collection !== "momentum" ||
+    category === "classics" && Boolean(preset.motion) && preset.motion?.collection !== "premium" && preset.motion?.collection !== "signature" && preset.motion?.collection !== "momentum" && preset.motion?.collection !== "text" ||
     category === "camera" && preset.category.startsWith("camera") || category === "camera-moves" && preset.category === "camera" || preset.category === category;
 }
 
@@ -242,7 +243,7 @@ export function cameraPoint(id: string, progress: number, point: number[]): numb
 
 export interface PresetNavigation {
   query: string; category: string; scope: string; scroll: number;
-  selectedId?: string; drafts?: Record<string, MotionLibraryOptions>;
+  textDimension?:"all"|"2d"|"3d"; textFamily?:string; sampleText?:string; selectedId?: string; drafts?: Record<string, MotionLibraryOptions>;
   recentOrder?: string[];
   pendingRevealId?: string;
   sidebarWidth?: number; view?: "browse" | "edit";
@@ -279,6 +280,10 @@ export function createPresetGallery(doc: Document, options: {
     const categoryVisible = galleryCategoryMatches(nav.category, requestedPreset);
     const queryVisible = normalizeSearch(`${requestedPreset.displayName[i18n.locale()] ?? requestedPreset.id} ${requestedPreset.tags}`).includes(normalizeSearch(nav.query));
     const scopeVisible = nav.scope === "favorites" ? prefs.favorites.includes(requestedPreset.id) : nav.scope === "recent" ? (nav.recentOrder ?? prefs.recent).includes(requestedPreset.id) : true;
+    if(requestedPreset.motion?.category.startsWith("text-")){
+      if(nav.textDimension&&nav.textDimension!=="all"&&nav.textDimension!==(requestedPreset.motion.text.dimension??"2d"))nav.textDimension="all";
+      if(nav.textFamily&&nav.textFamily!=="all"&&nav.textFamily!==requestedPreset.motion.textFamily)nav.textFamily="all";
+    }
     if (nav.selectedId !== requestedPreset.id || !categoryVisible || !queryVisible || !scopeVisible) {
       // The panel can remount before its two layout frames. Keep the request in
       // session navigation until a mounted gallery actually reveals the card.
@@ -344,6 +349,11 @@ export function createPresetGallery(doc: Document, options: {
   for (const scope of ["favorites", "recent"]) {
     const b = button(doc, { label: pt ? scope === "favorites" ? "Favoritos" : "Recentes" : scope === "favorites" ? "Favorites" : "Recent", onClick: () => { if(disposed)return; cancelReveal(); nav.scope = nav.scope === scope ? "all" : scope; delete nav.recentOrder; b.setAttribute("aria-pressed", String(nav.scope === scope)); draw(); } });
     b.dataset.scope = scope; b.setAttribute("aria-pressed", String(nav.scope === scope)); filters.appendChild(b);
+  }
+  const textFilters=createElement(doc,"div","ch-text-filters");filterMenu.appendChild(textFilters);
+  const textFamilyLabels:Record<string,string>=pt?{fade:"Opacidade",position:"Posição",rotate:"Rotação",scale:"Escala",tracking:"Entreletra",mask:"Revelação",typewriter:"Máquina de escrever",decode:"Decodificação",combination:"Combinações",loop:"Efeitos contínuos"}:{fade:"Fade",position:"Position",rotate:"Rotation",scale:"Scale",tracking:"Tracking",mask:"Reveal",typewriter:"Typewriter",decode:"Decode",combination:"Combinations",loop:"Continuous effects"};
+  for(const [key,label,choices] of [["textDimension",pt?"Dimensão":"Dimension",[["all",pt?"2D e 3D":"2D and 3D"],["2d","2D"],["3d","3D"]]],["textFamily",pt?"Família":"Family",[["all",pt?"Todas":"All"],...Object.entries(textFamilyLabels)]]] as const){
+    textFilters.appendChild(selectField(doc,{id:galleryId+"-"+key,label,value:nav[key]??"all",options:choices.map(([value,label])=>({value,label})),onChange:value=>{nav[key]=value as never;cancelReveal();draw();}}));
   }
   filterMenu.appendChild(filters);
   const browser = createElement(doc, "div", "ch-preset-browser"); scroll.appendChild(browser);
@@ -458,8 +468,9 @@ export function createPresetGallery(doc: Document, options: {
   const editorHeader = createElement(doc, "div", "ch-preset-editor-header");
   editorHeader.appendChild(createElement(doc, "span", "", pt ? "Ajustes do preset" : "Preset settings"));
   editorHeader.appendChild(button(doc, {label: pt ? "Fechar" : "Close", onClick: () => closeEditor(true)})); editor.appendChild(editorHeader);
+  let textPreview:ReturnType<typeof createTextPresetPreview>|undefined;
   const numericCleanups:Array<()=>void>=[];
-  function disposeNumbers():void{for(const dispose of numericCleanups.splice(0))dispose();}
+  function disposeNumbers():void{textPreview?.dispose();textPreview=undefined;for(const dispose of numericCleanups.splice(0))dispose();}
   const inspector = createElement(doc, "section", "ch-preset-inspector"); editor.appendChild(inspector);
   const actions = createElement(doc, "div", "ch-preset-applybar");
   const settingsPanel = createElement(doc, "section", "ch-preset-settings-panel");
@@ -735,7 +746,7 @@ export function createPresetGallery(doc: Document, options: {
   }
   function refreshPreview(preset?: GalleryPreset): void {
     if(!preset)return;
-    const scene=scenes.get(preset.id);if(!scene)return;
+    textPreview?.refresh();const scene=scenes.get(preset.id);if(!scene)return;
     if(visible.has(preset.id))scene.rest();scene.start=performance.now();schedulePreviews();
   }
   function drawInspector(preset?: GalleryPreset): void {
@@ -776,6 +787,7 @@ export function createPresetGallery(doc: Document, options: {
     if (p) {
       const draft = settings(preset), fields = createElement(doc, "div", "ch-preset-fields");
       const activeNumbers=new Set<string>();
+      if(p.category.startsWith("text-")){textPreview=createTextPresetPreview(doc,{locale:options.locale,preset:p,settings:()=>draft,sample:nav.sampleText??"Make it\nMoti.on",onSample:value=>{nav.sampleText=value;}});inspector.appendChild(textPreview.element);}
       if (camera && !p.cameraSpec) {
         const label=pt?"Aplicação":"Apply to";
         const row=selectField(doc,{id:`${galleryId}-camera-mode`,label,value:nav.cameraApplyMode??"precomp",disabled:options.busy,
@@ -855,7 +867,7 @@ export function createPresetGallery(doc: Document, options: {
         adjustments.appendChild(status);
       }
       const curve = draft.easing && draft.easing !== "preset" ? draft.easing : p.easing, settles = p.mode === "transition" && !overlay && (curve === "settle-wave" || curve === "settle-hop");
-      if (p.collection === "studio" || p.collection === "premium" || p.collection === "native" || p.collection === "signature" || p.collection === "momentum" || draft.easing==="spring" || settles) {
+      if (p.collection === "studio" || p.collection === "premium" || p.collection === "native" || p.collection === "signature" || p.collection === "momentum" || p.collection === "text" || draft.easing==="spring" || settles) {
         const details = createElement(doc, "details", "ch-preset-refine");
         details.appendChild(createElement(doc, "summary", "", pt ? "Refinar movimento" : "Refine motion"));
         const advanced = createElement(doc, "div", "ch-preset-fields");
@@ -999,7 +1011,7 @@ export function createPresetGallery(doc: Document, options: {
     filterLabel.textContent = category?.label ?? labels[nav.category] ?? labels.all!;
     cancelAnimationFrame(animationFrame); animationFrame=0;activePreview="";intersections?.disconnect();visible.clear();scenes.clear();previewPlayers.clear();closeEditor();clearNode(grid);drawFolders();
     grid.classList.toggle("ch-preset-grid--personal",nav.category.startsWith("personal"));
-    filters.hidden=nav.category.startsWith("personal");
+    filters.hidden=nav.category.startsWith("personal");textFilters.hidden=!(nav.category==="text"||nav.category.startsWith("text-"));
     if(nav.category.startsWith("personal")){drawInspector();drawPersonal();restoreFocus(focused);restoreScroll();return;}
     for (const b of Array.from(filters.querySelectorAll<HTMLButtonElement>("[data-scope]"))) b.setAttribute("aria-pressed", String(nav.scope === b.dataset.scope));
     const prefs = options.preferences.snapshot();
@@ -1010,6 +1022,7 @@ export function createPresetGallery(doc: Document, options: {
     let count = 0, selected:GalleryPreset|undefined;
     for (const preset of items) {
       if (!categoryMatches(preset)) continue;
+      if(preset.motion?.category.startsWith("text-")){if(nav.textDimension&&nav.textDimension!=="all"&&(preset.motion.text.dimension??"2d")!==nav.textDimension)continue;if(nav.textFamily&&nav.textFamily!=="all"&&preset.motion.textFamily!==nav.textFamily)continue;}
       if (nav.scope === "favorites" && !prefs.favorites.includes(preset.id)) continue;
       const name = preset.displayName[i18n.locale()] ?? preset.id;
       if (!normalizeSearch(`${name} ${preset.tags}`).includes(normalizeSearch(nav.query))) continue;

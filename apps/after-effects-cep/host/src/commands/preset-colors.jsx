@@ -44,7 +44,7 @@
     // Only controls named in an owned Moti.on instance are eligible here.
     var names=/** @type {any} */ ({}),lib=/** @type {any} */ (global).MotionPresetLibrary,phases=/** @type {any} */ (global).MotionPresetPhases;
     try{var root=phases&&phases.has(layer)?phases.metadata(layer):null,metas=/** @type {any[]} */ ([]);
-      if(root){if(root.slots.in)metas.push(root.slots.in.meta);if(root.slots.out)metas.push(root.slots.out.meta);}else{var legacy=lib.metadata(layer);if(legacy)metas.push(legacy);}
+      if(root){if(root.slots.in)metas.push(root.slots.in.meta);if(root.slots.out)metas.push(root.slots.out.meta);if(root.textEffect)metas.push(root.textEffect.meta);}else{var legacy=lib.metadata(layer);if(legacy)metas.push(legacy);}
       for(var m=0;m<metas.length;m++)for(var n=0;n<metas[m].effects.length;n++)names[metas[m].effects[n].name]=true;
     }catch(metadataError){/* Invalid metadata must never authorize an unrelated effect. */}
     var effects=layer.property("ADBE Effect Parade");

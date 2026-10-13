@@ -86,3 +86,21 @@ test("marker timing payload is bounded and rejects unsupported operations and ar
  for(const change of [{frames:601},{frames:-601},{frames:1.5},{frames:"3"},{phase:"both"},{order:"invalid"},{operation:"run"},{path:"/tmp/test.jsx"}])assert.equal(valid("ae.presets.timing",{...args,...change}),false);
  for(const key of Object.keys(args)){const missing={...args};delete missing[key];assert.equal(valid("ae.presets.timing",missing),false);}
 });
+
+test("text effect editing has its own contract without transition timing or filesystem fields", () => {
+  const cases = [
+    ["ae.presets.text-effect-adjust", adjust()],
+    ["ae.presets.text-effect-action", { target, action: "remove" }],
+    ["ae.presets.text-effect-action", { target, action: "reset" }]
+  ];
+  for (const [command, args] of cases) {
+    assert.equal(valid(command, args), true, command);
+    for (const key of ["phase", "frames", "markerTime", "path", "script"])
+      assert.equal(valid(command, { ...args, [key]: "in" }), false, `${command}.${key}`);
+    assert.equal(valid(command, { ...args, target: { ...target, layerId: -1 } }), false);
+    const missing = { ...args }; delete missing.target;
+    assert.equal(valid(command, missing), false);
+  }
+  assert.equal(valid("ae.presets.text-effect-action", { target, action: "bake" }), false);
+  assert.equal(valid("ae.presets.text-effect-adjust", { ...adjust(), options: { ...MOTION_LIBRARY_DEFAULTS, intensity: 301 } }), false);
+});

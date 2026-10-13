@@ -9,8 +9,9 @@ const CARD = { width: 320, height: 180, x: 160, y: 98, left: -36, top: -35, righ
 export function libraryPreviewTravel(p: MotionLibraryPreset, options: MotionLibraryOptions): number {
   const xy = libraryDirection(p.position[0], p.position[1], options.direction), length = Math.hypot(xy[0], xy[1]) || 1;
   const grow = Math.max(1, 1 + Math.max(p.scale[0], p.scale[1]) / 100 * Math.max(1, options.intensity / 100));
-  return 6 * libraryOffscreenDistance(CARD.x, CARD.y, CARD.x + CARD.left, CARD.y + CARD.top, CARD.x + CARD.right, CARD.y + CARD.bottom,
-    p.rotation[2] || grow > 1 ? grow : 0, xy[0] / length, xy[1] / length, CARD.width, CARD.height, Math.max(8, .02 * CARD.width));
+  const distance=6 * libraryOffscreenDistance(CARD.x, CARD.y, CARD.x + CARD.left, CARD.y + CARD.top, CARD.x + CARD.right, CARD.y + CARD.bottom,
+    p.rotation[2] || grow > 1 ? grow : 0, xy[0] / length, xy[1] / length, CARD.width, CARD.height, Math.max(8 / 6, .02 * CARD.width));
+  return Math.round(distance*100)/100; // Same precision as the host's live Distance control.
 }
 
 export function libraryPreviewEnd(options: MotionLibraryOptions): number {
@@ -46,12 +47,12 @@ function appliedOverlap(p: MotionLibraryPreset, options: MotionLibraryOptions): 
 
 export function librarySample(p: MotionLibraryPreset, options: MotionLibraryOptions, time: number, index = 0, count = 1): { x: number; y: number; z: number; rx: number; ry: number; rz: number; sx: number; sy: number; opacity: number; weight: number; progress: number } {
   const unit = options.unit === "preset" ? p.text.unit : options.unit;
-  const studio = p.collection === "studio" || p.collection === "native" || p.collection === "premium" || p.collection === "signature" || p.collection === "momentum";
+  const studio = p.collection === "studio" || p.collection === "native" || p.collection === "premium" || p.collection === "signature" || p.collection === "momentum" || p.collection === "text";
   const order = options.order && options.order !== "preset" ? options.order : p.text.order ?? (p.text.random ? "random" : "forward");
   const seed = options.seed ?? p.defaults?.seed ?? 17;
   const idx = unit === "all" ? 0 : order === "random" && count > 1 ? libraryOrder(index, count, options.seed) : librarySequence(index, count, order);
   const speed = studio ? (options.speed ?? p.defaults?.speed ?? 100) / 100 : 1, age = time * speed;
-  const [a, b] = (studio ? libraryStudioTiming : libraryTiming)(time, 0, libraryPreviewEnd(options), options.durationFrames / 30, options.phase, idx, unit === "all" ? 1 : count, options.staggerFrames / 30, appliedOverlap(p, options));
+  const [a, b] = (studio ? libraryStudioTiming : libraryTiming)(time, 0, libraryPreviewEnd(options), options.durationFrames / 30, p.mode==="continuous"&&p.category.startsWith("text-")?"both":options.phase, idx, unit === "all" ? 1 : count, options.staggerFrames / 30, appliedOverlap(p, options));
   const easing=options.easing&&options.easing!=="preset"?options.easing:p.easing;
   const elastic = options.elasticity ?? p.defaults?.elasticity;
   const settle = [options.settleAmount ?? p.defaults?.settleAmount, options.settleCount ?? p.defaults?.settleCount, options.settleDamping ?? p.defaults?.settleDamping] as const;
@@ -177,17 +178,19 @@ function signatureFilter(node: (tag: string, attrs: Record<string, string | numb
 }
 
 /** Project one point through the fixture camera after scale and XYZ rotation. */
-export function libraryProjectPoint(sample: ReturnType<typeof librarySample>, x: number, y: number): [number, number] {
+export function libraryProjectPoint(sample: ReturnType<typeof librarySample>, x: number, y: number, pivot: readonly number[] = [0, 0, 0]): [number, number] {
   const rx = sample.rx * Math.PI / 180, ry = sample.ry * Math.PI / 180, rz = sample.rz * Math.PI / 180;
-  const sx = x * sample.sx, sy = y * sample.sy, z = sy * Math.sin(rx);
-  const px = sx * Math.cos(ry) + z * Math.sin(ry), py = sy * Math.cos(rx);
-  const depth = -sx * Math.sin(ry) + z * Math.cos(ry) + sample.z;
+  const ox = (pivot[0] ?? 0) / 6, oy = (pivot[1] ?? 0) / 6, oz = (pivot[2] ?? 0) / 6;
+  const sx = (x - ox) * sample.sx, sy = (y - oy) * sample.sy;
+  const py = sy * Math.cos(rx) + oz * Math.sin(rx), z = sy * Math.sin(rx) - oz * Math.cos(rx);
+  const px = sx * Math.cos(ry) + z * Math.sin(ry);
+  const depth = -sx * Math.sin(ry) + z * Math.cos(ry) + sample.z + oz;
   const perspective = 260 / Math.max(40, 260 + depth);
-  return [(px * Math.cos(rz) - py * Math.sin(rz) + sample.x) * perspective, (px * Math.sin(rz) + py * Math.cos(rz) + sample.y) * perspective];
+  return [(px * Math.cos(rz) - py * Math.sin(rz) + sample.x + ox) * perspective, (px * Math.sin(rz) + py * Math.cos(rz) + sample.y + oy) * perspective];
 }
 
-function previewPlaneMatrix(sample: ReturnType<typeof librarySample>, x: number, y: number): string {
-  const o = libraryProjectPoint(sample, 0, 0), a = libraryProjectPoint(sample, 1, 0), b = libraryProjectPoint(sample, 0, 1);
+function previewPlaneMatrix(sample: ReturnType<typeof librarySample>, x: number, y: number, pivot?: readonly number[]): string {
+  const o = libraryProjectPoint(sample, 0, 0, pivot), a = libraryProjectPoint(sample, 1, 0, pivot), b = libraryProjectPoint(sample, 0, 1, pivot);
   return `matrix(${a[0]-o[0]} ${a[1]-o[1]} ${b[0]-o[0]} ${b[1]-o[1]} ${x+o[0]} ${y+o[1]})`;
 }
 
@@ -254,14 +257,49 @@ export function nativeLibraryPreviewSample(p: MotionLibraryPreset, options: Moti
 }
 
 /** Native effects are illustrated; timing and transforms use the host's math. */
-export function paintLibraryPreview(svg: SVGSVGElement, preset: MotionLibraryPreset, options: MotionLibraryOptions, time: number, cameraOverlay = false): void {
+export interface TextPreviewSegment { text: string; x: number; y: number; index: number; count: number; size: number; }
+
+/** A local illustration of editable source text. Combining marks and ZWJ emoji
+ * stay together; the AE render is the reference for font metrics and shaping. */
+export function textPreviewSegments(source: string, unit: string): TextPreviewSegment[] {
+  const lines = source.replace(/\r\n?/g, "\n").slice(0, 180).split("\n").slice(0, 5);
+  const clusters = (text: string): string[] => {
+    const out: string[] = [];
+    for (const c of Array.from(text)) {
+      const previous = out[out.length - 1];
+      const code = c.codePointAt(0) ?? 0;
+      const combining = (code >= 0x0300 && code <= 0x036f) || (code >= 0x1ab0 && code <= 0x1aff) || (code >= 0xfe00 && code <= 0xfe0f);
+      if (previous && (combining || c === "\u200d" || previous.endsWith("\u200d"))) out[out.length - 1] += c;
+      else out.push(c);
+    }
+    return out;
+  };
+  const width = (text: string): number => clusters(text).reduce((sum, c) => sum + (/^\s$/.test(c) ? .32 : /^[ilI.,'!]$/.test(c) ? .29 : /^[MW@]$/.test(c) ? .85 : (c.codePointAt(0) ?? 0) > 0x2fff ? .95 : .62), 0);
+  const max = Math.max(1, ...lines.map(width)), size = Math.min(lines.length > 2 ? 25 : 32, 268 / max), lineHeight = size * 1.3;
+  const segments: TextPreviewSegment[] = [];
+  let index = 0;
+  for (const [lineIndex, line] of lines.entries()) {
+    const tokens = unit === "characters" ? clusters(line) : unit === "words" ? line.match(/\S+|\s+/g) ?? [""] : [line];
+    let cursor = 160 - width(line) * size / 2;
+    for (const token of tokens) {
+      const tokenWidth = width(token) * size;
+      if (unit !== "words" || !/^\s+$/.test(token)) segments.push({text: token, x: cursor + tokenWidth / 2, y: 96 + (lineIndex - (lines.length - 1) / 2) * lineHeight, index: unit === "all" ? 0 : index++, count: 0, size});
+      cursor += tokenWidth;
+    }
+  }
+  const count = unit === "all" ? 1 : Math.max(1, index);
+  return segments.map(segment => ({...segment, count}));
+}
+
+export function paintLibraryPreview(svg: SVGSVGElement, preset: MotionLibraryPreset, options: MotionLibraryOptions, time: number, cameraOverlay = false, sampleText?: string): void {
   const doc = svg.ownerDocument, ns = "http://www.w3.org/2000/svg";
   const node = (tag: string, attrs: Record<string, string | number>, parent: Element = svg): SVGElement => {
     const el = doc.createElementNS(ns, tag); for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, String(value)); parent.appendChild(el); return el;
   };
   const textMode = preset.category.startsWith("text-");
   const unit = options.unit === "preset" ? preset.text.unit : options.unit;
-  const values = textMode ? unit === "all" ? ["MOTI.ON"] : unit === "lines" ? ["MOTI.ON", "MOTI.ON"] : unit === "words" ? ["MOTI.ON", "MOTI.ON"] : Array.from("MOTI.ON") : [""];
+  const segments = textMode && sampleText !== undefined ? textPreviewSegments(sampleText, unit) : undefined;
+  const values = segments?.map(segment => segment.text) ?? (textMode ? unit === "all" ? ["MOTI.ON"] : unit === "lines" ? ["MOTI.ON", "MOTI.ON"] : unit === "words" ? ["MOTI.ON", "MOTI.ON"] : Array.from("MOTI.ON") : [""]);
   const defs = node("defs", {});
   const filterId = `filter-${preset.id}`;
   const f = node("filter", { id: filterId, x: "-100%", y: "-100%", width: "300%", height: "300%" }, defs);
@@ -343,21 +381,22 @@ export function paintLibraryPreview(svg: SVGSVGElement, preset: MotionLibraryPre
   if (signatureFilter(node, defs, `signature-${preset.id}`, preset, options, time)) fixture.setAttribute("filter", `url(#signature-${preset.id})`);
   if (textMode && preset.text.mask) {
     const clip = node("clipPath", {id: `mask-${preset.id}`}, defs);
-    node("rect", {x: 32, y: unit === "lines" ? 46 : 66, width: 256, height: unit === "lines" ? 78 : 44}, clip);
+    node("rect", {x: 20, y: segments ? 20 : unit === "lines" ? 46 : 66, width: 280, height: segments ? 140 : unit === "lines" ? 78 : 44}, clip);
     fixture.setAttribute("clip-path", `url(#mask-${preset.id})`);
   }
   for (let i = 0; i < values.length; i++) {
-    const s = librarySample(preset, options, time, i, values.length);
-    const baseX = unit === "lines" || unit === "all" || !textMode ? 160 : unit === "words" ? 108 + i * 113 : 67 + i * 31 + (i - (values.length - 1) / 2) * preset.text.tracking * s.weight * options.intensity / 600;
-    const baseY = unit === "lines" ? 78 + i * 34 : 98;
+    const segment = segments?.[i], s = librarySample(preset, options, time, segment?.index ?? i, segment?.count ?? values.length);
+    const tracking = ((segment?.index ?? i) - ((segment?.count ?? values.length) - 1) / 2) * preset.text.tracking * s.weight * options.intensity / 600;
+    const baseX = segment ? segment.x + (unit === "characters" ? tracking : 0) : unit === "lines" || unit === "all" || !textMode ? 160 : unit === "words" ? 108 + i * 113 : 67 + i * 31 + tracking;
+    const baseY = segment?.y ?? (unit === "lines" ? 78 + i * 34 : 98);
     const fo = node("g", { opacity: s.opacity }, fixture);
     if (preset.text.blur) {
       const blurId = `blur-${preset.id}-${i}`, filter = node("filter", {id: blurId, x:"-100%", y:"-100%", width:"300%", height:"300%"}, defs);
-      const radius = preset.text.blur / 6 * Math.max(0,s.weight) * options.intensity / 100;
+      const radius = preset.text.blur / 6 * (preset.mode === "continuous" ? Math.abs(s.weight) : Math.max(0,s.weight)) * options.intensity / 100;
       node("feGaussianBlur", {stdDeviation: preset.text.blurAxis === "x" ? `${radius} 0` : preset.text.blurAxis === "y" ? `0 ${radius}` : radius}, filter);
       fo.setAttribute("filter", `url(#${blurId})`);
     }
-    const g = node("g", { transform: `${previewPlaneMatrix(s, baseX, baseY)} skewX(${preset.text.skew * s.weight * options.intensity / 100})`, filter: preset.effect === "blur" || preset.effect === "blur-wave" || preset.effect === "turbulent" || (preset.effect === "native-glitch" && native.displacement > 0) ? `url(#${filterId})` : "none" }, fo);
+    const g = node("g", { transform: `${previewPlaneMatrix(s, baseX, baseY, textMode ? preset.text.pivot : undefined)} skewX(${preset.text.skew * s.weight * options.intensity / 100})`, filter: preset.effect === "blur" || preset.effect === "blur-wave" || preset.effect === "turbulent" || (preset.effect === "native-glitch" && native.displacement > 0) ? `url(#${filterId})` : "none" }, fo);
     let label = values[i] ?? "";
     if (preset.text.decode && (preset.mode !== "transition" || Math.abs(s.weight) > .02)) label = Array.from(label).map((c, j) => c === " " ? c : String.fromCharCode(65 + Math.abs(Math.floor(Math.sin(Math.floor(time * 18) * 7.7 + (i + j) * 11.3) * 1000)) % 26)).join("");
     if ((preset.text.reveal === "resolve" || preset.text.reveal === "roll") && preset.mode === "transition" && options.intensity > 0) {
@@ -367,7 +406,7 @@ export function paintLibraryPreview(svg: SVGSVGElement, preset: MotionLibraryPre
     }
     const shape = (parent: Element, color: string, dx = 0, dy = 0): void => {
       if (textMode) {
-        const el = node("text", { x: dx, y: dy, fill: color, "text-anchor": "middle", "font-size": unit === "lines" ? 27 : unit === "words" ? 27 : 31, "font-family": "system-ui,sans-serif", "font-weight": 700, "letter-spacing": preset.text.tracking * s.weight * options.intensity / 600 }, parent); el.textContent = label;
+        const el = node("text", { x: dx, y: dy, fill: color, "text-anchor": "middle", "font-size": segment?.size ?? (unit === "lines" ? 27 : unit === "words" ? 27 : 31), "font-family": "Arial,system-ui,sans-serif", "font-weight": 700, "letter-spacing": unit === "characters" ? 0 : preset.text.tracking * s.weight * options.intensity / 600 }, parent); el.textContent = label;
       } else node("path", { d: "M-36 22V-35L0-8 36-35V22H20V-5L0 10-20-5V22Z", fill: color, transform: `translate(${dx} ${dy})` }, parent);
     };
     if (preset.effect === "extrude" || preset.effect.startsWith("shadow")) {
@@ -385,9 +424,9 @@ export function paintLibraryPreview(svg: SVGSVGElement, preset: MotionLibraryPre
       shape(g, "#ff4966", -native.rgb, 0); shape(g, "#30c5e8", native.rgb, 0);
     }
     shape(g, preset.effect === "duotone" || preset.effect === "chroma2" ? "#fa803b" : preset.effect === "contrast" ? "#ffffff" : "currentColor");
-    if (preset.text.fill && preset.mode === "transition") {
+    if (preset.text.fill) {
       // Arriving units carry the recipe's tint and return to the source fill.
-      const [r, gr, b] = preset.text.fill, tint = node("g", {opacity: Math.max(0, Math.min(1, s.weight)) * Math.min(1, options.intensity / 100)}, g);
+      const [r, gr, b] = preset.text.fill, tint = node("g", {opacity: Math.max(0, Math.min(1, preset.mode === "continuous" ? .5 + .5 * s.weight : s.weight)) * Math.min(1, options.intensity / 100)}, g);
       shape(tint, `rgb(${Math.round(r * 255)},${Math.round(gr * 255)},${Math.round(b * 255)})`);
     }
   }

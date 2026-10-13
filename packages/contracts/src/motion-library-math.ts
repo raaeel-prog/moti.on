@@ -83,8 +83,8 @@ export function libraryEase(t: number, kind: string, elasticity?: number, settle
   if (kind === "snap") {
     // Critically damped arrival: zero start velocity, a decisive attack and a
     // settle without any overshoot, normalized to land exactly on 1.
-    var k = 9;
-    return (1 - (1 + k * x) * Math.exp(-k * x)) / (1 - (1 + k) * Math.exp(-k));
+    var snapRate = 9;
+    return (1 - (1 + snapRate * x) * Math.exp(-snapRate * x)) / (1 - (1 + snapRate) * Math.exp(-snapRate));
   }
   return 1 - Math.pow(1 - x, 3);
 }
