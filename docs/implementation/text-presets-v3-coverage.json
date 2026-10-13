@@ -16767,7 +16767,13 @@
         "afterPixelSha256": "50aa7a2c7ee7d4017bc3944f34799a39cc6829a4e491bcf05c89091b07ff0feb"
       }
     ],
-    "installation": "NOT RUN"
+    "installation": {
+      "status": "PASS",
+      "sourceCommit": "c4ba6eb0bd0143fcde5803defbd4a623000b65e9",
+      "files": 264,
+      "panel": "PASS",
+      "report": "C:/dev/Moti.on-text-presets/artifacts/text-presets/continuation-2026-10-13/installation-2026-10-13T22-47-10-644Z/installation-report.json"
+    }
   },
   "recipes": [
     {

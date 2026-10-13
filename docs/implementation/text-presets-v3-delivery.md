@@ -76,7 +76,7 @@ As comparações locais do BadFX usam texto, fonte, enquadramento, cor, fps e du
 | UI PT/EN: 280, 360, 480 e 720 px | PASS — oito configurações | `ui-qa.json` e screenshots |
 | BadFX: aplicação e observação de 48 FFX | PASS | `badfx-host-study.json` |
 | Composer: um preset instalado aplicado e observado | PASS, cobertura limitada | `composer-host-study.json` e `composer-ui-catalog.txt` |
-| Instalação do candidato e painel CEP no Adobe | PASS — Windows x64, AE 26.5x89 | 264 hashes, configuração preservada e painel recarregado; `ae-text-v3-install-2026-10-13T21-20-23-927Z/ui-restored/installation-report.json` |
+| Instalação do candidato e painel CEP no Adobe | PASS — Windows x64, AE 26.5x89 | 264 hashes, configuração preservada, 108 receitas no host instalado e MP4 reproduzido no CEP; `continuation-2026-10-13/installation-2026-10-13T22-47-10-644Z/installation-report.json` |
 | Outros patches do AE, macOS e clean-machine | NOT RUN | Sem alegação de suporte validado nessa matriz |
 | Assinatura e publicação | NOT RUN | Pacote local de desenvolvimento; distribuição final em HOLD |
 
@@ -89,6 +89,18 @@ O host final difere do host das oito fixtures somente por dois comentários de d
 O check inicial encontrou uma ambiguidade ES3 já existente no Momentum. Ela foi corrigida, junto da composição de uma expressão com pivô negativo. Uma rodada final detectou uma asserção de timers dependente de carga em um teste de gestos existente; a asserção agora mede o limite de 10 Hz pelo tempo real. A repetição e o check completo passaram.
 
 A primeira instalação acrescentou uma prévia permanente ao editor e comprimiu a galeria. O candidato corrigido `e0dd457fed7cf0f18fcdafcac4d655536c28f812` restaura a área anterior e restringe a prévia ampliada aos ajustes dos novos presets. Foi instalado e o painel CEP foi recarregado, mantendo aberto o projeto não salvo do usuário. O bundle do host e os estilos não mudaram nessa correção. Os backups anterior à atualização e anterior à correção ficam no diretório de evidência da instalação. A assinatura e a publicação continuam pendentes.
+
+A continuação instalada é `c4ba6eb0bd0143fcde5803defbd4a623000b65e9`, pacote `Moti.on-0.2.0-text-v3-local-c4ba6eb0.zip`, SHA-256 `cb43f62e18e82d110f65d49152bfc4353185b495543f14777fa388cbcf4f53d9`. Os 108 vídeos e posters foram regenerados; quatro comparações de famílias do BadFX foram atualizadas usando os renders comerciais de estudo existentes, com hashes dos inputs registrados. Apenas 28 arquivos da instalação anterior precisaram de atualização; os 264 arquivos do candidato e o arquivo privado preservado foram conferidos novamente após abrir o Adobe. O backup completo está em `continuation-2026-10-13/installation-2026-10-13T22-47-10-644Z/previous`.
+
+O After Effects já não estava em execução antes da cópia. Ao reabrir, mostrou o aviso de falha de sessão anterior; Continuar abriu normalmente, sem redefinir preferências. A causa desse aviso permanece UNRESOLVED; a busca limitada por eventos recentes e crash logs não retornou um registro explicativo. A verificação instalada usou o novo projeto vazio, preservando seu estado antes/depois. Não se declara recuperação ou preservação do projeto anterior após o encerramento observado. O painel foi deixado em Tipografia, família Opacidade, com os novos presets visíveis. O vídeo original foi reproduzido dentro do CEP; a prévia ampliada foi fechada ao final, liberando a mídia.
+
+### Fontes da continuação
+
+- Cliente: `apps/after-effects-cep/client/src/motion-library-preview.ts` e manifesto gerado de referências. A galeria e o CSS aprovados não receberam mudanças nesta continuação.
+- Host: `apps/after-effects-cep/host/src/commands/preset-library.jsx` e `preset-phases.jsx`.
+- Compartilhado: `packages/contracts/src/motion-library-math.ts` e geração da biblioteca.
+- Testes: regressões de texto v3, Momentum, fases, galeria e paridade; `scripts/text-presets-lifecycle.jsx` e verificação de pixels.
+- Evidências e documentação: este relatório, matriz de cobertura, logs e recibo de instalação. `scripts/text-presets-visual-review.mjs` permite reutilizar os renders comerciais locais já observados, sem incluí-los no pacote.
 
 A auditoria npm registra dez vulnerabilidades preexistentes (nove high e uma critical) no grafo associado ao Site separado; a contagem permaneceu igual à baseline. O pacote CEP não contém `node_modules` nem o Site. Não houve atualização indiscriminada de dependências. PostCSS foi declarado e fixado porque os testes já o utilizavam; o restante do lockfile foi preservado.
 
