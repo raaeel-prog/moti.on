@@ -16,6 +16,8 @@ São 108 receitas próprias: 96 transições e 12 efeitos contínuos. Vinte rece
 
 Cada camada admite IN, OUT e um `textEffect` independente. Os comandos de ajuste, reset e remoção do efeito não aceitam fase, duração de transição ou marcadores. Inspeção, cópia e variantes salvas permitem escolher o componente. A raiz v3 migra rigs antigos durante edição; componentes restantes preservam suas identidades e controles.
 
+A atualização preserva a área de Presets anterior: a galeria e o editor compacto mantêm sua estrutura. A prévia ampliada é exclusiva das novas receitas da coleção de texto e fica no popover de ajustes já existente. Ela não ocupa o editor principal nem é adicionada aos presets antigos. Os estilos anteriores são preservados integralmente; as regras novas são limitadas aos controles de texto.
+
 O preflight verifica agrupamento, propriedade das expressões e capacidade 3D antes de alterar a camada. A remoção final restaura o estado capturado; alterações parciais têm rollback. Source Text e estilos continuam editáveis. Conflitos com agrupamento e animadores existentes são recusados, com diagnóstico, quando não é possível preservar o rig.
 
 ## Estudo das referências
@@ -54,7 +56,7 @@ Timing e easing usam as funções existentes da biblioteca, compartilhadas com a
 
 Cada variante exposta possui um MP4 original e um JPG: **108 vídeos + 108 posters**, mais o manifesto. Fixture: 480 × 270, 24 fps, quatro segundos, ArialMT 52 px, `Make it\rMoti.on`, Classic 3D, motion blur 180° e fundo Onyx. O manifesto guarda receita, parâmetros, fixture, versão do host e hash do motor de texto. Alterações nessas entradas invalidam o cache.
 
-A simulação permite editar o texto e os parâmetros imediatamente. O modo Render AE identifica a configuração gravada e não finge refletir mudanças locais. Há reprodução, scrub, carregamento sob demanda, pausa fora da área visível e descarte de recursos. A revisão local `artifacts/text-presets/original-families-review.mp4` reúne doze exemplos renderizados.
+A simulação nos ajustes dos novos presets permite editar o texto e os parâmetros imediatamente. O modo Render AE identifica a configuração gravada e não finge refletir mudanças locais. Há reprodução, scrub, carregamento sob demanda, pausa fora da área visível e descarte de recursos. A revisão local `artifacts/text-presets/original-families-review.mp4` reúne doze exemplos renderizados.
 
 As comparações locais do BadFX usam texto, fonte, enquadramento, cor, fps e duração equivalentes. Os controles importados permanecem nos defaults da referência, e os vídeos próprios usam defaults das receitas: diferenças de timing são registradas, sem uma falsa alegação de equivalência quadro a quadro. Esses renders de estudo ficam fora do pacote.
 

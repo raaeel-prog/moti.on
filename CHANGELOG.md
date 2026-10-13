@@ -1,4 +1,5 @@
 ## 2026-10-13 — Texto v3: caracteres, palavras, linhas e Effects
+- Correção de instalação: mantém a galeria e o editor compacto anteriores; a prévia ampliada fica somente nos ajustes dos novos presets de texto.
 - 108 receitas próprias de texto, incluindo 20 com 3D real por segmento; entrada, saída e efeito contínuo independentes em metadata v3.
 - Comandos de ajuste/reset/remoção do efeito, migração durante edição, preflight de agrupamento e rollback. Source Text e estilos permanecem editáveis.
 - Preview interativo editável, filtros 2D/3D/família e 108 vídeos + 108 posters originais renderizados no AE. Carregamento sob demanda, scrub, pausa e descarte de mídia.

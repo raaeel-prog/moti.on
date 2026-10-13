@@ -64,6 +64,22 @@ test('gallery search starts compact and retains query/focus without rebuilding i
   input.value='';input.emit('input');input.emit('blur');assert.equal(control.getAttribute('data-expanded'),'false');
 });
 
+test('existing text presets retain the compact inspector without an added preview',t=>{
+  const {gallery}=fixture(t,{category:'text',query:'Corte tipográfico'});
+  assert.ok(!gallery.element.querySelector('.ch-text-preview'),'the previous inspector has no expanded text preview');
+  assert.ok(gallery.element.querySelector('.ch-preset-primary-fields'));
+  assert.ok(gallery.element.querySelector('.ch-preset-grid'));
+});
+
+test('new text previews are confined to the existing settings popover',t=>{
+  const {gallery}=fixture(t,{category:'text',query:'Cascata de luz'});
+  const inspector=gallery.element.querySelector('.ch-preset-inspector');
+  const settings=gallery.element.querySelector('.ch-preset-settings-body');
+  assert.ok(!inspector.querySelector('.ch-text-preview'),'the grid inspector stays compact');
+  assert.ok(settings.querySelector('.ch-text-preview'));
+  assert.ok(gallery.element.querySelector('.ch-preset-grid'));
+});
+
 test('gallery invalid draft blocks button and double-click application until correction',t=>{
   const f=fixture(t),root=f.gallery.element;
   const preset=root.getElementsByTagName('button').find(n=>n.className.includes('ch-preset-apply'));

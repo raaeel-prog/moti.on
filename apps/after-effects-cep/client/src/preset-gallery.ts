@@ -787,7 +787,6 @@ export function createPresetGallery(doc: Document, options: {
     if (p) {
       const draft = settings(preset), fields = createElement(doc, "div", "ch-preset-fields");
       const activeNumbers=new Set<string>();
-      if(p.category.startsWith("text-")){textPreview=createTextPresetPreview(doc,{locale:options.locale,preset:p,settings:()=>draft,sample:nav.sampleText??"Make it\nMoti.on",onSample:value=>{nav.sampleText=value;}});inspector.appendChild(textPreview.element);}
       if (camera && !p.cameraSpec) {
         const label=pt?"Aplicação":"Apply to";
         const row=selectField(doc,{id:`${galleryId}-camera-mode`,label,value:nav.cameraApplyMode??"precomp",disabled:options.busy,
@@ -888,6 +887,12 @@ export function createPresetGallery(doc: Document, options: {
       adjustments.appendChild(createElement(doc, "p", "ch-preset-hint", overlay ? pt ? "Cria uma pré-comp acima das camadas, com o marcador CUT no tempo atual. Arraste o marcador para mover o pico da transição." : "Creates a precomp above the layers with a CUT marker at the current time. Drag the marker to move the transition peak." : p.mode === "transition" ? pt ? "Entrada no início da camada; saída no fim." : "In at the layer start; out at its end." : pt ? "Ajustes editáveis nos Controles do efeito." : "Editable settings in Effect Controls."));
       for(const key of invalidNumbers.get(presetId)?.keys()??[])if(!activeNumbers.has(key))invalidNumbers.get(presetId)?.delete(key);
       settingsBody.appendChild(adjustments);
+      // Keep the approved compact gallery and existing recipes unchanged.
+      // The extended preview belongs to the new text recipes' settings only.
+      if(p.collection==="text"){
+        textPreview=createTextPresetPreview(doc,{locale:options.locale,preset:p,settings:()=>draft,sample:nav.sampleText??"Make it\nMoti.on",onSample:value=>{nav.sampleText=value;}});
+        settingsBody.appendChild(textPreview.element);
+      }
 
     } else inspector.appendChild(createElement(doc, "p", "ch-preset-hint", preset.category === "ease" ? pt ? "Selecione dois ou mais keyframes." : "Select two or more keyframes." : pt ? "Selecione uma câmera sem parent nem animação na propriedade." : "Select an unparented camera without keys on the target property."));
     if(!p) settingsBody.appendChild(button(doc,{label:preset.category==="ease"?(pt?"Editar curva":"Edit curve"):(pt?"Editar movimento":"Edit motion"),onClick:()=>{if(disposed)return;rememberScroll();options.edit(preset);}}));
