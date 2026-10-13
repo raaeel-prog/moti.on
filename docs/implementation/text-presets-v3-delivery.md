@@ -1,6 +1,6 @@
 # Primeira leva de texto do Moti.on
 
-Implementação na branch `feat/text-presets-rea`, em `C:/dev/Moti.on-text-presets`. A base local de Momentum foi preservada no commit `c8151cf`; o patch do checkout compartilhado permaneceu idêntico ao snapshot inicial de 80.114 bytes. Não houve push nem publicação.
+Implementação na branch `feat/text-presets-rea`, em `C:/dev/Moti.on-text-presets`. A base local de Momentum foi preservada no commit `c8151cf`. A continuação incorporou por snapshots e patches verificados as correções recentes de Momentum, sem escrever nos fontes ou no índice do checkout compartilhado, que continua recebendo trabalho paralelo. Não houve push nem publicação.
 
 ## Biblioteca entregue
 
@@ -30,7 +30,7 @@ Animation Composer 4.2.6: a análise dirigida pelo REA completou a leitura de se
 
 No painel instalado, a seleção de Text Presets mostrou quatro itens: **Ease Fade Separately 3**, **Ease Fade Together 3**, **Ease Position & Rotate & Scale Y 1** e **Ease Position & Rotate & Scale Randomly 2**. Isso registra os itens visíveis nessa seleção, sem afirmar o inventário completo dos subdiretórios. O primeiro foi aplicado, em From Start / In, ao texto descartável: o AE expôs Range Selector, Opacity, controle Reversed Order e um marcador TR In em 0,80078125 s. Essa observação substitui inferências sobre a estrutura dessa família; as fórmulas internas e o inventário completo do pacote continuam sem confirmação.
 
-O [catálogo público oficial](https://misterhorse.com/products/text-presets/42) organiza Characters, Words, Lines e Effects. Ele foi usado para mapear famílias de posição, rotação, escala, tracking, máscaras, typewriter, decode, combinações e efeitos contínuos. Catálogo público e conteúdo instalado têm evidências separadas. A implementação própria não declara equivalência matemática nem reprodução exata de todos os presets comerciais.
+O [catálogo público oficial](https://misterhorse.com/products/text-presets/42), verificado em 13/10/2026, organiza Characters (626), Words (392), Lines (253) e Effects (143), totalizando 1.414 itens. Ele foi usado para mapear famílias de posição, rotação, escala, tracking, máscaras, typewriter, decode, combinações e efeitos contínuos. O inventário local confirmou 639 containers e 471 previews em `Products/3300`; esses números não identificam o pacote semanticamente nem suas fórmulas. Catálogo público e conteúdo instalado têm evidências separadas em `continuation-2026-10-13/composer-followup.json`. A implementação própria não declara equivalência matemática nem reprodução exata de todos os presets comerciais.
 
 O uso dos Text Animators e do 3D por caractere segue a [documentação da Adobe](https://helpx.adobe.com/after-effects/desktop/animating-text/text-animation/animating-text.html) e foi confirmado por probe no AE 26.5x89. Agrupamento, Anchor Point 3D, Position 3D, Scale 3D e Rotation X/Y/Z foram testados no host.
 
@@ -64,13 +64,15 @@ As comparações locais do BadFX usam texto, fonte, enquadramento, cor, fps e du
 
 | Verificação | Estado | Evidência local |
 |---|---|---|
-| Check completo integrado após correção da galeria | PASS — 2.393/2.393 | `ui-restore-check.log` |
+| Check completo integrado com as correções recentes de Momentum | PASS — 2.420/2.420 | `continuation-final-check.log` |
 | Contratos, migração, lifecycle, 3D e previews automatizados | PASS | Incluídos no check completo |
 | Probe nativo AE 2026 | PASS | `ae-capabilities.json` |
 | Aplicação e avaliação das 108 receitas em oito tempos | PASS | `fixture-report.json` |
 | Render de todas as variantes | PASS — 108 | `render-summary.json` e manifesto dos assets |
-| Lifecycle real: oito fixtures | PASS | `ae-lifecycle.json` |
-| Undo real, uma ação Ctrl+Z | PASS | `ae-undo-verify.json` |
+| Lifecycle real: oito fixtures, cópia e reset do efeito | PASS | `ae-lifecycle.json`; nova execução `18b44f58-fadc-4674-9bfd-a60fe84f3b21` |
+| Sliders ao vivo: spring, settle-wave e settle-hop | PASS — pixels alterados em três renders | `ae-live-controls.json`; execução do bundle final |
+| Regressão nativa do Momentum integrado | PASS — 21/21 | `continuation-2026-10-13/momentum-native-proof.json` e `artifacts/momentum-verify/result.json`; instância isolada |
+| Undo real, uma ação Ctrl+Z | PASS — evidência anterior da aplicação 3D; sem nova execução nesta continuação | `ae-undo-verify.json` |
 | UI PT/EN: 280, 360, 480 e 720 px | PASS — oito configurações | `ui-qa.json` e screenshots |
 | BadFX: aplicação e observação de 48 FFX | PASS | `badfx-host-study.json` |
 | Composer: um preset instalado aplicado e observado | PASS, cobertura limitada | `composer-host-study.json` e `composer-ui-catalog.txt` |
@@ -79,6 +81,10 @@ As comparações locais do BadFX usam texto, fonte, enquadramento, cor, fps e du
 | Assinatura e publicação | NOT RUN | Pacote local de desenvolvimento; distribuição final em HOLD |
 
 As fixtures reais cobrem texto curto, multilinha, paragraph text, acentos e Unicode, estilos mistos, parenting, animações existentes de Source Text/Position e taxas de 23,976 a 60 fps. Elas exercitam IN + OUT + efeito, ajustes, substituição individual, remoção e falha parcial. A prova de Undo confirma remoção das duas transições 3D em uma ação, com restauração do texto, seleção, controles, marcadores e flags 3D.
+
+A continuação corrigiu a leitura de sliders: `effect(...)(1)` é um objeto Property no AE e deve ser convertido por `Number()` antes das curvas que verificam o tipo numérico. Point Controls preservam seus vetores. A prova pixel a pixel encontrou 8.669, 1.103 e 6.396 pixels alterados em spring, settle-wave e settle-hop. Cópia do efeito cria identidade própria, não acrescenta markers e mantém o texto; Reset recupera os defaults sem alterar IN/OUT. Também foram incorporadas as correções de Reset e rollback da geometria do Momentum, proteção de controles animados, recusa de parent com escala zero e escala oculta acima de 100% de intensidade.
+
+O host final difere do host das oito fixtures somente por dois comentários de documentação; `continuation-2026-10-13/host-equivalence.json` verifica a igualdade de bytes após essa substituição exata. Os três controles renderizados foram executados novamente com o SHA do bundle final. O check completo, a prova de instalação e a prova funcional no Adobe permanecem registros distintos.
 
 O check inicial encontrou uma ambiguidade ES3 já existente no Momentum. Ela foi corrigida, junto da composição de uma expressão com pivô negativo. Uma rodada final detectou uma asserção de timers dependente de carga em um teste de gestos existente; a asserção agora mede o limite de 10 Hz pelo tempo real. A repetição e o check completo passaram.
 

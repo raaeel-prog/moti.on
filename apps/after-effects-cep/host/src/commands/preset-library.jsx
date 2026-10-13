@@ -216,17 +216,25 @@
     var m=/** @type {any} */ ([1,0,0,1,0,0]),l=layer,guard=0;
     while(l&&guard++<64){
       if(l.threeDLayer)return null;
-      var tr=l.property(MN_TRANSFORM),A=tr.property("ADBE Anchor Point").valueAtTime(time,true),P=tr.property("ADBE Position").valueAtTime(time,true),S=tr.property("ADBE Scale").valueAtTime(time,true),r=tr.property("ADBE Rotate Z").valueAtTime(time,true)*Math.PI/180;
+      var tr=l.property(MN_TRANSFORM),A=/** @type {any} */ (tr.property("ADBE Anchor Point").valueAtTime(time,true)),P=/** @type {any} */ (tr.property("ADBE Position").valueAtTime(time,true)),S=/** @type {any} */ (tr.property("ADBE Scale").valueAtTime(time,true)),r=tr.property("ADBE Rotate Z").valueAtTime(time,true)*Math.PI/180;
       var cs=Math.cos(r),sn=Math.sin(r),a=cs*S[0]/100,b=sn*S[0]/100,c=-sn*S[1]/100,d=cs*S[1]/100,e=P[0]-(a*A[0]+c*A[1]),f=P[1]-(b*A[0]+d*A[1]);
       m=[a*m[0]+c*m[1],b*m[0]+d*m[1],a*m[2]+c*m[3],b*m[2]+d*m[3],a*m[4]+c*m[5]+e,b*m[4]+d*m[5]+f];
       l=l.parent;
     }
     return m;
   }
+  /** Read-only: the parent can map the screen direction back into its own space.
+   * @param {any} layer @returns {boolean} */
+  function travelMeasurable(layer) {
+    if(!layer.parent)return true;
+    var times=[layer.inPoint,Math.max(layer.inPoint,layer.outPoint-layer.containingComp.frameDuration)];
+    for(var i=0;i<times.length;i++){var pm=/** @type {any} */ (compAffine(layer.parent,times[i]));if(!pm||Math.abs(pm[0]*pm[3]-pm[2]*pm[1])<.000000001)return false;}
+    return true;
+  }
   /** Distance, in composition pixels, that takes the layer out of frame along the
    * recipe's screen direction, at the start of each requested phase; and that
    * direction expressed in the parent's space, where Position lives.
-   * @param {any} plan @param {number[]} xy @returns {{distance:number,unit:number[]}} */
+   * @param {any} plan @param {any} xy @returns {{distance:number,unit:number[]}} */
   function offscreenTravel(plan,xy) {
     var l=plan.layer,comp=plan.comp,p=plan.p,vector=/** @type {any} */ (xy),length=Math.sqrt(vector[0]*vector[0]+vector[1]*vector[1]);
     if(length<.000001)throw new Error("O preset não define uma direção de saída.");
@@ -236,14 +244,14 @@
     var amp=Math.max(1,plan.args.intensity/100),grow=Math.max(1,1+Math.max(p.scale[0],p.scale[1])/100*amp),inflate=p.rotation[2]||grow>1?grow:0;
     for(i=0;i<times.length;i++){
       var m=compAffine(l,times[i]);if(!m)throw new Error("Este preset sai do quadro em 2D. Use uma camada 2D, sem parent 3D.");
-      var rect=l.sourceRectAtTime(times[i],false),A=l.property(MN_TRANSFORM).property("ADBE Anchor Point").valueAtTime(times[i],true);
+      var rect=l.sourceRectAtTime(times[i],false),A=/** @type {any} */ (l.property(MN_TRANSFORM).property("ADBE Anchor Point").valueAtTime(times[i],true));
       var xs=/** @type {any} */ ([rect.left,rect.left+rect.width]),ys=/** @type {any} */ ([rect.top,rect.top+rect.height]),minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
       for(j=0;j<4;j++){var x=xs[j%2],y=ys[j>1?1:0],cx=m[0]*x+m[2]*y+m[4],cy=m[1]*x+m[3]*y+m[5];minX=Math.min(minX,cx);maxX=Math.max(maxX,cx);minY=Math.min(minY,cy);maxY=Math.max(maxY,cy);}
       distance=Math.max(distance,core.libraryOffscreenDistance(m[0]*A[0]+m[2]*A[1]+m[4],m[1]*A[0]+m[3]*A[1]+m[5],minX,minY,maxX,maxY,inflate,ux,uy,comp.width,comp.height,Math.max(8,.02*Math.max(comp.width,comp.height))));
     }
     var unit=/** @type {any} */ ([ux,uy]);
     if(l.parent){
-      var pm=compAffine(l.parent,times[0]),det=pm?pm[0]*pm[3]-pm[2]*pm[1]:0;
+      var pm=/** @type {any} */ (compAffine(l.parent,times[0])),det=pm?pm[0]*pm[3]-pm[2]*pm[1]:0;
       if(Math.abs(det)<.000000001)throw new Error("A escala do parent é zero; não há como medir a saída do quadro.");
       unit=[(pm[3]*ux-pm[2]*uy)/det,(-pm[1]*ux+pm[0]*uy)/det];
     }
@@ -311,7 +319,8 @@
       if (!isText(p) && (p.position[0] || p.position[1] || p.position[2] || p.pivot !== "anchor") && pos.dimensionsSeparated) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Reúna as dimensões de Position para aplicar presets de motion.");
       // Leaving the frame is measured in the composition plane; a 3D layer or
       // parent would need the camera's projection, which is not modeled.
-      if (p.travel === "offscreen") for (var up = l; up; up = up.parent) if (up.threeDLayer) return fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE,"Este preset sai do quadro em 2D. Use uma camada 2D, sem parent 3D.");
+      if (p.travel === "offscreen") { for (var up = l; up; up = up.parent) if (up.threeDLayer) return fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE,"Este preset sai do quadro em 2D. Use uma camada 2D, sem parent 3D.");
+        if (!travelMeasurable(l)) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"A escala do parent é zero; não há como medir a saída do quadro."); }
       if (p.pivot === "offset" && l.threeDLayer && !flatOrientation(tr)) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Zere Orientation e as rotações X e Y para girar em torno do centro da transição.");
       if (l.outPoint <= l.inPoint) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"A camada precisa ter duração positiva.");
       if(p.mode==="transition"&&!phaseOwner){var markerError=markerPreflight(l,m,args,comp);if(markerError)return markerError;}
@@ -367,8 +376,13 @@
       // Signature looks share one progress, velocity and envelope with the preview.
       (p.collection==="signature" ? "var envelope="+core.librarySignatureEnvelope.toString()+";var glyph="+core.librarySignatureGlyph.toString()+";var sp=Math.max(0,Math.min(1,Math.min(u[0],u[1])));var sv="+(p.mode==="transition"?"("+core.librarySignatureVelocity.toString()+")(sp,"+MotionJson.stringify(args.easing&&args.easing!=="preset"?args.easing:p.easing)+",elastic,ease)":"0")+";\n" : "");
   }
-  /** @param {any} meta @param {string} key @param {number|string} fallback @returns {string} */
-  function controlExpression(meta,key,fallback){return meta.controls&&meta.controls[key]?"effect("+MotionJson.stringify(meta.controls[key])+")(1)":String(fallback);}
+  /** A Point Control is read as a vector; without the control, the Anchor Point.
+   * @param {any} meta @param {string} key @returns {string} */
+  function pointExpression(meta,key){return meta.controls&&meta.controls[key]?"effect("+MotionJson.stringify(meta.controls[key])+")(1)":"transform.anchorPoint";}
+  /** AE expressions return a Property for effect(...)(1): typeof is not "number"
+   * until it is converted, and the shared curves test typeof. Number() works in both.
+   * @param {any} meta @param {string} key @param {number|string} fallback @returns {string} */
+  function controlExpression(meta,key,fallback){return meta.controls&&meta.controls[key]?"Number(effect("+MotionJson.stringify(meta.controls[key])+")(1))":String(fallback);}
   /** @param {any} plan @param {any[]} path @param {string} expression */
   function express(plan,path,expression) {
     var prop = locate(plan.layer,path);
@@ -543,7 +557,7 @@
         // moves when the layer rotates by d around its Anchor Point, in the rest
         // rotation's frame. Anchor Point is never changed.
         var rz=p.rotation[2],q=(p.choreography?"pose[3]":"w")+"*amp";
-        body=(unit?"var travel="+controlExpression(plan.meta,"travel",0)+";":"")+"var q="+q+",d="+rz+"*q*Math.PI/180,c="+controlExpression(plan.meta,"center","transform.anchorPoint")+",a=transform.anchorPoint,s=transform.scale;"+
+        body=(unit?"var travel="+controlExpression(plan.meta,"travel",0)+";":"")+"var q="+q+",d=("+rz+")*q*Math.PI/180,c="+pointExpression(plan.meta,"center")+",a=transform.anchorPoint,s=transform.scale;"+
           "var vx=(c[0]-a[0])*s[0]/100,vy=(c[1]-a[1])*s[1]/100,r0=(transform.rotation-("+rz+")*q)*Math.PI/180;"+
           "var ex=vx*(1-Math.cos(d))+vy*Math.sin(d),ey=vy*(1-Math.cos(d))-vx*Math.sin(d);"+
           "["+terms[0]+"+ex*Math.cos(r0)-ey*Math.sin(r0),"+terms[1]+"+ex*Math.sin(r0)+ey*Math.cos(r0)"+(terms.length>2?","+terms[2]:"")+"];";
@@ -562,7 +576,9 @@
       express(plan,[MN_TRANSFORM,"ADBE Position"],h+body);
     }
     if(p.scale[0]||p.scale[1]||p.scale[2]){
-      terms=[];for(i=0;i<(plan.layer.threeDLayer?3:2);i++)terms.push("value["+i+"]*(1+"+p.scale[i]+"/100*amp*"+(p.choreography?(i===0?"pose[4]":i===1?"pose[5]":"w"):p.mode==="transition"?"w":"wave(age,"+i+","+MotionJson.stringify(p.waveform)+",seed+2)")+")");express(plan,[MN_TRANSFORM,"ADBE Scale"],h+"["+terms.join(",")+"];");
+      terms=[];for(i=0;i<(plan.layer.threeDLayer?3:2);i++){var factor="1+"+p.scale[i]+"/100*amp*"+(p.choreography?(i===0?"pose[4]":i===1?"pose[5]":"w"):p.mode==="transition"?"w":"wave(age,"+i+","+MotionJson.stringify(p.waveform)+",seed+2)");
+        // A Momentum layer hidden at zero scale stays flat above 100% Intensity instead of flipping.
+        terms.push("value["+i+"]*"+(p.collection==="momentum"&&p.scale[i]<0?"Math.max(0,"+factor+")":"("+factor+")"));}express(plan,[MN_TRANSFORM,"ADBE Scale"],h+"["+terms.join(",")+"];");
     }
     var rotations=["ADBE Rotate X","ADBE Rotate Y","ADBE Rotate Z"];
     for(i=0;i<3;i++)if(p.rotation[i]&&(i===2||plan.layer.threeDLayer))express(plan,[MN_TRANSFORM,rotations[i]],h+"value+"+p.rotation[i]+"*amp*"+(p.choreography?"pose[3]":p.effect==="camera-shake"?"(wave(age*3,"+i+",\"wiggle\",seed+6)*fadeWeight)":p.mode==="transition"?"w":"wave(age,"+i+","+MotionJson.stringify(p.waveform)+",seed+6)")+";");
@@ -721,9 +737,12 @@
     if(typeof opts.speed!=="number")opts.speed=p.defaults&&p.defaults.speed!==undefined?p.defaults.speed:100;
     var controls=/** @type {any[]} */ ([]),i;
     for(i=0;i<CONTROL_KEYS.length;i++)controls.push({key:CONTROL_KEYS[i],name:m.effects[i].name});
-    // Distance and transition center are free geometry in AE, not panel options:
-    // users may even animate them, so they never block inspection.
+    // Distance and transition center are free geometry in AE, not panel options.
+    // Static values survive rebuilds; animated controls require editing in AE.
     if(m.controls)for(key in m.controls)if(Object.prototype.hasOwnProperty.call(m.controls,key)&&key!=="travel"&&key!=="center")controls.push({key:key,name:m.controls[key]});
+    // Rebuilding a phase recreates these controls: keys or expressions would be lost.
+    var geometry=/** @type {any} */ (["travel","center"]);
+    for(i=0;m.controls&&i<geometry.length;i++){var owned=m.controls[geometry[i]],live=owned&&child(l.property(MN_EFFECTS),owned),value=live&&live.property(1);if(value&&(value.numKeys||value.expression))return {state:"conflict",layerName:l.name,message:"Distância ou Centro da transição têm keyframes ou expressão. Edite esse controle no After Effects para preservar a animação."};}
     for(i=0;i<controls.length;i++){
       var c=/** @type {any} */ (controls[i]),effect=child(l.property(MN_EFFECTS),c.name),prop=effect&&effect.property(1);
       if(!prop||prop.numKeys||prop.expression)return {state:"conflict",layerName:l.name,message:"Um controle tem keyframes ou expressão. Edite esse controle no After Effects para preservar a animação."};

@@ -25,16 +25,26 @@ test('camera overlay previews start neutral, peak at CUT, and settle without fad
   }
 });
 
-test('every fading transition previews a transparent start, readable rest and transparent exit',()=>{
+// The card glyph spans x -36..36 and y -35..22 around (160, 98) in a 320x180 frame.
+function hiddenByGeometry(s){
+  if(Math.abs(s.sx)<1e-9||Math.abs(s.sy)<1e-9)return true;
+  const r=s.rz*Math.PI/180,points=[[-36,-35],[36,-35],[-36,22],[36,22]].map(([x,y])=>{const a=x*s.sx,b=y*s.sy;return [160+s.x+a*Math.cos(r)-b*Math.sin(r),98+s.y+a*Math.sin(r)+b*Math.cos(r)];});
+  return points.every(p=>p[0]<0)||points.every(p=>p[0]>320)||points.every(p=>p[1]<0)||points.every(p=>p[1]>180);
+}
+test('every transition previews a transparent start, readable rest and transparent exit',()=>{
   const transitions=GALLERY_PRESETS.filter(p=>p.motion?.mode==='transition'&&!p.motion.effect.startsWith('camera-'));
   assert.equal(transitions.length,259);
   for(const {motion:p} of transitions){
-    if(!p.fade)continue; // Geometric Momentum transitions clear the frame without opacity animation.
     const o={...defaultLibraryOptions(p),phase:'both'},end=libraryPreviewEnd(o);
     for(let index=0;index<7;index++){
-      assert.equal(librarySample(p,o,0,index,7).opacity,0,`${p.id} start`);
-      assert.equal(librarySample(p,o,end/2,index,7).opacity,1,`${p.id} rest`);
-      assert.equal(librarySample(p,o,end,index,7).opacity,0,`${p.id} exit`);
+      const start=librarySample(p,o,0,index,7),rest=librarySample(p,o,end/2,index,7),exit=librarySample(p,o,end,index,7);
+      assert.equal(rest.opacity,1,`${p.id} rest`);
+      if(p.fade){assert.equal(start.opacity,0,`${p.id} start`);assert.equal(exit.opacity,0,`${p.id} exit`);continue;}
+      // Only Momentum recipes skip the fade: out of frame or at zero scale instead.
+      assert.equal(p.collection,'momentum',`${p.id} must fade`);
+      assert.ok(hiddenByGeometry(start),`${p.id} start must be out of frame or flat`);
+      assert.ok(hiddenByGeometry(exit),`${p.id} exit must be out of frame or flat`);
+      assert.ok(Math.abs(rest.x)<1e-9&&Math.abs(rest.y)<1e-9&&Math.abs(rest.rz)<1e-9&&Math.abs(rest.sx-1)<1e-9&&Math.abs(rest.sy-1)<1e-9,`${p.id} rest pose`);
     }
   }
 });

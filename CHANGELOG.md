@@ -6,6 +6,17 @@
 - Check após correção 2.393/2.393; AE 26.5x89: 108 aplicações, oito fixtures de lifecycle e um Undo real PASS. Browser PT/EN em 280/360/480/720 px PASS.
 - Candidato local instalado: 264 hashes verificados e painel recarregado preservando o projeto aberto. Estudo nativo de 48 FFX BadFX, um preset instalado do Composer e quatro comparações locais por família. Inventário completo/fórmulas do Composer e distribuição assinada permanecem pendentes; ver `docs/implementation/text-presets-v3-delivery.md`.
 
+## 2026-10-12 — Coleção Impulso: assentamento físico, saída do quadro e centro da transição
+- Engenharia reversa do Animation Composer 4 e do BadFX com o REA, limitada a técnica e comportamento: nada decriptado ou copiado. Ver `docs/research/2026-10-12-ac4-badfx-rea.md`.
+- Novas curvas Ricochete (`settle-wave`) e Quique (`settle-hop`). Os três controles viram sliders ao vivo, e na saída a curva vira antecipação. Disponíveis no seletor de suavização de qualquer transição.
+- Transições que saem do quadro de verdade: distância medida na composição (inclusive através de parents 2D) e editável em "Distância (px)".
+- Centro da transição: Point Control arrastável no Monitor; a camada gira em torno dele sem mudar o Anchor Point.
+- Coleção Impulso com 16 receitas próprias (10 2D, 4 3D, 2 efeitos contínuos: rotação em °/s e piscar), pasta própria na galeria logo após Signature.
+- Correção: o schema de comandos não aceitava as curvas `velvet`, `drift` e `snap` ao ajustar um preset.
+- Correção: no motor JavaScript do AE, `effect(...)(1)` é um objeto Property, e as curvas testavam `typeof`. Os controles agora são lidos com `Number(...)`. Isso também faz o slider de Elasticidade das curvas spring funcionar de verdade no AE, onde antes era ignorado. O harness de testes passa a imitar esse comportamento.
+- Revisão de código: escala travada acima de 100% de Intensidade, geometria animada protegida, parent com escala zero recusado antes de mutar, rollback e Reset coerentes e script de Undo restrito a projeto vazio.
+- `npm run check` 2.405/2.405 PASS (o teste do cofre de credenciais do Windows falhou uma vez rodando em paralelo e passa isolado). UI Chromium 280/360/480/720 PASS. After Effects 26.5x89/Windows por script: 21/21 cenários PASS no build final; Undo nativo PASS no build anterior à revisão (no final, o script recusou o projeto aberto, que não estava vazio). Painel instalado: NOT RUN.
+
 ## 2026-10-11 — Windows: Gradient na GPU (CUDA e DirectX 12)
 - CUDA (NVIDIA): GradientCuda.cu sobre o mesmo GradientMath.inc, PTX embutido e carregado pela API de driver (nvcuda.dll dinâmico; sem NVIDIA o plug-in segue na CPU). Verificado no After Effects 26.5 com RTX 3080: rastreio gpu=1, quadro idêntico ao da CPU (máx. 1/255). Corrigido: o setup recusava o CUDA porque o dispositivo 0 chega como ponteiro nulo.
 - DirectX 12: pronto e com paridade (RTX 3080 e WARP), mas este AE só oferece CUDA/Software para efeitos.

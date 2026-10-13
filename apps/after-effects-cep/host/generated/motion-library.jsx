@@ -30,14 +30,14 @@ libraryEase: function libraryEase(t, kind, elasticity, settleAmount, settleCount
     }
     var first = amount * 0.5, keep = Math.max(0.05, 1 - damping), hops = Math.max(1, Math.min(8, Math.round(count)));
     if (first <= 0) return 1;
-    var total = 0, h = 1, k;
-    for (k = 0; k < hops; k++) {
+    var total = 0, h = 1, hop;
+    for (hop = 0; hop < hops; hop++) {
       total += Math.sqrt(h);
       h *= keep;
     }
     var clock = (x - arrive) / span * total, lift = first, length;
-    for (k = 0; k < hops; k++) {
-      length = Math.sqrt(Math.pow(keep, k));
+    for (hop = 0; hop < hops; hop++) {
+      length = Math.sqrt(Math.pow(keep, hop));
       if (clock <= length) {
         var p = clock / length;
         return 1 - lift * 4 * p * (1 - p);

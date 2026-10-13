@@ -1,5 +1,5 @@
 /* Trusted scratch-project validation through the production dispatcher. */
-var report={status:"RUNNING",runId:job.runId,hostVersion:app.version,userProjectGuard:false,cases:[]};
+var report={status:"RUNNING",runId:job.runId,hostVersion:app.version,hostSha256:job.hostSha256,userProjectGuard:false,cases:[]};
 function writeReport(){var f=File(job.report);f.encoding="UTF-8";if(!f.open("w"))throw Error(f.error);f.write(MotionJson.stringify(report));f.close();}
 function check(value,message){if(!value)throw Error(message);}
 function command(id,args){return MotionJson.parse(MotionAE.dispatch(MotionJson.stringify({protocolVersion:MotionContracts.PROTOCOL_VERSION,requestId:"lifecycle-"+report.cases.length+"-"+id,command:"ae.presets."+id,args:args||{},context:{host:"after-effects",hostVersion:app.version,locale:"en-US"},options:{preserveSelection:true}})));}
@@ -11,6 +11,7 @@ try{
   if(!app.project||app.project.numItems!==0||app.project.file){report.status="ABORTED_USER_PROJECT_GUARD";writeReport();return;}
   report.userProjectGuard=true;app.beginSuppressDialogs();
   var fixtures=[{name:"short",text:"M",fps:24},{name:"multiline",text:"A\u00e7\u00e3o\rMoti.on\rTexto",fps:30},{name:"paragraph",text:"Editable paragraph text with multiple lines and accents: \u00e1\u00e9\u00ed\u00f3\u00fa",fps:60,box:true},{name:"unicode",text:"Ol\u00e1 \ud83d\udc69\u200d\ud83d\udcbb \u4f60\u597d \u0627\u0644\u0639\u0631\u0628\u064a\u0629",fps:24000/1001},{name:"mixed-styles",text:"Moti.on styles",fps:30000/1001,mixed:true},{name:"parenting",text:"Parented editable text",fps:25,parent:true},{name:"user-animation",text:"Animated source text",fps:30,keys:true},{name:"3d",text:"Depth per character",fps:24,threeD:true}];
+  if(job.controlsOnly)fixtures=[];
   var i,f,comp,layer,source,doc,parent,state,before,phases,effect,signature,selection,originalApply,armed,response;
   for(i=0;i<fixtures.length;i++){
     f=fixtures[i];comp=app.project.items.addComp("Moti.on lifecycle "+f.name,640,360,1,6,f.fps);
@@ -23,6 +24,11 @@ try{
     apply(f.threeD?"text-v3-characters-rotate-pitch-3d":"text-v3-characters-position-rise","in");apply("text-v3-characters-fade-cascade","out");before=inspect();phases=MotionJson.stringify(before.phases);
     apply("text-v3-characters-loop-drift");state=inspect();check(MotionJson.stringify(state.phases)===phases,"Effect changed phases");check(layer.property("ADBE Marker").numKeys===2,"Effect created timing marker");
     var options=state.textEffect.options;options.speed=75;options.intensity=45;response=command("text-effect-adjust",{target:state.target,presetId:state.textEffect.presetId,options:options});check(response.ok,"Effect adjustment failed");state=inspect();check(state.textEffect.options.speed===75,"Effect speed was not retained");effect=MotionJson.stringify(state.textEffect);
+    var copiedEffect=MotionJson.parse(effect),preservedPhases=MotionJson.stringify(state.phases);
+    response=command("text-effect-action",{target:state.target,action:"reset"});check(response.ok,"Effect reset failed");state=inspect();check(state.textEffect.options.intensity===100&&state.textEffect.options.speed===40,"Reset did not restore effect defaults");check(MotionJson.stringify(state.phases)===preservedPhases,"Reset changed a transition");
+    response=command("text-effect-adjust",{target:state.target,presetId:state.textEffect.presetId,options:copiedEffect.options});check(response.ok,"Restoring copied effect options failed");state=inspect();effect=MotionJson.stringify(state.textEffect);
+    layer.selected=false;var copiedLayer=comp.layers.addText("Copied editable effect"),copiedSource=copiedLayer.property("ADBE Text Properties").property("ADBE Text Document"),copiedSignature=sourceSignature(copiedSource);copiedLayer.selected=true;
+    var copiedArgs=MotionJson.parse(MotionJson.stringify(copiedEffect.options));copiedArgs.presetId=copiedEffect.presetId;response=command("apply",copiedArgs);check(response.ok,"Paste copied effect failed");var pasted=inspect();check(pasted.phases.length===0&&pasted.textEffect&&pasted.textEffect.options.speed===75&&pasted.textEffect.options.intensity===45,"Paste did not retain independent effect settings");check(pasted.textEffect.instance!==copiedEffect.instance,"Paste reused the source ownership identity");check(copiedLayer.property("ADBE Marker").numKeys===0&&sourceSignature(copiedSource)===copiedSignature,"Paste changed source text or created a transition marker");copiedLayer.remove();layer.selected=true;
     apply("text-v3-characters-position-rise","in");state=inspect();check(MotionJson.stringify(state.textEffect)===effect,"Replacing entrance changed effect");check(MotionJson.stringify(state.phases[1])===MotionJson.stringify(before.phases[1]),"Replacing entrance changed exit");
     originalApply=MotionPresetLibrary.applyLayer;armed=true;MotionPresetLibrary.applyLayer=function(plan){originalApply(plan);if(armed){armed=false;throw Error("Injected fixture failure");}};
     try{response=command("phase-apply",{presetId:"text-v3-characters-fade-cascade",phase:"in",direction:"preset",durationFrames:30,intensity:80,staggerFrames:2,unit:"preset"});}finally{MotionPresetLibrary.applyLayer=originalApply;}
@@ -31,7 +37,17 @@ try{
     response=command("phase-action",{target:state.target,phase:"in",action:"remove"});check(response.ok,"Entrance removal failed");state=inspect();response=command("phase-action",{target:state.target,phase:"out",action:"remove"});check(response.ok,"Exit removal failed");
     check(layer.comment==="","Last removal did not restore comment");check(layer.property("ADBE Effect Parade").numProperties===0,"Owned effects remained");check(layer.property("ADBE Text Properties").property("ADBE Text Animators").numProperties===0,"Owned animators remained");check(!layer.threeDPerChar&&!layer.threeDLayer,"3D state was not restored");check(sourceSignature(source)===signature,"Source text or mixed styles changed");check(comp.selectedLayers.length===1&&comp.selectedLayers[0].id===layer.id,"Selection changed");
     if(f.parent)check(layer.parent.id===parent.id,"Parent changed");if(f.keys)check(layer.property("ADBE Transform Group").property("ADBE Position").numKeys===2,"User animation changed");
-    report.cases.push({name:f.name,status:"PASS",frameRate:f.fps,sourcePreserved:true,selectionPreserved:true,independentComponents:true,partialFailureRollback:true});writeReport();
+    report.cases.push({name:f.name,status:"PASS",frameRate:f.fps,sourcePreserved:true,selectionPreserved:true,independentComponents:true,copyEffect:true,resetEffect:true,partialFailureRollback:true});writeReport();
+  }
+  report.liveControls=[];
+  if(job.controlImages){
+    var controlFixtures=[{curve:"spring",key:"elasticity",first:0,last:100,time:.28},{curve:"settle-wave",key:"settleAmount",first:0,last:80,time:.78},{curve:"settle-hop",key:"settleAmount",first:0,last:80,time:.78}];
+    for(i=0;i<controlFixtures.length;i++){
+      var cf=controlFixtures[i];comp=app.project.items.addComp("Moti.on live text "+cf.curve,640,360,1,4,30);layer=comp.layers.addText("MOTION");source=layer.property("ADBE Text Properties").property("ADBE Text Document");doc=source.value;doc.font="ArialMT";doc.fontSize=64;doc.fillColor=[1,1,1];doc.justification=ParagraphJustification.CENTER_JUSTIFY;source.setValue(doc);layer.property("ADBE Transform Group").property("ADBE Position").setValue([320,180]);comp.openInViewer();layer.selected=true;
+      var controlArgs={presetId:"text-v3-characters-position-rise",phase:"in",direction:"preset",durationFrames:30,intensity:100,staggerFrames:0,unit:"all",easing:cf.curve,settleCount:3,settleDamping:50};controlArgs[cf.key]=cf.first;response=command("phase-apply",controlArgs);check(response.ok,"Live text control apply failed");var liveRoot=MotionPresetPhases.metadata(layer),liveName=liveRoot.slots["in"].meta.controls[cf.key],liveControl=null,liveGroup=layer.property("ADBE Effect Parade"),ci;
+      for(ci=1;ci<=liveGroup.numProperties;ci++){var candidateControl=liveGroup.property(ci);if(candidateControl.name===liveName){liveControl=candidateControl.property(1);break;}}check(liveControl,"Owned live control not found");var beforeImage=job.controlImages+"/"+cf.curve+"-before.png",afterImage=job.controlImages+"/"+cf.curve+"-after.png";
+      comp.saveFrameToPng(cf.time,File(beforeImage));liveControl.setValue(cf.last);comp.saveFrameToPng(cf.time,File(afterImage));check(source.value.text==="MOTION","Slider changed editable source text");report.liveControls.push({curve:cf.curve,key:cf.key,first:cf.first,last:cf.last,time:cf.time,before:beforeImage,after:afterImage,status:"AWAITING_IMAGE_COMPARISON"});writeReport();
+    }
   }
   report.undo={status:"NOT RUN",reason:"API fixtures exercise production undo grouping; one user Undo requires an interactive Adobe check."};
   report.status="PASS";writeReport();app.project.close(CloseOptions.DO_NOT_SAVE_CHANGES);app.endSuppressDialogs(false);app.quit();

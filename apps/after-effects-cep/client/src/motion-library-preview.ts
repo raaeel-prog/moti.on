@@ -64,12 +64,14 @@ export function librarySample(p: MotionLibraryPreset, options: MotionLibraryOpti
   const xy = libraryDirection(p.position[0], p.position[1], options.direction);
   const pose = p.choreography ? libraryChoreography(Math.max(0, Math.min(1, Math.min(a, b))), w, ...p.position, p.choreography.path, p.choreography.distribution ?? "uniform", unit === "all" ? 0 : index, seed, p.choreography.turns ?? 1, options.direction) : undefined;
   const transform = (axis: number, waveSeed: number): number => p.effect === "camera-shake" && waveSeed !== seed + 2 ? libraryWave(age * 3, axis, "wiggle", waveSeed) * fadeWeight : p.mode === "transition" || text ? w : libraryWave(age, axis, p.waveform, waveSeed);
+  // Momentum layers hidden at zero scale stay flat above 100% Intensity, as in AE.
+  const flat = (axis: number, factor: number): number => p.collection === "momentum" && p.scale[axis]! < 0 ? Math.max(0, factor) : factor;
   // Out-of-frame travel follows the measured distance, not Intensity, as in AE.
   const travel = p.travel === "offscreen" && !text ? libraryPreviewTravel(p, options) / (Math.hypot(xy[0], xy[1]) || 1) : 0;
   const sample = { x: travel ? xy[0] * travel * transform(0, seed) / 6 : amp * (pose ? pose[0] : xy[0] * transform(0, seed)) / 6,
     y: travel ? xy[1] * travel * transform(1, seed) / 6 : amp * (pose ? pose[1] : xy[1] * transform(1, seed)) / 6, z: amp * (pose ? pose[2] : p.position[2] * transform(2, seed)) / 6,
     rx: p.rotation[0] * amp * (pose ? pose[3] : transform(0, seed + 6)), ry: p.rotation[1] * amp * (pose ? pose[3] : transform(1, seed + 6)), rz: p.rotation[2] * amp * (pose ? pose[3] : transform(2, seed + 6)),
-    sx: 1 + p.scale[0] / 100 * amp * (pose ? pose[4] : transform(0, seed + 2)), sy: 1 + p.scale[1] / 100 * amp * (pose ? pose[5] : transform(1, seed + 2)),
+    sx: flat(0, 1 + p.scale[0] / 100 * amp * (pose ? pose[4] : transform(0, seed + 2))), sy: flat(1, 1 + p.scale[1] / 100 * amp * (pose ? pose[5] : transform(1, seed + 2))),
     opacity: p.text.reveal === "typewriter" ? (Math.min(a, b) < (idx + 1) / (unit === "all" ? 1 : count) ? 1 - Math.min(1, amp) : 1) : p.fade ? 1 - Math.max(0, Math.min(1, (text && p.mode !== "transition" ? Math.abs(w) * .7 : fadeWeight) * amp)) : 1, weight: p.effect.startsWith("camera-") ? fadeWeight : w,
     progress: Math.max(0, Math.min(1, Math.min(a, b))) };
   if (p.pivot === "edge" && !text) {

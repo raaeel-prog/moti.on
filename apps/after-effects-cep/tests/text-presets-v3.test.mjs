@@ -39,6 +39,20 @@ test('repeated applications do not accumulate controls, selectors or markers',as
   assert.deepEqual(inspection(f).phases.map(p=>p.instance),identities);
 });
 
+test('text selectors read live numeric Property controls for spring and settle curves',async()=>{
+  for(const [easing,key,first,last] of [['spring','elasticity',0,100],['settle-wave','settleAmount',0,80]]){
+    const f=await fixture({text:true});
+    f.run('phase-apply',f.args(entrance,{phase:'in',easing,[key]:first}));
+    const selector=animators(f).children[0].property('ADBE Text Selectors').property('Moti.on Timing').property('ADBE Text Expressible Amount');
+    const control=f.layer.effects.property(root(f).slots.in.meta.controls[key]).property(1);
+    const sample=time=>{const value=selector.valueAtTime(time,false,0,7);return Array.isArray(value)?value[0]:value;};
+    const times=[.2,.4,.6,.7,.8,.9],before=times.map(sample);
+    control.setValue(last);
+    const after=times.map(sample);
+    assert.ok(after.some((value,index)=>Math.abs(value-before[index])>.01),`${easing} must change the evaluated selector when its live slider changes`);
+  }
+});
+
 test('3D text creates X/Y/Z and depth animators, preserves grouping, and restores it only on final removal',async()=>{
   const f=await fixture({text:true}),group=f.layer.text.property('ADBE Text More Options').property('ADBE Text Anchor Point Option');
   group.setValue(4);f.run('apply',f.args(exit,{phase:'in'}));

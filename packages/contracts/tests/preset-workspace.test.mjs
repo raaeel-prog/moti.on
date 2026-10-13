@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MOTION_LIBRARY_DEFAULTS, isMotionLibraryOptions, validateCommandRequest } from "../dist/index.js";
+import { MOTION_LIBRARY_DEFAULTS, MOTION_LIBRARY_EASINGS, isMotionLibraryOptions, validateCommandRequest } from "../dist/index.js";
 
 const target = { compId: 2, layerId: 3, instance: "1726539600-3", fingerprint: '{"version":1}' };
 const adjust = () => ({ target: { ...target }, presetId: "mist-reveal", options: { ...MOTION_LIBRARY_DEFAULTS } });
@@ -69,7 +69,10 @@ test("Adjust option schema agrees with the shared motion controls on bounds and 
     ["elasticity", [-1, 0, 50.5, 100, 101]], ["overlap", [-1, 0, 50.5, 100, 101]],
     ["speed", [24, 25, 100.5, 200, 201]],
     ["order", ["preset", "forward", "reverse", "center-out", "edges-in", "random", "bad"]],
-    ["seed", [-1, 0, 17, 9999, 10000, 1.5]]
+    ["seed", [-1, 0, 17, 9999, 10000, 1.5]],
+    ["easing", [...MOTION_LIBRARY_EASINGS, "bad", ""]],
+    ["settleAmount", [-1, 0, 35.5, 100, 101]], ["settleCount", [0.4, 0.5, 2.5, 8, 8.1]],
+    ["settleDamping", [-1, 0, 55, 100, 101]]
   ]) for (const value of values) {
     const options = { ...MOTION_LIBRARY_DEFAULTS, [key]: value };
     assert.equal(valid("ae.presets.adjust", { ...adjust(), options }), isMotionLibraryOptions(options), `${key}=${value}`);

@@ -53,12 +53,16 @@ function hostSample(f, time) {
 }
 export async function parity(p, phase) {
   const f0 = await fixture(), args = f0.args(p.id, p.mode === 'transition' ? {phase} : {});
-  const f = await hostFor(p, args), three = f.layer.threeDLayer, edge = p.pivot === 'edge', found = [];
+  // Pivoted recipes compensate Position around a point; preset-momentum checks that point.
+  const f = await hostFor(p, args), three = f.layer.threeDLayer, edge = p.pivot === 'edge' || p.pivot === 'offset', found = [];
+  // Out-of-frame travel is measured: AE measures the composition, the card its own frame.
+  const measured = p.travel === 'offscreen' ? f.layer.effects.children.find(e => e.name.endsWith('· Distância (px)')).property(1).value : 0;
+  const travel = measured ? measured / preview.libraryPreviewTravel(p, args) : 1;
   let moved = 0;
   for (let frame = 0; frame <= Math.ceil(f.layer.outPoint * 30); frame++) {
     const time = frame / 30, host = hostSample(f, time), s = preview.librarySample(p, args, time);
     const pairs = [['sx', host.sx, s.sx], ['sy', host.sy, s.sy], ['rz', host.rz, s.rz], ['opacity', host.opacity, s.opacity]];
-    if (!edge) pairs.push(['x', host.x, s.x * 6], ['y', host.y, s.y * 6]);
+    if (!edge) pairs.push(['x', host.x, s.x * 6 * travel], ['y', host.y, s.y * 6 * travel]);
     if (three) { pairs.push(['rx', host.rx, s.rx], ['ry', host.ry, s.ry]); if (!edge) pairs.push(['z', host.z, s.z * 6]); }
     if (pairs.some(([, a]) => Math.abs(a - (a === host.sx || a === host.sy || a === host.opacity ? 1 : 0)) > 1e-3)) moved++;
     const bad = pairs.find(([, a, b]) => !(Math.abs(a - b) < 1e-4));

@@ -708,6 +708,20 @@ Não estender evidências históricas abaixo a esse novo layout.
 
 56 receitas próprias validadas no AE 26.5x89/macOS. Miniaturas de efeitos e 3D são ilustrativas. Um preset gerenciado por camada; conflitos de expressão são recusados. Bake somente em motion de até 1.800 frames, sem keys prévios nas propriedades controladas. Texto continua editável pelos animadores. A máscara da cortina é capturada na aplicação. Windows e versões anteriores ainda não foram verificados. Consulte `docs/implementation/2026-09-14-animation-composer/entrega-e-validacao.md`.
 
+## Coleção Impulso — outubro de 2026
+
+`IMPLEMENTED_HOST_PARTIALLY_VERIFIED`. As 16 receitas, as curvas Ricochete/Quique, a medição fora do quadro e o centro da transição passaram no check (2.405 testes), na paridade prévia × host e no harness ExtendScript. No AE 26.5x89/Windows, por script, passaram 21/21 cenários no build final. O Undo nativo em chamada separada passou no build anterior à revisão.
+
+**Limites:**
+- A medição fora do quadro só vale para hierarquia 2D; 3D é recusado.
+- O centro da transição em 3D exige Orientation e rotações X/Y zeradas.
+- Em "Ambos", Entrada e Saída têm cada uma seu Centro e sua Distância.
+- O Bake não cobre fases (limitação anterior).
+- Interação pelo painel instalado, macOS e outras versões do AE: NOT RUN.
+- A correção `Number(effect(...)(1))` também reativa o slider de Elasticidade das curvas spring, que antes o AE ignorava.
+
+Consulte `docs/implementation/2026-10-12-motion-momentum.md`.
+
 ## Revisão de ferramentas — 21/09/2026
 
 O build de revisão abriu o painel Moti.on conectado no After Effects 26.5.0.89, macOS 27.2 arm64, em projeto vazio. Ao acionar o botão nativo “Criar uma nova composição”, o After Effects encerrou antes da execução de qualquer comando Moti.on. O relatório `~/Library/Logs/DiagnosticReports/After Effects-2026-09-21-210830.ips` aponta a thread em `BEE_MakeUniqueName` → `CProject::DoNewComp` → `CPanoProjItem::OnboardingNewComp`. Isso caracteriza o ponto da falha, não sua causa: não há evidência suficiente para responsabilizar ou inocentar a extensão. O aplicativo reabriu, e criar composição pelo menu Composição funcionou duas vezes.

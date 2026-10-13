@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 const built=await build({entryPoints:[fileURLToPath(new URL('../client/src/preset-gallery.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
-const {GALLERY_PRESETS,curveProgress,cameraPoint,presetArgs,defaultLibraryOptions,galleryCategoryMatches,gallerySequenceControls,signatureDurationRange}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+const {GALLERY_PRESETS,curveProgress,cameraPoint,presetArgs,defaultLibraryOptions,galleryCategoryMatches,gallerySequenceControls,signatureDurationRange,presetEasingChoices,settleFieldLabels}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
 test('curated and legacy presets retain unique identities and real application handlers',()=>{
   assert.equal(GALLERY_PRESETS.length,356);assert.equal(new Set(GALLERY_PRESETS.map(p=>p.id )).size,356);
@@ -109,3 +109,29 @@ test('order and variation controls follow text grouping and actual randomness',(
   assert.deepEqual(gallerySequenceControls(text,{...settings,order:'random',unit:'all'}),{order:false,seed:false});
 });
 
+
+test('momentum follows signature, filters by category and stays out of classics',()=>{
+  const momentum=GALLERY_PRESETS.filter(p=>p.motion?.collection==='momentum');
+  assert.equal(momentum.length,16);
+  assert.deepEqual(GALLERY_PRESETS.slice(81,97),momentum,'momentum is the block right after signature');
+  assert.equal(GALLERY_PRESETS.filter(p=>galleryCategoryMatches('momentum',p)).length,16);
+  for(const [folder,count] of [['momentum-2d',10],['momentum-3d',4],['momentum-effects',2]])assert.equal(GALLERY_PRESETS.filter(p=>galleryCategoryMatches(folder,p)).length,count,folder);
+  assert.ok(!momentum.some(p=>galleryCategoryMatches('classics',p)||galleryCategoryMatches('premium',p)||galleryCategoryMatches('signature',p)));
+  for(const p of momentum){
+    assert.ok(galleryCategoryMatches('motion',p),p.id);assert.match(p.tags,/impulso/);
+    assert.equal(p.handler,p.motion.mode==='transition'?'ae.presets.phase-apply':'ae.presets.apply');
+  }
+  assert.match(GALLERY_PRESETS.find(p=>p.motion?.id==='momentum-push').tags,/fora do quadro/);
+  assert.match(GALLERY_PRESETS.find(p=>p.motion?.id==='momentum-pendulum').tags,/pêndulo/);
+});
+test('settle curves are offered everywhere with curve-specific control labels',()=>{
+  for(const locale of ['pt-BR','en-US']){
+    const values=presetEasingChoices(locale).map(([value])=>value);
+    assert.ok(values.includes('settle-wave')&&values.includes('settle-hop'));
+    assert.equal(new Set(values).size,values.length);
+  }
+  assert.deepEqual(settleFieldLabels('settle-wave','pt-BR').map(([key,label])=>[key,label]),[['settleAmount','Ricochete · %'],['settleCount','Oscilações'],['settleDamping','Amortecimento · %']]);
+  assert.deepEqual(settleFieldLabels('settle-hop','en-US').map(([,label])=>label),['Hop height · %','Hops','Loss per hop · %']);
+  const push=GALLERY_PRESETS.find(p=>p.motion?.id==='momentum-push');
+  assert.deepEqual([push.params.settleAmount,push.params.settleCount,push.params.settleDamping],[30,2,55],'apply sends the tuned settle');
+});

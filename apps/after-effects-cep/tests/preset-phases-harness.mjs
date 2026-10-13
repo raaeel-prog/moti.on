@@ -14,7 +14,7 @@ const TAG = '[Moti.on.library.v1]';
 const errors = Object.fromEntries(['INVALID_PRESET', 'NO_ACTIVE_COMP', 'NO_SELECTION', 'INVALID_SELECTION_TYPE', 'CAPABILITY_UNAVAILABLE', 'EXPRESSION_CONFLICT', 'ROLLBACK_FAILED'].map(key => [key, key]));
 const hostSource = await readFile(new URL('../host/src/commands/preset-library.jsx', import.meta.url), 'utf8');
 
-export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
+export async function fixture({ fps = 30, height = 1080, width = height * 16 / 9, text = false } = {}) {
   let nextId = 1, mutations = 0;
   class MarkerValue {
     constructor(comment) { this.comment = comment; this.params = {}; this.duration = 0; }
@@ -46,8 +46,11 @@ export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
       return vm.runInNewContext(this.expression, {
         time, inPoint: layer.inPoint, outPoint: layer.outPoint, value: this.value, thisComp: comp,
         thisLayer: {marker: layer.markers.expressionAPI()},
-        textIndex: unitIndex + 1, textTotal: unitCount, transform: {scale: layer.transform.property('ADBE Scale').valueAtTime(time, true),anchorPoint:layer.transform.property('ADBE Anchor Point').value,get rotation(){return layer.transform.property('ADBE Rotate Z').valueAtTime(time);}},
-        effect: name => index => layer.effects.property(name).property(index).value
+        textIndex: unitIndex + 1, textTotal: unitCount,
+        // Rotation is read lazily: its own expression evaluates through this context.
+        transform: {scale: layer.transform.property('ADBE Scale').valueAtTime(time, true), anchorPoint: layer.transform.property('ADBE Anchor Point').value, get rotation() { return layer.transform.property('ADBE Rotate Z').valueAtTime(time); }},
+        // AE hands expressions a Property: arithmetic sees its value, typeof never says "number".
+        effect: name => index => { const v = layer.effects.property(name).property(index).value; return Array.isArray(v) ? v : Object.assign(function property() {}, {valueOf: () => v}); }
       });
     }
     setValuesAtTimes(times, values) { this.keys = times.map((time, i) => ({time, value: values[i]})); mutations++; }
@@ -95,7 +98,7 @@ export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
     sourceRectAtTime() { return {left: 0, top: 0, width: 100, height: 100}; }
   }
   class CompItem {
-    constructor() { Object.assign(this, {id: 100, width:height*16/9, height, time: .2, frameDuration: 1 / fps, layers: []}); }
+    constructor() { Object.assign(this, {id: 100, width, height, time: .2, frameDuration: 1 / fps, layers: []}); }
     get selectedLayers() { return this.layers.filter(l => l.selected); }
   }
   const comp = new CompItem(), layer = new Layer(text); comp.layers.push(layer);
