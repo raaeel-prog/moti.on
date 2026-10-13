@@ -16732,7 +16732,9 @@
     "renderedVariants": 108,
     "lifecycleCases": 8,
     "uiUndo": "PASS",
-    "installation": "NOT RUN"
+    "installation": "PASS",
+    "installationEvidence": "artifacts/text-presets/ae-text-v3-install-2026-10-13T21-20-23-927Z/ui-restored/installation-report.json",
+    "installedCandidateCommit": "e0dd457fed7cf0f18fcdafcac4d655536c28f812"
   },
   "recipes": [
     {

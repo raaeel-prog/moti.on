@@ -64,7 +64,7 @@ As comparações locais do BadFX usam texto, fonte, enquadramento, cor, fps e du
 
 | Verificação | Estado | Evidência local |
 |---|---|---|
-| Check completo integrado | PASS — 2.391/2.391 | `integration-check-delivery-2.log` |
+| Check completo integrado após correção da galeria | PASS — 2.393/2.393 | `ui-restore-check.log` |
 | Contratos, migração, lifecycle, 3D e previews automatizados | PASS | Incluídos no check completo |
 | Probe nativo AE 2026 | PASS | `ae-capabilities.json` |
 | Aplicação e avaliação das 108 receitas em oito tempos | PASS | `fixture-report.json` |
@@ -74,13 +74,15 @@ As comparações locais do BadFX usam texto, fonte, enquadramento, cor, fps e du
 | UI PT/EN: 280, 360, 480 e 720 px | PASS — oito configurações | `ui-qa.json` e screenshots |
 | BadFX: aplicação e observação de 48 FFX | PASS | `badfx-host-study.json` |
 | Composer: um preset instalado aplicado e observado | PASS, cobertura limitada | `composer-host-study.json` e `composer-ui-catalog.txt` |
-| Instalação do candidato e painel CEP no Adobe | NOT RUN | Nenhuma inferência a partir dos testes de browser ou do host script |
+| Instalação do candidato e painel CEP no Adobe | PASS — Windows x64, AE 26.5x89 | 264 hashes, configuração preservada e painel recarregado; `ae-text-v3-install-2026-10-13T21-20-23-927Z/ui-restored/installation-report.json` |
 | Outros patches do AE, macOS e clean-machine | NOT RUN | Sem alegação de suporte validado nessa matriz |
 | Assinatura e publicação | NOT RUN | Pacote local de desenvolvimento; distribuição final em HOLD |
 
 As fixtures reais cobrem texto curto, multilinha, paragraph text, acentos e Unicode, estilos mistos, parenting, animações existentes de Source Text/Position e taxas de 23,976 a 60 fps. Elas exercitam IN + OUT + efeito, ajustes, substituição individual, remoção e falha parcial. A prova de Undo confirma remoção das duas transições 3D em uma ação, com restauração do texto, seleção, controles, marcadores e flags 3D.
 
 O check inicial encontrou uma ambiguidade ES3 já existente no Momentum. Ela foi corrigida, junto da composição de uma expressão com pivô negativo. Uma rodada final detectou uma asserção de timers dependente de carga em um teste de gestos existente; a asserção agora mede o limite de 10 Hz pelo tempo real. A repetição e o check completo passaram.
+
+A primeira instalação acrescentou uma prévia permanente ao editor e comprimiu a galeria. O candidato corrigido `e0dd457fed7cf0f18fcdafcac4d655536c28f812` restaura a área anterior e restringe a prévia ampliada aos ajustes dos novos presets. Foi instalado e o painel CEP foi recarregado, mantendo aberto o projeto não salvo do usuário. O bundle do host e os estilos não mudaram nessa correção. Os backups anterior à atualização e anterior à correção ficam no diretório de evidência da instalação. A assinatura e a publicação continuam pendentes.
 
 A auditoria npm registra dez vulnerabilidades preexistentes (nove high e uma critical) no grafo associado ao Site separado; a contagem permaneceu igual à baseline. O pacote CEP não contém `node_modules` nem o Site. Não houve atualização indiscriminada de dependências. PostCSS foi declarado e fixado porque os testes já o utilizavam; o restante do lockfile foi preservado.
 
