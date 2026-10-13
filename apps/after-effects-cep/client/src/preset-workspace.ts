@@ -1,6 +1,6 @@
 import { isColorPickerOpen, hasColorDraft, attachScrubbableNumber, button, createActionButton, type ActionButtonController, clearNode, createElement, createAlert, createBadge, createI18n, selectField, type AlertController } from "@motion/ui-core";
-import { isMotionLibraryOptions, type CommandResponse, type MotionLibraryOptions, type PersonalPresetCatalog, type PersonalPresetPreview, type PresetInspection, type PresetTarget, type PresetTimingArgs } from "@motion/contracts";
-import { createPresetGallery, createPresetPhaseControl, defaultLibraryOptions, GALLERY_PRESETS, gallerySequenceControls, presetEasingChoices } from "./preset-gallery.js";
+import { isMotionLibraryOptions, MOTION_SETTLE_DEFAULTS, type CommandResponse, type MotionLibraryOptions, type PersonalPresetCatalog, type PersonalPresetPreview, type PresetInspection, type PresetTarget, type PresetTimingArgs } from "@motion/contracts";
+import { createPresetGallery, createPresetPhaseControl, defaultLibraryOptions, GALLERY_PRESETS, gallerySequenceControls, presetEasingChoices, settleFieldLabels } from "./preset-gallery.js";
 import { focusedPoll } from "./focused-poll.js";
 import { createPresetTimingControls, defaultPresetTimingDraft } from "./preset-timing-controls.js";
 import { createPresetVariants, type PresetVariant, type PresetVariantError, type PresetVariantResult, type PresetVariantStorage } from "./preset-variants.js";
@@ -465,7 +465,7 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
       if(snapshot?.mixedKeys?.includes(key)||draft![key]!==snapshot?.options?.[key])changedKeys.add(key);else changedKeys.delete(key);
       dirty=changedKeys.size>0||invalidNumbers.size>0;updateNotice();
     };
-    function numeric(key:"durationFrames"|"intensity"|"staggerFrames"|"elasticity"|"overlap"|"speed"|"seed",label:string,min:number,max:number,step=1):void {
+    function numeric(key:"durationFrames"|"intensity"|"staggerFrames"|"elasticity"|"overlap"|"speed"|"seed"|"settleAmount"|"settleCount"|"settleDamping",label:string,min:number,max:number,step=1):void {
       activeNumbers.add(key);
       const row=createElement(doc,"div","ch-applied-field ch-applied-field--numeric"),header=createElement(doc,"div","ch-applied-control"),controls=createElement(doc,"div","ch-applied-number");
       const parts=label.split(" · "),toggle=button(doc,{label:parts[0]!,disabled:busy,onClick:()=>{controls.hidden=!controls.hidden;controls.setAttribute("data-open",String(!controls.hidden));toggle.setAttribute("aria-expanded",String(!controls.hidden));}});
@@ -520,8 +520,10 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
     const sequenceControls=gallerySequenceControls(preset,draft);
     if(!data.cameraTransition&&sequenceControls.order)choice("order",pt?"Ordem":"Order",[["preset",pt?"Original":"Original"],["forward",pt?"Primeiro ao último":"First to last"],["reverse",pt?"Último ao primeiro":"Last to first"],["center-out",pt?"Centro para fora":"Center outward"],["edges-in",pt?"Bordas para dentro":"Edges inward"],["random",pt?"Aleatória":"Random"]]);
     if(!data.cameraTransition&&sequenceControls.seed){draft.seed??=17;numeric("seed",pt?"Variação":"Variation",0,9999);}
-    if(preset.collection==="studio"||preset.collection==="premium"||preset.collection==="native"||preset.collection==="signature"||draft.easing==="spring"){
-      if((draft.easing&&draft.easing!=="preset"?draft.easing:preset.easing)==="spring"||isMixed("easing"))numeric("elasticity",pt?"Elasticidade · %":"Elasticity · %",0,100,.1);
+    const curve=draft.easing&&draft.easing!=="preset"?draft.easing:preset.easing;
+    if(preset.mode==="transition"&&!data.cameraTransition&&(curve==="settle-wave"||curve==="settle-hop"))for(const [key,label,min,max] of settleFieldLabels(curve,options.locale)){draft[key]??=MOTION_SETTLE_DEFAULTS[curve][key];numeric(key,label,min,max,.1);}
+    if(preset.collection==="studio"||preset.collection==="premium"||preset.collection==="native"||preset.collection==="signature"||preset.collection==="momentum"||draft.easing==="spring"){
+      if(curve==="spring"||isMixed("easing"))numeric("elasticity",pt?"Elasticidade · %":"Elasticity · %",0,100,.1);
       if(preset.category.startsWith("text-")&&preset.mode==="transition")numeric("overlap",pt?"Sobreposição · %":"Overlap · %",0,100,.1);
       if(preset.mode==="continuous")numeric("speed",pt?"Velocidade · %":"Speed · %",25,200,.1);
     }

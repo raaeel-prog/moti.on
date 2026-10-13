@@ -11,9 +11,11 @@ import type { MotionLibraryPreset } from "./motion-library.js";
  * preset pede. Por ir ao ExtendScript por `toString()`, a função não pode ler
  * nada de fora dela: sem `const`, sem closure, sem helpers.
  */
-export function libraryRequiredEffects(p: { effect: string; collection?: string | undefined }): string[] {
+export function libraryRequiredEffects(p: { effect: string; collection?: string | undefined; pivot?: string | undefined }): string[] {
   var e = p.effect;
   var r = ["ADBE Slider Control"];
+  // A distant transition center is a live point the user drags in the viewer.
+  if (p.pivot === "offset") r.push("ADBE Point Control");
   if (e.indexOf("camera-") === 0) r.push("ADBE Gaussian Blur 2");
   if (e === "camera-dark" || e === "camera-light") r.push("ADBE Tint");
   if (e === "camera-distort" || e === "camera-shake") r.push("ADBE Turbulent Displace");

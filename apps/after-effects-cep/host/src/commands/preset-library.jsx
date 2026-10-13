@@ -170,15 +170,15 @@
   }
   /** @param {any} args @returns {MotionCommandFailure|null} */
   function validate(args) {
-    var allowed = /** @type {Record<string,boolean>} */ ({presetId:true, phase:true, direction:true, durationFrames:true, intensity:true, staggerFrames:true, unit:true,easing:true,elasticity:true,overlap:true,speed:true,order:true,seed:true});
+    var allowed = /** @type {Record<string,boolean>} */ ({presetId:true, phase:true, direction:true, durationFrames:true, intensity:true, staggerFrames:true, unit:true,easing:true,elasticity:true,overlap:true,speed:true,order:true,seed:true,settleAmount:true,settleCount:true,settleDamping:true});
     for (var k in args) if (Object.prototype.hasOwnProperty.call(args,k) && !allowed[k]) return fail(MotionContracts.ERROR.INVALID_PRESET,"Opção de preset desconhecida.");
     if (!definition(args) || (args.phase !== "in" && args.phase !== "out" && args.phase !== "both") || (args.direction !== "preset" && args.direction !== "left" && args.direction !== "right" && args.direction !== "top" && args.direction !== "bottom")) return fail(MotionContracts.ERROR.INVALID_PRESET,"Preset, fase ou direção inválidos.");
     if (typeof args.durationFrames !== "number" || !isFinite(args.durationFrames) || args.durationFrames < 1 || args.durationFrames > 600 || Math.floor(args.durationFrames) !== args.durationFrames || typeof args.intensity !== "number" || !isFinite(args.intensity) || args.intensity < 0 || args.intensity > 300 || typeof args.staggerFrames !== "number" || !isFinite(args.staggerFrames) || args.staggerFrames < 0 || args.staggerFrames > 60 || Math.floor(args.staggerFrames) !== args.staggerFrames) return fail(MotionContracts.ERROR.INVALID_PRESET,"Duração, intensidade ou intervalo fora do limite.");
-    if(Object.prototype.hasOwnProperty.call(args,"easing")&&args.easing!=="preset"&&args.easing!=="smooth"&&args.easing!=="cubic"&&args.easing!=="overshoot"&&args.easing!=="bounce"&&args.easing!=="flicker"&&args.easing!=="silk"&&args.easing!=="glide"&&args.easing!=="spring"&&args.easing!=="velvet"&&args.easing!=="drift"&&args.easing!=="snap")return fail(MotionContracts.ERROR.INVALID_PRESET,"Suavização inválida.");
-    var optional=["elasticity","overlap","speed"];
+    if(Object.prototype.hasOwnProperty.call(args,"easing")&&args.easing!=="preset"&&args.easing!=="smooth"&&args.easing!=="cubic"&&args.easing!=="overshoot"&&args.easing!=="bounce"&&args.easing!=="flicker"&&args.easing!=="silk"&&args.easing!=="glide"&&args.easing!=="spring"&&args.easing!=="velvet"&&args.easing!=="drift"&&args.easing!=="snap"&&args.easing!=="settle-wave"&&args.easing!=="settle-hop")return fail(MotionContracts.ERROR.INVALID_PRESET,"Suavização inválida.");
+    var optional=["elasticity","overlap","speed","settleAmount","settleCount","settleDamping"];
     for(var o=0;o<optional.length;o++){var option=optional[o];if(!option||!Object.prototype.hasOwnProperty.call(args,option))continue;
-      var v=args[option],min=option==="speed"?25:0,max=option==="speed"?200:100;
-      if(typeof v!=="number"||!isFinite(v)||v<min||v>max)return fail(MotionContracts.ERROR.INVALID_PRESET,"Elasticidade, sobreposição ou velocidade fora do limite.");
+      var v=args[option],min=option==="speed"?25:option==="settleCount"?.5:0,max=option==="speed"?200:option==="settleCount"?8:100;
+      if(typeof v!=="number"||!isFinite(v)||v<min||v>max)return fail(MotionContracts.ERROR.INVALID_PRESET,"Elasticidade, sobreposição, velocidade ou assentamento fora do limite.");
     }
     if (args.unit !== "preset" && args.unit !== "characters" && args.unit !== "words" && args.unit !== "lines" && args.unit !== "all") return fail(MotionContracts.ERROR.INVALID_PRESET,"Divisão de texto inválida.");
     if (Object.prototype.hasOwnProperty.call(args,"order") && args.order !== "preset" && args.order !== "forward" && args.order !== "reverse" && args.order !== "center-out" && args.order !== "edges-in" && args.order !== "random") return fail(MotionContracts.ERROR.INVALID_PRESET,"Ordem de texto inválida.");
@@ -189,6 +189,74 @@
   function isText(p) { return p.category.indexOf("text-") === 0; }
   /** @param {any} p @returns {boolean} */
   function usesNativeCore(p) { return p.effect === "native-rgb" || p.effect === "native-glitch"; }
+  /** Collections authored on Studio timing and its Speed/Overlap controls.
+   * @param {any} p @returns {boolean} */
+  function studioTimed(p) { return p.collection==="studio"||p.collection==="native"||p.collection==="premium"||p.collection==="signature"||p.collection==="momentum"; }
+  /** @param {string} kind @returns {boolean} */
+  function isSettle(kind) { return kind==="settle-wave"||kind==="settle-hop"; }
+  /** Option, then recipe default, then the curve's own default.
+   * @param {any} p @param {any} args @param {string} key @param {string} kind @returns {number} */
+  function settleDefault(p,args,key,kind) {
+    if(typeof args[key]==="number")return args[key];
+    if(p.defaults&&typeof p.defaults[key]==="number")return p.defaults[key];
+    var wave=kind==="settle-wave";return key==="settleAmount"?(wave?35:40):key==="settleCount"?(wave?2.5:3):(wave?55:60);
+  }
+  /** A 3D layer turns around the transition center only in its own XY plane.
+   * @param {any} tr @returns {boolean} */
+  function flatOrientation(tr) {
+    var names=["ADBE Rotate X","ADBE Rotate Y"],i;
+    for(i=0;i<names.length;i++){var r=tr.property(names[i]);if(r&&Math.abs(r.value)>.000001)return false;}
+    var o=tr.property("ADBE Orientation");if(o&&o.value)for(i=0;i<o.value.length;i++)if(Math.abs(o.value[i])>.000001)return false;
+    return true;
+  }
+  /** Layer space to composition space through 2D parents, pre-expression, at
+   * time t: [a,b,c,d,e,f] with x'=a*x+c*y+e and y'=b*x+d*y+f. Null for 3D.
+   * @param {any} layer @param {number} time @returns {number[]|null} */
+  function compAffine(layer,time) {
+    var m=[1,0,0,1,0,0],l=layer,guard=0;
+    while(l&&guard++<64){
+      if(l.threeDLayer)return null;
+      var tr=l.property(MN_TRANSFORM),A=tr.property("ADBE Anchor Point").valueAtTime(time,true),P=tr.property("ADBE Position").valueAtTime(time,true),S=tr.property("ADBE Scale").valueAtTime(time,true),r=tr.property("ADBE Rotate Z").valueAtTime(time,true)*Math.PI/180;
+      var cs=Math.cos(r),sn=Math.sin(r),a=cs*S[0]/100,b=sn*S[0]/100,c=-sn*S[1]/100,d=cs*S[1]/100,e=P[0]-(a*A[0]+c*A[1]),f=P[1]-(b*A[0]+d*A[1]);
+      m=[a*m[0]+c*m[1],b*m[0]+d*m[1],a*m[2]+c*m[3],b*m[2]+d*m[3],a*m[4]+c*m[5]+e,b*m[4]+d*m[5]+f];
+      l=l.parent;
+    }
+    return m;
+  }
+  /** Distance, in composition pixels, that takes the layer out of frame along the
+   * recipe's screen direction, at the start of each requested phase; and that
+   * direction expressed in the parent's space, where Position lives.
+   * @param {any} plan @param {number[]} xy @returns {{distance:number,unit:number[]}} */
+  function offscreenTravel(plan,xy) {
+    var l=plan.layer,comp=plan.comp,p=plan.p,length=Math.sqrt(xy[0]*xy[0]+xy[1]*xy[1]);
+    if(length<.000001)throw new Error("O preset não define uma direção de saída.");
+    var ux=xy[0]/length,uy=xy[1]/length,times=[],distance=0,i,j;
+    if(plan.args.phase!=="out")times.push(l.inPoint);
+    if(plan.args.phase!=="in")times.push(Math.max(l.inPoint,l.outPoint-comp.frameDuration));
+    var amp=Math.max(1,plan.args.intensity/100),grow=Math.max(1,1+Math.max(p.scale[0],p.scale[1])/100*amp),inflate=p.rotation[2]||grow>1?grow:0;
+    for(i=0;i<times.length;i++){
+      var m=compAffine(l,times[i]);if(!m)throw new Error("Este preset sai do quadro em 2D. Use uma camada 2D, sem parent 3D.");
+      var rect=l.sourceRectAtTime(times[i],false),A=l.property(MN_TRANSFORM).property("ADBE Anchor Point").valueAtTime(times[i],true);
+      var xs=[rect.left,rect.left+rect.width],ys=[rect.top,rect.top+rect.height],minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+      for(j=0;j<4;j++){var x=xs[j%2],y=ys[j>1?1:0],cx=m[0]*x+m[2]*y+m[4],cy=m[1]*x+m[3]*y+m[5];minX=Math.min(minX,cx);maxX=Math.max(maxX,cx);minY=Math.min(minY,cy);maxY=Math.max(maxY,cy);}
+      distance=Math.max(distance,core.libraryOffscreenDistance(m[0]*A[0]+m[2]*A[1]+m[4],m[1]*A[0]+m[3]*A[1]+m[5],minX,minY,maxX,maxY,inflate,ux,uy,comp.width,comp.height,Math.max(8,.02*Math.max(comp.width,comp.height))));
+    }
+    var unit=[ux,uy];
+    if(l.parent){
+      var pm=compAffine(l.parent,times[0]),det=pm?pm[0]*pm[3]-pm[2]*pm[1]:0;
+      if(Math.abs(det)<.000000001)throw new Error("A escala do parent é zero; não há como medir a saída do quadro.");
+      unit=[(pm[3]*ux-pm[2]*uy)/det,(-pm[1]*ux+pm[0]*uy)/det];
+    }
+    return {distance:Math.round(distance*100)/100,unit:unit};
+  }
+  /** Live values the user may have tuned in AE, carried when a phase is rebuilt.
+   * @param {any} layer @param {any} meta @returns {any} */
+  function liveValues(layer,meta) {
+    if(!meta||!meta.controls)return null;
+    var out=/** @type {any} */ ({direction:meta.options&&meta.options.direction,travelComputed:meta.travelComputed}),keys=["center","travel"],found=false;
+    for(var i=0;i<keys.length;i++){var name=meta.controls[keys[i]],e=name&&child(layer.property(MN_EFFECTS),name),prop=e&&e.property(1);if(prop&&!prop.numKeys&&!prop.expression){out[keys[i]]=prop.value;found=true;}}
+    return found?out:null;
+  }
   /** Signature looks whose texture or sequence depends on the seed.
    * @param {any} p @returns {boolean} */
   function signatureSeeded(p) { return p.text.order === "random" || p.text.reveal === "resolve" || (p.choreography && p.choreography.distribution === "scatter") || p.effect === "film-burn" || p.effect === "projector"; }
@@ -236,12 +304,16 @@
       if (isText(p) && !l.property(MN_TEXT)) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Este preset precisa de uma camada de texto.");
       if (p.category === "motion-3d" && !l.threeDLayer && (l.parent || /** @type {any} */ (comp).activeCamera || (l.source instanceof CompItem && l.collapseTransformation))) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Converta a camada em 3D antes de usar este preset com câmera, parent ou transformações recolhidas.");
       var tr = l.property(MN_TRANSFORM), pos = tr.property("ADBE Position");
-      if (!isText(p) && (p.position[0] || p.position[1] || p.position[2] || p.pivot === "edge") && pos.dimensionsSeparated) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Reúna as dimensões de Position para aplicar presets de motion.");
+      if (!isText(p) && (p.position[0] || p.position[1] || p.position[2] || p.pivot !== "anchor") && pos.dimensionsSeparated) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Reúna as dimensões de Position para aplicar presets de motion.");
+      // Leaving the frame is measured in the composition plane; a 3D layer or
+      // parent would need the camera's projection, which is not modeled.
+      if (p.travel === "offscreen") for (var up = l; up; up = up.parent) if (up.threeDLayer) return fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE,"Este preset sai do quadro em 2D. Use uma camada 2D, sem parent 3D.");
+      if (p.pivot === "offset" && l.threeDLayer && !flatOrientation(tr)) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Zere Orientation e as rotações X e Y para girar em torno do centro da transição.");
       if (l.outPoint <= l.inPoint) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"A camada precisa ter duração positiva.");
       if(p.mode==="transition"&&!phaseOwner){var markerError=markerPreflight(l,m,args,comp);if(markerError)return markerError;}
       if (!isText(p)) {
         var names = [];
-        if (p.position[0] || p.position[1] || p.position[2] || p.pivot === "edge") names.push("ADBE Position");
+        if (p.position[0] || p.position[1] || p.position[2] || p.pivot !== "anchor") names.push("ADBE Position");
         if (p.scale[0] || p.scale[1] || p.scale[2]) names.push("ADBE Scale");
         if (p.rotation[2]) names.push("ADBE Rotate Z");
         if (p.fade) names.push("ADBE Opacity");
@@ -268,7 +340,8 @@
    * @param {any} p @param {any} args @param {any} m @param {boolean} text @returns {string} */
   function header(p,args,m,text) {
     var duration = "effect("+MotionJson.stringify(m.effects[0].name)+")(1)", amount = "effect("+MotionJson.stringify(m.effects[1].name)+")(1)", stagger = "effect("+MotionJson.stringify(m.effects[2].name)+")(1)";
-    var unit = args.unit === "preset" ? p.text.unit : args.unit,studio=p.collection==="studio"||p.collection==="native"||p.collection==="premium"||p.collection==="signature";
+    var unit = args.unit === "preset" ? p.text.unit : args.unit,studio=studioTimed(p);
+    var kind=args.easing&&args.easing!=="preset"?args.easing:p.easing,settles=p.mode==="transition"&&isSettle(kind),easeTail=settles?",elastic,settleA,settleN,settleD":",elastic";
     var order=args.order&&args.order!=="preset"?args.order:(p.text.order||(p.text.random?"random":"forward")),sequence="",seed=typeof args.seed==="number"?args.seed:17;
     if(text&&unit!=="all"){
       if(order==="random")sequence="var order="+core.libraryOrder.toString()+";idx=order(idx,total"+(typeof args.seed==="number"||p.collection==="premium"?",seed":"")+");\n";
@@ -281,7 +354,9 @@
       markerExpression(m)+
       (m.markerVersion===1?"var totalSpan="+(args.phase==="both"?"markerIn+markerOut":"0")+";if(totalSpan>markerSpan){markerIn*=markerSpan/totalSpan;markerOut*=markerSpan/totalSpan;}var u=["+(args.phase==="out"?"1":"timing(time,inPoint,outPoint,markerIn,\"in\",idx,total,Math.max(0,Math.min(60,"+stagger+"))*thisComp.frameDuration"+(studio?",overlap":"")+")[0]")+","+(args.phase==="in"?"1":"timing(time,inPoint,outPoint,markerOut,\"out\",idx,total,Math.max(0,Math.min(60,"+stagger+"))*thisComp.frameDuration"+(studio?",overlap":"")+")[1]")+"];\n":
       "var u=timing(time,inPoint,outPoint,dur,"+MotionJson.stringify(args.phase)+",idx,total,Math.max(0,Math.min(60,"+stagger+"))*thisComp.frameDuration"+(studio?",overlap":"")+");\n")+
-      "var w="+(p.mode === "transition" ? "2-ease(u[0],"+MotionJson.stringify(args.easing&&args.easing!=="preset"?args.easing:p.easing)+",elastic)-ease(u[1],"+MotionJson.stringify(args.easing&&args.easing!=="preset"?args.easing:p.easing)+",elastic)" : "wave(age,idx,"+MotionJson.stringify(p.waveform === "none" ? "wiggle" : p.waveform)+",seed)")+";var fadeWeight=w;\n"+
+      // Settle curves read their live controls; the exit term turns into anticipation.
+      (settles?"var settleA="+controlExpression(m,"settleAmount",settleDefault(p,args,"settleAmount",kind))+",settleN="+controlExpression(m,"settleCount",settleDefault(p,args,"settleCount",kind))+",settleD="+controlExpression(m,"settleDamping",settleDefault(p,args,"settleDamping",kind))+";\n":"")+
+      "var w="+(p.mode === "transition" ? "2-ease(u[0],"+MotionJson.stringify(kind)+easeTail+")-ease(u[1],"+MotionJson.stringify(kind)+easeTail+(settles?",1":"")+")" : "wave(age,idx,"+MotionJson.stringify(p.waveform === "none" ? "wiggle" : p.waveform)+",seed)")+";var fadeWeight=w;\n"+
       (p.mode === "transition" && p.waveform !== "none" ? "w+=wave(age,idx,"+MotionJson.stringify(p.waveform)+",seed)*Math.abs(w)*0.25;\n" : "")+
       (p.choreography ? "var choreography="+core.libraryChoreography.toString()+";var pose=choreography(Math.max(0,Math.min(1,Math.min(u[0],u[1]))),w,"+p.position.join(",")+","+MotionJson.stringify(p.choreography.path)+","+MotionJson.stringify(p.choreography.distribution||"uniform")+",rawIndex,seed,"+(typeof p.choreography.turns==="number"?p.choreography.turns:1)+","+MotionJson.stringify(args.direction)+");\n" : "")+
       // Signature looks share one progress, velocity and envelope with the preview.
@@ -450,10 +525,21 @@
   /** @param {any} plan */
   function layerAnimation(plan){
     var p=plan.p, tr=plan.layer.property(MN_TRANSFORM),h=header(p,plan.args,plan.meta,false),xy=core.libraryDirection(p.position[0],p.position[1],plan.args.direction),scale=plan.comp.height/1080;
-    var vec=[xy[0]*scale,xy[1]*scale,p.position[2]*scale],terms=[],i;
-    for(i=0;i<(plan.layer.threeDLayer?3:2);i++)terms.push(p.choreography?"value["+i+"]+pose["+i+"]*"+scale+"*amp":"value["+i+"]+"+vec[i]+"*amp*"+(p.effect==="camera-shake"?"(wave(age*3,"+i+",\"wiggle\",seed)*fadeWeight)":p.mode==="transition"?"w":"wave(age,"+i+","+MotionJson.stringify(p.waveform)+",seed)"));
-    if(vec[0]||vec[1]||vec[2]||p.pivot==="edge"){
-      var body="["+terms.join(",")+"];";
+    var vec=[xy[0]*scale,xy[1]*scale,p.position[2]*scale],terms=[],i,unit=plan.travelUnit;
+    for(i=0;i<(plan.layer.threeDLayer?3:2);i++)terms.push(unit&&i<2?"value["+i+"]+travel*"+unit[i]+"*w":p.choreography?"value["+i+"]+pose["+i+"]*"+scale+"*amp":"value["+i+"]+"+vec[i]+"*amp*"+(p.effect==="camera-shake"?"(wave(age*3,"+i+",\"wiggle\",seed)*fadeWeight)":p.mode==="transition"?"w":"wave(age,"+i+","+MotionJson.stringify(p.waveform)+",seed)"));
+    if(vec[0]||vec[1]||vec[2]||p.pivot!=="anchor"){
+      // Out-of-frame travel is measured, not scaled by Intensity: it always clears the frame.
+      var body=(unit?"var travel="+controlExpression(plan.meta,"travel",0)+";":"")+"["+terms.join(",")+"];";
+      if(p.pivot==="offset"){
+        // Turn around the live transition center C: the position cancels how far C
+        // moves when the layer rotates by d around its Anchor Point, in the rest
+        // rotation's frame. Anchor Point is never changed.
+        var rz=p.rotation[2],q=(p.choreography?"pose[3]":"w")+"*amp";
+        body=(unit?"var travel="+controlExpression(plan.meta,"travel",0)+";":"")+"var q="+q+",d="+rz+"*q*Math.PI/180,c="+controlExpression(plan.meta,"center","transform.anchorPoint")+",a=transform.anchorPoint,s=transform.scale;"+
+          "var vx=(c[0]-a[0])*s[0]/100,vy=(c[1]-a[1])*s[1]/100,r0=(transform.rotation-"+rz+"*q)*Math.PI/180;"+
+          "var ex=vx*(1-Math.cos(d))+vy*Math.sin(d),ey=vy*(1-Math.cos(d))-vx*Math.sin(d);"+
+          "["+terms[0]+"+ex*Math.cos(r0)-ey*Math.sin(r0),"+terms[1]+"+ex*Math.sin(r0)+ey*Math.cos(r0)"+(terms.length>2?","+terms[2]:"")+"];";
+      }
       if(p.pivot==="edge"){
         // Rotate around a source-space edge while leaving Anchor Point intact.
         // The extra position offsets cancel the edge displacement at rest.
@@ -474,6 +560,30 @@
     for(i=0;i<3;i++)if(p.rotation[i]&&(i===2||plan.layer.threeDLayer))express(plan,[MN_TRANSFORM,rotations[i]],h+"value+"+p.rotation[i]+"*amp*"+(p.choreography?"pose[3]":p.effect==="camera-shake"?"(wave(age*3,"+i+",\"wiggle\",seed+6)*fadeWeight)":p.mode==="transition"?"w":"wave(age,"+i+","+MotionJson.stringify(p.waveform)+",seed+6)")+";");
     if(p.fade)express(plan,[MN_TRANSFORM,"ADBE Opacity"],h+"value*(1-Math.max(0,Math.min(1,fadeWeight*amp)));");
   }
+  /** Measured travel and the transition center become live controls. A rebuilt
+   * preset keeps the user's center, and keeps an edited distance while the
+   * direction is unchanged; a distance never edited is measured again.
+   * @param {any} plan */
+  function liveGeometry(plan){
+    var p=plan.p,m=plan.meta,pt=plan.locale.indexOf("pt")===0,keep=m.keep||liveValues(plan.layer,m),name,control;
+    delete m.keep;
+    if(isText(p)||(p.travel!=="offscreen"&&p.pivot!=="offset"))return;
+    if(!m.controls)m.controls={};
+    if(p.travel==="offscreen"){
+      var measured=offscreenTravel(plan,core.libraryDirection(p.position[0],p.position[1],plan.args.direction)),value=measured.distance;
+      if(keep&&typeof keep.travel==="number"&&keep.direction===plan.args.direction&&typeof keep.travelComputed==="number"&&Math.abs(keep.travel-keep.travelComputed)>.01)value=keep.travel;
+      name=m.controls.travel?m.controls.travel.split(" · ").slice(1).join(" · "):(pt?"Distância (px)":"Distance (px)");
+      control=effect(plan,name,"ADBE Slider Control");set(plan,control.property(1),value);
+      m.controls.travel=control.name;m.travelComputed=measured.distance;plan.travelUnit=measured.unit;
+    }
+    if(p.pivot==="offset"){
+      var tr=plan.layer.property(MN_TRANSFORM),anchor=tr.property("ADBE Anchor Point").valueAtTime(plan.layer.inPoint,true),rect=plan.layer.sourceRectAtTime(plan.layer.inPoint,false),offset=p.pivotOffset||[0,0];
+      var center=keep&&keep.center&&keep.center.length>=2?[keep.center[0],keep.center[1]]:[anchor[0]+offset[0]*rect.width,anchor[1]+offset[1]*rect.height];
+      name=m.controls.center?m.controls.center.split(" · ").slice(1).join(" · "):(pt?"Centro da transição":"Transition center");
+      control=effect(plan,name,"ADBE Point Control");set(plan,control.property(1),center);
+      m.controls.center=control.name;
+    }
+  }
   /** @param {any} plan */
   function applyLayer(plan){
     var l=plan.layer,m=plan.meta,p=plan.p,labels=plan.locale.indexOf("pt")===0?CONTROL_LABELS:CONTROL_LABELS_EN;
@@ -483,9 +593,15 @@
       var key=m.effects[i]?m.effects[i].name.split(" · ").slice(1).join(" · "):labels[i];
       var e=effect(plan,key,"ADBE Slider Control");set(plan,e.property(1),plan.args[CONTROL_KEYS[i] || "durationFrames"]);
     }
-    var extras=[];
-    if(p.mode==="transition"&&((plan.args.easing&&plan.args.easing!=="preset"?plan.args.easing:p.easing)==="spring"||(m.controls&&m.controls.elasticity)))extras.push({key:"elasticity",pt:"Elasticidade (%)",en:"Elasticity (%)",fallback:30});
-    if(p.collection==="studio"||p.collection==="native"||p.collection==="premium"||p.collection==="signature"){
+    var extras=[],kind=plan.args.easing&&plan.args.easing!=="preset"?plan.args.easing:p.easing;
+    if(p.mode==="transition"&&(kind==="spring"||(m.controls&&m.controls.elasticity)))extras.push({key:"elasticity",pt:"Elasticidade (%)",en:"Elasticity (%)",fallback:30});
+    if(p.mode==="transition"&&(isSettle(kind)||(m.controls&&m.controls.settleAmount))){
+      var settleKind=isSettle(kind)?kind:"settle-wave";
+      extras.push({key:"settleAmount",pt:"Ricochete (%)",en:"Settle (%)",fallback:settleDefault(p,{},"settleAmount",settleKind)});
+      extras.push({key:"settleCount",pt:"Oscilações",en:"Oscillations",fallback:settleDefault(p,{},"settleCount",settleKind)});
+      extras.push({key:"settleDamping",pt:"Amortecimento (%)",en:"Damping (%)",fallback:settleDefault(p,{},"settleDamping",settleKind)});
+    }
+    if(studioTimed(p)){
       if(isText(p)&&p.mode==="transition")extras.push({key:"overlap",pt:"Sobreposição (%)",en:"Overlap (%)",fallback:65});
       if(p.mode==="continuous")extras.push({key:"speed",pt:"Velocidade (%)",en:"Speed (%)",fallback:100});
       if(p.collection==="premium"||p.collection==="signature"&&signatureSeeded(p))extras.push({key:"seed",pt:"Variação",en:"Variation",fallback:17});
@@ -498,6 +614,7 @@
         set(plan,control.property(1),value);m.controls[extra.key]=control.name;
       }
     }
+    liveGeometry(plan);
     if(!plan.deferMarkers)applyMarkers(plan);
     if(isText(p))textAnimation(plan);else layerAnimation(plan);
     effects(plan);m.options=plan.args;m.expressionVersion=2;if(!plan.deferMetadata)saveMetadata(l,m);
@@ -594,7 +711,9 @@
     if(typeof opts.speed!=="number")opts.speed=p.defaults&&p.defaults.speed!==undefined?p.defaults.speed:100;
     var controls=/** @type {any[]} */ ([]),i;
     for(i=0;i<CONTROL_KEYS.length;i++)controls.push({key:CONTROL_KEYS[i],name:m.effects[i].name});
-    if(m.controls)for(key in m.controls)if(Object.prototype.hasOwnProperty.call(m.controls,key))controls.push({key:key,name:m.controls[key]});
+    // Distance and transition center are free geometry in AE, not panel options:
+    // users may even animate them, so they never block inspection.
+    if(m.controls)for(key in m.controls)if(Object.prototype.hasOwnProperty.call(m.controls,key)&&key!=="travel"&&key!=="center")controls.push({key:key,name:m.controls[key]});
     for(i=0;i<controls.length;i++){
       var c=/** @type {any} */ (controls[i]),effect=child(l.property(MN_EFFECTS),c.name),prop=effect&&effect.property(1);
       if(!prop||prop.numKeys||prop.expression)return {state:"conflict",layerName:l.name,message:"Um controle tem keyframes ou expressão. Edite esse controle no After Effects para preservar a animação."};
@@ -614,8 +733,8 @@
     for(var key in args)if(Object.prototype.hasOwnProperty.call(args,key)&&!Object.prototype.hasOwnProperty.call(allowed,key))return fail(MotionContracts.ERROR.INVALID_PRESET,"Parâmetro de ajuste desconhecido.");
     if(!args.options||typeof args.options!=="object"||Object.prototype.hasOwnProperty.call(args.options,"presetId"))return fail(MotionContracts.ERROR.INVALID_PRESET,"Ajustes inválidos.");
     if(typeof args.optionKeys!=="undefined"){
-      if(!(args.optionKeys instanceof Array)||args.optionKeys.length<1||args.optionKeys.length>12)return fail(MotionContracts.ERROR.INVALID_PRESET,"Escolha os parâmetros que serão alterados.");
-      var known={phase:true,direction:true,durationFrames:true,intensity:true,staggerFrames:true,unit:true,easing:true,elasticity:true,overlap:true,speed:true,order:true,seed:true},seen=/** @type {Record<string,boolean>} */ ({});
+      if(!(args.optionKeys instanceof Array)||args.optionKeys.length<1||args.optionKeys.length>15)return fail(MotionContracts.ERROR.INVALID_PRESET,"Escolha os parâmetros que serão alterados.");
+      var known={phase:true,direction:true,durationFrames:true,intensity:true,staggerFrames:true,unit:true,easing:true,elasticity:true,overlap:true,speed:true,order:true,seed:true,settleAmount:true,settleCount:true,settleDamping:true},seen=/** @type {Record<string,boolean>} */ ({});
       for(var option=0;option<args.optionKeys.length;option++){var optionKey=args.optionKeys[option];if(typeof optionKey!=="string"||!Object.prototype.hasOwnProperty.call(known,optionKey)||seen[optionKey]||!Object.prototype.hasOwnProperty.call(args.options,optionKey))return fail(MotionContracts.ERROR.INVALID_PRESET,"Parâmetro parcial inválido.");seen[optionKey]=true;}
     }
     var optionsError=validate(adjustArgs(args));if(optionsError)return optionsError;
@@ -682,5 +801,5 @@
   }
   MotionRegistry.register("ae.presets.remove",{preflight:function(args){return preflight(args,"remove");},run:function(args){var error=preflight(args,"remove");if(error){var invalid=/** @type {any} */ (new Error(error.message));invalid.motionCode=error.code;throw invalid;}return cameraTransition && cameraTransition.hasSelected(app.project.activeItem)?cameraTransition.remove():remove();}});
   MotionRegistry.register("ae.presets.bake",{preflight:function(args){return preflight(args,"bake");},run:function(){return cameraTransition && cameraTransition.hasSelected(app.project.activeItem)?cameraTransition.bake():bake();}});
-  global.MotionPresetLibrary={validate:validate,metadata:metadata,requiredEffects:requiredEffects,header:header,markerState:markerState,verifyOwnership:verifyOwnership,definition:definition,preflight:preflight,applyLayer:applyLayer,removeLayer:removeLayer,inspectLayer:inspectLayer,locate:locate,child:child,snapshot:snapshot,restore:restore,saveMetadata:saveMetadata,snapshotMarkers:snapshotMarkers,restoreMarkers:restoreMarkers,removeMarkers:removeMarkers};
+  global.MotionPresetLibrary={validate:validate,metadata:metadata,requiredEffects:requiredEffects,header:header,markerState:markerState,verifyOwnership:verifyOwnership,definition:definition,preflight:preflight,applyLayer:applyLayer,removeLayer:removeLayer,inspectLayer:inspectLayer,locate:locate,child:child,snapshot:snapshot,restore:restore,saveMetadata:saveMetadata,snapshotMarkers:snapshotMarkers,restoreMarkers:restoreMarkers,removeMarkers:removeMarkers,liveValues:liveValues};
 }($.global));

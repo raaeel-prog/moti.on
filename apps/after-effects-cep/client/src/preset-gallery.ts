@@ -1,12 +1,22 @@
 import { attachScrubbableNumber, button, createActionButton, type ActionButtonController, clearNode, createElement, createIcon, createBadge, createEmptyState, createI18n, searchField, selectField, type PanelPreferences } from "@motion/ui-core";
-import { MOTION_LIBRARY_PRESETS, MOTION_LIBRARY_DEFAULTS, motionLibraryRequirements, type MotionLibraryRequirements, type MotionLibraryPreset, type MotionLibraryOptions, type PersonalPresetCatalog, type PersonalPresetItem, type PersonalPresetPreview, type PresetDefinitionV1, type QuickContext } from "@motion/contracts";
+import { MOTION_LIBRARY_PRESETS, MOTION_LIBRARY_DEFAULTS, MOTION_SETTLE_DEFAULTS, motionLibraryRequirements, type MotionLibraryRequirements, type MotionLibraryPreset, type MotionLibraryOptions, type PersonalPresetCatalog, type PersonalPresetItem, type PersonalPresetPreview, type PresetDefinitionV1, type QuickContext } from "@motion/contracts";
 import { paintLibraryPreview, libraryPreviewPlayback, libraryPreviewEnd, cameraPreviewPlayback } from "./motion-library-preview.js";
 import { createPersonalMediaPreview } from "./personal-media-preview.js";
 import { normalizeSearch } from "./quick-library.js";
 
 export function presetEasingChoices(locale:string):[string,string][] {
   const pt=locale==="pt-BR";
-  return [["preset",pt?"Original":"Original"],["smooth",pt?"Suave":"Smooth"],["cubic",pt?"Acelerada":"Cubic"],["silk",pt?"Sedosa":"Silk"],["glide",pt?"Deslizante":"Glide"],["velvet",pt?"Aveludada":"Velvet"],["drift",pt?"Cauda longa":"Drift"],["snap",pt?"Precisa":"Snap"],["overshoot",pt?"Ultrapassagem":"Overshoot"],["bounce",pt?"Salto":"Bounce"],["spring",pt?"Elástica":"Spring"],["flicker",pt?"Intermitente":"Flicker"]];
+  return [["preset",pt?"Original":"Original"],["smooth",pt?"Suave":"Smooth"],["cubic",pt?"Acelerada":"Cubic"],["silk",pt?"Sedosa":"Silk"],["glide",pt?"Deslizante":"Glide"],["velvet",pt?"Aveludada":"Velvet"],["drift",pt?"Cauda longa":"Drift"],["snap",pt?"Precisa":"Snap"],["overshoot",pt?"Ultrapassagem":"Overshoot"],["bounce",pt?"Salto":"Bounce"],["spring",pt?"Elástica":"Spring"],["settle-wave",pt?"Ricochete":"Ricochet"],["settle-hop",pt?"Quique":"Hop"],["flicker",pt?"Intermitente":"Flicker"]];
+}
+
+/** Settle controls shown for Ricochet/Hop curves, with curve-specific wording. */
+export function settleFieldLabels(kind: string, locale: string): [keyof Pick<MotionLibraryOptions, "settleAmount" | "settleCount" | "settleDamping">, string, number, number][] {
+  const pt = locale === "pt-BR", hop = kind === "settle-hop";
+  return [
+    ["settleAmount", hop ? pt ? "Altura do quique · %" : "Hop height · %" : pt ? "Ricochete · %" : "Ricochet · %", 0, 100],
+    ["settleCount", hop ? pt ? "Quiques" : "Hops" : pt ? "Oscilações" : "Oscillations", .5, 8],
+    ["settleDamping", hop ? pt ? "Perda por quique · %" : "Loss per hop · %" : pt ? "Amortecimento · %" : "Damping · %", 0, 100]
+  ];
 }
 let gallerySequence = 0;
 type Curve = { x1: number; y1: number; x2: number; y2: number };
@@ -122,9 +132,20 @@ export function requirementReason(needs: MotionLibraryRequirements, context: { s
   return null;
 }
 
+/** Search words for the Momentum techniques, in both locales. */
+function momentumTags(motion: MotionLibraryPreset): string {
+  if (motion.collection !== "momentum") return "";
+  const words = ["impulso"];
+  if (motion.easing === "settle-wave") words.push("ricochete ricochet");
+  if (motion.easing === "settle-hop") words.push("quique hop bounce");
+  if (motion.travel === "offscreen") words.push("fora do quadro offscreen push");
+  if (motion.pivot === "offset") words.push("pêndulo pendulum pivô pivot");
+  return `${words.join(" ")} `;
+}
+
 export const GALLERY_PRESETS: GalleryPreset[] = [
   ...[...MOTION_LIBRARY_PRESETS].sort((a, b) => {
-    const rank = (p: MotionLibraryPreset): number => p.collection === "premium" ? (p.cameraSpec ? 1 : 0) : p.collection === "signature" ? 1.5 : p.collection === "studio" ? 2 : 3;
+    const rank = (p: MotionLibraryPreset): number => p.collection === "premium" ? (p.cameraSpec ? 1 : 0) : p.collection === "signature" ? 1.5 : p.collection === "momentum" ? 1.75 : p.collection === "studio" ? 2 : 3;
     return rank(a) - rank(b);
   }).map((motion): GalleryPreset => {
     const transition = motion.id.startsWith("camera-");
@@ -136,7 +157,7 @@ export const GALLERY_PRESETS: GalleryPreset[] = [
     category: motion.id.startsWith("camera-") ? "camera-transitions" : motion.category, hosts: ["after-effects"], minHostVersion: { "after-effects": "25.0" },
     requirements: [transition ? "active-composition" : motion.category.startsWith("text-") ? "selected-text-layers" : "selected-visual-layers"],
     operationPlan: { command: handler, args: params },
-    tags: `${motion.collection ?? ""} ${motion.family ?? ""} ${motion.tempo?.character ?? ""} ${motion.category} ${motion.easing} ${motion.effect} ${motion.waveform} ${motion.choreography?.path ?? ""} ${motion.choreography?.distribution ?? ""} ${motion.name["pt-BR"]} ${motion.name["en-US"]}`,
+    tags: `${motion.collection ?? ""} ${motion.family ?? ""} ${motion.tempo?.character ?? ""} ${motion.category} ${motion.easing} ${motion.effect} ${motion.waveform} ${motion.choreography?.path ?? ""} ${motion.choreography?.distribution ?? ""} ${momentumTags(motion)}${motion.name["pt-BR"]} ${motion.name["en-US"]}`,
     curve: cameraCurve, preview: { renderer: "motion", fixtureId: `${motion.id}-v1` },
     handler, applyMode: transition ? "precomp" : "layers", reapplyPolicy: "adjust-managed", motion, params
   }; }),
@@ -156,13 +177,15 @@ export function galleryCategoryMatches(category: string, preset: GalleryPreset):
   if (category === "camera-impact") return Boolean(preset.motion?.cameraSpec?.impact);
   if (category === "signature") return preset.motion?.collection === "signature";
   if (category.startsWith("signature-")) return preset.motion?.collection === "signature" && preset.motion.family === category.substring("signature-".length);
+  if (category === "momentum") return preset.motion?.collection === "momentum";
+  if (category.startsWith("momentum-")) return preset.motion?.collection === "momentum" && preset.category === `motion-${category.substring("momentum-".length)}`;
   if (category === "premium") return preset.motion?.collection === "premium";
   if (category.startsWith("premium-")) return preset.motion?.collection === "premium" &&
     (category === "premium-camera" ? preset.category === "camera-transitions" : preset.category.startsWith(category === "premium-text" ? "text-" : "motion-") && preset.category !== "camera-transitions");
   return category === "all" || category === "animation" && Boolean(preset.motion) && !preset.category.startsWith("camera") ||
     category === "motion" && preset.category.startsWith("motion-") || category === "text" && preset.category.startsWith("text-") ||
     category === "studio" && preset.motion?.collection === "studio" || category === "gemini" && preset.motion?.collection === "gemini" ||
-    category === "classics" && Boolean(preset.motion) && preset.motion?.collection !== "premium" && preset.motion?.collection !== "signature" ||
+    category === "classics" && Boolean(preset.motion) && preset.motion?.collection !== "premium" && preset.motion?.collection !== "signature" && preset.motion?.collection !== "momentum" ||
     category === "camera" && preset.category.startsWith("camera") || category === "camera-moves" && preset.category === "camera" || preset.category === category;
 }
 
@@ -272,7 +295,9 @@ export function createPresetGallery(doc: Document, options: {
     "motion-effects": pt ? "Motion · Efeitos" : "Motion · Effects", "text-characters": pt ? "Texto · Caracteres" : "Text · Characters",
     "text-words": pt ? "Texto · Palavras" : "Text · Words", "text-lines": pt ? "Texto · Linhas" : "Text · Lines",
     "text-effects": pt ? "Texto · Efeitos" : "Text · Effects", ease: pt ? "Curvas" : "Curves", camera: pt ? "Câmera" : "Camera",
-    text: pt ? "Tipografia" : "Typography", motion: "Motion", transitions: pt ? "Transições" : "Transitions"
+    text: pt ? "Tipografia" : "Typography", motion: "Motion", transitions: pt ? "Transições" : "Transitions",
+    momentum: pt ? "Impulso" : "Momentum", "momentum-2d": pt ? "Impulso · 2D" : "Momentum · 2D",
+    "momentum-3d": pt ? "Impulso · 3D" : "Momentum · 3D", "momentum-effects": pt ? "Impulso · Efeitos" : "Momentum · Effects"
   };
   const galleryId=`preset-gallery-${++gallerySequence}`;
   const invalidNumbers=new Map<string,Map<string,string>>();
@@ -339,6 +364,9 @@ export function createPresetGallery(doc: Document, options: {
     {id: "signature", label: "Signature", children: [
       {id:"signature-essentials",label:pt?"Entrada e saída":"In & out"},{id:"signature-cinema",label:"Cinema"},
       {id:"signature-light-matter",label:pt?"Luz e matéria":"Light & matter"},{id:"signature-variation",label:pt?"Variação":"Variation"}]},
+    {id: "momentum", label: pt ? "Impulso" : "Momentum", children: [
+      {id:"momentum-2d",label:pt?"Transições 2D":"2D transitions"},{id:"momentum-3d",label:pt?"Transições 3D":"3D transitions"},
+      {id:"momentum-effects",label:pt?"Efeitos":"Effects"}]},
     {id: "text", label: pt ? "Tipografia" : "Typography", children: [
       {id:"text-characters",label:pt?"Caracteres":"Characters"},{id:"text-words",label:pt?"Palavras":"Words"},
       {id:"text-lines",label:pt?"Linhas":"Lines"},{id:"text-effects",label:pt?"Efeitos de texto":"Text effects"}]},
@@ -765,9 +793,9 @@ export function createPresetGallery(doc: Document, options: {
         row.getElementsByTagName("select")[0]?.setAttribute("aria-label",label);
         fields.appendChild(row);
       }
-      function number(key: "durationFrames" | "intensity" | "staggerFrames" | "elasticity" | "overlap" | "speed" | "seed", label: string, min: number, max: number, container: HTMLElement = fields): void {
+      function number(key: "durationFrames" | "intensity" | "staggerFrames" | "elasticity" | "overlap" | "speed" | "seed" | "settleAmount" | "settleCount" | "settleDamping", label: string, min: number, max: number, container: HTMLElement = fields): void {
         activeNumbers.add(key);
-        const step=["intensity","elasticity","overlap","speed"].includes(key) ? 0.1 : 1;
+        const step=["intensity","elasticity","overlap","speed","settleAmount","settleCount","settleDamping"].includes(key) ? 0.1 : 1;
         const wrapper=createElement(doc,"div","ch-preset-field--number");
         const row=createElement(doc,"label","ch-preset-field");row.appendChild(createElement(doc,"span","",label));
         const field=doc.createElement("input");field.type="number";field.id=`${galleryId}-${key}-input`;field.min=String(min);field.max=String(max);field.step=String(step);field.value=invalidNumbers.get(presetId)?.get(key)??String(draft[key]);field.disabled=options.busy;field.setAttribute("aria-label",label);
@@ -826,19 +854,25 @@ export function createPresetGallery(doc: Document, options: {
         } }));
         adjustments.appendChild(status);
       }
-      if (p.collection === "studio" || p.collection === "premium" || p.collection === "native" || p.collection === "signature" || draft.easing==="spring") {
+      const curve = draft.easing && draft.easing !== "preset" ? draft.easing : p.easing, settles = p.mode === "transition" && !overlay && (curve === "settle-wave" || curve === "settle-hop");
+      if (p.collection === "studio" || p.collection === "premium" || p.collection === "native" || p.collection === "signature" || p.collection === "momentum" || draft.easing==="spring" || settles) {
         const details = createElement(doc, "details", "ch-preset-refine");
         details.appendChild(createElement(doc, "summary", "", pt ? "Refinar movimento" : "Refine motion"));
         const advanced = createElement(doc, "div", "ch-preset-fields");
-        if ((draft.easing&&draft.easing!=="preset"?draft.easing:p.easing) === "spring") number("elasticity", pt ? "Elasticidade · %" : "Elasticity · %", 0, 100, advanced);
+        if (curve === "spring") number("elasticity", pt ? "Elasticidade · %" : "Elasticity · %", 0, 100, advanced);
+        if (settles) for (const [key, label, min, max] of settleFieldLabels(curve, options.locale)) { draft[key] ??= MOTION_SETTLE_DEFAULTS[curve === "settle-hop" ? "settle-hop" : "settle-wave"][key]; number(key, label, min, max, advanced); }
         if (p.category.startsWith("text-") && p.mode === "transition") number("overlap", pt ? "Sobreposição · %" : "Overlap · %", 0, 100, advanced);
         if (p.mode === "continuous") number("speed", pt ? "Velocidade · %" : "Speed · %", 25, 200, advanced);
         if (advanced.children.length) {
           details.appendChild(advanced);
-          details.appendChild(createElement(doc,"p","ch-preset-hint",p.mode === "continuous" ? pt ? "Menor velocidade deixa o ciclo mais lento." : "Lower speed makes the cycle slower." : pt ? "Sobreposição maior aproxima as entradas; elasticidade controla a acomodação." : "More overlap brings arrivals closer; elasticity controls settling."));
+          details.appendChild(createElement(doc,"p","ch-preset-hint",p.mode === "continuous" ? pt ? "Menor velocidade deixa o ciclo mais lento." : "Lower speed makes the cycle slower." : settles ? pt ? "Os mesmos controles ficam ao vivo nos Controles do efeito; na saída, viram uma antecipação." : "The same controls stay live in Effect Controls; on exit they become an anticipation." : pt ? "Sobreposição maior aproxima as entradas; elasticidade controla a acomodação." : "More overlap brings arrivals closer; elasticity controls settling."));
           adjustments.appendChild(details);
         }
       }
+      if (!overlay && (p.travel === "offscreen" || p.pivot === "offset")) adjustments.appendChild(createElement(doc, "p", "ch-preset-hint", [
+        p.travel === "offscreen" ? pt ? "Sai do quadro: a distância é medida na composição e fica em Distância (px)." : "Leaves the frame: the distance is measured in the composition and kept in Distance (px)." : "",
+        p.pivot === "offset" ? pt ? "Gira em torno do Centro da transição; arraste o ponto no Monitor." : "Turns around the Transition center; drag the point in the Viewer." : ""
+      ].filter(Boolean).join(" ")));
       adjustments.appendChild(createElement(doc, "p", "ch-preset-hint", overlay ? pt ? "Cria uma pré-comp acima das camadas, com o marcador CUT no tempo atual. Arraste o marcador para mover o pico da transição." : "Creates a precomp above the layers with a CUT marker at the current time. Drag the marker to move the transition peak." : p.mode === "transition" ? pt ? "Entrada no início da camada; saída no fim." : "In at the layer start; out at its end." : pt ? "Ajustes editáveis nos Controles do efeito." : "Editable settings in Effect Controls."));
       for(const key of invalidNumbers.get(presetId)?.keys()??[])if(!activeNumbers.has(key))invalidNumbers.get(presetId)?.delete(key);
       settingsBody.appendChild(adjustments);

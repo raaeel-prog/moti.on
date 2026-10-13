@@ -9,7 +9,7 @@ export async function generateMotionLibrary() {
     bundle: true, format: "esm", platform: "node", write: false
   });
   const module = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString("base64")}`);
-  const math = ["libraryEase", "libraryTiming", "libraryWave", "libraryDirection", "libraryOrder", "libraryStudioTiming", "librarySequence", "libraryChoreography", "cameraImpactSample", "librarySignatureEnvelope", "librarySignatureVelocity", "librarySignatureGlyph", "libraryRequiredEffects"];
+  const math = ["libraryEase", "libraryTiming", "libraryWave", "libraryDirection", "libraryOrder", "libraryStudioTiming", "librarySequence", "libraryChoreography", "cameraImpactSample", "librarySignatureEnvelope", "librarySignatureVelocity", "librarySignatureGlyph", "libraryRequiredEffects", "libraryOffscreenDistance"];
   const body = `(function(global) {\nglobal.MotionLibraryCatalog = ${JSON.stringify(module.MOTION_LIBRARY_PRESETS)};\nglobal.MotionLibraryCore = {\n${math.map(name => `${name}: ${module[name].toString()}`).join(",\n")}\n};\n}($.global));\n`;
   const output = new URL("../apps/after-effects-cep/host/generated/motion-library.jsx", import.meta.url);
   await mkdir(new URL(".", output), { recursive: true });

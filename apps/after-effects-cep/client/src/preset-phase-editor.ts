@@ -1,6 +1,6 @@
 import {attachCompactNumberEditing, attachScrubbableNumber, button, createActionButton, createElement, createI18n, createIcon, selectField} from "@motion/ui-core";
-import type {PresetInspection, PresetPhaseInspection} from "@motion/contracts";
-import {defaultLibraryOptions, GALLERY_PRESETS, gallerySequenceControls, presetEasingChoices} from "./preset-gallery.js";
+import {MOTION_SETTLE_DEFAULTS, type PresetInspection, type PresetPhaseInspection} from "@motion/contracts";
+import {defaultLibraryOptions, GALLERY_PRESETS, gallerySequenceControls, presetEasingChoices, settleFieldLabels} from "./preset-gallery.js";
 import {formatPresetOffset,parsePresetOffset} from "./preset-timecode.js";
 
 /** Session-only drafts; property and layer references never leave the host. */
@@ -58,7 +58,7 @@ export function createPresetPhaseEditor(doc:Document, options:{
       applyControl.setDisabled(apply.disabled,reason);
     };
     refreshers.push(update);
-    const numeric=(key:"durationFrames"|"intensity"|"staggerFrames"|"elasticity"|"overlap"|"seed",label:string,min:number,max:number,integer=true):void=>{
+    const numeric=(key:"durationFrames"|"intensity"|"staggerFrames"|"elasticity"|"overlap"|"seed"|"settleAmount"|"settleCount"|"settleDamping",label:string,min:number,max:number,integer=true):void=>{
       const field=createElement(doc,"label","ch-phase-field");field.appendChild(createElement(doc,"span","",label));
       const input=doc.createElement("input");input.id=`phase-${phase.instance}-${phase.phase}-${key}`;input.type="text";input.inputMode=integer?"numeric":"decimal";input.value=String(draft[key]??defaultLibraryOptions(preset)[key]??0);input.setAttribute("aria-label",`${phase.phase==="in"?(pt?"Entrada":"In"):(pt?"Saída":"Out")} · ${label}`);input.disabled=options.busy;
       input.min=String(min);input.max=String(max);input.step=integer?"1":"0.1";numberInputs.set(key,input);if(saved?.numbers[key]!==undefined)input.value=saved.numbers[key];
@@ -94,6 +94,8 @@ export function createPresetPhaseEditor(doc:Document, options:{
       if(["studio","native","premium","signature"].includes(preset.collection??""))numeric("overlap",pt?"Sobreposição · %":"Overlap · %",0,100);
     }
     if(draft.easing==="spring"||preset.easing==="spring")numeric("elasticity",pt?"Elasticidade · %":"Elasticity · %",0,100);
+    const curve=draft.easing&&draft.easing!=="preset"?draft.easing:preset.easing;
+    if(curve==="settle-wave"||curve==="settle-hop")for(const [key,label,min,max] of settleFieldLabels(curve,options.locale)){draft[key]??=MOTION_SETTLE_DEFAULTS[curve][key];numeric(key,label,min,max,false);}
     if(gallerySequenceControls(preset,draft).seed)numeric("seed",pt?"Variação":"Variation",0,9999);
     const timing=createElement(doc,"div","ch-phase-field ch-phase-shift");timing.appendChild(createElement(doc,"span","",pt?"Deslocar transição":"Shift transition"));
     const controls=createElement(doc,"div","ch-phase-shift-controls");timing.appendChild(controls);

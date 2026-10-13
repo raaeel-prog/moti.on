@@ -1,4 +1,17 @@
-import { cameraImpactSample, libraryDirection, libraryEase, libraryTiming, libraryWave, libraryOrder, libraryStudioTiming, librarySequence, libraryChoreography, librarySignatureEnvelope, librarySignatureGlyph, librarySignatureVelocity, type MotionLibraryOptions, type MotionLibraryPreset } from "@motion/contracts";
+import { cameraImpactSample, libraryDirection, libraryEase, libraryOffscreenDistance, libraryTiming, libraryWave, libraryOrder, libraryStudioTiming, librarySequence, libraryChoreography, librarySignatureEnvelope, librarySignatureGlyph, librarySignatureVelocity, type MotionLibraryOptions, type MotionLibraryPreset } from "@motion/contracts";
+
+/** Card geometry: a 320x180 frame with the layer glyph at rest at (160, 98),
+ * spanning x -36..36 and y -35..22 around it. */
+const CARD = { width: 320, height: 180, x: 160, y: 98, left: -36, top: -35, right: 36, bottom: 22 };
+
+/** Out-of-frame travel for the card, in nominal 1080p pixels (the card is 1:6).
+ * The host measures the composition with the same function. */
+export function libraryPreviewTravel(p: MotionLibraryPreset, options: MotionLibraryOptions): number {
+  const xy = libraryDirection(p.position[0], p.position[1], options.direction), length = Math.hypot(xy[0], xy[1]) || 1;
+  const grow = Math.max(1, 1 + Math.max(p.scale[0], p.scale[1]) / 100 * Math.max(1, options.intensity / 100));
+  return 6 * libraryOffscreenDistance(CARD.x, CARD.y, CARD.x + CARD.left, CARD.y + CARD.top, CARD.x + CARD.right, CARD.y + CARD.bottom,
+    p.rotation[2] || grow > 1 ? grow : 0, xy[0] / length, xy[1] / length, CARD.width, CARD.height, Math.max(8, .02 * CARD.width));
+}
 
 export function libraryPreviewEnd(options: MotionLibraryOptions): number {
   return Math.max(3.2, options.durationFrames / 30 * 2 + .8);
@@ -33,21 +46,27 @@ function appliedOverlap(p: MotionLibraryPreset, options: MotionLibraryOptions): 
 
 export function librarySample(p: MotionLibraryPreset, options: MotionLibraryOptions, time: number, index = 0, count = 1): { x: number; y: number; z: number; rx: number; ry: number; rz: number; sx: number; sy: number; opacity: number; weight: number; progress: number } {
   const unit = options.unit === "preset" ? p.text.unit : options.unit;
-  const studio = p.collection === "studio" || p.collection === "native" || p.collection === "premium" || p.collection === "signature";
+  const studio = p.collection === "studio" || p.collection === "native" || p.collection === "premium" || p.collection === "signature" || p.collection === "momentum";
   const order = options.order && options.order !== "preset" ? options.order : p.text.order ?? (p.text.random ? "random" : "forward");
   const seed = options.seed ?? p.defaults?.seed ?? 17;
   const idx = unit === "all" ? 0 : order === "random" && count > 1 ? libraryOrder(index, count, options.seed) : librarySequence(index, count, order);
   const speed = studio ? (options.speed ?? p.defaults?.speed ?? 100) / 100 : 1, age = time * speed;
   const [a, b] = (studio ? libraryStudioTiming : libraryTiming)(time, 0, libraryPreviewEnd(options), options.durationFrames / 30, options.phase, idx, unit === "all" ? 1 : count, options.staggerFrames / 30, appliedOverlap(p, options));
   const easing=options.easing&&options.easing!=="preset"?options.easing:p.easing;
-  let w = p.mode === "transition" ? 2 - libraryEase(a, easing, options.elasticity ?? p.defaults?.elasticity) - libraryEase(b, easing, options.elasticity ?? p.defaults?.elasticity) : libraryWave(age, idx, p.waveform === "none" ? "wiggle" : p.waveform, seed);
+  const elastic = options.elasticity ?? p.defaults?.elasticity;
+  const settle = [options.settleAmount ?? p.defaults?.settleAmount, options.settleCount ?? p.defaults?.settleCount, options.settleDamping ?? p.defaults?.settleDamping] as const;
+  // The exit term reads the curve backwards; settle curves turn it into anticipation.
+  let w = p.mode === "transition" ? 2 - libraryEase(a, easing, elastic, ...settle) - libraryEase(b, easing, elastic, ...settle, 1) : libraryWave(age, idx, p.waveform === "none" ? "wiggle" : p.waveform, seed);
   const fadeWeight = w;
   if (p.mode === "transition" && p.waveform !== "none") w += libraryWave(age, idx, p.waveform, seed) * Math.abs(w) * .25;
   const amp = options.intensity / 100, text = p.category.startsWith("text-");
   const xy = libraryDirection(p.position[0], p.position[1], options.direction);
   const pose = p.choreography ? libraryChoreography(Math.max(0, Math.min(1, Math.min(a, b))), w, ...p.position, p.choreography.path, p.choreography.distribution ?? "uniform", unit === "all" ? 0 : index, seed, p.choreography.turns ?? 1, options.direction) : undefined;
   const transform = (axis: number, waveSeed: number): number => p.effect === "camera-shake" && waveSeed !== seed + 2 ? libraryWave(age * 3, axis, "wiggle", waveSeed) * fadeWeight : p.mode === "transition" || text ? w : libraryWave(age, axis, p.waveform, waveSeed);
-  const sample = { x: amp * (pose ? pose[0] : xy[0] * transform(0, seed)) / 6, y: amp * (pose ? pose[1] : xy[1] * transform(1, seed)) / 6, z: amp * (pose ? pose[2] : p.position[2] * transform(2, seed)) / 6,
+  // Out-of-frame travel follows the measured distance, not Intensity, as in AE.
+  const travel = p.travel === "offscreen" && !text ? libraryPreviewTravel(p, options) / (Math.hypot(xy[0], xy[1]) || 1) : 0;
+  const sample = { x: travel ? xy[0] * travel * transform(0, seed) / 6 : amp * (pose ? pose[0] : xy[0] * transform(0, seed)) / 6,
+    y: travel ? xy[1] * travel * transform(1, seed) / 6 : amp * (pose ? pose[1] : xy[1] * transform(1, seed)) / 6, z: amp * (pose ? pose[2] : p.position[2] * transform(2, seed)) / 6,
     rx: p.rotation[0] * amp * (pose ? pose[3] : transform(0, seed + 6)), ry: p.rotation[1] * amp * (pose ? pose[3] : transform(1, seed + 6)), rz: p.rotation[2] * amp * (pose ? pose[3] : transform(2, seed + 6)),
     sx: 1 + p.scale[0] / 100 * amp * (pose ? pose[4] : transform(0, seed + 2)), sy: 1 + p.scale[1] / 100 * amp * (pose ? pose[5] : transform(1, seed + 2)),
     opacity: p.text.reveal === "typewriter" ? (Math.min(a, b) < (idx + 1) / (unit === "all" ? 1 : count) ? 1 - Math.min(1, amp) : 1) : p.fade ? 1 - Math.max(0, Math.min(1, (text && p.mode !== "transition" ? Math.abs(w) * .7 : fadeWeight) * amp)) : 1, weight: p.effect.startsWith("camera-") ? fadeWeight : w,
@@ -66,6 +85,13 @@ export function librarySample(p: MotionLibraryPreset, options: MotionLibraryOpti
     sample.x += dx * sample.sx * (Math.cos(ry) - 1) + dy * sample.sy * Math.sin(rx) * Math.sin(ry);
     sample.y += dy * sample.sy * (Math.cos(rx) - 1);
     sample.z += -dx * sample.sx * Math.sin(ry) + dy * sample.sy * Math.sin(rx) * Math.cos(ry);
+  }
+  if (p.pivot === "offset" && !text) {
+    // Same compensation as AE around the transition center, on the card's glyph.
+    const offset = p.pivotOffset ?? [0, 0], d = sample.rz * Math.PI / 180;
+    const vx = offset[0] * (CARD.right - CARD.left) * sample.sx, vy = offset[1] * (CARD.bottom - CARD.top) * sample.sy;
+    sample.x += vx * (1 - Math.cos(d)) + vy * Math.sin(d);
+    sample.y += vy * (1 - Math.cos(d)) - vx * Math.sin(d);
   }
   return sample;
 }

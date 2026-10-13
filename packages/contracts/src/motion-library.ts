@@ -3,6 +3,7 @@ import { MOTION_LIBRARY_STUDIO_PRESETS } from "./motion-library-studio.js";
 import { MOTION_LIBRARY_CAMERA_PRESETS } from "./motion-library-camera.js";
 import { MOTION_LIBRARY_NATIVE_PRESETS } from "./motion-library-native.js";
 import { MOTION_LIBRARY_SIGNATURE_PRESETS } from "./motion-library-signature.js";
+import { MOTION_LIBRARY_MOMENTUM_PRESETS } from "./motion-library-momentum.js";
 
 /**
  * Original, declarative Moti.on animation library.
@@ -26,7 +27,7 @@ export interface MotionLibraryPreset {
   referenceIndex: number | null;
   /** Exact master-spec overlay recipe; does not apply directly to user layers. */
   cameraSpec?: { id: string; blur: "none" | "gaussian" | "lens"; exposure?: number; native?: { style: number; angle: number }; impact?: CameraImpactSpec };
-  collection?: "studio" | "gemini" | "native" | "premium" | "signature";
+  collection?: "studio" | "gemini" | "native" | "premium" | "signature" | "momentum";
   /** Signature gallery family; absent on every other collection. */
   family?: "essentials" | "cinema" | "light-matter" | "variation";
   /** Authored tempo character, in frames at the 30 fps reference. A kinetic
@@ -43,7 +44,9 @@ export interface MotionLibraryPreset {
   /** Curated initial controls; omitted values use the legacy library defaults. */
   defaults?: Partial<MotionLibraryOptions>;
   mode: "transition" | "continuous" | "static";
-  easing: "smooth" | "cubic" | "overshoot" | "bounce" | "flicker" | "silk" | "glide" | "spring" | "velvet" | "drift" | "snap";
+  easing: "smooth" | "cubic" | "overshoot" | "bounce" | "flicker" | "silk" | "glide" | "spring" | "velvet" | "drift" | "snap"
+    /** Momentum settles: a decaying ricochet or hops, tuned live by the settle controls. */
+    | "settle-wave" | "settle-hop";
   /** Nominal offsets/amplitudes in pixels for a 1080-pixel-high composition. */
   position: [number, number, number];
   /** X, Y and Z offsets/amplitudes in degrees. */
@@ -51,7 +54,7 @@ export interface MotionLibraryPreset {
   /** Transition offsets from 100%; continuous amplitudes in percentage points. */
   scale: [number, number, number];
   fade: boolean;
-  waveform: "none" | "wiggle" | "cosine" | "abs-cosine" | "orbit";
+  waveform: "none" | "wiggle" | "cosine" | "abs-cosine" | "orbit" | "spin" | "blink";
   effect:
     | "none"
     | "blur"
@@ -110,7 +113,14 @@ export interface MotionLibraryPreset {
     /** Restrict per-unit blur to one axis for a directional motion streak. */
     blurAxis?: "x" | "y";
   };
-  pivot: "anchor" | "edge";
+  /** "offset" turns around a point away from the Anchor Point, set by pivotOffset
+   * and then by a live "Transition center" control; Anchor Point never changes. */
+  pivot: "anchor" | "edge" | "offset";
+  /** Pivot relative to the Anchor Point, in fractions of the layer's width and height. */
+  pivotOffset?: [number, number];
+  /** "offscreen" replaces the authored distance: the host measures how far the
+   * layer must travel to leave the composition and exposes it as a live control. */
+  travel?: "authored" | "offscreen";
 }
 
 /**
@@ -163,7 +173,22 @@ export interface MotionLibraryOptions {
   overlap?: number;
   /** Continuous-animation frequency, as a percentage of the base cycle speed. */
   speed?: number;
+  /** Momentum settle size: ricochet amplitude or first hop height, in percent. */
+  settleAmount?: number;
+  /** Ricochet oscillations or number of hops after the arrival. */
+  settleCount?: number;
+  /** How quickly the ricochet fades or how much height each hop loses, in percent. */
+  settleDamping?: number;
 }
+
+/** Defaults of the Momentum settle controls; the shared curve and the host use the same values. */
+export const MOTION_SETTLE_DEFAULTS: Readonly<Record<"settle-wave" | "settle-hop", Readonly<Required<Pick<MotionLibraryOptions, "settleAmount" | "settleCount" | "settleDamping">>>>> = {
+  "settle-wave": { settleAmount: 35, settleCount: 2.5, settleDamping: 55 },
+  "settle-hop": { settleAmount: 40, settleCount: 3, settleDamping: 60 }
+};
+
+/** Every accepted easing option, including the recipe's own ("preset"). */
+export const MOTION_LIBRARY_EASINGS: readonly string[] = ["preset", "smooth", "cubic", "overshoot", "bounce", "flicker", "silk", "glide", "spring", "velvet", "drift", "snap", "settle-wave", "settle-hop"];
 
 export const MOTION_LIBRARY_DEFAULTS: Readonly<MotionLibraryOptions> = {
   phase: "in",
@@ -182,7 +207,7 @@ export function isMotionLibraryOptions(value: unknown): value is MotionLibraryOp
   const requiredKeys = [
     "phase", "direction", "durationFrames", "intensity", "staggerFrames", "unit"
   ];
-  const expectedKeys = [...requiredKeys, "elasticity", "overlap", "speed", "order", "seed", "easing"];
+  const expectedKeys = [...requiredKeys, "elasticity", "overlap", "speed", "order", "seed", "easing", "settleAmount", "settleCount", "settleDamping"];
   const keys = Reflect.ownKeys(value);
   if (keys.length < requiredKeys.length || keys.length > expectedKeys.length) return false;
   if (requiredKeys.some((key) => !Object.prototype.hasOwnProperty.call(value, key))) return false;
@@ -193,13 +218,14 @@ export function isMotionLibraryOptions(value: unknown): value is MotionLibraryOp
   }
   const options = value as Record<string, unknown>;
   for (const [key, minimum, maximum] of [
-    ["elasticity", 0, 100], ["overlap", 0, 100], ["speed", 25, 200]
+    ["elasticity", 0, 100], ["overlap", 0, 100], ["speed", 25, 200],
+    ["settleAmount", 0, 100], ["settleCount", 0.5, 8], ["settleDamping", 0, 100]
   ] as const) {
     if (!Object.prototype.hasOwnProperty.call(options, key)) continue;
     const number = options[key];
     if (typeof number !== "number" || !Number.isFinite(number) || number < minimum || number > maximum) return false;
   }
-  if (Object.prototype.hasOwnProperty.call(options, "easing") && !["preset", "smooth", "cubic", "overshoot", "bounce", "flicker", "silk", "glide", "spring", "velvet", "drift", "snap"].includes(options.easing as string)) return false;
+  if (Object.prototype.hasOwnProperty.call(options, "easing") && !MOTION_LIBRARY_EASINGS.includes(options.easing as string)) return false;
   if (Object.prototype.hasOwnProperty.call(options, "order") && !["preset", "forward", "reverse", "center-out", "edges-in", "random"].includes(options.order as string)) return false;
   if (Object.prototype.hasOwnProperty.call(options, "seed") && (typeof options.seed !== "number" || !Number.isInteger(options.seed) || options.seed < 0 || options.seed > 9999)) return false;
   return (options.phase === "in" || options.phase === "out" || options.phase === "both")
@@ -1818,5 +1844,6 @@ export const MOTION_LIBRARY_PRESETS: readonly MotionLibraryPreset[] = [
   ...MOTION_LIBRARY_CAMERA_PRESETS,
   ...MOTION_LIBRARY_NATIVE_PRESETS,
   ...MOTION_LIBRARY_PREMIUM_PRESETS,
-  ...MOTION_LIBRARY_SIGNATURE_PRESETS
+  ...MOTION_LIBRARY_SIGNATURE_PRESETS,
+  ...MOTION_LIBRARY_MOMENTUM_PRESETS
 ];

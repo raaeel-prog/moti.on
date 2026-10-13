@@ -250,8 +250,28 @@
             "flicker",
             "silk",
             "glide",
-            "spring"
+            "spring",
+            "velvet",
+            "drift",
+            "snap",
+            "settle-wave",
+            "settle-hop"
           ]
+        },
+        "settleAmount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "settleCount": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 8
+        },
+        "settleDamping": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
         }
       }
     },
@@ -344,7 +364,7 @@
         "optionKeys": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 12,
+          "maxItems": 15,
           "uniqueItems": true,
           "items": {
             "enum": [
@@ -359,7 +379,10 @@
               "speed",
               "order",
               "seed",
-              "easing"
+              "easing",
+              "settleAmount",
+              "settleCount",
+              "settleDamping"
             ]
           }
         }

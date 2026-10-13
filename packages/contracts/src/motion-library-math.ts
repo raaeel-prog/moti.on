@@ -1,9 +1,47 @@
 /* eslint-disable no-var -- Serialized verbatim into the ES3 Adobe host. */
 /** These functions are also serialized into the ES3 host and its expressions.
  * Keep them self-contained, deterministic, and written with var/function. */
-export function libraryEase(t: number, kind: string, elasticity?: number): number {
+export function libraryEase(t: number, kind: string, elasticity?: number, settleAmount?: number,
+  settleCount?: number, settleDamping?: number, exit?: number): number {
   var x = Math.max(0, Math.min(1, t));
   if (x === 0 || x === 1) return x;
+  if (kind === "settle-wave" || kind === "settle-hop") {
+    // Momentum settles: a fast arrival, then a decaying ricochet ("wave") or
+    // parabolic hops that lose height each time ("hop"). Both end exactly on 1.
+    // An exit reads the curve backwards, so it becomes a single anticipation
+    // whose pull grows with the settle amount.
+    var wave = kind === "settle-wave";
+    var amount = Math.max(0, Math.min(100, typeof settleAmount === "number" ? settleAmount : wave ? 35 : 40)) / 100;
+    var count = Math.max(.5, Math.min(8, typeof settleCount === "number" ? settleCount : wave ? 2.5 : 3));
+    var damping = Math.max(0, Math.min(100, typeof settleDamping === "number" ? settleDamping : wave ? 55 : 60)) / 100;
+    if (exit) { var pull = .4 + amount * 3.2, back = x - 1; return 1 + (pull + 1) * back * back * back + pull * back * back; }
+    var arrive = wave ? .3 : .34, span = 1 - arrive;
+    if (wave) {
+      // Oscillation velocity at arrival is amplitude*2*pi*count/span; the
+      // Hermite arrival matches it, capped so the approach never reverses.
+      var turn = 2 * Math.PI * count;
+      var height = Math.min(amount * .6, 3 * span / (arrive * turn));
+      if (x < arrive) {
+        var a = x / arrive, m = height * turn / span * arrive;
+        return -2 * a * a * a + 3 * a * a + (a * a * a - a * a) * m;
+      }
+      var tau = (x - arrive) / span, tail = Math.max(0, Math.min(1, (tau - .75) / .25));
+      return 1 + height * Math.exp(-(1 + damping * 7) * tau) * Math.sin(turn * tau) * (1 - tail * tail * tail * (10 + tail * (-15 + 6 * tail)));
+    }
+    if (x < arrive) { var fall = x / arrive; return fall * fall; }
+    var first = amount * .5, keep = Math.max(.05, 1 - damping), hops = Math.max(1, Math.min(8, Math.round(count)));
+    if (first <= 0) return 1;
+    // Hop durations follow sqrt(height), as under constant gravity.
+    var total = 0, h = 1, k;
+    for (k = 0; k < hops; k++) { total += Math.sqrt(h); h *= keep; }
+    var clock = (x - arrive) / span * total, lift = first, length;
+    for (k = 0; k < hops; k++) {
+      length = Math.sqrt(Math.pow(keep, k));
+      if (clock <= length) { var p = clock / length; return 1 - lift * 4 * p * (1 - p); }
+      clock -= length; lift *= keep;
+    }
+    return 1;
+  }
   if (kind === "silk") return x * x * x * (10 + x * (-15 + 6 * x));
   if (kind === "glide" || kind === "spring") {
     // Integral of a beta(2,4) velocity profile: zero velocity at both ends.
@@ -109,7 +147,30 @@ export function libraryWave(time: number, axis: number, kind: string, seed: numb
   if (kind === "abs-cosine") return axis === 1 ? -Math.abs(Math.cos(time * Math.PI * 2 + p)) : Math.sin(time * Math.PI * 2 + p);
   if (kind === "orbit") return axis === 0 ? Math.sin(time * Math.PI * 2) : Math.cos(time * Math.PI * 2);
   if (kind === "wiggle") return (Math.sin(time * 7.1 + p) + Math.sin(time * 13.7 + p * 2.1) * 0.5 + Math.sin(time * 23.3 + p * 3.7) * 0.25) / 1.75;
+  // Steady rotation: seconds elapsed, so amplitude reads as degrees per second.
+  if (kind === "spin") return time;
+  // Square blink at two cycles per second; the seed only shifts its phase.
+  if (kind === "blink") return Math.sin(time * Math.PI * 4 + p) < 0 ? 1 : 0;
   return 0;
+}
+
+/** Distance along a unit screen direction (ux, uy) that takes a layer fully out
+ * of a width x height frame, plus margin. The box is the layer at rest; with
+ * inflate > 0 it becomes the circle that the layer sweeps while it rotates or
+ * scales by up to that factor around its pivot (cx, cy). Shared by the host,
+ * which measures the composition, and by the preview, which measures its card. */
+export function libraryOffscreenDistance(cx: number, cy: number, minX: number, minY: number, maxX: number, maxY: number,
+  inflate: number, ux: number, uy: number, width: number, height: number, margin: number): number {
+  if (inflate > 0) {
+    var dx = Math.max(Math.abs(minX - cx), Math.abs(maxX - cx)), dy = Math.max(Math.abs(minY - cy), Math.abs(maxY - cy));
+    var radius = Math.sqrt(dx * dx + dy * dy) * inflate;
+    minX = cx - radius; maxX = cx + radius; minY = cy - radius; maxY = cy + radius;
+  }
+  // Leaving through either axis is enough, so the shorter exit wins.
+  var best = -1, need;
+  if (Math.abs(ux) > 1e-6) { need = Math.max(0, ux > 0 ? (width - minX) / ux : maxX / -ux); best = need; }
+  if (Math.abs(uy) > 1e-6) { need = Math.max(0, uy > 0 ? (height - minY) / uy : maxY / -uy); if (best < 0 || need < best) best = need; }
+  return best < 0 ? 0 : best + Math.max(0, margin);
 }
 
 export function libraryDirection(x: number, y: number, direction: string): [number, number] {
