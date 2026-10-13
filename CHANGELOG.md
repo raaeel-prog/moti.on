@@ -3,7 +3,8 @@
 - 108 receitas próprias de texto, incluindo 20 com 3D real por segmento; entrada, saída e efeito contínuo independentes em metadata v3.
 - Comandos de ajuste/reset/remoção do efeito, migração durante edição, preflight de agrupamento e rollback. Source Text e estilos permanecem editáveis.
 - Preview interativo editável, filtros 2D/3D/família e 108 vídeos + 108 posters originais renderizados no AE. Carregamento sob demanda, scrub, pausa e descarte de mídia.
-- Check após correção 2.393/2.393; AE 26.5x89: 108 aplicações, oito fixtures de lifecycle e um Undo real PASS. Browser PT/EN em 280/360/480/720 px PASS.
+- Continuação: sliders nativos lidos como números, mantendo Point Controls vetoriais; elasticidade e assentamento agora respondem ao vivo. Cópia/reset de efeito e integração das correções de geometria do Momentum verificados.
+- Check integrado 2.420/2.420; AE 26.5x89: 108 aplicações, oito fixtures de lifecycle com cópia/reset, três comparações de pixels de sliders e 21 regressões de Momentum PASS. Undo real PASS em execução anterior; não repetido nesta continuação. Browser PT/EN em 280/360/480/720 px PASS.
 - Candidato local instalado: 264 hashes verificados e painel recarregado preservando o projeto aberto. Estudo nativo de 48 FFX BadFX, um preset instalado do Composer e quatro comparações locais por família. Inventário completo/fórmulas do Composer e distribuição assinada permanecem pendentes; ver `docs/implementation/text-presets-v3-delivery.md`.
 
 ## 2026-10-12 — Coleção Impulso: assentamento físico, saída do quadro e centro da transição

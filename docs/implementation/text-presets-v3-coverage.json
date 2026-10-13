@@ -16724,6 +16724,14 @@
       ],
       "nativeFormulaIdentification": "UNRESOLVED",
       "publicCatalog": "https://misterhorse.com/products/text-presets/42",
+      "publicCatalogVerified": "2026-10-13",
+      "publicCatalogCounts": {
+        "characters": 626,
+        "words": 392,
+        "lines": 253,
+        "effects": 143,
+        "total": 1414
+      },
       "opaqueProduct3300Mapping": "UNRESOLVED"
     }
   },
@@ -16732,9 +16740,34 @@
     "renderedVariants": 108,
     "lifecycleCases": 8,
     "uiUndo": "PASS",
-    "installation": "PASS",
-    "installationEvidence": "artifacts/text-presets/ae-text-v3-install-2026-10-13T21-20-23-927Z/ui-restored/installation-report.json",
-    "installedCandidateCommit": "e0dd457fed7cf0f18fcdafcac4d655536c28f812"
+    "lifecycleHostSha256": "af506d4a757ba4ce01e7367399b4cb9ff89bda1a441aa5ccffa56cd839372fee",
+    "liveControlRenders": [
+      {
+        "curve": "spring",
+        "key": "elasticity",
+        "status": "PASS",
+        "changedPixels": 8669,
+        "beforePixelSha256": "523eeed55cb3e571b1dbd62b2abfaebbeafd02302f8444f47ef0e6af88b02a99",
+        "afterPixelSha256": "9a89a93d09b3e8ca2792f2152d5b1efb20efe5ec764edc33316d1595eb7311ef"
+      },
+      {
+        "curve": "settle-wave",
+        "key": "settleAmount",
+        "status": "PASS",
+        "changedPixels": 1103,
+        "beforePixelSha256": "07b51c8ee8eb55542137602b326b38a06a2a0660a0af62efff60a7dee3505c6b",
+        "afterPixelSha256": "301d8bd0ceb352d9850125201e8a9e3ab81b669363898fd1ffd590a6a2c92ba0"
+      },
+      {
+        "curve": "settle-hop",
+        "key": "settleAmount",
+        "status": "PASS",
+        "changedPixels": 6396,
+        "beforePixelSha256": "07b51c8ee8eb55542137602b326b38a06a2a0660a0af62efff60a7dee3505c6b",
+        "afterPixelSha256": "50aa7a2c7ee7d4017bc3944f34799a39cc6829a4e491bcf05c89091b07ff0feb"
+      }
+    ],
+    "installation": "NOT RUN"
   },
   "recipes": [
     {
