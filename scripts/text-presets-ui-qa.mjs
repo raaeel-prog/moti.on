@@ -3,7 +3,9 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),client=path.join(root,'dist/after-effects-cep/client'),evidence=path.join(root,'artifacts/text-presets/ui-request-2026-10-13');
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),client=path.join(root,'dist/after-effects-cep/client');
+const evidenceArg=process.argv.find(arg=>arg.startsWith('--evidence='));
+const evidence=evidenceArg?path.resolve(root,evidenceArg.slice(11)):path.join(root,'artifacts/text-presets/ui-request-2026-10-13');
 await mkdir(client,{recursive:true});await mkdir(evidence,{recursive:true});
 await build({stdin:{contents:`import {createPresetGallery} from './apps/after-effects-cep/client/src/preset-gallery.ts';
 const nav={category:'text',query:'',scope:'all',scroll:0,selectedId:'builtin.motion.text-v3-characters-position-rise',selectionExpanded:false};window.qaCalls=[];window.qaNavigation=nav;
@@ -19,12 +21,12 @@ try{
     await page.setViewportSize({width,height});await page.goto(`http://127.0.0.1:4178/after-effects-cep/client/text-qa.html?locale=${locale}`);await page.waitForSelector('.ch-preset-card');
     const initial=await page.locator('.ch-preset-grid').evaluate(node=>node.getBoundingClientRect().height);
     if(await page.locator('.ch-preset-editor').isVisible()||await page.locator('.ch-preset-applybar').isVisible())throw Error('Restored preset opened the lower area');
-    for(const id of ['text-v3-characters-position-rise','text-v3-words-loop-wave','premium-glyph-constellation']){
+    for(const id of ['text-v3-characters-position-rise','text-v3-words-loop-wave','premium-glyph-constellation','text-v3-characters-combination-fold-ribbon-3d','text-v3-characters-loop-decode-spacing']){
       const card=page.locator(`[id="builtin.motion.${id}"]`);await card.locator('.ch-preset-preview').click();await page.waitForTimeout(200);
       const selectedGridHeight=await page.locator('.ch-preset-grid').evaluate(node=>node.getBoundingClientRect().height);
       await card.locator('.ch-preset-settings-trigger').scrollIntoViewIfNeeded();await page.waitForTimeout(100);await card.locator('.ch-preset-settings-trigger').click();
       const panel=page.locator('.ch-preset-settings-panel');
-      if(id.startsWith('text-v3-characters'))await panel.locator('select').filter({has:page.locator('option[value="settle-wave"]')}).selectOption('settle-wave',{force:true});
+      if(id==='text-v3-characters-position-rise'||id==='text-v3-characters-combination-fold-ribbon-3d')await panel.locator('select').filter({has:page.locator('option[value="settle-wave"]')}).selectOption('settle-wave',{force:true});
       await page.waitForTimeout(300);
       const row=await page.evaluate(()=>{
         const doc=globalThis.document,panel=doc.querySelector('.ch-preset-settings-panel'),body=panel.querySelector('.ch-preset-settings-body'),box=panel.getBoundingClientRect();

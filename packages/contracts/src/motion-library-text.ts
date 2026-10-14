@@ -196,6 +196,21 @@ const TYPOGRAPHY: readonly Variant[] = [
 ];
 
 const COMBINATIONS: readonly Variant[] = [
+  { id: "resolve-lift", family: "combination", pt: "Código em ascensão", en: "Rising code", config: {
+    position: [0, 90, 0], scale: [-38, -38, 0],
+    text: { reveal: "resolve", tracking: 26, blur: 3 }, easing: "velvet",
+    defaults: { durationFrames: 44, overlap: 74, seed: 71 }
+  } },
+  { id: "wiggly-lift", family: "combination", pt: "Chegada vibrante", en: "Lively arrival", config: {
+    position: [0, 105, 0], rotation: [0, 0, -8], scale: [-50, -50, 0], waveform: "wiggle",
+    text: { tracking: 8, blur: 2 }, easing: "glide",
+    defaults: { durationFrames: 44, overlap: 82, seed: 47 }
+  } },
+  { id: "fold-ribbon-3d", family: "combination", pt: "Dobra em sequência 3D", en: "3D folding sequence", config: {
+    position: [0, 65, -160], rotation: [-75, 35, -8], scale: [-32, -32, -32],
+    text: { dimension: "3d", pivot: [0, -40, 0], tracking: 18, blur: 4, order: "edges-in" }, easing: "velvet",
+    defaults: { durationFrames: 44, overlap: 76 }
+  } },
   { id: "lift-turn", family: "combination", pt: "Subida em torção", en: "Twisting lift", config: {
     position: [0, 100, 0], rotation: [0, 0, -28], scale: [-65, -65, 0],
     text: { tracking: 32, blur: 5, order: "center-out", pivot: [0, -25, 0] }, easing: "spring",
@@ -211,6 +226,18 @@ const COMBINATIONS: readonly Variant[] = [
 /** Continuous recipes use independent controls and no IN/OUT markers. Amplitudes
  * are intentionally restrained to keep readable copy during the entire layer. */
 const EFFECTS: readonly (Variant & { unit: Unit })[] = [
+  { unit: "characters", id: "decode-spacing", family: "loop", pt: "Decodificação e respiro", en: "Decode and breathe", config: {
+    scale: [2, 2, 0], text: { decode: true, tracking: 16 },
+    defaults: { speed: 45, seed: 83, intensity: 65 }
+  } },
+  { unit: "words", id: "sway-spacing", family: "loop", pt: "Ondulação tipográfica", en: "Typographic ripple", config: {
+    position: [10, 8, 0], rotation: [0, 0, 3], text: { tracking: 8, pivot: [0, -16, 0] },
+    waveform: "wiggle", defaults: { speed: 40 }
+  } },
+  { unit: "lines", id: "jiggle-scale", family: "loop", pt: "Vibração suave", en: "Gentle vibration", config: {
+    position: [0, 6, 0], rotation: [0, 0, 1.5], scale: [1.5, 1.5, 0],
+    waveform: "wiggle", defaults: { speed: 35, intensity: 80 }
+  } },
   { unit: "characters", id: "drift", family: "loop", pt: "Flutuação delicada", en: "Delicate float", config: {
     position: [0, 14, 0], defaults: { speed: 40 }
   } },

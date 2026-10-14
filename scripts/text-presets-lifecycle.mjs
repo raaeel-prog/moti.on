@@ -7,8 +7,12 @@ import {groupConditionalBranches,toAsciiExtendScript} from './build-extendscript
 import {verifyTextControlImages} from './text-controls-verify.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),evidence=path.join(root,'artifacts/text-presets');
 const controlImages=path.join(evidence,'live-control-images');await mkdir(controlImages,{recursive:true});
-const controlsOnly=process.argv.includes('--controls-only'),host=path.join(root,'dist/after-effects-cep/host/index.jsx').replaceAll('\\','/');
-const job={runId:randomUUID(),host,hostSha256:createHash('sha256').update(await readFile(host)).digest('hex'),report:path.join(evidence,controlsOnly?'ae-live-controls.json':'ae-lifecycle.json').replaceAll('\\','/'),controlImages:controlImages.replaceAll('\\','/'),controlsOnly};
+const controlsOnly=process.argv.includes('--controls-only'),legacyOnly=process.argv.includes('--legacy-only'),host=path.join(root,'dist/after-effects-cep/host/index.jsx').replaceAll('\\','/');
+const hostBytes=await readFile(host),executionHost=path.join(evidence,'lifecycle-host.jsx').replaceAll('\\','/');
+await writeFile(executionHost,hostBytes.toString('utf8').replace(/^#target aftereffects\r?\n/,''));
+const job={runId:randomUUID(),host:executionHost,sourceHost:host,hostSha256:createHash('sha256').update(hostBytes).digest('hex'),report:path.join(evidence,controlsOnly?'ae-live-controls.json':'ae-lifecycle.json').replaceAll('\\','/'),controlImages:controlImages.replaceAll('\\','/'),controlsOnly,legacyOnly};
+const legacyArg=process.argv.find(arg=>arg.startsWith('--legacy-host='));
+if(legacyArg&&!controlsOnly){const legacyBytes=await readFile(path.resolve(legacyArg.slice(14)));job.legacyHost=path.join(evidence,'lifecycle-legacy-host.jsx').replaceAll('\\','/');job.legacyHostSha256=createHash('sha256').update(legacyBytes).digest('hex');await writeFile(job.legacyHost,legacyBytes.toString('utf8').replace(/^#target aftereffects\r?\n/,''));}
 const script=path.join(evidence,'lifecycle-job.jsx');await writeFile(script,toAsciiExtendScript(groupConditionalBranches(`(function(){var job=${JSON.stringify(job)};\n${await readFile(new URL('./text-presets-lifecycle.jsx',import.meta.url),'utf8')}\n}());`),'lifecycle-job.jsx'));
 const child=spawn(path.join(process.env.MOTION_AE_DIRECTORY||'C:/Program Files/Adobe/Adobe After Effects 2026/Support Files','AfterFX.com'),['-m','-noui','-r',script],{windowsHide:true,stdio:'ignore'});console.log(`Isolated lifecycle PID ${child.pid}`);
 const timer=setTimeout(()=>child.kill(),600000);const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});clearTimeout(timer);

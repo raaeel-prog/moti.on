@@ -2,6 +2,7 @@
 var report={status:"RUNNING",runId:job.runId,hostVersion:app.version,hostSha256:job.hostSha256,userProjectGuard:false,cases:[]};
 function writeReport(){var f=File(job.report);f.encoding="UTF-8";if(!f.open("w"))throw Error(f.error);f.write(MotionJson.stringify(report));f.close();}
 function check(value,message){if(!value)throw Error(message);}
+function phaseState(phases){var result=[];for(var pi=0;pi<phases.length;pi++){var phase=MotionJson.parse(MotionJson.stringify(phases[pi]));delete phase.controls;result.push(phase);}return MotionJson.stringify(result);}
 function command(id,args){return MotionJson.parse(MotionAE.dispatch(MotionJson.stringify({protocolVersion:MotionContracts.PROTOCOL_VERSION,requestId:"lifecycle-"+report.cases.length+"-"+id,command:"ae.presets."+id,args:args||{},context:{host:"after-effects",hostVersion:app.version,locale:"en-US"},options:{preserveSelection:true}})));}
 function apply(id,phase){var response=command("apply",{presetId:id,phase:phase||"in",direction:"preset",durationFrames:30,intensity:100,staggerFrames:2,unit:"preset",easing:"preset",order:"preset",overlap:65,speed:50,elasticity:30,seed:17});check(response.ok,"Apply "+id+": "+MotionJson.stringify(response.error));}
 function inspect(){var r=command("inspect",{});check(r.ok&&r.data.state==="ready","Inspection not ready");return r.data;}
@@ -11,7 +12,7 @@ try{
   if(!app.project||app.project.numItems!==0||app.project.file){report.status="ABORTED_USER_PROJECT_GUARD";writeReport();return;}
   report.userProjectGuard=true;app.beginSuppressDialogs();
   var fixtures=[{name:"short",text:"M",fps:24},{name:"multiline",text:"A\u00e7\u00e3o\rMoti.on\rTexto",fps:30},{name:"paragraph",text:"Editable paragraph text with multiple lines and accents: \u00e1\u00e9\u00ed\u00f3\u00fa",fps:60,box:true},{name:"unicode",text:"Ol\u00e1 \ud83d\udc69\u200d\ud83d\udcbb \u4f60\u597d \u0627\u0644\u0639\u0631\u0628\u064a\u0629",fps:24000/1001},{name:"mixed-styles",text:"Moti.on styles",fps:30000/1001,mixed:true},{name:"parenting",text:"Parented editable text",fps:25,parent:true},{name:"user-animation",text:"Animated source text",fps:30,keys:true},{name:"3d",text:"Depth per character",fps:24,threeD:true}];
-  if(job.controlsOnly)fixtures=[];
+  if(job.controlsOnly||job.legacyOnly)fixtures=[];
   var i,f,comp,layer,source,doc,parent,state,before,phases,effect,signature,selection,originalApply,armed,response;
   for(i=0;i<fixtures.length;i++){
     f=fixtures[i];comp=app.project.items.addComp("Moti.on lifecycle "+f.name,640,360,1,6,f.fps);
@@ -39,15 +40,48 @@ try{
     if(f.parent)check(layer.parent.id===parent.id,"Parent changed");if(f.keys)check(layer.property("ADBE Transform Group").property("ADBE Position").numKeys===2,"User animation changed");
     report.cases.push({name:f.name,status:"PASS",frameRate:f.fps,sourcePreserved:true,selectionPreserved:true,independentComponents:true,copyEffect:true,resetEffect:true,partialFailureRollback:true});writeReport();
   }
+  if(job.legacyHost){
+    comp=app.project.items.addComp("Moti.on legacy text effect",640,360,1,6,30);layer=comp.layers.addText("Legacy editable text");comp.openInViewer();layer.selected=true;
+    $.evalFile(File(job.legacyHost));apply("text-v3-characters-position-rise","in");apply("text-v3-characters-fade-cascade","out");apply("text-v3-characters-loop-decode");
+    before=inspect();var legacyInstance=before.textEffect.instance,legacyPhases=phaseState(before.phases),legacyMarkers=layer.property("ADBE Marker").numKeys;
+    check(!MotionPresetPhases.metadata(layer).textEffect.meta.controls.seed,"Legacy fixture already has a live seed control");
+    $.evalFile(File(job.host));state=inspect();var legacyOptions=MotionJson.parse(MotionJson.stringify(state.textEffect.options));legacyOptions.seed=81;legacyOptions.speed=75;
+    var legacyComment=layer.comment,legacyCount=layer.property("ADBE Effect Parade").numProperties,legacyInspection=MotionJson.stringify(state);
+    originalApply=MotionPresetLibrary.applyLayer;armed=true;MotionPresetLibrary.applyLayer=function(plan){originalApply(plan);if(armed){armed=false;throw Error("Injected legacy migration failure");}};
+    try{response=command("text-effect-adjust",{target:state.target,presetId:state.textEffect.presetId,options:legacyOptions});}finally{MotionPresetLibrary.applyLayer=originalApply;}
+    var legacyAfterFailure=command("inspect",{});report.legacyRollback={commentPreserved:layer.comment===legacyComment,controlsBefore:legacyCount,controlsAfter:layer.property("ADBE Effect Parade").numProperties,stateAfter:legacyAfterFailure.data?legacyAfterFailure.data.state:null,inspectionPreserved:MotionJson.stringify(legacyAfterFailure.data)===legacyInspection};writeReport();
+    check(!response.ok,"Legacy injected failure did not reject");check(report.legacyRollback.commentPreserved&&report.legacyRollback.controlsAfter===legacyCount&&report.legacyRollback.inspectionPreserved,"Legacy failure did not restore the exact rig");state=inspect();
+    response=command("text-effect-adjust",{target:state.target,presetId:state.textEffect.presetId,options:legacyOptions});check(response.ok,"Legacy effect adjustment failed");state=inspect();
+    check(state.textEffect.instance===legacyInstance&&state.textEffect.options.seed===81&&state.textEffect.options.speed===75,"Legacy effect identity or controls lost");
+    check(phaseState(state.phases)===legacyPhases&&layer.property("ADBE Marker").numKeys===legacyMarkers,"Legacy edit changed IN/OUT");
+    for(var lp=0;lp<before.phases.length;lp++)for(var lc=0;lc<before.phases[lp].controls.length;lc++){var oldControl=before.phases[lp].controls[lc],matched=false;for(var nc=0;nc<state.phases[lp].controls.length;nc++)if(MotionJson.stringify(state.phases[lp].controls[nc])===MotionJson.stringify(oldControl))matched=true;check(matched,"Legacy phase control was lost");}
+    check(!!MotionPresetPhases.metadata(layer).textEffect.meta.controls.seed,"Legacy adjustment did not create Variation");
+    check(layer.property("ADBE Text Properties").property("ADBE Text Document").value.text==="Legacy editable text","Legacy edit changed source");
+    response=command("remove",{target:state.target});check(response.ok&&layer.property("ADBE Effect Parade").numProperties===0,"Legacy final removal failed");
+    report.cases.push({name:"legacy-v3-seed-control",status:"PASS",legacyHostSha256:job.legacyHostSha256,identityPreserved:true,phasesPreserved:true,markersPreserved:true,sourcePreserved:true,liveVariationCreated:true,partialFailureRollback:true});writeReport();
+  }
+  comp=app.project.items.addComp("Moti.on foreign metadata guard",640,360,1,4,30);layer=comp.layers.addText("Protected editable text");comp.openInViewer();layer.selected=true;apply("text-v3-characters-loop-drift");
+  var validComment=layer.comment,foreignRoot=MotionPresetPhases.metadata(layer),foreignControlCount=layer.property("ADBE Effect Parade").numProperties;
+  foreignRoot.slots.effect=foreignRoot.textEffect;delete foreignRoot.textEffect;layer.comment="[Moti.on.library.v3]"+encodeURIComponent(MotionJson.stringify(foreignRoot));var protectedComment=layer.comment;
+  response=command("phase-apply",{presetId:"text-v3-characters-position-rise",phase:"in",direction:"preset",durationFrames:30,intensity:100,staggerFrames:2,unit:"preset"});
+  check(!response.ok,"Foreign format was not rejected");
+  check(layer.comment===protectedComment&&layer.property("ADBE Effect Parade").numProperties===foreignControlCount&&layer.property("ADBE Marker").numKeys===0,"Foreign format rejection mutated the rig");
+  layer.comment=validComment;state=inspect();response=command("remove",{target:state.target});check(response.ok,"Foreign fixture cleanup failed");
+  report.cases.push({name:"foreign-v3-format",status:"PASS",commentPreserved:true,controlsPreserved:true,markersPreserved:true});writeReport();
   report.liveControls=[];
   if(job.controlImages){
-    var controlFixtures=[{curve:"spring",key:"elasticity",first:0,last:100,time:.28},{curve:"settle-wave",key:"settleAmount",first:0,last:80,time:.78},{curve:"settle-hop",key:"settleAmount",first:0,last:80,time:.78}];
+    var controlFixtures=[{curve:"spring",key:"elasticity",first:0,last:100,time:.28},{curve:"settle-wave",key:"settleAmount",first:0,last:80,time:.78},{curve:"settle-hop",key:"settleAmount",first:0,last:80,time:.78},{curve:"decode-speed",key:"speed",first:100,last:50,time:.57,continuous:true},{curve:"decode-seed",key:"seed",first:17,last:81,time:.57,continuous:true}];
     for(i=0;i<controlFixtures.length;i++){
       var cf=controlFixtures[i];comp=app.project.items.addComp("Moti.on live text "+cf.curve,640,360,1,4,30);layer=comp.layers.addText("MOTION");source=layer.property("ADBE Text Properties").property("ADBE Text Document");doc=source.value;doc.font="ArialMT";doc.fontSize=64;doc.fillColor=[1,1,1];doc.justification=ParagraphJustification.CENTER_JUSTIFY;source.setValue(doc);layer.property("ADBE Transform Group").property("ADBE Position").setValue([320,180]);comp.openInViewer();layer.selected=true;
-      var controlArgs={presetId:"text-v3-characters-position-rise",phase:"in",direction:"preset",durationFrames:30,intensity:100,staggerFrames:0,unit:"all",easing:cf.curve,settleCount:3,settleDamping:50};controlArgs[cf.key]=cf.first;response=command("phase-apply",controlArgs);check(response.ok,"Live text control apply failed");var liveRoot=MotionPresetPhases.metadata(layer),liveName=liveRoot.slots["in"].meta.controls[cf.key],liveControl=null,liveGroup=layer.property("ADBE Effect Parade"),ci;
-      for(ci=1;ci<=liveGroup.numProperties;ci++){var candidateControl=liveGroup.property(ci);if(candidateControl.name===liveName){liveControl=candidateControl.property(1);break;}}check(liveControl,"Owned live control not found");var beforeImage=job.controlImages+"/"+cf.curve+"-before.png",afterImage=job.controlImages+"/"+cf.curve+"-after.png";
+      var controlArgs={presetId:cf.continuous?"text-v3-characters-loop-decode":"text-v3-characters-position-rise",phase:"in",direction:"preset",durationFrames:30,intensity:100,staggerFrames:0,unit:"all",easing:cf.continuous?"preset":cf.curve,settleCount:3,settleDamping:50,speed:100,seed:17};controlArgs[cf.key]=cf.first;response=command(cf.continuous?"apply":"phase-apply",controlArgs);check(response.ok,"Live text control apply failed");var liveRoot=MotionPresetPhases.metadata(layer),liveMeta=cf.continuous?liveRoot.textEffect.meta:liveRoot.slots["in"].meta,liveName=liveMeta.controls[cf.key],liveControl=null,liveGroup=layer.property("ADBE Effect Parade"),ci;
+      var liveNames=[];for(ci=1;ci<=liveGroup.numProperties;ci++){var candidateControl=liveGroup.property(ci);liveNames.push(candidateControl.name);if(candidateControl.name===liveName){liveControl=candidateControl.property(1);break;}}check(liveControl,"Owned live control not found: "+cf.curve+" / "+liveName+" / "+liveNames.join(" | "));var beforeImage=job.controlImages+"/"+cf.curve+"-before.png",afterImage=job.controlImages+"/"+cf.curve+"-after.png";
       comp.saveFrameToPng(cf.time,File(beforeImage));liveControl.setValue(cf.last);comp.saveFrameToPng(cf.time,File(afterImage));check(source.value.text==="MOTION","Slider changed editable source text");report.liveControls.push({curve:cf.curve,key:cf.key,first:cf.first,last:cf.last,time:cf.time,before:beforeImage,after:afterImage,status:"AWAITING_IMAGE_COMPARISON"});writeReport();
     }
+    state=inspect();response=command("text-effect-action",{target:state.target,action:"remove"});check(response.ok,"Decode removal failed before zero-intensity comparison");
+    var zeroBefore=job.controlImages+"/decode-zero-before.png",zeroAfter=job.controlImages+"/decode-zero-after.png";
+    comp.saveFrameToPng(.57,File(zeroBefore));layer.selected=true;controlArgs.intensity=0;response=command("apply",controlArgs);check(response.ok,"Zero-intensity decode apply failed: "+MotionJson.stringify(response.error));comp.saveFrameToPng(.57,File(zeroAfter));
+    check(source.value.text==="MOTION"&&layer.property("ADBE Marker").numKeys===0,"Decode zero intensity changed source or added a marker");
+    report.liveControls.push({curve:"decode-zero",key:"intensity",first:0,last:0,time:.57,before:zeroBefore,after:zeroAfter,expectedIdentical:true,status:"AWAITING_IMAGE_COMPARISON"});writeReport();
   }
   report.undo={status:"NOT RUN",reason:"API fixtures exercise production undo grouping; one user Undo requires an interactive Adobe check."};
   report.status="PASS";writeReport();app.project.close(CloseOptions.DO_NOT_SAVE_CHANGES);app.endSuppressDialogs(false);app.quit();

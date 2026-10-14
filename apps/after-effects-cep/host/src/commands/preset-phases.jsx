@@ -16,6 +16,8 @@
     var text=String(layer.comment||""),tag=text.indexOf(TAG)>=0?TAG:LEGACY_TAG,at=text.indexOf(tag);if(at<0)return null;
     var r=clone(MotionJson.parse(decodeURIComponent(text.substring(at+tag.length).split("\n")[0]||"")));
     if(!r||(r.version!==2&&r.version!==3)||r.version!== (tag===TAG?3:2)||typeof r.instance!=="string"||r.instance.length>128||!/^[0-9-]+$/.test(r.instance)||typeof r.was3D!=="boolean"||!r.slots||!(r.shared instanceof Array)||r.shared.length>6)throw new Error("Identidade das fases inválida.");
+    // A parallel rig format uses slots.effect; never edit it as textEffect.
+    if(r.slots.effect)throw new Error("Este rig usa outro formato de efeito. Recarregue a atualizacao que o criou antes de editar.");
     var roles=r.version===3?["in","out","effect"]:ROLES;
     for(var i=0;i<roles.length;i++){var role=roles[i],s=role==="effect"?r.textEffect:r.slots[role];if(!s)continue;
       if(!s.meta||!lib.definition({presetId:s.presetId})||s.meta.presetId!==s.presetId||(role!=="effect"&&s.meta.markerInstance!==r.instance)||lib.validate(s.meta.options))throw new Error("Receita da fase inválida.");
@@ -107,6 +109,35 @@
       p.valueAtTime(Math.max(layer.inPoint,Math.min(layer.outPoint-layer.containingComp.frameDuration,layer.containingComp.time)),false);if(p.expressionError)throw new Error(p.expressionError);
     }
   }
+  // ROLLBACK_ONLY_BEGIN
+  /** Capture verified live DOM state, never expression source from metadata.
+   * @param {any} layer @param {any} root @returns {any} */
+  function captureExact(layer,root){
+    var state=/** @type {any} */ ({properties:[],effectNames:[]}),components=[],i,j,m,p;
+    if(root.textEffect)components.push(root.textEffect.meta);
+    for(i=0;i<ROLES.length;i++)if(root.slots[ROLES[i]])components.push(root.slots[ROLES[i]].meta);
+    for(i=0;i<root.shared.length;i++)state.properties.push(lib.snapshot(lib.locate(layer,root.shared[i].path)));
+    for(i=0;i<components.length;i++){m=components[i];
+      for(j=0;j<m.expressions.length;j++)state.properties.push(lib.snapshot(lib.locate(layer,m.expressions[j].path)));
+      for(j=0;j<m.effects.length;j++){var record=m.effects[j];state.effectNames.push(record.name);
+        if(record.matchName==="ADBE Slider Control"||record.matchName==="ADBE Point Control"){p=lib.child(layer.property("ADBE Effect Parade"),record.name).property(1);state.properties.push(lib.snapshot(p));}
+      }
+    }return state;
+  }
+  /** Restore the exact captured expressions/controls after rebuilding an older
+   * recipe, and discard controls introduced only by the unsuccessful upgrade.
+   * @param {any} layer @param {any} root @param {any} state */
+  function restoreExact(layer,root,state){
+    if(!state)return;lib.restore(layer,state.properties);
+    var components=[],i,j,k,record,known,control;
+    if(root.textEffect)components.push(root.textEffect.meta);
+    for(i=0;i<ROLES.length;i++)if(root.slots[ROLES[i]])components.push(root.slots[ROLES[i]].meta);
+    for(i=0;i<components.length;i++)for(j=components[i].effects.length-1;j>=0;j--){record=components[i].effects[j];known=false;
+      for(k=0;k<state.effectNames.length;k++)if(state.effectNames[k]===record.name)known=true;
+      if(!known&&record.matchName==="ADBE Slider Control"&&record.name.indexOf("Moti.on "+components[i].instance+" · ")===0){control=lib.child(layer.property("ADBE Effect Parade"),record.name);if(control)control.remove();}
+    }
+  }
+  // ROLLBACK_ONLY_END
   /** @param {any} layer @param {any} root @param {string} role @param {any} context @param {any[]} components @param {any[]} plans */
   function renderSlot(layer,root,role,context,components,plans){
     var s=role==="effect"?root.textEffect:root.slots[role],m=s.meta,p=lib.definition({presetId:s.presetId});if(role!=="effect")m.markerInstance=root.instance;
@@ -238,6 +269,10 @@
       for(keepRole=0;oldRoot&&keepRole<ROLES.length;keepRole++){var previousSlot=q.root.slots[ROLES[keepRole]],kept=previousSlot?lib.liveValues(q.layer,previousSlot.meta):null;if(kept)oldRoot.slots[ROLES[keepRole]].meta.keep=kept;}
       var root=q.root||{version:3,sharedVersion:2,instance:q.rootId,was3D:q.old?q.old.was3D:q.was3D,shared:[],slots:/** @type {any} */ ({})},components=/** @type {any[]} */ ([]),times={inTime:q.state.inTime,outTime:q.state.outTime};
       // Register recovery before legacy removal or any other mutation.
+      // ROLLBACK_STATE_BEGIN
+      if(oldRoot)q.rollbackExact=captureExact(q.layer,oldRoot);
+      else if(q.old)q.rollbackExact=captureExact(q.layer,{textEffect:{meta:q.old},slots:{},shared:[]});
+      // ROLLBACK_STATE_END
       done.push({q:q,root:root,oldRoot:oldRoot});migrate(q,root);
       if(action==="remove-all"){if(root.textEffect){lib.removeLayer(q.layer,root.textEffect.meta,true);delete root.textEffect;}for(var rr=0;rr<ROLES.length;rr++)if(root.slots[ROLES[rr]]){lib.removeLayer(q.layer,root.slots[ROLES[rr]].meta,true);delete root.slots[ROLES[rr]];}times={inTime:null,outTime:null};}
       else if(isEffect){var effectPrior=root.textEffect;if(baseAction==="action"&&args.action==="remove"){lib.removeLayer(q.layer,effectPrior.meta,true);delete root.textEffect;}else{var effectValues=baseAction==="apply"?clone(args):baseAction==="adjust"?clone(args.options):defaults(effectPrior.presetId,"both"),effectId=baseAction==="action"?effectPrior.presetId:args.presetId;effectValues.presetId=effectId;if(effectPrior)lib.removeLayer(q.layer,effectPrior.meta,true);root.textEffect=newSlot(root,"effect",effectId,effectValues);}}
@@ -257,8 +292,8 @@
     }}catch(problem){var failed=false;
       for(i=plans.length-1;i>=0;i--){try{var plan=plans[i];lib.restore(plan.layer,plan.snapshots);for(var j=plan.created.length-1;j>=0;j--){var item=plan.created[j],g=lib.locate(plan.layer,item.group),e=lib.child(g,item.name);if(e)e.remove();}}catch(partialError){failed=true;}}
       for(i=done.length-1;i>=0;i--)try{var d=/** @type {any} */ (done[i]);erase(d.q.layer,d.root);d.q.layer.comment=d.q.comment;d.q.layer.threeDLayer=d.q.was3D;if(typeof d.q.perChar3D==="boolean")d.q.layer.threeDPerChar=d.q.perChar3D;var gp=groupingProperty(d.q.layer);if(gp&&d.q.grouping!==null)gp.setValue(d.q.grouping);
-        if(d.oldRoot){configureText(d.q.layer,d.oldRoot);components=[];if(d.oldRoot.textEffect)renderSlot(d.q.layer,d.oldRoot,"effect",context,components,[]);for(r=0;r<ROLES.length;r++)if(d.oldRoot.slots[ROLES[r]])renderSlot(d.q.layer,d.oldRoot,ROLES[r],context,components,[]);combine(d.q.layer,d.oldRoot,components);lib.restoreMarkers(d.q.layer,d.oldRoot,d.q.markers);d.q.layer.comment=d.q.comment;}
-        else if(d.q.old){var m=d.q.old;lib.applyLayer({layer:d.q.layer,comp:prepared.comp,p:lib.definition({presetId:m.presetId}),args:m.options,meta:m,created:[],snapshots:[],locale:context.locale||"pt-BR",rect:d.q.layer.sourceRectAtTime((d.q.layer.inPoint+d.q.layer.outPoint)/2,false)});lib.restoreMarkers(d.q.layer,m,d.q.markers);d.q.layer.comment=d.q.comment;}
+        if(d.oldRoot){configureText(d.q.layer,d.oldRoot);components=[];if(d.oldRoot.textEffect)renderSlot(d.q.layer,d.oldRoot,"effect",context,components,[]);for(r=0;r<ROLES.length;r++)if(d.oldRoot.slots[ROLES[r]])renderSlot(d.q.layer,d.oldRoot,ROLES[r],context,components,[]);combine(d.q.layer,d.oldRoot,components);lib.restoreMarkers(d.q.layer,d.oldRoot,d.q.markers);restoreExact(d.q.layer,d.oldRoot,d.q.rollbackExact);d.q.layer.comment=d.q.comment;}
+        else if(d.q.old){var m=d.q.old;lib.applyLayer({layer:d.q.layer,comp:prepared.comp,p:lib.definition({presetId:m.presetId}),args:m.options,meta:m,created:[],snapshots:[],locale:context.locale||"pt-BR",rect:d.q.layer.sourceRectAtTime((d.q.layer.inPoint+d.q.layer.outPoint)/2,false)});lib.restoreMarkers(d.q.layer,m,d.q.markers);restoreExact(d.q.layer,{textEffect:{meta:m},slots:{},shared:[]},d.q.rollbackExact);d.q.layer.comment=d.q.comment;}
       }catch(rollbackError){failed=true;}
       if(failed){var failure=/** @type {any} */ (new Error("Falha ao restaurar as fases; use Desfazer."));failure.motionCode=MotionContracts.ERROR.ROLLBACK_FAILED;throw failure;}throw problem;
     }return {changed:true,data:{appliedCount:prepared.batch.length,phase:args.phase},warnings:[]};

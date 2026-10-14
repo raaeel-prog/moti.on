@@ -1,4 +1,4 @@
-import { cameraImpactSample, libraryDirection, libraryEase, libraryOffscreenDistance, libraryTiming, libraryWave, libraryOrder, libraryStudioTiming, librarySequence, libraryChoreography, librarySignatureEnvelope, librarySignatureGlyph, librarySignatureVelocity, type MotionLibraryOptions, type MotionLibraryPreset } from "@motion/contracts";
+import { cameraImpactSample, libraryDirection, libraryEase, libraryOffscreenDistance, libraryTiming, libraryWave, libraryOrder, libraryStudioTiming, librarySequence, libraryChoreography, librarySignatureEnvelope, librarySignatureGlyph, librarySignatureVelocity, libraryTextDecode, type MotionLibraryOptions, type MotionLibraryPreset } from "@motion/contracts";
 
 /** Card geometry: a 320x180 frame with the layer glyph at rest at (160, 98),
  * spanning x -36..36 and y -35..22 around it. */
@@ -400,7 +400,18 @@ export function paintLibraryPreview(svg: SVGSVGElement, preset: MotionLibraryPre
     }
     const g = node("g", { transform: `${previewPlaneMatrix(s, baseX, baseY, textMode ? preset.text.pivot : undefined)} skewX(${preset.text.skew * s.weight * options.intensity / 100})`, filter: preset.effect === "blur" || preset.effect === "blur-wave" || preset.effect === "turbulent" || (preset.effect === "native-glitch" && native.displacement > 0) ? `url(#${filterId})` : "none" }, fo);
     let label = values[i] ?? "";
-    if (preset.text.decode && (preset.mode !== "transition" || Math.abs(s.weight) > .02)) label = Array.from(label).map((c, j) => c === " " ? c : String.fromCharCode(65 + Math.abs(Math.floor(Math.sin(Math.floor(time * 18) * 7.7 + (i + j) * 11.3) * 1000)) % 26)).join("");
+    if (preset.text.decode && preset.collection === "text" && options.intensity > 0) {
+      const seed = options.seed ?? preset.defaults?.seed ?? 17, count = segment?.count ?? values.length;
+      const order = options.order && options.order !== "preset" ? options.order : preset.text.order ?? "forward";
+      const raw = unit === "all" ? 0 : segment?.index ?? i;
+      const index = order === "random" && count > 1 ? libraryOrder(raw, count, seed) : librarySequence(raw, count, order);
+      const age = time * Math.max(25, Math.min(200, options.speed ?? preset.defaults?.speed ?? 100)) / 100;
+      const offset = Math.round(libraryTextDecode(age, index, seed) * options.intensity / 100 * (preset.mode === "transition" ? Math.max(0, Math.min(1, s.weight)) : 1));
+      label = Array.from(label).map(c => {
+        const base = /[A-Z]/.test(c) ? 65 : /[a-z]/.test(c) ? 97 : null;
+        return base === null ? c : String.fromCharCode(base + ((c.charCodeAt(0) - base + offset) % 26 + 26) % 26);
+      }).join("");
+    } else if (preset.text.decode && preset.collection !== "text" && (preset.mode !== "transition" || Math.abs(s.weight) > .02)) label = Array.from(label).map((c, j) => c === " " ? c : String.fromCharCode(65 + Math.abs(Math.floor(Math.sin(Math.floor(time * 18) * 7.7 + (i + j) * 11.3) * 1000)) % 26)).join("");
     if ((preset.text.reveal === "resolve" || preset.text.reveal === "roll") && preset.mode === "transition" && options.intensity > 0) {
       // The host's Character Offset: letters advance within A–Z and keep their case.
       const offset = librarySignatureGlyph(preset.text.reveal, s.progress, s.weight, i, options.seed ?? preset.defaults?.seed ?? 17);

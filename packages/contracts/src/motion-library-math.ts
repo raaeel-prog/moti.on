@@ -131,6 +131,13 @@ export function librarySignatureGlyph(kind: string, progress: number, weight: nu
   return 1 + Math.floor(h * 25);
 }
 
+/** Original stepped Character Offset. age is already scaled by the live Speed
+ * control; the same unit index and seed drive the host and gallery thumbnail. */
+export function libraryTextDecode(age: number, index: number, seed: number): number {
+  var tick = Math.floor(Math.max(0, age) * 18);
+  return Math.round(Math.sin(tick * 7.7 + (index + 1) * 11.3 + (seed - 17) * .37) * 30);
+}
+
 export function libraryTiming(time: number, start: number, end: number, duration: number,
   phase: string, index: number, count: number, stagger: number): [number, number] {
   var d = Math.max(0.0001, Math.min(duration, (end - start) / (phase === "both" ? 2 : 1)));

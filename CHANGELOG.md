@@ -1,3 +1,10 @@
+## 2026-10-14 — Continuação dos presets de texto
+
+- Acrescenta 12 receitas autorais de texto, totalizando 120: decode combinado, acomodação irregular, dobradura 3D e três Effects.
+- Corrige Velocidade e Variação do decode no host e nas miniaturas, com prova de pixels e intensidade zero.
+- Restaura exatamente controles e expressões verificadas quando uma migração falha; protege o formato alternativo de efeito v3 antes da edição.
+- Registra 25 famílias instaladas do Composer aplicadas e comparadas, 120 renders próprios, dez fixtures de lifecycle e 50 cenários de interface. Mantém a galeria e a simulação removida.
+
 ## 2026-10-13 — Presets: controles compactos
 - Removida a simulação interativa do navegador e editor de presets aplicados, incluindo texto de amostra, alternância Render AE e controles da prévia ampliada. As receitas e miniaturas continuam na biblioteca.
 - Área inferior recolhida ao abrir, revelada por seleção e recolhível sem perder os ajustes. Popover usa a altura disponível e duas colunas quando cabem; controles de refinamento acessíveis sem outra seção.

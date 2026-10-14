@@ -16701,7 +16701,7 @@
         "Ease Position & Rotate & Scale Y 1",
         "Ease Position & Rotate & Scale Randomly 2"
       ],
-      "visibleItemsScope": "Text Presets root selection observed in installed UI; not a recursive package inventory.",
+      "visibleItemsScope": "Historical first UI observation; recursive installed inventory recorded separately in installedCatalog.",
       "observedPreset": "Ease Fade Separately 3 / From Start / In",
       "markers": [
         {
@@ -16732,15 +16732,202 @@
         "effects": 143,
         "total": 1414
       },
-      "opaqueProduct3300Mapping": "UNRESOLVED"
+      "opaqueProduct3300Mapping": "Text leaves explicitly identify productId 3300; other containers remain unclassified.",
+      "installedCatalog": {
+        "observedAt": "2026-10-14T01:16:10.467Z",
+        "source": "Composer native loopback Content.getItemTree, read only",
+        "host": "After Effects 2026 26.5x89",
+        "treeSha256": "e45319e2cdba97a220ed2a211d66443c4de795af1e5ad43615eae2b5709522bd",
+        "itemLeaves": 81,
+        "variantGroups": 27,
+        "directRecipes": 21,
+        "uniqueItemIds": 81,
+        "productIds": [
+          "3300"
+        ],
+        "areas": [
+          {
+            "name": "Transitions - Characters",
+            "leaves": 33,
+            "families": [
+              {
+                "name": "Fade",
+                "leaves": 4
+              },
+              {
+                "name": "Position & Rotate & Scale",
+                "leaves": 12
+              },
+              {
+                "name": "Position & Scale",
+                "leaves": 3
+              },
+              {
+                "name": "Scale",
+                "leaves": 10
+              },
+              {
+                "name": "Scale & Tracking",
+                "leaves": 4
+              }
+            ]
+          },
+          {
+            "name": "Transitions - Words",
+            "leaves": 23,
+            "families": [
+              {
+                "name": "Decode & Position & Scale",
+                "leaves": 2
+              },
+              {
+                "name": "Position",
+                "leaves": 8
+              },
+              {
+                "name": "Position & Mask",
+                "leaves": 2
+              },
+              {
+                "name": "Position & Rotate",
+                "leaves": 4
+              },
+              {
+                "name": "Position & Rotate & Scale",
+                "leaves": 1
+              },
+              {
+                "name": "Position & Scale",
+                "leaves": 3
+              },
+              {
+                "name": "Scale",
+                "leaves": 3
+              }
+            ]
+          },
+          {
+            "name": "Transitions - Lines",
+            "leaves": 17,
+            "families": [
+              {
+                "name": "Decode & Fade",
+                "leaves": 2
+              },
+              {
+                "name": "Fade",
+                "leaves": 1
+              },
+              {
+                "name": "Fade & Position",
+                "leaves": 3
+              },
+              {
+                "name": "Position",
+                "leaves": 8
+              },
+              {
+                "name": "Position & Scale",
+                "leaves": 1
+              },
+              {
+                "name": "Scale & Tracking",
+                "leaves": 2
+              }
+            ]
+          },
+          {
+            "name": "Effects",
+            "leaves": 8,
+            "families": [
+              {
+                "name": "Decode",
+                "leaves": 1
+              },
+              {
+                "name": "Decode & Scale & Tracking",
+                "leaves": 1
+              },
+              {
+                "name": "Fade",
+                "leaves": 1
+              },
+              {
+                "name": "Jiggling",
+                "leaves": 2
+              },
+              {
+                "name": "Position & Rotate",
+                "leaves": 1
+              },
+              {
+                "name": "Position & Rotate & Scale",
+                "leaves": 1
+              },
+              {
+                "name": "Position & Rotate & Tracking",
+                "leaves": 1
+              }
+            ]
+          }
+        ],
+        "formulaObservation": "Native family properties, selectors, easing and controls observed; exact internal formulas not reconstructed.",
+        "boundary": "Installed subset only. Node names do not prove easing, formulas, selector or 3D implementation. No commercial media or formulas copied.",
+        "localPreviewFiles": 81,
+        "itemsWithLocalContainer": 81,
+        "familyApplicationStatus": "PASS",
+        "familyApplicationReport": "C:/dev/Moti.on-text-presets/artifacts/text-presets/continuation-2026-10-14/composer-native/family-coverage.json"
+      },
+      "installedFamilyApplications": {
+        "status": "PASS",
+        "hostVersion": "26.5x89",
+        "cases": 28,
+        "representatives": 26,
+        "coveredFamilies": 25,
+        "installedFamilyCount": 25,
+        "families": [
+          "Effects/Decode",
+          "Effects/Decode & Scale & Tracking",
+          "Effects/Fade",
+          "Effects/Jiggling",
+          "Effects/Position & Rotate",
+          "Effects/Position & Rotate & Scale",
+          "Effects/Position & Rotate & Tracking",
+          "Transitions - Characters/Fade",
+          "Transitions - Characters/Position & Rotate & Scale",
+          "Transitions - Characters/Position & Scale",
+          "Transitions - Characters/Scale",
+          "Transitions - Characters/Scale & Tracking",
+          "Transitions - Lines/Decode & Fade",
+          "Transitions - Lines/Fade",
+          "Transitions - Lines/Fade & Position",
+          "Transitions - Lines/Position",
+          "Transitions - Lines/Position & Scale",
+          "Transitions - Lines/Scale & Tracking",
+          "Transitions - Words/Decode & Position & Scale",
+          "Transitions - Words/Position",
+          "Transitions - Words/Position & Mask",
+          "Transitions - Words/Position & Rotate",
+          "Transitions - Words/Position & Rotate & Scale",
+          "Transitions - Words/Position & Scale",
+          "Transitions - Words/Scale"
+        ],
+        "sourceEditable": true,
+        "limits": [
+          "Native structural application observed; no internal formulas reconstructed.",
+          "Layer3D and perCharacter3D are distinct; matchNames ending3D do not establish3D mode.",
+          "Run3 stills use960x540 and are not equivalent to final previewfixture."
+        ],
+        "report": "artifacts/text-presets/continuation-2026-10-14/composer-native/family-coverage.json"
+      }
     }
   },
   "validation": {
-    "realApplications": 108,
-    "renderedVariants": 108,
-    "lifecycleCases": 8,
+    "realApplications": 120,
+    "renderedVariants": 120,
+    "lifecycleCases": 10,
     "uiUndo": "PASS",
-    "lifecycleHostSha256": "af506d4a757ba4ce01e7367399b4cb9ff89bda1a441aa5ccffa56cd839372fee",
+    "lifecycleHostSha256": "71b29b1060752d31befbcaf8cac40a79e2d9739990b7f6474ad9af96cec9a075",
     "liveControlRenders": [
       {
         "curve": "spring",
@@ -16748,7 +16935,8 @@
         "status": "PASS",
         "changedPixels": 8669,
         "beforePixelSha256": "523eeed55cb3e571b1dbd62b2abfaebbeafd02302f8444f47ef0e6af88b02a99",
-        "afterPixelSha256": "9a89a93d09b3e8ca2792f2152d5b1efb20efe5ec764edc33316d1595eb7311ef"
+        "afterPixelSha256": "9a89a93d09b3e8ca2792f2152d5b1efb20efe5ec764edc33316d1595eb7311ef",
+        "expectedIdentical": false
       },
       {
         "curve": "settle-wave",
@@ -16756,7 +16944,8 @@
         "status": "PASS",
         "changedPixels": 1103,
         "beforePixelSha256": "07b51c8ee8eb55542137602b326b38a06a2a0660a0af62efff60a7dee3505c6b",
-        "afterPixelSha256": "301d8bd0ceb352d9850125201e8a9e3ab81b669363898fd1ffd590a6a2c92ba0"
+        "afterPixelSha256": "301d8bd0ceb352d9850125201e8a9e3ab81b669363898fd1ffd590a6a2c92ba0",
+        "expectedIdentical": false
       },
       {
         "curve": "settle-hop",
@@ -16764,15 +16953,55 @@
         "status": "PASS",
         "changedPixels": 6396,
         "beforePixelSha256": "07b51c8ee8eb55542137602b326b38a06a2a0660a0af62efff60a7dee3505c6b",
-        "afterPixelSha256": "50aa7a2c7ee7d4017bc3944f34799a39cc6829a4e491bcf05c89091b07ff0feb"
+        "afterPixelSha256": "50aa7a2c7ee7d4017bc3944f34799a39cc6829a4e491bcf05c89091b07ff0feb",
+        "expectedIdentical": false
+      },
+      {
+        "curve": "decode-speed",
+        "key": "speed",
+        "status": "PASS",
+        "changedPixels": 5867,
+        "beforePixelSha256": "d58320d76c7f3a6e699671b4cf40c46ab75058255351fb77776b78209fe671f9",
+        "afterPixelSha256": "9df8d8fd851c20f6ad2b9318a6a509306368bd07765fa8bf8fd8cfb5ec69d184",
+        "expectedIdentical": false
+      },
+      {
+        "curve": "decode-seed",
+        "key": "seed",
+        "status": "PASS",
+        "changedPixels": 6016,
+        "beforePixelSha256": "d58320d76c7f3a6e699671b4cf40c46ab75058255351fb77776b78209fe671f9",
+        "afterPixelSha256": "825d0e737b5f63b09fe9b5cb880f004aae06aafad4360f391548f4a60f9f7612",
+        "expectedIdentical": false
+      },
+      {
+        "curve": "decode-zero",
+        "key": "intensity",
+        "status": "PASS",
+        "changedPixels": 0,
+        "beforePixelSha256": "07b51c8ee8eb55542137602b326b38a06a2a0660a0af62efff60a7dee3505c6b",
+        "afterPixelSha256": "07b51c8ee8eb55542137602b326b38a06a2a0660a0af62efff60a7dee3505c6b",
+        "expectedIdentical": true
       }
     ],
-    "installation": {
+    "installation": "NOT RUN",
+    "finalVerification": {
+      "report": "artifacts/text-presets/continuation-2026-10-14/final-verification.json",
       "status": "PASS",
-      "sourceCommit": "c4ba6eb0bd0143fcde5803defbd4a623000b65e9",
-      "files": 264,
-      "panel": "PASS",
-      "report": "C:/dev/Moti.on-text-presets/artifacts/text-presets/continuation-2026-10-13/installation-2026-10-13T22-47-10-644Z/installation-report.json"
+      "hostSha256": "71b29b1060752d31befbcaf8cac40a79e2d9739990b7f6474ad9af96cec9a075",
+      "renderedHostSha256": "266350a58ca26210fd50a16dee63b85d198e91925dc46324e1898f137d6ea390",
+      "renderProjectionSha256": "441c43e76a183bce94f4b1a01ce4dc8d6dac47547c9a5172d902b151bb23493c",
+      "renderProjectionEquivalent": true,
+      "projectionScope": "Fresh layers: excludes foreign metadata rejection and restoration of a prior rig. These cannot execute in authored fresh-layer previews. Final host separately exercised in 10 lifecycle cases, including exact old-rig rollback.",
+      "uiCases": 50,
+      "composerComparisonVideos": 25,
+      "legacyRollback": {
+        "commentPreserved": true,
+        "controlsBefore": 12,
+        "controlsAfter": 12,
+        "stateAfter": "ready",
+        "inspectionPreserved": true
+      }
     }
   },
   "recipes": [
@@ -18644,6 +18873,195 @@
       "nativeApplication": "PASS",
       "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-characters-decode-roll.mp4",
       "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-characters-decode-roll.jpg"
+    },
+    {
+      "id": "text-v3-characters-combination-resolve-lift",
+      "name": {
+        "pt-BR": "Texto · Código em ascensão · Caracteres",
+        "en-US": "Text · Rising code · Characters"
+      },
+      "unit": "characters",
+      "dimension": "2d",
+      "family": "combination",
+      "variant": "resolve-lift",
+      "mode": "transition",
+      "properties": {
+        "position": [
+          0,
+          90,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          -38,
+          -38,
+          0
+        ],
+        "fade": true,
+        "text": {
+          "unit": "characters",
+          "dimension": "2d",
+          "random": false,
+          "decode": false,
+          "tracking": 26,
+          "skew": 0,
+          "mask": false,
+          "order": "forward",
+          "blur": 3,
+          "reveal": "resolve"
+        },
+        "easing": "velvet",
+        "effect": "none",
+        "waveform": "none"
+      },
+      "defaults": {
+        "phase": "in",
+        "direction": "preset",
+        "unit": "preset",
+        "intensity": 100,
+        "elasticity": 30,
+        "overlap": 74,
+        "speed": 100,
+        "order": "preset",
+        "seed": 71,
+        "durationFrames": 44,
+        "staggerFrames": 2
+      },
+      "referenceCoverage": "Composer public family; original native AE implementation",
+      "nativeApplication": "PASS",
+      "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-characters-combination-resolve-lift.mp4",
+      "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-characters-combination-resolve-lift.jpg"
+    },
+    {
+      "id": "text-v3-characters-combination-wiggly-lift",
+      "name": {
+        "pt-BR": "Texto · Chegada vibrante · Caracteres",
+        "en-US": "Text · Lively arrival · Characters"
+      },
+      "unit": "characters",
+      "dimension": "2d",
+      "family": "combination",
+      "variant": "wiggly-lift",
+      "mode": "transition",
+      "properties": {
+        "position": [
+          0,
+          105,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          -8
+        ],
+        "scale": [
+          -50,
+          -50,
+          0
+        ],
+        "fade": true,
+        "text": {
+          "unit": "characters",
+          "dimension": "2d",
+          "random": false,
+          "decode": false,
+          "tracking": 8,
+          "skew": 0,
+          "mask": false,
+          "order": "forward",
+          "blur": 2
+        },
+        "easing": "glide",
+        "effect": "none",
+        "waveform": "wiggle"
+      },
+      "defaults": {
+        "phase": "in",
+        "direction": "preset",
+        "unit": "preset",
+        "intensity": 100,
+        "elasticity": 30,
+        "overlap": 82,
+        "speed": 100,
+        "order": "preset",
+        "seed": 47,
+        "durationFrames": 44,
+        "staggerFrames": 2
+      },
+      "referenceCoverage": "Composer public family; original native AE implementation",
+      "nativeApplication": "PASS",
+      "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-characters-combination-wiggly-lift.mp4",
+      "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-characters-combination-wiggly-lift.jpg"
+    },
+    {
+      "id": "text-v3-characters-combination-fold-ribbon-3d",
+      "name": {
+        "pt-BR": "Texto · Dobra em sequência 3D · Caracteres",
+        "en-US": "Text · 3D folding sequence · Characters"
+      },
+      "unit": "characters",
+      "dimension": "3d",
+      "family": "combination",
+      "variant": "fold-ribbon-3d",
+      "mode": "transition",
+      "properties": {
+        "position": [
+          0,
+          65,
+          -160
+        ],
+        "rotation": [
+          -75,
+          35,
+          -8
+        ],
+        "scale": [
+          -32,
+          -32,
+          -32
+        ],
+        "fade": true,
+        "text": {
+          "unit": "characters",
+          "dimension": "3d",
+          "random": false,
+          "decode": false,
+          "tracking": 18,
+          "skew": 0,
+          "mask": false,
+          "order": "edges-in",
+          "blur": 4,
+          "pivot": [
+            0,
+            -40,
+            0
+          ]
+        },
+        "easing": "velvet",
+        "effect": "none",
+        "waveform": "none"
+      },
+      "defaults": {
+        "phase": "in",
+        "direction": "preset",
+        "unit": "preset",
+        "intensity": 100,
+        "elasticity": 30,
+        "overlap": 76,
+        "speed": 100,
+        "order": "preset",
+        "seed": 17,
+        "durationFrames": 44,
+        "staggerFrames": 2
+      },
+      "referenceCoverage": "Composer public family; original native AE implementation",
+      "nativeApplication": "PASS",
+      "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-characters-combination-fold-ribbon-3d.mp4",
+      "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-characters-combination-fold-ribbon-3d.jpg"
     },
     {
       "id": "text-v3-characters-combination-lift-turn",
@@ -20647,6 +21065,195 @@
       "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-words-decode-roll.jpg"
     },
     {
+      "id": "text-v3-words-combination-resolve-lift",
+      "name": {
+        "pt-BR": "Texto · Código em ascensão · Palavras",
+        "en-US": "Text · Rising code · Words"
+      },
+      "unit": "words",
+      "dimension": "2d",
+      "family": "combination",
+      "variant": "resolve-lift",
+      "mode": "transition",
+      "properties": {
+        "position": [
+          0,
+          90,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          -38,
+          -38,
+          0
+        ],
+        "fade": true,
+        "text": {
+          "unit": "words",
+          "dimension": "2d",
+          "random": false,
+          "decode": false,
+          "tracking": 26,
+          "skew": 0,
+          "mask": false,
+          "order": "forward",
+          "blur": 3,
+          "reveal": "resolve"
+        },
+        "easing": "velvet",
+        "effect": "none",
+        "waveform": "none"
+      },
+      "defaults": {
+        "phase": "in",
+        "direction": "preset",
+        "unit": "preset",
+        "intensity": 100,
+        "elasticity": 30,
+        "overlap": 74,
+        "speed": 100,
+        "order": "preset",
+        "seed": 71,
+        "durationFrames": 44,
+        "staggerFrames": 4
+      },
+      "referenceCoverage": "Composer public family; original native AE implementation",
+      "nativeApplication": "PASS",
+      "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-words-combination-resolve-lift.mp4",
+      "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-words-combination-resolve-lift.jpg"
+    },
+    {
+      "id": "text-v3-words-combination-wiggly-lift",
+      "name": {
+        "pt-BR": "Texto · Chegada vibrante · Palavras",
+        "en-US": "Text · Lively arrival · Words"
+      },
+      "unit": "words",
+      "dimension": "2d",
+      "family": "combination",
+      "variant": "wiggly-lift",
+      "mode": "transition",
+      "properties": {
+        "position": [
+          0,
+          105,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          -8
+        ],
+        "scale": [
+          -50,
+          -50,
+          0
+        ],
+        "fade": true,
+        "text": {
+          "unit": "words",
+          "dimension": "2d",
+          "random": false,
+          "decode": false,
+          "tracking": 8,
+          "skew": 0,
+          "mask": false,
+          "order": "forward",
+          "blur": 2
+        },
+        "easing": "glide",
+        "effect": "none",
+        "waveform": "wiggle"
+      },
+      "defaults": {
+        "phase": "in",
+        "direction": "preset",
+        "unit": "preset",
+        "intensity": 100,
+        "elasticity": 30,
+        "overlap": 82,
+        "speed": 100,
+        "order": "preset",
+        "seed": 47,
+        "durationFrames": 44,
+        "staggerFrames": 4
+      },
+      "referenceCoverage": "Composer public family; original native AE implementation",
+      "nativeApplication": "PASS",
+      "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-words-combination-wiggly-lift.mp4",
+      "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-words-combination-wiggly-lift.jpg"
+    },
+    {
+      "id": "text-v3-words-combination-fold-ribbon-3d",
+      "name": {
+        "pt-BR": "Texto · Dobra em sequência 3D · Palavras",
+        "en-US": "Text · 3D folding sequence · Words"
+      },
+      "unit": "words",
+      "dimension": "3d",
+      "family": "combination",
+      "variant": "fold-ribbon-3d",
+      "mode": "transition",
+      "properties": {
+        "position": [
+          0,
+          65,
+          -160
+        ],
+        "rotation": [
+          -75,
+          35,
+          -8
+        ],
+        "scale": [
+          -32,
+          -32,
+          -32
+        ],
+        "fade": true,
+        "text": {
+          "unit": "words",
+          "dimension": "3d",
+          "random": false,
+          "decode": false,
+          "tracking": 18,
+          "skew": 0,
+          "mask": false,
+          "order": "edges-in",
+          "blur": 4,
+          "pivot": [
+            0,
+            -40,
+            0
+          ]
+        },
+        "easing": "velvet",
+        "effect": "none",
+        "waveform": "none"
+      },
+      "defaults": {
+        "phase": "in",
+        "direction": "preset",
+        "unit": "preset",
+        "intensity": 100,
+        "elasticity": 30,
+        "overlap": 76,
+        "speed": 100,
+        "order": "preset",
+        "seed": 17,
+        "durationFrames": 44,
+        "staggerFrames": 4
+      },
+      "referenceCoverage": "Composer public family; original native AE implementation",
+      "nativeApplication": "PASS",
+      "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-words-combination-fold-ribbon-3d.mp4",
+      "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-words-combination-fold-ribbon-3d.jpg"
+    },
+    {
       "id": "text-v3-words-combination-lift-turn",
       "name": {
         "pt-BR": "Texto · Subida em torção · Palavras",
@@ -22648,6 +23255,195 @@
       "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-lines-decode-roll.jpg"
     },
     {
+      "id": "text-v3-lines-combination-resolve-lift",
+      "name": {
+        "pt-BR": "Texto · Código em ascensão · Linhas",
+        "en-US": "Text · Rising code · Lines"
+      },
+      "unit": "lines",
+      "dimension": "2d",
+      "family": "combination",
+      "variant": "resolve-lift",
+      "mode": "transition",
+      "properties": {
+        "position": [
+          0,
+          90,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          -38,
+          -38,
+          0
+        ],
+        "fade": true,
+        "text": {
+          "unit": "lines",
+          "dimension": "2d",
+          "random": false,
+          "decode": false,
+          "tracking": 26,
+          "skew": 0,
+          "mask": false,
+          "order": "forward",
+          "blur": 3,
+          "reveal": "resolve"
+        },
+        "easing": "velvet",
+        "effect": "none",
+        "waveform": "none"
+      },
+      "defaults": {
+        "phase": "in",
+        "direction": "preset",
+        "unit": "preset",
+        "intensity": 100,
+        "elasticity": 30,
+        "overlap": 74,
+        "speed": 100,
+        "order": "preset",
+        "seed": 71,
+        "durationFrames": 44,
+        "staggerFrames": 6
+      },
+      "referenceCoverage": "Composer public family; original native AE implementation",
+      "nativeApplication": "PASS",
+      "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-lines-combination-resolve-lift.mp4",
+      "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-lines-combination-resolve-lift.jpg"
+    },
+    {
+      "id": "text-v3-lines-combination-wiggly-lift",
+      "name": {
+        "pt-BR": "Texto · Chegada vibrante · Linhas",
+        "en-US": "Text · Lively arrival · Lines"
+      },
+      "unit": "lines",
+      "dimension": "2d",
+      "family": "combination",
+      "variant": "wiggly-lift",
+      "mode": "transition",
+      "properties": {
+        "position": [
+          0,
+          105,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          -8
+        ],
+        "scale": [
+          -50,
+          -50,
+          0
+        ],
+        "fade": true,
+        "text": {
+          "unit": "lines",
+          "dimension": "2d",
+          "random": false,
+          "decode": false,
+          "tracking": 8,
+          "skew": 0,
+          "mask": false,
+          "order": "forward",
+          "blur": 2
+        },
+        "easing": "glide",
+        "effect": "none",
+        "waveform": "wiggle"
+      },
+      "defaults": {
+        "phase": "in",
+        "direction": "preset",
+        "unit": "preset",
+        "intensity": 100,
+        "elasticity": 30,
+        "overlap": 82,
+        "speed": 100,
+        "order": "preset",
+        "seed": 47,
+        "durationFrames": 44,
+        "staggerFrames": 6
+      },
+      "referenceCoverage": "Composer public family; original native AE implementation",
+      "nativeApplication": "PASS",
+      "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-lines-combination-wiggly-lift.mp4",
+      "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-lines-combination-wiggly-lift.jpg"
+    },
+    {
+      "id": "text-v3-lines-combination-fold-ribbon-3d",
+      "name": {
+        "pt-BR": "Texto · Dobra em sequência 3D · Linhas",
+        "en-US": "Text · 3D folding sequence · Lines"
+      },
+      "unit": "lines",
+      "dimension": "3d",
+      "family": "combination",
+      "variant": "fold-ribbon-3d",
+      "mode": "transition",
+      "properties": {
+        "position": [
+          0,
+          65,
+          -160
+        ],
+        "rotation": [
+          -75,
+          35,
+          -8
+        ],
+        "scale": [
+          -32,
+          -32,
+          -32
+        ],
+        "fade": true,
+        "text": {
+          "unit": "lines",
+          "dimension": "3d",
+          "random": false,
+          "decode": false,
+          "tracking": 18,
+          "skew": 0,
+          "mask": false,
+          "order": "edges-in",
+          "blur": 4,
+          "pivot": [
+            0,
+            -40,
+            0
+          ]
+        },
+        "easing": "velvet",
+        "effect": "none",
+        "waveform": "none"
+      },
+      "defaults": {
+        "phase": "in",
+        "direction": "preset",
+        "unit": "preset",
+        "intensity": 100,
+        "elasticity": 30,
+        "overlap": 76,
+        "speed": 100,
+        "order": "preset",
+        "seed": 17,
+        "durationFrames": 44,
+        "staggerFrames": 6
+      },
+      "referenceCoverage": "Composer public family; original native AE implementation",
+      "nativeApplication": "PASS",
+      "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-lines-combination-fold-ribbon-3d.mp4",
+      "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-lines-combination-fold-ribbon-3d.jpg"
+    },
+    {
       "id": "text-v3-lines-combination-lift-turn",
       "name": {
         "pt-BR": "Texto · Subida em torção · Linhas",
@@ -22778,6 +23574,194 @@
       "nativeApplication": "PASS",
       "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-lines-combination-focus-spacing.mp4",
       "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-lines-combination-focus-spacing.jpg"
+    },
+    {
+      "id": "text-v3-characters-loop-decode-spacing",
+      "name": {
+        "pt-BR": "Texto · Decodificação e respiro · Caracteres",
+        "en-US": "Text · Decode and breathe · Characters"
+      },
+      "unit": "characters",
+      "dimension": "2d",
+      "family": "loop",
+      "variant": "decode-spacing",
+      "mode": "continuous",
+      "properties": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          2,
+          2,
+          0
+        ],
+        "fade": false,
+        "text": {
+          "unit": "characters",
+          "dimension": "2d",
+          "random": false,
+          "decode": true,
+          "tracking": 16,
+          "skew": 0,
+          "mask": false,
+          "order": "forward",
+          "blur": 0
+        },
+        "easing": "glide",
+        "effect": "none",
+        "waveform": "cosine"
+      },
+      "defaults": {
+        "phase": "in",
+        "direction": "preset",
+        "unit": "preset",
+        "intensity": 65,
+        "elasticity": 30,
+        "overlap": 65,
+        "speed": 45,
+        "order": "preset",
+        "seed": 83,
+        "durationFrames": 30,
+        "staggerFrames": 0
+      },
+      "referenceCoverage": "Composer public family; original native AE implementation",
+      "nativeApplication": "PASS",
+      "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-characters-loop-decode-spacing.mp4",
+      "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-characters-loop-decode-spacing.jpg"
+    },
+    {
+      "id": "text-v3-words-loop-sway-spacing",
+      "name": {
+        "pt-BR": "Texto · Ondulação tipográfica · Palavras",
+        "en-US": "Text · Typographic ripple · Words"
+      },
+      "unit": "words",
+      "dimension": "2d",
+      "family": "loop",
+      "variant": "sway-spacing",
+      "mode": "continuous",
+      "properties": {
+        "position": [
+          10,
+          8,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          3
+        ],
+        "scale": [
+          0,
+          0,
+          0
+        ],
+        "fade": false,
+        "text": {
+          "unit": "words",
+          "dimension": "2d",
+          "random": false,
+          "decode": false,
+          "tracking": 8,
+          "skew": 0,
+          "mask": false,
+          "order": "forward",
+          "blur": 0,
+          "pivot": [
+            0,
+            -16,
+            0
+          ]
+        },
+        "easing": "glide",
+        "effect": "none",
+        "waveform": "wiggle"
+      },
+      "defaults": {
+        "phase": "in",
+        "direction": "preset",
+        "unit": "preset",
+        "intensity": 100,
+        "elasticity": 30,
+        "overlap": 65,
+        "speed": 40,
+        "order": "preset",
+        "seed": 17,
+        "durationFrames": 34,
+        "staggerFrames": 0
+      },
+      "referenceCoverage": "Composer public family; original native AE implementation",
+      "nativeApplication": "PASS",
+      "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-words-loop-sway-spacing.mp4",
+      "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-words-loop-sway-spacing.jpg"
+    },
+    {
+      "id": "text-v3-lines-loop-jiggle-scale",
+      "name": {
+        "pt-BR": "Texto · Vibração suave · Linhas",
+        "en-US": "Text · Gentle vibration · Lines"
+      },
+      "unit": "lines",
+      "dimension": "2d",
+      "family": "loop",
+      "variant": "jiggle-scale",
+      "mode": "continuous",
+      "properties": {
+        "position": [
+          0,
+          6,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          1.5
+        ],
+        "scale": [
+          1.5,
+          1.5,
+          0
+        ],
+        "fade": false,
+        "text": {
+          "unit": "lines",
+          "dimension": "2d",
+          "random": false,
+          "decode": false,
+          "tracking": 0,
+          "skew": 0,
+          "mask": false,
+          "order": "forward",
+          "blur": 0
+        },
+        "easing": "glide",
+        "effect": "none",
+        "waveform": "wiggle"
+      },
+      "defaults": {
+        "phase": "in",
+        "direction": "preset",
+        "unit": "preset",
+        "intensity": 80,
+        "elasticity": 30,
+        "overlap": 65,
+        "speed": 35,
+        "order": "preset",
+        "seed": 17,
+        "durationFrames": 40,
+        "staggerFrames": 0
+      },
+      "referenceCoverage": "Composer public family; original native AE implementation",
+      "nativeApplication": "PASS",
+      "video": "../../apps/after-effects-cep/assets/text-previews/text-v3-lines-loop-jiggle-scale.mp4",
+      "poster": "../../apps/after-effects-cep/assets/text-previews/text-v3-lines-loop-jiggle-scale.jpg"
     },
     {
       "id": "text-v3-characters-loop-drift",

@@ -33,7 +33,7 @@ function hiddenByGeometry(s){
 }
 test('every transition previews a transparent start, readable rest and transparent exit',()=>{
   const transitions=GALLERY_PRESETS.filter(p=>p.motion?.mode==='transition'&&!p.motion.effect.startsWith('camera-'));
-  assert.equal(transitions.length,259);
+  assert.equal(transitions.length,268);
   for(const {motion:p} of transitions){
     const o={...defaultLibraryOptions(p),phase:'both'},end=libraryPreviewEnd(o);
     for(let index=0;index<7;index++){
@@ -111,6 +111,19 @@ test('text sequence overrides and deterministic seeds change the intended units'
   assert.deepEqual(sample(27),sample(27));assert.notDeepEqual(sample(27),sample(81));
   const forward=librarySample(p,{...o,order:'forward'},.3,0,7),reverse=librarySample(p,{...o,order:'reverse'},.3,0,7);
   assert.notEqual(forward.opacity,reverse.opacity);
+});
+
+test('text decode thumbnails share speed, seed and zero-intensity behavior with the effect',()=>{
+  const doc=createFakeDocument(),p=GALLERY_PRESETS.find(p=>p.motion?.id==='text-v3-characters-loop-decode').motion;
+  const labels=(speed,seed,intensity,time)=>{
+    const svg=doc.createElementNS('http://www.w3.org/2000/svg','svg');
+    paintLibraryPreview(svg,p,{...defaultLibraryOptions(p),speed,seed,intensity,unit:'all'},time,false,'Motion');
+    return svg.getElementsByTagName('text').map(n=>n.textContent).join('');
+  };
+  const times=[.17,.31,.57,.83,1.11];
+  assert.deepEqual(times.map(t=>labels(50,17,100,t)),times.map(t=>labels(100,17,100,t/2)));
+  assert.notDeepEqual(times.map(t=>labels(100,81,100,t)),times.map(t=>labels(100,17,100,t)));
+  assert.equal(labels(100,17,0,.57),'Motion');
 });
 test('typewriter reveals units in binary steps rather than fading an entire line',()=>{
   const p=GALLERY_PRESETS.find(p=>p.motion?.id==='premium-typewriter').motion,o=defaultLibraryOptions(p),samples=[];

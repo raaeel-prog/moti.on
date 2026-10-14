@@ -16,13 +16,24 @@ Pedido de 13/10/2026 (America/Bahia): remover a simulação interativa de todo o
 - Foco: galeria, editor de fases e validação do manifesto — 45 testes PASS (`ui-request-focused.log`).
 - Browser: 30 cenários PT/EN, texto com Ricochete e quatro controles adicionais, efeito contínuo e preset antigo. Larguras 280/360/480/720 px e altura curta 360 px. Todos os controles cabem sem rolagem nas alturas padrão; zero overflow horizontal e zero aplicação durante navegação. Evidência: `artifacts/text-presets/ui-request-2026-10-13/ui-qa.json` e screenshots.
 - Check integrado final: `npm.cmd run check` — 2.421/2.421 PASS, incluindo lint, tipos, build, validação e skills (`ui-request-final-check.log`). O hash do host é idêntico ao candidato anterior; os testes nativos anteriores continuam identificados como evidência daquela execução, sem nova alegação de renderização por esta mudança de interface.
-- A instalação será registrada separadamente no recibo final desta alteração.
+- Instalação local PASS: candidato `5b4befca9ef5ee736a650dfda538be3e0dc85ae4`, 264 arquivos conferidos por SHA-256, três arquivos atualizados e estado privado preservado. Pacote `artifacts/text-presets/delivery/Moti.on-0.2.0-text-v3-local-5b4befca.zip`, SHA-256 `2edd4ecc0c07dcb0548f4bfce203015ad852b11463cdbb5579deb7ae26c4d768`. Backup e recibo estão apontados por `ui-request-2026-10-13/latest-installation.json`.
+- Painel instalado PASS no After Effects 2026 26.5x89: área inicialmente recolhida, seleção revela os ajustes, popover completo sem scrollbar no dock observado, sem simulação e sem alternância Render AE. Ao terminar a verificação, a área foi recolhida novamente. Evidências `installed-panel-proof.json` e `installed-probe.json` no mesmo diretório: 345 presets totais, incluindo as 108 receitas de texto, e projeto vazio preservado.
+- Na abertura, o AE exibiu aviso de recuperação referente à sessão anterior. Continuou normalmente, sem reset de preferências ou plugins; causa não determinada. Publicação, assinatura e instalação em máquina limpa continuam fora desta prova local.
 
 ## Estudo do Composer
 
-O estudo dirigido reutilizou os records do REA e verificou os containers locais. Confirmou que os seis JSX analisados são utilitários de comunicação, não o catálogo de texto. O bundle do navegador obtém os itens por `Content.getItemTree`; não contém os nomes das famílias. A leitura amostral dos containers não identificou nomes legíveis. Não se atribui `Products/3300` ao pacote Text Presets sem evidência semântica.
+O estudo dirigido reutilizou os records do REA e verificou os containers locais. Confirmou que os seis JSX analisados são utilitários de comunicação, não o catálogo de texto. A investigação do bundle identificou `Content.getItemTree` e o protocolo local do Composer. Uma consulta somente de leitura ao backend instalado retornou a árvore real, incluindo a pasta `Text Presets`. O arquivo completo, seu hash, a lista de itens e as contagens estão em `ui-request-2026-10-13/composer-study/installed-item-tree.json`, `installed-text-items.json` e `installed-catalog-summary.json`.
 
-O inventário recursivo e as fórmulas internas do Composer permanecem parcialmente investigados. O relatório dirigido, seus Evidence IDs e as fronteiras de cobertura estão em `artifacts/text-presets/ui-request-2026-10-13/composer-study/composer-text-gap-study.md`. As famílias próprias já implementadas não declaram equivalência matemática com os presets comerciais.
+| Área instalada | Itens aplicáveis | Pastas de famílias |
+| --- | ---: | ---: |
+| Transitions - Characters | 33 | 5 |
+| Transitions - Words | 23 | 7 |
+| Transitions - Lines | 17 | 6 |
+| Effects | 8 | 7 |
+
+São 81 IDs de itens distintos, distribuídos em 27 grupos de variantes e 21 receitas diretas. Os 81 têm preview e container local presentes (`installed-local-files.json`). O total de folhas inclui diferenças de direção e ordem; não representa 81 famílias. As folhas de texto identificam explicitamente `productId: 3300`, permitindo vincular estes itens ao produto local. Essa prova não atribui todos os 639 containers desse produto a texto e não extrapola o subconjunto instalado para o catálogo público.
+
+As fórmulas internas continuam pendentes de observação. A instância própria sem interface carregou o plugin nativo, mas seus listeners rejeitaram o handshake; os 18 representantes planejados naquela tentativa permanecem NOT RUN. O relatório dirigido, seus Evidence IDs e o resultado desta tentativa estão em `composer-study/composer-text-gap-study.md` e `composer-study/native/native-study-report.json`. Nomes de famílias não comprovam fórmulas, seletores ou implementação 3D. As famílias próprias já implementadas não declaram equivalência matemática com os presets comerciais.
 
 ## Arquivos
 

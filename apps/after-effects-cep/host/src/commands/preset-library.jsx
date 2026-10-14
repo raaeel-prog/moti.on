@@ -373,6 +373,7 @@
       (p.mode === "transition" && p.waveform !== "none" ? "w+=wave(age,idx,"+MotionJson.stringify(p.waveform)+",seed)*Math.abs(w)*0.25;\n" : "")+
       (p.choreography ? "var choreography="+core.libraryChoreography.toString()+";var pose=choreography(Math.max(0,Math.min(1,Math.min(u[0],u[1]))),w,"+p.position.join(",")+","+MotionJson.stringify(p.choreography.path)+","+MotionJson.stringify(p.choreography.distribution||"uniform")+",rawIndex,seed,"+(typeof p.choreography.turns==="number"?p.choreography.turns:1)+","+MotionJson.stringify(args.direction)+");\n" : "")+
       ((p.text.reveal==="resolve"||p.text.reveal==="roll")&&p.collection!=="signature"?"var glyph="+core.librarySignatureGlyph.toString()+";\n":"")+
+      (p.collection==="text"&&p.text.decode?"var decodeGlyph="+core.libraryTextDecode.toString()+";\n":"")+
       // Signature looks share one progress, velocity and envelope with the preview.
       (p.collection==="signature" ? "var envelope="+core.librarySignatureEnvelope.toString()+";var glyph="+core.librarySignatureGlyph.toString()+";var sp=Math.max(0,Math.min(1,Math.min(u[0],u[1])));var sv="+(p.mode==="transition"?"("+core.librarySignatureVelocity.toString()+")(sp,"+MotionJson.stringify(args.easing&&args.easing!=="preset"?args.easing:p.easing)+",elastic,ease)":"0")+";\n" : "");
   }
@@ -533,7 +534,7 @@
     // The fill tints arriving units and returns to the editable source fill at rest.
     if(p.text.fill){a=animator(plan,"Cor");textProperty(plan,a,"ADBE Text Fill Color",[p.text.fill[0],p.text.fill[1],p.text.fill[2],1]);textSelector(plan,a,"var c="+(p.mode==="transition"?"Math.max(0,Math.min(1,fadeWeight))":"(.5+.5*w)")+"*Math.min(1,amp)*100;[c,c,c];");}
     if((p.text.reveal==="resolve"||p.text.reveal==="roll")&&p.mode==="transition"){a=animator(plan,"Glifos");textProperty(plan,a,"ADBE Text Character Offset",30);textSelector(plan,a,"var g=glyph("+MotionJson.stringify(p.text.reveal)+",Math.min(u[0],u[1]),fadeWeight,rawIndex,seed)*(amp>0?100/30:0);[g,g,g];");}
-    if(p.text.decode){a=animator(plan,"Decodificação");textProperty(plan,a,"ADBE Text Character Offset",30);textSelector(plan,a,"var amount=Math.round(Math.sin(Math.floor((time-inPoint)*18)*7.7+textIndex*11.3)*30)*"+(p.mode==="transition"?"Math.max(0,Math.min(1,w))":"1")+"*amp;[amount*100/30,amount*100/30,amount*100/30];");}
+    if(p.text.decode){a=animator(plan,"Decodificação");textProperty(plan,a,"ADBE Text Character Offset",30);textSelector(plan,a,"var amount="+(p.collection==="text"?"decodeGlyph(age,idx,seed)":"Math.round(Math.sin(Math.floor((time-inPoint)*18)*7.7+textIndex*11.3)*30)")+"*"+(p.mode==="transition"?"Math.max(0,Math.min(1,w))":"1")+"*amp;[amount*100/30,amount*100/30,amount*100/30];");}
     if(p.text.mask){
       var masks=plan.layer.property("ADBE Mask Parade"),name="Moti.on "+plan.meta.instance+" · Janela",mask=child(masks,name);
       if(!mask){
@@ -628,7 +629,7 @@
     if(studioTimed(p)){
       if(isText(p)&&p.mode==="transition")extras.push({key:"overlap",pt:"Sobreposição (%)",en:"Overlap (%)",fallback:65});
       if(p.mode==="continuous")extras.push({key:"speed",pt:"Velocidade (%)",en:"Speed (%)",fallback:100});
-      if(p.collection==="text"||p.collection==="premium"||p.collection==="signature"&&signatureSeeded(p))extras.push({key:"seed",pt:"Variação",en:"Variation",fallback:17});
+      if(p.collection==="text"||p.collection==="premium"||(p.collection==="signature"&&signatureSeeded(p)))extras.push({key:"seed",pt:"Variação",en:"Variation",fallback:17});
     }
     if(extras.length){
       if(!m.controls)m.controls={};

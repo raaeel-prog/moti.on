@@ -19,12 +19,14 @@ await visit(extension);
 const notices=['LICENSE','THIRD_PARTY_NOTICES.md'];for(const name of notices){const bytes=await readFile(path.join(root,name));inventory.push({path:name,size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')});}
 inventory.sort((a,b)=>a.path.localeCompare(b.path));
 const manifest=JSON.parse(await readFile(path.join(extension,'assets/text-previews/manifest.json'),'utf8'));
-if(Object.keys(manifest.presets).length!==108)throw Error('Missing original text reference coverage');
+const {MOTION_LIBRARY_PRESETS}=await import('../packages/contracts/dist/motion-library.js');
+const originalTextIds=MOTION_LIBRARY_PRESETS.filter(p=>p.collection==='text').map(p=>p.id).sort();
+if(JSON.stringify(Object.keys(manifest.presets).sort())!==JSON.stringify(originalTextIds))throw Error('Missing original text reference coverage');
 const filename=`Moti.on-${version}-text-v3-local-${commit.slice(0,8)}.zip`,archive=path.join(output,filename);
 execFileSync('tar.exe',['-a','-c','-f',archive,'-C',extension,'.','-C',root,...notices],{cwd:root,stdio:'inherit'});
 const contents=execFileSync('tar.exe',['-t','-f',archive],{encoding:'utf8'}).split(/\r?\n/).filter(name=>name&&!name.endsWith('/')).map(name=>name.replace(/^\.\//,'')).sort();
 if(JSON.stringify(contents)!==JSON.stringify(inventory.map(entry=>entry.path).sort()))throw Error('Archive inventory differs from the verified extension');
-const receipt={kind:'unsigned-local-development-candidate',productVersion:version,sourceCommit:commit,createdAt:new Date().toISOString(),timestampPolicy:'Build and archive timestamps are recorded; source, file hashes and archive hash are authoritative.',target:{os:'Windows',architecture:'x64',observedHost:'After Effects 2026 26.5x89'},package:filename,sha256:createHash('sha256').update(await readFile(archive)).digest('hex'),fileCount:inventory.length,originalTextRecipes:108,signature:'NOT RUN',installation:'NOT RUN',installedPanelVerification:'NOT RUN',releaseDecision:'HOLD',files:inventory};
+const receipt={kind:'unsigned-local-development-candidate',productVersion:version,sourceCommit:commit,createdAt:new Date().toISOString(),timestampPolicy:'Build and archive timestamps are recorded; source, file hashes and archive hash are authoritative.',target:{os:'Windows',architecture:'x64',observedHost:'After Effects 2026 26.5x89'},package:filename,sha256:createHash('sha256').update(await readFile(archive)).digest('hex'),fileCount:inventory.length,originalTextRecipes:originalTextIds.length,signature:'NOT RUN',installation:'NOT RUN',installedPanelVerification:'NOT RUN',releaseDecision:'HOLD',files:inventory};
 await writeFile(path.join(output,'candidate-receipt.json'),JSON.stringify(receipt,null,2)+'\n');
 const sbom={bomFormat:'CycloneDX',specVersion:'1.6',version:1,metadata:{timestamp:receipt.createdAt,component:{type:'application',name:'Moti.on After Effects local text candidate',version}},components:inventory.map(entry=>({type:'file',name:entry.path,hashes:[{alg:'SHA-256',content:entry.sha256}]}))};
 await writeFile(path.join(output,'sbom.cdx.json'),JSON.stringify(sbom,null,2)+'\n');

@@ -1,6 +1,10 @@
 # Primeira leva de texto do Moti.on
 
+**Continuação de 14/10/2026:** a biblioteca agora contém 120 receitas, 23 com 3D real. Foram observadas as 25 pastas de famílias instaladas do Composer, geradas 25 comparações visuais e corrigidos controles de decode e rollback de rigs anteriores. Evidência atual em [continuação dos presets de texto](text-presets-continuation-2026-10-14.md). Os números e limites históricos abaixo pertencem às entregas anteriores.
+
 **Alteração solicitada em 13/10/2026:** a simulação interativa foi removida do produto; a área inferior passa a iniciar recolhida e os parâmetros usam um popover mais amplo. O histórico abaixo registra a primeira entrega. O comportamento atual e a validação desta alteração estão em [controles compactos](text-presets-controls-2026-10-13.md).
+
+**Pesquisa posterior:** a consulta ao backend instalado do Composer identificou 81 itens de texto em Characters, Words, Lines e Effects, todos com arquivos locais presentes e `productId: 3300`. A matriz registra agora esse inventário separado do catálogo público e da observação inicial de quatro cards. Os detalhes e limites da investigação também estão no relatório de controles compactos.
 
 Implementação na branch `feat/text-presets-rea`, em `C:/dev/Moti.on-text-presets`. A base local de Momentum foi preservada no commit `c8151cf`. A continuação incorporou por snapshots e patches verificados as correções recentes de Momentum, sem escrever nos fontes ou no índice do checkout compartilhado, que continua recebendo trabalho paralelo. Não houve push nem publicação.
 

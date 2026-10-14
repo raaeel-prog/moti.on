@@ -32,16 +32,16 @@ test("motion library covers every reviewed reference exactly once", async () => 
     import.meta.url
   ), "utf8"));
   assert.equal(reviewedPresets.length, reference.count);
-  assert.equal(MOTION_LIBRARY_PRESETS.length, 345);
+  assert.equal(MOTION_LIBRARY_PRESETS.length, 357);
   assert.equal(reference.count, 56);
   assert.deepEqual(
     reviewedPresets.map((preset) => preset.referenceIndex).sort((a, b) => a - b),
     reference.items.map((_, index) => index)
   );
-  assert.equal(new Set(MOTION_LIBRARY_PRESETS.map((preset) => preset.id)).size, 345);
+  assert.equal(new Set(MOTION_LIBRARY_PRESETS.map((preset) => preset.id)).size, 357);
   for (const locale of ["pt-BR", "en-US"]) {
     const names = MOTION_LIBRARY_PRESETS.map((preset) => preset.name[locale]);
-    assert.equal(new Set(names).size, 345, `duplicate localized names: ${locale}`);
+    assert.equal(new Set(names).size, 357, `duplicate localized names: ${locale}`);
     for (const name of names) {
       assert.ok(name.trim().length > 0);
       assert.ok(!reference.items.some((item) => item.referenceLabel === name));
@@ -80,7 +80,7 @@ test("library preserves motion and text grouping from the review", () => {
     }
   }
   const signatures = MOTION_LIBRARY_PRESETS.map(({ id: _id, name: _name, referenceIndex: _referenceIndex, ...recipe }) => JSON.stringify(recipe));
-  assert.equal(new Set(signatures).size, 345, "an original variant has the same recipe as another preset");
+  assert.equal(new Set(signatures).size, 357, "an original variant has the same recipe as another preset");
 });
 
 test("options accept defaults and every supported enum", () => {

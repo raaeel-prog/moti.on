@@ -53,6 +53,25 @@ test('text selectors read live numeric Property controls for spring and settle c
   }
 });
 
+test('continuous text decode honors live speed and seed, and zero intensity restores the source',async()=>{
+  const f=await fixture({text:true});
+  f.run('apply',f.args('text-v3-characters-loop-decode',{speed:100,seed:17}));
+  const meta=root(f).textEffect.meta;
+  const glyph=animators(f).children.find(a=>a.property('ADBE Text Animator Properties').property('ADBE Text Character Offset'));
+  const selector=glyph.property('ADBE Text Selectors').property('Moti.on Timing').property('ADBE Text Expressible Amount');
+  const sample=time=>selector.valueAtTime(time,false,2,7)[0];
+  const times=[.17,.31,.57,.83,1.11],baseline=times.map(sample),halfTime=times.map(t=>sample(t/2));
+  f.layer.effects.property(meta.controls.speed).property(1).setValue(50);
+  assert.deepEqual(times.map(sample),halfTime,'half speed must use half the elapsed decode time');
+  f.layer.effects.property(meta.controls.speed).property(1).setValue(100);
+  assert.deepEqual(times.map(sample),baseline);
+  f.layer.effects.property(meta.controls.seed).property(1).setValue(81);
+  assert.notDeepEqual(times.map(sample),baseline,'seed must change the glyph sequence');
+  f.layer.effects.property(meta.effects[1].name).property(1).setValue(0);
+  assert.ok(times.map(sample).every(v=>v===0));
+  assert.equal(f.layer.markers.numKeys,0);
+});
+
 test('3D text creates X/Y/Z and depth animators, preserves grouping, and restores it only on final removal',async()=>{
   const f=await fixture({text:true}),group=f.layer.text.property('ADBE Text More Options').property('ADBE Text Anchor Point Option');
   group.setValue(4);f.run('apply',f.args(exit,{phase:'in'}));
@@ -94,4 +113,34 @@ test('a partial application failure restores all components and text state',asyn
   let armed=true;f.Group.prototype.addProperty=function(name){if(armed&&name==='ADBE Text Rotation X'){armed=false;throw new Error('Injected animator failure');}return oldAdd.call(this,name);};
   assert.throws(()=>f.run('phase-apply',f.args(exit,{phase:'out'})),/Injected animator failure/);
   assert.deepEqual(inspection(f),before);assert.equal(f.layer.comment,comment);assert.equal(JSON.stringify(f.layer.markers.keys),markers);assert.equal(f.layer.threeDPerChar,false);
+});
+
+test('a different v3 effect layout is rejected without changing its rig or comment',async()=>{
+  const f=await fixture({text:true});f.run('phase-apply',f.args(entrance,{phase:'both'}));f.run('apply',f.args(effect));
+  const foreign=root(f);foreign.slots.effect=foreign.textEffect;delete foreign.textEffect;
+  f.layer.comment='Keep this comment\n[Moti.on.library.v3]'+encodeURIComponent(JSON.stringify(foreign));
+  const before=f.mutations,comment=f.layer.comment,markers=JSON.stringify(f.layer.markers.keys);
+  const error=f.handler('phase-apply').preflight(f.args(entrance,{phase:'in'}));
+  assert.ok(error);assert.equal(f.mutations,before);
+  assert.equal(f.layer.comment,comment);assert.equal(JSON.stringify(f.layer.markers.keys),markers);
+});
+
+test('failure while upgrading a rig without Variation restores its exact live templates and controls',async()=>{
+  const f=await fixture({text:true});f.run('phase-apply',f.args(entrance,{phase:'both'}));f.run('apply',f.args('text-v3-characters-loop-decode'));
+  const legacy=root(f);
+  for(const slot of [legacy.slots.in,legacy.slots.out,legacy.textEffect]){
+    const meta=slot.meta,seedName=meta.controls.seed,access=`Number(effect(${f.scope.MotionJson.stringify(seedName)})(1))`;
+    for(const owned of meta.expressions){
+      const property=f.scope.MotionPresetLibrary.locate(f.layer,owned.path);
+      property.expression=property.expression.split(access).join(String(meta.options.seed))+'\n// previous managed template';
+      owned.managed=property.expression;
+    }
+    f.layer.effects.property(seedName).remove();meta.effects=meta.effects.filter(e=>e.name!==seedName);delete meta.controls.seed;
+  }
+  f.layer.comment='Keep this comment\n[Moti.on.library.v3]'+encodeURIComponent(JSON.stringify(legacy));
+  const before=inspection(f),comment=f.layer.comment,count=f.layer.effects.numProperties,markers=JSON.stringify(f.layer.markers.keys);
+  assert.equal(before.state,'ready');const apply=f.scope.MotionPresetLibrary.applyLayer;let armed=true;
+  f.scope.MotionPresetLibrary.applyLayer=plan=>{apply(plan);if(armed){armed=false;throw Error('Injected old-template upgrade failure');}};
+  assert.throws(()=>f.run('text-effect-adjust',{target:before.target,presetId:before.textEffect.presetId,options:{...before.textEffect.options,seed:81,speed:75}}),/Injected old-template/);
+  assert.deepEqual(inspection(f),before);assert.equal(f.layer.comment,comment);assert.equal(f.layer.effects.numProperties,count);assert.equal(JSON.stringify(f.layer.markers.keys),markers);
 });

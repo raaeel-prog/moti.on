@@ -1,10 +1,14 @@
 /* Included by the trusted Node generator inside a function with its own job. */
 var report = {status: "RUNNING", hostVersion: app.version, entries: [], errors: [], userProjectGuard: false};
 function evidenceWrite() { var f = File(job.report); f.encoding = "UTF-8"; if (!f.open("w")) { throw new Error("Cannot write fixture evidence: " + f.error); } f.write(MotionJson.stringify(report)); f.close(); }
-function command(id, args) { return MotionJson.parse(MotionAE.dispatch(MotionJson.stringify({protocolVersion: MotionContracts.PROTOCOL_VERSION, requestId: "text-fixture-" + report.entries.length + "-" + id, command: id, args: args, context: {host: "after-effects", hostVersion: app.version, locale: "en-US"}, options: {preserveSelection: true}}))); }
+var fixtureDispatch=null,fixtureGlobals={};
+function command(id, args) { for(var globalKey in fixtureGlobals)if(Object.prototype.hasOwnProperty.call(fixtureGlobals,globalKey)){$.global[globalKey]=fixtureGlobals[globalKey];}return MotionJson.parse(fixtureDispatch(MotionJson.stringify({protocolVersion: MotionContracts.PROTOCOL_VERSION, requestId: "text-fixture-" + report.entries.length + "-" + id, command: id, args: args, context: {host: "after-effects", hostVersion: app.version, locale: "en-US"}, options: {preserveSelection: true}}))); }
 function scanErrors(group, path, output) { if (!group) { return; } var i, p; for (i = 1; i <= group.numProperties; i++) { p = group.property(i); if (p.canSetExpression && p.expressionEnabled) { p.valueAtTime(app.project.activeItem.time, false); if(p.expressionError) { output.push({path: path + "/" + p.matchName, error: p.expressionError}); } } if (p.numProperties) { scanErrors(p, path + "/" + p.matchName, output); } } }
 try {
   $.evalFile(File(job.host));
+  fixtureDispatch=MotionAE.dispatch;report.executionCatalogCount=MotionLibraryCatalog.length;
+  for(var hostGlobal in $.global)if(hostGlobal.indexOf("Motion")===0)fixtureGlobals[hostGlobal]=$.global[hostGlobal];
+  if(report.executionCatalogCount!==job.expectedCatalogCount)throw Error("Unexpected fixture host catalog");
   if (!app.project || app.project.numItems !== 0 || app.project.file) { report.status = "ABORTED_USER_PROJECT_GUARD"; evidenceWrite(); return; }
   report.userProjectGuard = true;
   app.beginSuppressDialogs();
@@ -40,7 +44,7 @@ try {
     for (key in entry.options) { if (Object.prototype.hasOwnProperty.call(entry.options, key)) { options[key] = entry.options[key]; } }
     options.presetId = entry.id;
     applied = command(entry.mode === "continuous" ? "ae.presets.apply" : "ae.presets.phase-apply", options);
-    if (!applied.ok) { report.entries.push({id: entry.id, status: "FAIL", response: applied}); report.status = "FAIL"; evidenceWrite(); throw new Error("Preset application failed: " + entry.id); }
+    if (!applied.ok) { report.entries.push({id: entry.id, status: "FAIL", response: applied,args:options,definitionFound:!!MotionPresetLibrary.definition(options),catalogCount:MotionLibraryCatalog.length}); report.status = "FAIL"; evidenceWrite(); throw new Error("Preset application failed: " + entry.id); }
     inspected = command("ae.presets.inspect", {});
     if (!inspected.ok || inspected.data.state !== "ready") { throw new Error("Preset inspection failed: " + entry.id); }
     errors = [];
