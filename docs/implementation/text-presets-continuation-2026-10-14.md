@@ -47,7 +47,13 @@ Evidência: `artifacts/text-presets/continuation-2026-10-14/composer-native/find
 - UI: **50 cenários PASS**, PT/EN, 280/360/480/720 px e dock curto. Nas alturas padrão todos os parâmetros cabem; no dock curto a rolagem é limitada ao popover. Zero overflow horizontal, zero aplicação durante navegação e zero simulação ampliada.
 - A projeção do código que renderiza uma camada nova é idêntica à usada nos 120 renders. O hash exclui somente a recusa de metadata alternativa e a recuperação de um rig anterior, caminhos que não executam nas fixtures novas. O bundle final foi exercitado separadamente nos dez casos de lifecycle. Os hashes distintos e essa fronteira estão em `final-verification.json`.
 
-Instalação e verificação do painel serão registradas separadamente em `continuation-2026-10-14/latest-installation.json`. Assinatura, publicação e clean-machine continuam NOT RUN; a entrega é um candidato local.
+Instalação local **PASS**: candidato `99f9fc815b57b828430fbf4841ebbe146ee6cbe7`, ZIP SHA-256 `508d2fe608db9a6c2a8366d627dfc25a0b3f778aec5bcf8f704a9e7695ffdd06`. Foram conferidos 288 arquivos, atualizados 30 e preservado um arquivo privado, com backup integral verificado fora da pasta CEP. O painel foi fechado e reaberto sem encerrar o After Effects ou salvar o projeto do usuário.
+
+O painel recarregado confirmou 357 receitas, incluindo os 120 presets de texto, e a presença da função de decode. A galeria e os ajustes de “Dobra em sequência 3D · Caracteres” foram observados. O inspector abriu na seleção e foi recolhido novamente. A recarga reorganizou o encaixe nativo; o Moti.on ficou no grupo lateral com Propriedades. A biblioteca e a interface de presets permanecem as mesmas. Antes e depois, o projeto manteve um item, nenhuma composição ativa, nenhuma seleção, nenhum arquivo salvo e o estado dirty existente.
+
+Os **12 novos presets instalados** também foram aplicados numa instância própria do AE, em oito tempos cada, com texto editável e zero erros de expressão; três confirmaram 3D por segmento. O host instalado tem SHA-256 `71b29b1060752d31befbcaf8cac40a79e2d9739990b7f6474ad9af96cec9a075`, igual ao bundle do lifecycle final. A instância de teste encerrou normalmente. Recibo, snapshot, hashes e resultados: `artifacts/text-presets/continuation-2026-10-14/latest-installation.json`, `installed-panel-proof.json`, `candidate-receipt-final.json` e `installed-smoke/fixture-report.json`.
+
+Build, análise estática, tipos, contratos, testes e empacotamento local: PASS. Aplicação nativa no AE 26.5: PASS. Premiere, assinatura, publicação e clean-machine: NOT RUN. Performance não foi medida nesta continuação; o gerenciamento de previews está coberto por testes. O Undo real anterior permanece evidência histórica, sem nova execução nesta rodada. A entrega é um candidato local; a decisão de release público continua HOLD.
 
 ## Arquivos e limites
 

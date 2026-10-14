@@ -16984,7 +16984,13 @@
         "expectedIdentical": true
       }
     ],
-    "installation": "NOT RUN",
+    "installation": {
+      "status": "PASS",
+      "sourceCommit": "99f9fc815b57b828430fbf4841ebbe146ee6cbe7",
+      "files": 288,
+      "panel": "PASS",
+      "report": "artifacts/text-presets/continuation-2026-10-14/coverage-installation.json"
+    },
     "finalVerification": {
       "report": "artifacts/text-presets/continuation-2026-10-14/final-verification.json",
       "status": "PASS",
