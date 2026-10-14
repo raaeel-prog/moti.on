@@ -1,7 +1,6 @@
 import { attachScrubbableNumber, button, createActionButton, type ActionButtonController, clearNode, createElement, createIcon, createBadge, createEmptyState, createI18n, searchField, selectField, type PanelPreferences } from "@motion/ui-core";
 import { MOTION_LIBRARY_PRESETS, MOTION_LIBRARY_DEFAULTS, MOTION_SETTLE_DEFAULTS, motionLibraryRequirements, type MotionLibraryRequirements, type MotionLibraryPreset, type MotionLibraryOptions, type PersonalPresetCatalog, type PersonalPresetItem, type PersonalPresetPreview, type PresetDefinitionV1, type QuickContext } from "@motion/contracts";
 import { paintLibraryPreview, libraryPreviewPlayback, libraryPreviewEnd, cameraPreviewPlayback } from "./motion-library-preview.js";
-import {createTextPresetPreview} from "./text-preset-preview.js";
 import { createPersonalMediaPreview } from "./personal-media-preview.js";
 import { normalizeSearch } from "./quick-library.js";
 
@@ -243,7 +242,9 @@ export function cameraPoint(id: string, progress: number, point: number[]): numb
 
 export interface PresetNavigation {
   query: string; category: string; scope: string; scroll: number;
-  textDimension?:"all"|"2d"|"3d"; textFamily?:string; sampleText?:string; selectedId?: string; drafts?: Record<string, MotionLibraryOptions>;
+  textDimension?:"all"|"2d"|"3d"; textFamily?:string; selectedId?: string; drafts?: Record<string, MotionLibraryOptions>;
+  /** Session-only disclosure: restoring a saved choice does not open its inspector. */
+  selectionExpanded?: boolean;
   recentOrder?: string[];
   pendingRevealId?: string;
   sidebarWidth?: number; view?: "browse" | "edit";
@@ -293,6 +294,7 @@ export function createPresetGallery(doc: Document, options: {
       if (!scopeVisible) nav.scope = "all";
     }
     nav.selectedId = requestedPreset.id;
+    nav.selectionExpanded = true;
   }
   function cancelReveal(): void { delete nav.pendingRevealId; }
   const labels: Record<string, string> = {
@@ -468,9 +470,8 @@ export function createPresetGallery(doc: Document, options: {
   const editorHeader = createElement(doc, "div", "ch-preset-editor-header");
   editorHeader.appendChild(createElement(doc, "span", "", pt ? "Ajustes do preset" : "Preset settings"));
   editorHeader.appendChild(button(doc, {label: pt ? "Fechar" : "Close", onClick: () => closeEditor(true)})); editor.appendChild(editorHeader);
-  let textPreview:ReturnType<typeof createTextPresetPreview>|undefined;
   const numericCleanups:Array<()=>void>=[];
-  function disposeNumbers():void{textPreview?.dispose();textPreview=undefined;for(const dispose of numericCleanups.splice(0))dispose();}
+  function disposeNumbers():void{for(const dispose of numericCleanups.splice(0))dispose();}
   const inspector = createElement(doc, "section", "ch-preset-inspector"); editor.appendChild(inspector);
   const actions = createElement(doc, "div", "ch-preset-applybar");
   const settingsPanel = createElement(doc, "section", "ch-preset-settings-panel");
@@ -619,15 +620,22 @@ export function createPresetGallery(doc: Document, options: {
     const box = editorTrigger.getBoundingClientRect();
     const width = doc.documentElement.clientWidth || 360;
     const height = doc.documentElement.clientHeight || doc.defaultView?.innerHeight || 640;
-    const panelWidth = Math.min(280, width - 16);
-    const panelHeight = Math.min(settingsPanel.scrollHeight || 320, height - 96);
-    const below = height - box.bottom - 48, above = box.top - 8;
-    const opensAbove = below < Math.min(panelHeight, 180) && above > below;
-    const top = opensAbove ? Math.max(8,box.top-panelHeight-6) : Math.min(box.bottom+6,Math.max(8,height-128));
+    const panelWidth = Math.min(480, width - 16);
+    settingsPanel.style.width = `${panelWidth}px`;
+    settingsPanel.setAttribute("data-columns", panelWidth >= 464 ? "2" : "1");
+    settingsPanel.style.maxHeight = "none";
+    const available = Math.max(80, height - 16);
+    const panelHeight = Math.min((settingsHeader.offsetHeight || 44) + (settingsBody.scrollHeight || 276) + 2, available);
+    const below = height - box.bottom - 14, above = box.top - 14;
+    const opensAbove = below < panelHeight && above >= panelHeight;
+    // If neither side fits, use the available viewport instead of a tiny strip
+    // beneath a low card. Only genuinely oversized content needs to scroll.
+    const preferredTop = opensAbove ? box.top-panelHeight-6 : box.bottom+6;
+    const top = Math.max(8, Math.min(preferredTop, height-panelHeight-8));
     settingsPanel.style.left = `${Math.max(8,Math.min(box.right-panelWidth,width-panelWidth-8))}px`;
     settingsPanel.style.top = `${top}px`;
     settingsPanel.style.width = `${panelWidth}px`;
-    settingsPanel.style.maxHeight = `${Math.max(80, Math.min(panelHeight,height-top-48))}px`;
+    settingsPanel.style.maxHeight = `${available}px`;
     settingsPanel.setAttribute("data-side", opensAbove ? "above" : "below");
   }
   function closeEditor(restoreFocus = false): void {
@@ -673,6 +681,7 @@ export function createPresetGallery(doc: Document, options: {
     rememberScroll();
     if (nav.selectedId !== preset.id) closeEditor();
     nav.selectedId = preset.id;
+    nav.selectionExpanded = true;
     for (const card of Array.from(grid.querySelectorAll(".ch-preset-card"))) {card.setAttribute("data-selected", String(card.id === preset.id));card.querySelector(".ch-preset-preview")?.setAttribute("aria-pressed",String(card.id===preset.id));}
     drawInspector(preset);
   }
@@ -746,7 +755,7 @@ export function createPresetGallery(doc: Document, options: {
   }
   function refreshPreview(preset?: GalleryPreset): void {
     if(!preset)return;
-    textPreview?.refresh();const scene=scenes.get(preset.id);if(!scene)return;
+    const scene=scenes.get(preset.id);if(!scene)return;
     if(visible.has(preset.id))scene.rest();scene.start=performance.now();schedulePreviews();
   }
   function drawInspector(preset?: GalleryPreset): void {
@@ -757,14 +766,15 @@ export function createPresetGallery(doc: Document, options: {
     settingsTabStops(true);
     disposeNumbers();clearNode(inspector); clearNode(settingsBody);
     primaryApply = undefined; clearNode(actions);
-    editor.hidden = !preset;
-    actions.hidden = !preset;
+    editor.hidden = !preset || nav.selectionExpanded === false;
+    actions.hidden = editor.hidden;
     if (!preset) { actions.appendChild(createElement(doc,"span","ch-preset-hint",pt?"Selecione uma miniatura":"Select a preview")); inspector.appendChild(createElement(doc, "p", "ch-preset-hint", pt ? "Escolha um preset para aplicar ou ajustar." : "Choose a preset to apply or adjust.")); return; }
     const presetId=preset.id;
     settingsTitle.textContent = preset.displayName[options.locale] ?? preset.id;
     const heading = createElement(doc, "div", "ch-preset-approved-heading");
     heading.appendChild(createElement(doc, "span", "", preset.displayName[options.locale] ?? preset.id));
-    heading.appendChild(createBadge(doc, { label: pt ? "Ajustável" : "Editable", showIcon: false }).element);
+    const collapse=button(doc,{label:"×",onClick:()=>{closeEditor();nav.selectionExpanded=false;editor.hidden=true;actions.hidden=true;}});
+    collapse.classList.add("ch-preset-deselect");collapse.setAttribute("aria-label",pt?"Recolher ajustes do preset":"Collapse preset settings");heading.appendChild(collapse);
     inspector.appendChild(heading);
     if (preset.motion) {
       const needs = requirementLabels(motionLibraryRequirements(preset.motion), pt);
@@ -851,24 +861,25 @@ export function createPresetGallery(doc: Document, options: {
       if (!overlay && sequenceControls.order) choice("order", pt ? "Ordem" : "Order", [["preset",pt?"Original":"Original"],["forward",pt?"Primeiro ao último":"First to last"],["reverse",pt?"Último ao primeiro":"Last to first"],["center-out",pt?"Centro para fora":"Center outward"],["edges-in",pt?"Bordas para dentro":"Edges inward"],["random",pt?"Aleatória":"Random"]]);
       if (!overlay && sequenceControls.seed) { draft.seed ??= p.defaults?.seed ?? 17; number("seed", pt ? "Variação" : "Variation", 0, 9999); }
       adjustments.appendChild(fields);
-      adjustments.appendChild(button(doc,{label:pt?"Restaurar padrão":"Reset defaults",disabled:options.busy,onClick:()=>{nav.drafts![preset.id]=defaultLibraryOptions(p,options.context?.()?.fps);invalidNumbers.delete(presetId);drawInspector(preset);previewPlayers.get(preset.id)?.();}}));
+      const draftActions=createElement(doc,"div","ch-preset-draft-actions");
+      adjustments.appendChild(draftActions);
+      draftActions.appendChild(button(doc,{label:pt?"Restaurar padrão":"Reset defaults",disabled:options.busy,onClick:()=>{nav.drafts![preset.id]=defaultLibraryOptions(p,options.context?.()?.fps);invalidNumbers.delete(presetId);drawInspector(preset);previewPlayers.get(preset.id)?.();}}));
       if (options.saveVariant && !p.cameraSpec && !p.id.startsWith("camera-")) {
         // Guardar o ajuste antes de aplicar: a variação aparece em Editar →
         // Variações salvas e pode ser aplicada depois em qualquer seleção.
         const status = createElement(doc, "p", "ch-preset-hint ch-preset-variant-status");
         status.setAttribute("role", "status");
-        adjustments.appendChild(button(doc, { label: pt ? "Salvar como variação" : "Save as variation", disabled: options.busy || Boolean(invalidNumbers.get(presetId)?.size), onClick: () => {
+        draftActions.appendChild(button(doc, { label: pt ? "Salvar como variação" : "Save as variation", disabled: options.busy || Boolean(invalidNumbers.get(presetId)?.size), onClick: () => {
           if (disposed || invalidNumbers.get(presetId)?.size) return;
           const result = options.saveVariant!(p.id, preset.displayName[options.locale] ?? p.id, { ...settings(preset) });
           status.textContent = result.message;
           status.dataset.state = result.ok ? "ok" : "error";
         } }));
-        adjustments.appendChild(status);
+        draftActions.appendChild(status);
       }
       const curve = draft.easing && draft.easing !== "preset" ? draft.easing : p.easing, settles = p.mode === "transition" && !overlay && (curve === "settle-wave" || curve === "settle-hop");
       if (p.collection === "studio" || p.collection === "premium" || p.collection === "native" || p.collection === "signature" || p.collection === "momentum" || p.collection === "text" || draft.easing==="spring" || settles) {
-        const details = createElement(doc, "details", "ch-preset-refine");
-        details.appendChild(createElement(doc, "summary", "", pt ? "Refinar movimento" : "Refine motion"));
+        const details = createElement(doc, "div", "ch-preset-refine");
         const advanced = createElement(doc, "div", "ch-preset-fields");
         if (curve === "spring") number("elasticity", pt ? "Elasticidade · %" : "Elasticity · %", 0, 100, advanced);
         if (settles) for (const [key, label, min, max] of settleFieldLabels(curve, options.locale)) { draft[key] ??= MOTION_SETTLE_DEFAULTS[curve === "settle-hop" ? "settle-hop" : "settle-wave"][key]; number(key, label, min, max, advanced); }
@@ -887,12 +898,6 @@ export function createPresetGallery(doc: Document, options: {
       adjustments.appendChild(createElement(doc, "p", "ch-preset-hint", overlay ? pt ? "Cria uma pré-comp acima das camadas, com o marcador CUT no tempo atual. Arraste o marcador para mover o pico da transição." : "Creates a precomp above the layers with a CUT marker at the current time. Drag the marker to move the transition peak." : p.mode === "transition" ? pt ? "Entrada no início da camada; saída no fim." : "In at the layer start; out at its end." : pt ? "Ajustes editáveis nos Controles do efeito." : "Editable settings in Effect Controls."));
       for(const key of invalidNumbers.get(presetId)?.keys()??[])if(!activeNumbers.has(key))invalidNumbers.get(presetId)?.delete(key);
       settingsBody.appendChild(adjustments);
-      // Keep the approved compact gallery and existing recipes unchanged.
-      // The extended preview belongs to the new text recipes' settings only.
-      if(p.collection==="text"){
-        textPreview=createTextPresetPreview(doc,{locale:options.locale,preset:p,settings:()=>draft,sample:nav.sampleText??"Make it\nMoti.on",onSample:value=>{nav.sampleText=value;}});
-        settingsBody.appendChild(textPreview.element);
-      }
 
     } else inspector.appendChild(createElement(doc, "p", "ch-preset-hint", preset.category === "ease" ? pt ? "Selecione dois ou mais keyframes." : "Select two or more keyframes." : pt ? "Selecione uma câmera sem parent nem animação na propriedade." : "Select an unparented camera without keys on the target property."));
     if(!p) settingsBody.appendChild(button(doc,{label:preset.category==="ease"?(pt?"Editar curva":"Edit curve"):(pt?"Editar movimento":"Edit motion"),onClick:()=>{if(disposed)return;rememberScroll();options.edit(preset);}}));

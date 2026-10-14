@@ -133,7 +133,7 @@ function restorePresetNavigation(): PresetNavigation {
   const category = saved.gallery.category.startsWith("personal") ? "all" : saved.gallery.category;
   const known = GALLERY_PRESETS.some(preset => preset.id === saved.gallery.presetId);
   return {
-    category, scope: saved.gallery.scope, query: saved.gallery.query, scroll: 0, drafts,
+    category, scope: saved.gallery.scope, query: saved.gallery.query, scroll: 0, drafts, selectionExpanded: false,
     ...(known ? { selectedId: saved.gallery.presetId } : {})
   };
 }

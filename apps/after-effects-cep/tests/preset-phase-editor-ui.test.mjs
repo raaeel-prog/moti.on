@@ -25,7 +25,7 @@ function events(target){
   return target;
 }
 
-function fixture(t,{locale='pt-BR',busy=false,twoPhases=false,sharedInstance=false,live,frameRate=24,dropFrame=false}={}){
+function fixture(t,{locale='pt-BR',busy=false,twoPhases=false,sharedInstance=false,live,frameRate=24,dropFrame=false,presetId='studio-letter-silk-rise'}={}){
   const doc=events(createCepDocument()),create=doc.createElement.bind(doc);
   doc.defaultView=events({});
   doc.createEvent=()=>({initEvent(type){this.type=type;}});
@@ -36,7 +36,7 @@ function fixture(t,{locale='pt-BR',busy=false,twoPhases=false,sharedInstance=fal
     return node;
   };
   const phaseOptions={phase:'in',direction:'bottom',durationFrames:40,intensity:100,staggerFrames:2,unit:'preset',elasticity:0,overlap:70,speed:100,easing:'preset',order:'preset',seed:17};
-  const phase={phase:'in',instance:'in-one',presetId:'studio-letter-silk-rise',markerTime:1,options:{...phaseOptions},controls:[{key:'intensity',name:'Intensity',type:'number',min:0,max:300,unit:'%'}]};
+  const phase={phase:'in',instance:'in-one',presetId,markerTime:1,options:{...phaseOptions},controls:[{key:'intensity',name:'Intensity',type:'number',min:0,max:300,unit:'%'}]};
   const inspection={state:'ready',message:'',layerName:'Title',target:{compId:1,layerId:2,instance:'one',fingerprint:'a'},phases:[phase],frameRate,dropFrame};
   if(twoPhases)inspection.phases.push({...phase,phase:'out',instance:sharedInstance?'in-one':'out-one',options:{...phaseOptions,phase:'out'}});
   const calls=[],dirty=[];
@@ -49,6 +49,14 @@ function fixture(t,{locale='pt-BR',busy=false,twoPhases=false,sharedInstance=fal
   const message=node=>editor.element.getElementsByTagName('p').find(item=>item.id===node.getAttribute('aria-describedby'));
   return {doc,editor,inspection,calls,dirty,input,buttons,edit,message};
 }
+
+test('applied text editor retains its controls without simulation or sample media',t=>{
+  const f=fixture(t,{presetId:'text-v3-characters-position-rise'}),root=f.editor.element;
+  assert.equal(root.getElementsByTagName('video').length,0);assert.equal(root.getElementsByTagName('textarea').length,0);
+  assert.equal(root.allText.includes('Simulação interativa'),false);
+  f.edit(f.input('intensity'),77);f.buttons('Aplicar ajustes')[0].click();
+  assert.equal(f.calls[0].args.options.intensity,77);assert.equal(f.calls[0].command,'ae.presets.phase-adjust');
+});
 
 test('phase validation keeps the invalid draft and explains how to correct the same field',t=>{
   const f=fixture(t),number=f.input('intensity'),apply=f.buttons('Aplicar ajustes')[0];

@@ -8,7 +8,7 @@ import { createFakeWindow } from '../../../packages/ui-core/tests/fake-dom.mjs';
 const built=await build({entryPoints:[fileURLToPath(new URL('../client/src/preset-gallery.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
 const {createPresetGallery}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
-function fixture(t, { category = 'all', scope = 'all', query = '', locale = 'pt-BR', context = {hasComp:true, selectionCount:2, selectedKeys:4}, busy = false, personal, personalAction, onApply, pick = true } = {}) {
+function fixture(t, { category = 'all', scope = 'all', query = '', locale = 'pt-BR', context = {hasComp:true, selectionCount:2, selectedKeys:4}, busy = false, personal, personalAction, onApply, pick = true, restoredSelection } = {}) {
   const saved={window:globalThis.window,requestAnimationFrame:globalThis.requestAnimationFrame,cancelAnimationFrame:globalThis.cancelAnimationFrame,IntersectionObserver:globalThis.IntersectionObserver};
   globalThis.window=createFakeWindow();globalThis.window.setTimeout=setTimeout;
   globalThis.requestAnimationFrame=()=>1;globalThis.cancelAnimationFrame=()=>{};
@@ -40,7 +40,7 @@ function fixture(t, { category = 'all', scope = 'all', query = '', locale = 'pt-
     const walk=node=>{if(node.id===id)return node;for(const child of node.children){const match=walk(child);if(match)return match;}return null;};
     return walk(doc.documentElement);
   };
-  const navigation={query,category,scope,scroll:0};
+  const navigation={query,category,scope,scroll:0,...(restoredSelection?{selectedId:restoredSelection,selectionExpanded:false}:{})};
   const preferences={favorites:[],recent:[],folderColors:{},collapsedFolders:[],presetAutoplay:false,presetSize:200};
   const gallery=createPresetGallery(doc,{locale,navigation,busy,context:()=>context,openApplied(){},personal,personalAction,
     preferences:{snapshot:()=>preferences,toggleFolder(id){preferences.collapsedFolders=preferences.collapsedFolders.includes(id)?preferences.collapsedFolders.filter(item=>item!==id):[...preferences.collapsedFolders,id];},toggleFavorite(id){preferences.favorites=preferences.favorites.includes(id)?preferences.favorites.filter(item=>item!==id):[...preferences.favorites,id];}},
@@ -71,13 +71,30 @@ test('existing text presets retain the compact inspector without an added previe
   assert.ok(gallery.element.querySelector('.ch-preset-grid'));
 });
 
-test('new text previews are confined to the existing settings popover',t=>{
+test('new text settings contain only preset controls, without the interactive simulation',t=>{
   const {gallery}=fixture(t,{category:'text',query:'Cascata de luz'});
   const inspector=gallery.element.querySelector('.ch-preset-inspector');
   const settings=gallery.element.querySelector('.ch-preset-settings-body');
   assert.ok(!inspector.querySelector('.ch-text-preview'),'the grid inspector stays compact');
-  assert.ok(settings.querySelector('.ch-text-preview'));
+  assert.ok(!settings.querySelector('.ch-text-preview'));
+  assert.ok(!gallery.element.allText.includes('Simulação interativa'));
+  assert.equal(settings.getElementsByTagName('textarea').length,0);
+  assert.equal(settings.getElementsByTagName('video').length,0);
+  assert.ok(settings.getElementsByTagName('input').some(node=>node.getAttribute('aria-label')==='Sobreposição · %'),'refinement controls remain accessible');
   assert.ok(gallery.element.querySelector('.ch-preset-grid'));
+});
+
+test('restored preset stays collapsed until selected and can collapse without losing its draft',t=>{
+  const id='builtin.motion.text-v3-characters-fade-cascade';
+  const {gallery,navigation}=fixture(t,{category:'text',pick:false,restoredSelection:id}),root=gallery.element;
+  const editor=root.querySelector('.ch-preset-editor'),bar=root.querySelector('.ch-preset-applybar');
+  assert.equal(editor.hidden,true);assert.equal(bar.hidden,true);
+  const card=root.getElementsByTagName('article').find(node=>node.id===id);
+  card.querySelector('.ch-preset-preview').click();assert.equal(editor.hidden,false);assert.equal(bar.hidden,false);
+  const duration=root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Duração · frames');duration.value='47';duration.emit('input');
+  root.getElementsByTagName('button').find(node=>node.getAttribute('aria-label')==='Recolher ajustes do preset').click();
+  assert.equal(editor.hidden,true);assert.equal(bar.hidden,true);assert.equal(navigation.drafts[id].durationFrames,47);
+  card.querySelector('.ch-preset-preview').click();assert.equal(editor.hidden,false);assert.equal(navigation.drafts[id].durationFrames,47);
 });
 
 test('gallery invalid draft blocks button and double-click application until correction',t=>{

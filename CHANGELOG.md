@@ -1,3 +1,8 @@
+## 2026-10-13 — Presets: controles compactos
+- Removida a simulação interativa do navegador e editor de presets aplicados, incluindo texto de amostra, alternância Render AE e controles da prévia ampliada. As receitas e miniaturas continuam na biblioteca.
+- Área inferior recolhida ao abrir, revelada por seleção e recolhível sem perder os ajustes. Popover usa a altura disponível e duas colunas quando cabem; controles de refinamento acessíveis sem outra seção.
+- QA visual: 30 cenários PT/EN em 280/360/480/720 px, incluindo janela baixa, sem rolagem nas alturas padrão. Ver `docs/implementation/text-presets-controls-2026-10-13.md`.
+
 ## 2026-10-13 — Texto v3: caracteres, palavras, linhas e Effects
 - Correção de instalação: mantém a galeria e o editor compacto anteriores; a prévia ampliada fica somente nos ajustes dos novos presets de texto.
 - 108 receitas próprias de texto, incluindo 20 com 3D real por segmento; entrada, saída e efeito contínuo independentes em metadata v3.

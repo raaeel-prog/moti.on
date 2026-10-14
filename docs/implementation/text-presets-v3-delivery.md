@@ -1,5 +1,7 @@
 # Primeira leva de texto do Moti.on
 
+**Alteração solicitada em 13/10/2026:** a simulação interativa foi removida do produto; a área inferior passa a iniciar recolhida e os parâmetros usam um popover mais amplo. O histórico abaixo registra a primeira entrega. O comportamento atual e a validação desta alteração estão em [controles compactos](text-presets-controls-2026-10-13.md).
+
 Implementação na branch `feat/text-presets-rea`, em `C:/dev/Moti.on-text-presets`. A base local de Momentum foi preservada no commit `c8151cf`. A continuação incorporou por snapshots e patches verificados as correções recentes de Momentum, sem escrever nos fontes ou no índice do checkout compartilhado, que continua recebendo trabalho paralelo. Não houve push nem publicação.
 
 ## Biblioteca entregue

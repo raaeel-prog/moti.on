@@ -1,7 +1,6 @@
 import {attachCompactNumberEditing, attachScrubbableNumber, button, createActionButton, createElement, createI18n, createIcon, selectField} from "@motion/ui-core";
 import {MOTION_SETTLE_DEFAULTS, type PresetInspection, type PresetPhaseInspection, type PresetTextEffectInspection} from "@motion/contracts";
 import {defaultLibraryOptions, GALLERY_PRESETS, gallerySequenceControls, presetEasingChoices, settleFieldLabels} from "./preset-gallery.js";
-import {createTextPresetPreview} from "./text-preset-preview.js";
 import {formatPresetOffset,parsePresetOffset} from "./preset-timecode.js";
 
 /** Session-only drafts; property and layer references never leave the host. */
@@ -47,8 +46,6 @@ export function createPresetPhaseEditor(doc:Document, options:{
     const body=createElement(doc,"div","ch-phase-parameters");row.appendChild(body);
     const dragHint=createElement(doc,"p","ch-preset-hint");dragHint.hidden=true;body.appendChild(dragHint);
     const saved=options.drafts?.[phase.phase],draft={...(saved?.options??phase.options)},valid=new Map<string,boolean>(),numberInputs=new Map<string,HTMLInputElement>();let dirty=false;
-    const preview=preset.category.startsWith("text-")?createTextPresetPreview(doc,{locale:options.locale,preset,settings:()=>draft,sample:"Make it\nMoti.on",onSample:()=>{}}):undefined;
-    if(preview){body.appendChild(preview.element);cleanups.push(()=>preview.dispose());}
     const applyLabel=pt?"Aplicar ajustes":"Apply changes",unchangedReason=pt?"Altere um parâmetro para aplicar.":"Change a parameter to apply.";
     const applyControl=createActionButton(doc,{id:`phase-${phase.instance}-${phase.phase}-apply`,label:applyLabel,variant:"primary",disabled:true,disabledReason:unchangedReason,onPress:()=>{
       if(!disposed&&!options.busy&&!blocked)options.execute(isEffect?"ae.presets.text-effect-adjust":"ae.presets.phase-adjust",{target:data.target,...(!isEffect?{phase:phase.phase}:{}),presetId:phase.presetId,options:draft});
@@ -58,7 +55,7 @@ export function createPresetPhaseEditor(doc:Document, options:{
       const invalid=[...valid.values()].some(value=>!value);
       dirty=JSON.stringify(draft)!==JSON.stringify(phase.options);
       if(dirty||invalid)dirtyPhases.add(phase.phase);else dirtyPhases.delete(phase.phase);
-      preview?.refresh();reportDirty();apply.disabled=options.busy||blocked||!dirty||invalid;
+      reportDirty();apply.disabled=options.busy||blocked||!dirty||invalid;
       const reason=options.busy||blockedBusy?i18n.t("phaseEditor.wait"):blocked?i18n.t("phaseEditor.reloadSelection"):invalid?i18n.t("phaseEditor.correctFields"):!dirty?unchangedReason:undefined;
       applyControl.setDisabled(apply.disabled,reason);
     };
