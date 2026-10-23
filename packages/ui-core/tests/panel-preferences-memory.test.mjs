@@ -41,6 +41,16 @@ test("aba, galeria e rascunhos sobrevivem a reabrir o painel", () => {
   assert.equal(JSON.parse(storage.data[KEY]).version, 1, "versão mantida: builds anteriores continuam lendo");
 });
 
+test("largura da árvore é opcional, persistente e limitada sem migrar preferências antigas", () => {
+  const storage=memoryStorage();const first=createPanelPreferences(root,storage);
+  assert.equal(first.snapshot().gallery.sidebarWidth,undefined);
+  first.setGallery({sidebarWidth:228});assert.equal(createPanelPreferences(root,storage).snapshot().gallery.sidebarWidth,228);
+  first.setGallery({sidebarWidth:10});assert.equal(first.snapshot().gallery.sidebarWidth,120);
+  first.setGallery({sidebarWidth:1000});assert.equal(first.snapshot().gallery.sidebarWidth,320);
+  first.setGallery({sidebarWidth:Number.NaN});assert.equal(first.snapshot().gallery.sidebarWidth,undefined);
+  assert.equal(JSON.parse(storage.data[KEY]).version,1);
+});
+
 test("aba sem ferramenta aberta e valores estranhos não voltam", () => {
   const storage = memoryStorage({ [KEY]: JSON.stringify({
     version: 1, lastView: "tools",

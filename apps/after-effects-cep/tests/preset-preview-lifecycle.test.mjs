@@ -43,13 +43,25 @@ function fixture(t,{autoplay=true,focused=true,intersection=true,scroll=0,naviga
     snapshots(){return svgs.map(s=>s.firstChild);}};
 }
 
-test('full catalogue allocates artwork only for visible cards and animates one at the display rate',t=>{
-  const f=fixture(t);assert.equal(f.views.length,232);assert.ok(f.svgs.every(s=>s.children.length===0));
+test('full catalogue allocates artwork only for visible cards and animates visible cards through one 30 fps scheduler',t=>{
+  const f=fixture(t);assert.equal(f.views.length,451);assert.ok(f.svgs.every(s=>s.children.length===0));
   f.visible([0,1,2,3,4,5]);assert.equal(f.svgs.filter(s=>s.children.length).length,6);assert.equal(f.frames.size,1);
   let before=f.snapshots();f.tick(1000);
-  assert.equal(f.snapshots().filter((n,i)=>n!==before[i]).length,1);
+  assert.equal(f.snapshots().filter((n,i)=>n!==before[i]).length,6);
   before=f.snapshots();f.tick(1008);assert.deepEqual(f.snapshots(),before,'never more than one paint per display frame');
-  f.tick(1017);assert.equal(f.snapshots().filter((n,i)=>n!==before[i]).length,1,'a cheap preview paints every 60 Hz frame');
+  f.tick(1017);assert.deepEqual(f.snapshots(),before,'cadence is capped at 30 fps');
+  f.tick(1034);assert.equal(f.snapshots().filter((n,i)=>n!==before[i]).length,6);
+});
+test('clicks, focus and pointer re-entry inside a playing panel never restart the preview clock',t=>{
+  // Each card repaint under the pointer re-fires mouseenter; resetting the clock
+  // there pinned the playing card to its first, invisible frame.
+  const now=performance.now;let clock=0;performance.now=()=>clock;t.after(()=>{performance.now=now;});
+  const f=fixture(t);f.visible([0]);
+  const markup=()=>JSON.stringify(f.svgs[0].children.map(function walk(n){return [n.tagName,n.attributes?Object.entries(n.attributes):[],(n.children??[]).map(walk)];}));
+  f.tick(600);const early=markup();
+  clock=600;for(const type of ['mouseenter','mousedown','focusin'])f.gallery.element.emit(type);
+  f.tick(1200);
+  assert.notEqual(markup(),early,'the preview keeps playing from where it was, not from the start');
 });
 test('native focus loss immediately cancels animation, including an already dequeued callback',t=>{
   const f=fixture(t);f.visible([0,1]);const late=[...f.frames.values()][0];
@@ -64,12 +76,13 @@ test('hidden panels remain idle and offscreen previews release their SVG/filter 
   f.doc.hidden=true;f.doc.emit('visibilitychange');f.visible([2]);assert.equal(f.frames.size,0);
   f.doc.hidden=false;f.gallery.element.emit('mouseenter');assert.equal(f.frames.size,1);
 });
-test('Autoplay off remains idle until explicit hover and never animates a hidden selected card',t=>{
-  const f=fixture(t,{autoplay:false});f.visible([0,1]);assert.equal(f.frames.size,0);
-  f.views[1].emit('mouseenter');assert.equal(f.frames.size,1);
-  f.views[1].emit('mouseleave');assert.equal(f.frames.size,0);
-  f.views[0].click();f.visible([0],false);assert.equal(f.frames.size,0);
+test('Autoplay off animates only an explicitly selected visible card and ignores hover',t=>{
+ const f=fixture(t,{autoplay:false});f.visible([0,1]);assert.equal(f.frames.size,0);
+ f.views[1].emit('mouseenter');assert.equal(f.frames.size,0);f.views[1].click();assert.equal(f.frames.size,1);
+ f.views[1].emit('mouseleave');assert.equal(f.frames.size,1);f.visible([1],false);assert.equal(f.frames.size,0);
+ f.views[0].click();f.visible([0],false);assert.equal(f.frames.size,0);
 });
+
 test('reduced motion, disposal and late observer deliveries cannot restart rendering',t=>{
   const f=fixture(t);f.doc.documentElement.setAttribute('data-reduced-motion','true');f.visible([0,1]);assert.equal(f.frames.size,0);
   f.gallery.dispose();assert.ok(f.svgs.every(s=>s.children.length===0));
@@ -283,7 +296,7 @@ test('disposal cancels a pending scroll restoration, including a dequeued callba
 });
 test('older CEP without IntersectionObserver keeps a bounded fallback and can preview later cards',t=>{
   const f=fixture(t,{intersection:false});assert.equal(f.svgs.filter(s=>s.children.length).length,2);
-  f.views[100].emit('mouseenter');f.tick(1000);assert.ok(f.svgs[100].children.length);assert.equal(f.svgs.filter(s=>s.children.length).length,1);
+  f.views[100].emit('mouseenter');assert.equal(f.svgs[100].children.length,0);f.views[100].click();f.tick(1000);assert.ok(f.svgs[100].children.length);assert.equal(f.svgs.filter(s=>s.children.length).length,1);
 });
 test('host polling owns no timer while unfocused, hidden, inactive or disposed',t=>{
   const f=fixture(t);let reads=0,enabled=true;

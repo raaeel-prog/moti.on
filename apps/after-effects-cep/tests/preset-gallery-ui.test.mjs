@@ -47,21 +47,16 @@ function fixture(t, { category = 'all', scope = 'all', query = '', locale = 'pt-
     apply(preset,settings,mode){applied.push({preset,settings,mode});return onApply?.(preset,navigation);},edit(){}});
   doc.documentElement.appendChild(gallery.element);
   // Details appear only after a choice; most tests start from the user picking the first card.
-  if(pick)gallery.element.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-apply'))?.click();
+  if(pick){gallery.element.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-apply'))?.click();doc.documentElement.setAttribute('data-reduced-motion','true');doc.emit('keydown',{key:'Escape'});doc.documentElement.removeAttribute('data-reduced-motion');}
   t.after(()=>{gallery.dispose();Object.assign(globalThis,saved);});
   return {doc,navigation,gallery,applied,context,preferences};
 }
 
-test('gallery search starts compact and retains query/focus without rebuilding its control',t=>{
-  const f=fixture(t),root=f.gallery.element;
-  const control=root.getElementsByTagName('div').find(n=>n.className.includes('ch-preset-search'));
-  const trigger=control.getElementsByTagName('button')[0],input=control.getElementsByTagName('input')[0];
-  assert.equal(control.getAttribute('data-expanded'),'false');
-  trigger.click();assert.equal(control.getAttribute('data-expanded'),'true');assert.equal(f.doc.activeElement,input);
-  input.value='arco';input.emit('input');assert.equal(f.navigation.query,'arco');
-  input.emit('blur');assert.equal(control.getAttribute('data-expanded'),'true');
-  input.keydown('Escape');assert.equal(input.value,'arco');assert.equal(f.navigation.query,'arco');
-  input.value='';input.emit('input');input.emit('blur');assert.equal(control.getAttribute('data-expanded'),'false');
+test('gallery search is always visible and retains its query without recreating the control',t=>{
+ const f=fixture(t),control=f.gallery.element.querySelector('.ch-preset-search'),input=control.getElementsByTagName('input')[0];
+ assert.equal(control.getElementsByTagName('button').length,0);input.focus();input.value='arco';input.emit('input');input.emit('blur');
+ assert.equal(f.navigation.query,'arco');assert.equal(control.getElementsByTagName('input')[0]===input,true);
+ input.value='';input.emit('input');assert.equal(f.navigation.query,'');
 });
 
 test('application captures the actual grid position before the next scroll event and selects its target',t=>{
@@ -107,44 +102,23 @@ test('opening applied presets captures the live offset before the shell detaches
   assert.equal(navigation.scroll,712);
 });
 
-test('the default gallery exposes all collections with its filters in a closed anchored menu',t=>{
-  const {gallery,navigation}=fixture(t),root=gallery.element;
-  assert.equal(navigation.category,'all');
-  const cards=root.getElementsByTagName('article');
-  assert.ok(cards.length>30,'all collections include more than the former premium-only default');
-  assert.ok(!cards.some(card=>card.id.startsWith('builtin.ease.')));
-  assert.ok(cards.some(card=>card.id==='builtin.camera.pushIn'));
-  const menu=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-filter-menu');
-  const categories=root.getElementsByTagName('nav').find(node=>node.className==='ch-preset-categories');
-  const trigger=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-filter-trigger'));
-  assert.equal(categories.parentNode,menu);
-  assert.equal(menu.hidden,true);assert.equal(trigger.getAttribute('aria-expanded'),'false');
-  assert.match(trigger.allText,/Todos os presets/);
-  const edit=root.getElementsByTagName('button').find(node=>node.getAttribute('aria-label')==='Editar preset aplicado');
-  const autoplay=root.getElementsByTagName('button').find(node=>node.getAttribute('aria-label')==='Autoplay');
-  const size=root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Tamanho das miniaturas');
-  assert.equal(edit.parentNode,trigger.parentNode);assert.equal(autoplay.parentNode,trigger.parentNode);
-  assert.equal(menu.contains(edit),false);assert.equal(menu.contains(autoplay),false);assert.equal(menu.contains(size),false);
-  const scroll=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-scroll');
-  assert.equal(scroll.contains(trigger),false);assert.equal(scroll.contains(size),false);
-  trigger.click();assert.equal(menu.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');
+test('the default gallery exposes every collection in its persistent sidebar',t=>{
+ const {gallery,navigation}=fixture(t),root=gallery.element,sidebar=root.querySelector('.ch-preset-sidebar');
+ assert.equal(navigation.category,'all');const cards=root.getElementsByTagName('article');assert.ok(cards.length>30);assert.ok(!cards.some(card=>card.id.startsWith('builtin.ease.')));assert.ok(cards.some(card=>card.id==='builtin.camera.pushIn'));
+ const menu=root.querySelector('.ch-preset-filter-menu'),categories=root.querySelector('.ch-preset-categories');assert.equal(menu.hidden,false);assert.equal(sidebar.contains(categories),true);assert.equal(menu.getAttribute('data-open'),'true');
+ assert.equal(sidebar.contains(root.querySelector('.ch-preset-search')),true);assert.equal(root.querySelector('.ch-preset-scroll').contains(sidebar),false);
 });
 
-test('thumbnail size shares the catalog toolbar and the category menu sizes itself',t=>{
-  const {gallery}=fixture(t),root=gallery.element;
-  const toolbar=root.getElementsByTagName('div').find(node=>node.className.includes('ch-preset-toolbar-approved'));
-  const size=root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Tamanho das miniaturas');
-  assert.ok(toolbar.contains(size),'the thumbnail control no longer owns a row of its own');
-  const categories=root.getElementsByTagName('nav').find(node=>node.className==='ch-preset-categories');
-  assert.equal(categories.style.width,undefined,'no inherited sidebar width narrows the menu');
-  assert.equal(root.getElementsByTagName('div').some(node=>node.className==='ch-preset-divider'),false);
+test('thumbnail size lives in the fixed footer and the tree exposes a splitter',t=>{
+ const {gallery}=fixture(t),root=gallery.element;const size=root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Tamanho das miniaturas');
+ assert.equal(root.querySelector('.ch-preset-reference-footer').contains(size),true);assert.equal(root.querySelector('.ch-preset-toolbar-approved').contains(size),false);
+ assert.equal(root.getElementsByRole('separator').length,1);
 });
 
 test('category menu supports arrow, Home/End and fold keys',t=>{
   const {gallery,doc,preferences}=fixture(t),root=gallery.element;
   const menu=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-filter-menu');
-  const trigger=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-filter-trigger'));
-  trigger.click();
+  menu.getElementsByTagName('button').find(node=>node.dataset.category==='signature').focus();
   const key=name=>menu.emit('keydown',{key:name,target:doc.activeElement});
   assert.equal(doc.activeElement.dataset.category,'signature');
   key('ArrowDown');assert.equal(doc.activeElement.dataset.category,'signature-essentials');
@@ -160,7 +134,7 @@ test('a selected preset persists when closing settings or pressing Escape',t=>{
   const {gallery,navigation,doc}=fixture(t,{pick:false}),root=gallery.element;
   const editor=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-editor');
   const bar=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-applybar');
-  assert.equal(navigation.selectedId,undefined);assert.equal(editor.hidden,true);assert.equal(bar.hidden,true);
+  assert.equal(navigation.selectedId,undefined);assert.equal(editor.hidden,true);assert.equal(bar.hidden,false);
   const title=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-apply'));
   title.click();const selected=navigation.selectedId;
   assert.equal(editor.hidden,true,'the empty inspector has no visible container');assert.equal(bar.hidden,false);
@@ -206,20 +180,10 @@ test('legacy Curves navigation migrates to all presets without a dead selected i
   assert.ok(!gallery.element.getElementsByTagName('article').some(card=>card.id.startsWith('builtin.ease.')));
 });
 
-test('filter menu transfers focus on opening and reverses an unfinished closing animation',async t=>{
-  const {gallery,doc}=fixture(t),root=gallery.element;
-  const menu=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-filter-menu');
-  const trigger=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-filter-trigger'));
-  trigger.focus();trigger.click();
-  assert.equal(menu.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');
-  assert.equal(doc.activeElement,menu.getElementsByTagName('button').find(node=>node.className==='ch-folder-select'),'keyboard navigation enters the menu that precedes its trigger in the DOM');
-  trigger.click();assert.equal(menu.getAttribute('data-open'),'false');assert.equal(menu.hidden,false,'exit animation is still running');
-  trigger.click();assert.equal(trigger.getAttribute('aria-expanded'),'true');assert.equal(menu.getAttribute('data-open'),'true');
-  await new Promise(resolve=>setTimeout(resolve,240));
-  assert.equal(menu.hidden,false,'the cancelled exit timer must not hide the reopened menu');
-  assert.equal(menu.getAttribute('aria-hidden'),'false');
-  trigger.click();await new Promise(resolve=>setTimeout(resolve,240));
-  assert.equal(menu.hidden,true);assert.equal(trigger.getAttribute('aria-expanded'),'false');
+test('the persistent tree remains visible after Escape and pointer movement',async t=>{
+ const {gallery,doc}=fixture(t),root=gallery.element,tree=root.querySelector('.ch-preset-filter-menu');
+ const first=tree.getElementsByTagName('button').find(node=>node.className==='ch-folder-select');first.focus();doc.emit('keydown',{key:'Escape'});tree.emit('mouseleave');await new Promise(resolve=>setTimeout(resolve,240));
+ assert.equal(tree.hidden,false);assert.equal(tree.getAttribute('data-open'),'true');assert.equal(doc.activeElement===first,true);
 });
 
 test('switching to personal presets clears the previous inspector and preserves its draft for return',t=>{
@@ -238,7 +202,7 @@ test('switching to personal presets clears the previous inspector and preserves 
   assert.equal(editor.hidden,true,'returning keeps the empty inspector hidden');assert.equal(navigation.selectedId,selected);
   const title=()=>root.getElementsByTagName('button').find(node=>node.dataset.focusKey===`title.${selected}`);
   title().click();
-  assert.equal(editor.hidden,true,'a second click clears the choice and folds the box');assert.equal(navigation.selectedId,'');
+  assert.equal(editor.hidden,true,'a second click clears the choice and folds the box');assert.ok(navigation.selectedId);
   title().click();
   assert.equal(editor.hidden,true);assert.equal(navigation.selectedId,selected);assert.equal(root.getElementsByTagName('div').find(node=>node.className==='ch-preset-applybar').hidden,false);
   assert.equal(left().getAttribute('aria-pressed'),'true','the draft survives deselection');
@@ -335,7 +299,7 @@ test('library keeps search and folders beside the cards and exposes a keyboard s
   assert.ok(sidebar.querySelector('input'));assert.ok(sidebar.querySelector('.ch-preset-categories'));
   const splitter=root.getElementsByRole('separator')[0];assert.ok(splitter);assert.equal(splitter.getAttribute('aria-orientation'),'vertical');
   const before=Number(splitter.getAttribute('aria-valuenow'));splitter.emit('keydown',{key:'ArrowLeft'});
-  assert.equal(Number(splitter.getAttribute('aria-valuenow')),before-8);
+  assert.equal(Number(splitter.getAttribute('aria-valuenow')),Math.max(120,before-8));
   const footer=root.querySelector('.ch-preset-reference-footer');assert.ok(footer);
   assert.ok(footer.querySelector('input'));assert.ok(footer.getElementsByTagName('button').find(node=>node.allText==='Ações de presets'));
 });
@@ -382,7 +346,7 @@ test('Apply bar is outside the scrolling gallery and stays blocked while busy',t
   const {gallery,applied}=fixture(t,{busy:true}),root=gallery.element;
   const scroll=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-scroll');
   const bar=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-applybar');
-  assert.ok(scroll);assert.equal(bar.parentNode,scroll.parentNode);assert.equal(bar.parentNode,root);
+  assert.ok(scroll);assert.equal(bar.parentNode===root.querySelector('.ch-preset-reference-footer'),true);
   assert.equal(scroll.contains(bar),false);
   const apply=bar.getElementsByTagName('button').find(node=>node.dataset.phase==='in');
   assert.equal(apply.disabled,true);apply.click();assert.equal(applied.length,0);
@@ -453,8 +417,7 @@ test('empty search retains selection, draft, search identity and focus until exp
   const selected=navigation.selectedId;
   root.getElementsByTagName('button').find(node=>node.dataset.direction==='left').click();
   const search=root.getElementsByTagName('input').find(node=>node.type==='search');
-  const searchControl=root.getElementsByTagName('div').find(node=>node.className.includes('ch-preset-search'));
-  searchControl.getElementsByTagName('button')[0].click();
+  search.focus();
   search.value='does-not-exist';search.emit('input');t.mock.timers.tick(250);
   assert.equal(navigation.selectedId,selected);assert.equal(navigation.drafts[selected].direction,'left');
   assert.equal(doc.activeElement,search);assert.equal(navigation.query,'does-not-exist');
@@ -543,7 +506,7 @@ test('the box under the gallery is lean: only In, Out and Both; a second click f
   const selected=navigation.selectedId,card=root.getElementsByTagName('article').find(node=>node.id===selected);
   assert.equal(card.getAttribute('data-selected'),'true');
   card.getElementsByTagName('button').find(node=>node.className==='ch-preset-preview').click();
-  assert.equal(card.getAttribute('data-selected'),'false');assert.equal(navigation.selectedId,'');assert.equal(editor.hidden,true);
+  assert.equal(card.getAttribute('data-selected'),'true');assert.equal(navigation.selectedId,selected);assert.equal(editor.hidden,true);
 });
 
 test('character chips pick the curve and reveal its own controls',t=>{

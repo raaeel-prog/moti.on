@@ -1,7 +1,7 @@
 import { selectField, hint } from "./shell.js";
 import type { I18n } from "./i18n.js";
 
-type Theme = "dark" | "light";
+type Theme = "dark" | "light" | "host";
 type PanelLocale = "host" | "pt-BR" | "en-US";
 type Density = "default" | "compact";
 type PreferenceStorage = Pick<Storage, "getItem" | "setItem">;
@@ -18,12 +18,12 @@ const RESTORABLE_VIEWS = ["home", "ease", "presets", "settings"];
 const GALLERY_SCOPES = ["all", "favorites", "recent"];
 const MAX_DRAFTS = 24;
 
-export interface GalleryMemory { category: string; scope: string; query: string; presetId: string }
+export interface GalleryMemory { category: string; scope: string; query: string; presetId: string; sidebarWidth?: number }
 type DraftValue = string | number | boolean;
 
 /** Guarda somente preferências e IDs de ferramentas, nunca dados do projeto. */
-export function createPanelPreferences(root: HTMLElement, storage?: PreferenceStorage) {
-  let theme: Theme = "dark";
+export function createPanelPreferences(root: HTMLElement, storage?: PreferenceStorage, options: { hostTheme?: boolean; onThemeChange?(): void } = {}) {
+  let theme: Theme = options.hostTheme ? "host" : "dark";
   let locale: PanelLocale = "host";
   let density: Density = "default";
   let category = "all";
@@ -71,6 +71,7 @@ export function createPanelPreferences(root: HTMLElement, storage?: PreferenceSt
     if (typeof data["scope"] === "string" && GALLERY_SCOPES.includes(data["scope"])) next.scope = data["scope"];
     if (typeof data["query"] === "string" && data["query"].length <= 120 && !Array.from(data["query"]).some(character => character.charCodeAt(0) < 32)) next.query = data["query"];
     if (typeof data["presetId"] === "string" && ids([data["presetId"]], 1).length === 1) next.presetId = data["presetId"];
+    if(typeof data["sidebarWidth"]==="number"&&Number.isFinite(data["sidebarWidth"]))next.sidebarWidth=Math.max(120,Math.min(320,data["sidebarWidth"]));
     if (next.category === "ease") next.category = "all";
     if (next.presetId.startsWith("builtin.ease.")) next.presetId = "";
     return next;
@@ -86,7 +87,8 @@ export function createPanelPreferences(root: HTMLElement, storage?: PreferenceSt
         readable = true;
         const data = saved as Record<string, unknown>;
         if (data["locale"] === "pt-BR" || data["locale"] === "en-US") locale = data["locale"];
-        if (data["theme"] === "light") theme = "light";
+        if (options.hostTheme) { if (data["aeTheme"] === "dark" || data["aeTheme"] === "light") theme = data["aeTheme"]; }
+        else if (data["theme"] === "light") theme = "light";
         if (data["density"] === "compact") density = "compact";
         if (typeof data["category"] === "string" && ["all", "keyframes", "layers", "animation", "spatial", "shapes", "effects", "project"].includes(data["category"])) category = data["category"];
         favorites = ids(data["favorites"], 100);
@@ -121,14 +123,16 @@ export function createPanelPreferences(root: HTMLElement, storage?: PreferenceSt
   }
 
   function apply(): void {
-    root.setAttribute("data-theme", theme);
+    root.setAttribute("data-theme", theme === "host" ? root.getAttribute("data-host-theme") ?? "dark" : theme);
+    if (options.hostTheme) root.setAttribute("data-theme-mode", theme);
     root.setAttribute("data-density", density);
+    options.onThemeChange?.();
   }
   function save(): void {
     apply();
     if (!storage || (!readable && !recovered)) return;
     try {
-      const base = { version: 1, theme, locale, density, category, favorites, recent, recentColors, presetAutoplay, presetSize, quickDockPinned, folderColors, collapsedFolders, lastView, gallery };
+      const base = { version: 1, theme: theme === "host" ? "dark" : theme, ...(options.hostTheme ? { aeTheme: theme } : {}), locale, density, category, favorites, recent, recentColors, presetAutoplay, presetSize, quickDockPinned, folderColors, collapsedFolders, lastView, gallery };
       let serialized = JSON.stringify({ ...base, drafts });
       // Rascunhos são o primeiro a ceder: preferências e favoritos sempre cabem.
       if (serialized.length > 32_768) serialized = JSON.stringify({ ...base, drafts: {} });
@@ -138,6 +142,7 @@ export function createPanelPreferences(root: HTMLElement, storage?: PreferenceSt
   }
   apply();
   return {
+    supportsHostTheme: Boolean(options.hostTheme),
     snapshot: () => ({ theme, locale, density, category, favorites: [...favorites], recent: [...recent], recentColors: [...recentColors], persistent, recovered, presetAutoplay, presetSize, quickDockPinned, folderColors: { ...folderColors }, collapsedFolders: [...collapsedFolders], lastView, gallery: { ...gallery }, drafts: JSON.parse(JSON.stringify(drafts)) as Record<string, Record<string, DraftValue>> }),
     /** Só as abas principais; não grava se nada mudou (é chamado a cada render). */
     setLastView(value: string) { if (RESTORABLE_VIEWS.includes(value) && value !== lastView) { lastView = value; save(); } },
@@ -158,7 +163,7 @@ export function createPanelPreferences(root: HTMLElement, storage?: PreferenceSt
     setFolderColor(id: string, color: string) { if (!folderId(id)) return; if (colors.includes(color)) folderColors[id] = color; else delete folderColors[id]; save(); },
     toggleFolder(id: string) { if (!folderId(id)) return; collapsedFolders = collapsedFolders.includes(id) ? collapsedFolders.filter(v => v !== id) : ids([...collapsedFolders, id], 100); save(); },
     setCategory(value: string) { category = value; save(); },
-    setTheme(value: string) { if (value === "dark" || value === "light") { theme = value; save(); } },
+    setTheme(value: string) { if (value === "dark" || value === "light" || (value === "host" && options.hostTheme)) { theme = value; save(); } },
     setDensity(value: string) { if (value === "default" || value === "compact") { density = value; save(); } },
     toggleFavorite(id: string) {
       if (ids([id], 1).length === 0) return;
@@ -176,7 +181,7 @@ export function createPanelPreferences(root: HTMLElement, storage?: PreferenceSt
     clearFavorites() { favorites = []; save(); },
     clearDrafts() { drafts = {}; save(); },
     /** Presentation only: libraries, saved recipes, account and favorites remain. */
-    resetInterface() { theme = "dark"; density = "default"; locale = "host"; quickDockPinned = false; apply(); save(); },
+    resetInterface() { theme = options.hostTheme ? "host" : "dark"; density = "default"; locale = "host"; quickDockPinned = false; apply(); save(); },
     resetPreviews() { presetAutoplay = true; presetSize = 200; save(); }
   };
 }
@@ -195,6 +200,7 @@ export function appearanceSettings(doc: Document, i18n: I18n, preferences: Panel
     selectField(doc, {
       id: "settings-theme", label: i18n.t("settings.theme.label"), value: current.theme,
       options: [
+        ...(preferences.supportsHostTheme ? [{ value: "host", label: i18n.t("settings.theme.host") }] : []),
         { value: "dark", label: i18n.t("settings.theme.dark") },
         { value: "light", label: i18n.t("settings.theme.light") }
       ],

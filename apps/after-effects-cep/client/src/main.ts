@@ -1,3 +1,5 @@
+import {createHostTheme, type ThemeHost} from "./host-theme.js";
+import {standardToolNumbers} from "./tool-number-fields.js";
 /**
  * Raiz de composição do painel do After Effects.
  *
@@ -33,6 +35,8 @@ import { groupToolSections } from "./views/tool-sections.js";
 import { createSelectionCoordinator, type SelectionReader } from "./selection-coordinator.js";
 import { renderManagedTools } from "./managed-tools-editor.js";
 import { focusedPoll } from "./focused-poll.js";
+import { trackPointerPresence, type PointerPresence } from "./pointer-presence.js";
+import { createCameraPanel } from "./camera-panel.js";
 import { createGradientEditor } from "./gradient-editor.js";
 import { DEFAULT_EASE, cloneEaseDraft, easeNeedsPair, type EaseDraft } from "./ease-args.js";
 import { EASE_PRESETS, readEaseAutoOpen, readEaseLibrary, readEaseLive, writeEaseAutoOpen, writeEaseLive, type EaseCurve } from "./ease-library.js";
@@ -61,7 +65,6 @@ import {
   hint,
   notice,
   normalizeHexColor,
-  numberField,
   propertyRow,
   sectionTitle,
   selectField,
@@ -103,7 +106,10 @@ import { createEaseActions, type EaseAction } from "./ease-actions.js";
 import { DEFAULT_ORBIT, ORBIT_PRESETS, deriveOrbitPreset, selectOrbitPreset, type OrbitDraft, type OrbitTargetMode } from "./orbit-presets.js";
 import { presetArgs, defaultLibraryOptions, GALLERY_PRESETS, type PresetNavigation } from "./preset-gallery.js";
 
-const panelPreferences = createPanelPreferences(document.documentElement, browserPreferenceStorage(window));
+let hostTheme: ReturnType<typeof createHostTheme> | undefined;
+const toolNumbers = standardToolNumbers;
+const numberField = toolNumbers.field;
+const panelPreferences = createPanelPreferences(document.documentElement, browserPreferenceStorage(window), {hostTheme:true,onThemeChange:()=>hostTheme?.refresh()});
 let panelHostLocale: string | undefined;
 const libraryNavigation: LibraryState = { category: panelPreferences.snapshot().category, scope: "all", query: "", scroll: 0 };
 let disposeView: (() => void) | null = null;
@@ -112,6 +118,12 @@ let refreshLibrary: (() => void) | null = null;
 let quickTileFeedback: ((id: string, state: TileFeedback) => void) | null = null;
 let selectionCoordinator: ReturnType<typeof createSelectionCoordinator> | null = null;
 const selectionReaders = new Set<SelectionReader>();
+/**
+ * Periodic host reads pause while the pointer is over the panel: on Windows
+ * each `evalScript` resets the cursor (see `pointer-presence.ts`).
+ */
+let pointerPresence: PointerPresence | null = null;
+const pointerInPanel = (): boolean => pointerPresence?.inside() ?? false;
 let refreshToolContext: (() => void) | null = null;
 let refreshPresetContext: (() => void) | null = null;
 let orbitAdvancedOpen = false;
@@ -133,7 +145,7 @@ function restorePresetNavigation(): PresetNavigation {
   const category = saved.gallery.category.startsWith("personal") ? "all" : saved.gallery.category;
   const known = GALLERY_PRESETS.some(preset => preset.id === saved.gallery.presetId);
   return {
-    category, scope: saved.gallery.scope, query: saved.gallery.query, scroll: 0, drafts,
+    category, scope: saved.gallery.scope, query: saved.gallery.query, scroll: 0, drafts, ...(saved.gallery.sidebarWidth!==undefined?{sidebarWidth:saved.gallery.sidebarWidth}:{}),
     ...(known ? { selectedId: saved.gallery.presetId } : {})
   };
 }
@@ -147,7 +159,7 @@ function rememberPresetNavigation(): void {
   }
   panelPreferences.setGallery({
     category: presetNavigation.category.startsWith("personal") ? "all" : presetNavigation.category,
-    scope: presetNavigation.scope, query: presetNavigation.query, presetId: presetNavigation.selectedId ?? ""
+    scope: presetNavigation.scope, query: presetNavigation.query, presetId: presetNavigation.selectedId ?? "", ...(presetNavigation.sidebarWidth!==undefined?{sidebarWidth:presetNavigation.sidebarWidth}:{})
   });
   panelPreferences.setDrafts(changed);
 }
@@ -907,7 +919,14 @@ const DEFAULT_GLITCH: GlitchDraft = {
   durationFrames: 12
 };
 
-type ParallaxFullOperation = "create" | "adjust" | "remove" | "subtle" | "truck" | "vertical" | "dolly" | "autoFocus" | "zoom" | "wiggle" | "bake";
+const PARALLAX_MOVE_OPS = [
+  "subtle",
+  "truck",
+  "vertical",
+  "dolly"
+] as const;
+
+type ParallaxFullOperation = "create" | "adjust" | "remove" | (typeof PARALLAX_MOVE_OPS)[number] | "autoFocus" | "zoom" | "wiggle" | "bake";
 
 interface ParallaxFullDraft {
   operation: ParallaxFullOperation;
@@ -944,6 +963,10 @@ interface ParallaxDraft {
   createCamera: boolean;
   preserveFraming: boolean;
   controllerName: string;
+  /** linear | front | area: how the planes share the depth. */
+  depthMode: "linear" | "front" | "area";
+  /** Background behind the focal plane, as a fraction of the camera zoom (0–0.5). */
+  backgroundDepth: number;
 }
 
 const DEFAULT_PARALLAX: ParallaxDraft = {
@@ -952,7 +975,9 @@ const DEFAULT_PARALLAX: ParallaxDraft = {
   orderMode: "selection",
   createCamera: true,
   preserveFraming: true,
-  controllerName: "Parallax"
+  controllerName: "Parallax",
+  depthMode: "linear",
+  backgroundDepth: 0
 };
 
 const DEFAULT_FAST_EDIT: FastEditDraft = {
@@ -1901,8 +1926,10 @@ const VIEWS: ShellView[] = [
   // Entrada de busca, favoritos e ferramentas recentes; Quick preserva a view.
   { id: "home", labelKey: "library.browse", titleKey: "view.home.title" },
   { id: "ease", primary: true, labelKey: "tool.ease.name", titleKey: "tool.ease.name" },
+  // Parallax e camera (ADR 0007): aba propria ao lado de Suavizacao, a pedido do usuario.
+  { id: "parallax", primary: true, labelKey: "nav.parallax", titleKey: "view.parallax.title" },
   { id: "presets", labelKey: "library.presets", titleKey: "library.presets" },
-  { id: "tools", labelKey: "library.edit", titleKey: "view.tools.title" },
+  { id: "tools", utilityOnly: true, labelKey: "library.edit", titleKey: "view.tools.title" },
   { id: "context", utilityOnly: true, labelKey: "nav.context", titleKey: "view.context.title" },
   { id: "system", utilityOnly: true, labelKey: "nav.system", titleKey: "view.system.title" },
   { id: "diagnostics", utilityOnly: true, labelKey: "nav.diagnostics", titleKey: "view.diagnostics.title" },
@@ -1964,6 +1991,8 @@ const state: {
   fastEdit: FastEditDraft;
   parallax: ParallaxDraft;
   parallaxFull: ParallaxFullDraft;
+  /** Which half of the Parallax tab is open. */
+  parallaxSegment: "parallax" | "camera";
   breakShape: BreakShapeDraft;
   effector: EffectorDraft;
   cameraTransition: CameraTransitionDraft;
@@ -2035,6 +2064,7 @@ const state: {
   fastEdit: { ...DEFAULT_FAST_EDIT },
   parallax: { ...DEFAULT_PARALLAX },
   parallaxFull: { ...DEFAULT_PARALLAX_FULL },
+  parallaxSegment: "camera",
   breakShape: { ...DEFAULT_BREAK_SHAPE },
   effector: { ...DEFAULT_EFFECTOR },
   cameraTransition: { ...DEFAULT_CAMERA_TRANSITION },
@@ -2081,31 +2111,11 @@ function start(): void {
     return locale === "host" ? undefined : locale;
   }, authorizeCreativeOperation);
 
-  if (adapter) {
-    // "pt_BR", com underscore — formato medido no After Effects 26.3, não
-    // suposto. `normalizeLocale` cuida da conversão.
-    panelHostLocale = adapter.uiLocale();
-    logger.setHost("after-effects");
+  if (adapter) { panelHostLocale = adapter.uiLocale(); logger.setHost("after-effects"); }
+  let themeHost: ThemeHost | undefined;
+  try { const Constructor = (window as unknown as {CSInterface?: new()=>ThemeHost}).CSInterface; if(Constructor) themeHost = new Constructor(); } catch { /* Screenshot fallback remains available. */ }
+  hostTheme = createHostTheme(document.documentElement, themeHost, () => panelPreferences.snapshot().theme);
 
-    // Moti.on Theme Sync: Inject native highlight color and typography
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const csInterface = new (window as any).CSInterface();
-      const applyTheme = () => {
-        const env = csInterface.getHostEnvironment();
-        if (env && env.appSkinInfo) {
-          const rgb = env.appSkinInfo.systemHighlightColor;
-          if (rgb) {
-            const highlightHex = `#${Math.round(rgb.red).toString(16).padStart(2, '0')}${Math.round(rgb.green).toString(16).padStart(2, '0')}${Math.round(rgb.blue).toString(16).padStart(2, '0')}`;
-            document.documentElement.style.setProperty('--focus-ring', highlightHex);
-          }
-          document.documentElement.style.setProperty('--ch-font-family', '"Adobe Clean", sans-serif');
-        }
-      };
-      applyTheme();
-      csInterface.addEventListener("com.adobe.csxs.events.ThemeColorChanged", applyTheme);
-    } catch { /* Ignored */ }
-  }
 
   const preferredLocale = panelPreferences.snapshot().locale;
   i18n.setLocale(preferredLocale === "host" ? panelHostLocale : preferredLocale);
@@ -2115,6 +2125,7 @@ function start(): void {
   // regras de português quando o After Effects está em en-US.
   document.documentElement.lang = i18n.locale();
   document.documentElement.setAttribute("data-runtime", "cep");
+  document.documentElement.setAttribute("data-host", "after-effects");
 
   const initialView = panelPreferences.snapshot().lastView;
   const shell = createShell({
@@ -2149,7 +2160,7 @@ function start(): void {
       : { region: "Notifications", dismiss: "Dismiss", queued: n => `${n} queued notifications`, success: "Complete", error: "Error", warning: "Warning", info: "Information" }
   });
   mount.appendChild(globalFeedback.element);
-  window.addEventListener("unload", () => { rememberPresetNavigation(); disposeView?.(); globalFeedback?.dispose(); });
+  window.addEventListener("unload", () => { rememberPresetNavigation(); disposeView?.(); toolNumbers.dispose(); hostTheme?.dispose(); globalFeedback?.dispose(); });
   // Grava a navegação da galeria em segundo plano; só escreve quando mudou.
   const navigationMemory = setInterval(rememberPresetNavigation, 2000);
   window.addEventListener("unload", () => clearInterval(navigationMemory));
@@ -2166,6 +2177,8 @@ function start(): void {
 
   // A partir daqui o painel se mantem sozinho: trocar de composicao ou de
   // selecao na timeline chega aqui sem o usuario apertar nada.
+  pointerPresence = trackPointerPresence(document);
+  window.addEventListener("unload", () => { pointerPresence?.dispose(); pointerPresence = null; });
   const pararWatch = startContextWatch(shell, logger, adapter.client);
   window.addEventListener("unload", pararWatch);
   const pararSuperficies = startEaseSurfaces(shell, i18n, adapter.client);
@@ -2309,7 +2322,7 @@ async function applyQuickPreset(
       label: i18n.t("feedback.adjust"), dismissOnPress: true,
       onPress: () => {
         state.activeTool = tool.id; state.lastError = null;
-        if (shell.activeView() === "tools") shell.rerender(); else shell.navigate("tools");
+        openToolView(shell, tool.id);
         void tool.load?.();
       }
     }]);
@@ -2363,10 +2376,15 @@ async function applyQuickPreset(
  * verificá-la lendo o próprio código-fonte com expressão regular.
  */
 async function applyLibraryCommand(action: "apply" | "phase-apply" | "remove" | "bake" | "camera-transition", args: Record<string, unknown>, recentId: string,
-  shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
-  if (state.busy) return;
+  shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<{ok:boolean;message:string}> {
   const pt = i18n.locale() === "pt-BR";
-  setBusy(shell, true); state.lastError = null;
+  if (state.busy) return {ok:false,message:pt?"Aguarde a operação atual.":"Wait for the current operation."};
+  // Preserve library state during phase application and failed/no-op outcomes.
+  const retainBrowse = action === "phase-apply" && shell.activeView() === "presets" && presetNavigation.view !== "edit";
+  if (retainBrowse) { state.busy = true; shell.setBusy(true); }
+  else setBusy(shell, true);
+  let openEdit = false;
+  state.lastError = null;
   shell.setStatus(pt ? "Atualizando preset…" : "Updating preset…", "busy");
   try {
     const command = `ae.presets.${action}`;
@@ -2374,21 +2392,28 @@ async function applyLibraryCommand(action: "apply" | "phase-apply" | "remove" | 
     logger.recordResponse(command, response);
     if (!response.ok) {
       state.lastError = response.error?.message || (pt ? "Não foi possível aplicar o preset." : "Unable to apply preset.");
-      shell.setStatus(state.lastError, "error"); return;
+      shell.setStatus(state.lastError, "error"); return {ok:false,message:state.lastError};
     }
     if (recentId) panelPreferences.recordUse(recentId);
     const count = Number((response.data as { appliedCount?: number } | null)?.appliedCount ?? 0);
     // setBusy(false) recreates the workspace; choose Edit before that render so
     // its fresh inspection loads the values actually applied in After Effects.
-    if (count > 0 && (action === "apply" || action === "phase-apply" || action === "camera-transition")) presetNavigation.view = "edit";
+    if (count > 0 && (action === "apply" || action === "phase-apply" || action === "camera-transition")) { presetNavigation.view = "edit"; openEdit = true; }
     // Removing a managed preset returns to the browser context retained before
     // application, including the selected card, filters and scroll position.
     if (count > 0 && action === "remove") presetNavigation.view = "browse";
     const message = action === "camera-transition" && count ? pt ? "Transição pronta. O marcador CUT indica o corte." : "Transition ready. The CUT marker marks the cut." : count ? pt ? action === "remove" ? "Preset removido da seleção." : action === "bake" ? "Animação convertida em keyframes." : "Preset aplicado. Ajuste na aba Editar." : action === "remove" ? "Preset removed." : action === "bake" ? "Animation baked to keyframes." : "Preset applied. Adjust in the Edit tab." : pt ? "Nenhum preset gerenciado na seleção." : "No managed preset in selection.";
     shell.setStatus(message, count ? "ok" : "busy");
     if (response.warnings.length) reportHostWarnings(response.warnings);
-  } catch { shell.setStatus(i18n.t("message.failureWithoutReason"), "error"); }
-  finally { setBusy(shell, false); }
+    return {ok:count>0,message};
+  } catch {
+    state.lastError=i18n.t("message.failureWithoutReason");
+    shell.setStatus(state.lastError, "error");
+    return {ok:false,message:state.lastError};
+  } finally {
+    if (retainBrowse && !openEdit) { state.busy=false;state.busyReason=null;shell.setBusy(false);refreshPresetContext?.();selectionCoordinator?.refresh(); }
+    else setBusy(shell, false);
+  }
 }
 
 async function applyQuickAction(action: QuickAction, shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
@@ -2416,6 +2441,64 @@ async function applyQuickAction(action: QuickAction, shell: Shell, i18n: I18n, l
   } finally { setBusy(shell, false); }
 }
 
+/** Parallax lives in its own tab next to Suavização; every other tool opens in Ferramentas. */
+function openToolView(shell: Shell, toolId: ToolId): void {
+  const view = toolId === "parallax" ? "parallax" : "tools";
+  if (toolId === "parallax") state.parallaxSegment = "parallax";
+  if (shell.activeView() === view) shell.rerender(); else shell.navigate(view);
+}
+
+/** The two halves of the Parallax tab: the depth rig and the camera shots. One task at a time. */
+function parallaxSegments(shell: Shell, i18n: I18n): HTMLElement {
+  const english = i18n.locale().startsWith("en");
+  const group = createElement(document, "div", "ch-chip-group ch-parallax-segments");
+  group.setAttribute("role", "tablist");
+  for (const [id, pt, en] of [["camera", "Câmera", "Camera"], ["parallax", "Parallax", "Parallax"]] as const) {
+    const tab = createElement(document, "button", "ch-chip", english ? en : pt);
+    tab.id = "parallax-segment-" + id;
+    tab.setAttribute("type", "button");
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(state.parallaxSegment === id));
+    tab.setAttribute("data-active", String(state.parallaxSegment === id));
+    tab.addEventListener("click", () => {
+      if (state.busy || state.parallaxSegment === id) return;
+      state.parallaxSegment = id;
+      shell.rerender();
+    });
+    group.appendChild(tab);
+  }
+  return group;
+}
+
+/** Câmera half of the Parallax tab (ADR 0007). */
+function renderCameraView(regions: RenderRegions, shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): void {
+  shell.setViewTitle(i18n.t("view.parallax.title"));
+  regions.content.appendChild(parallaxSegments(shell, i18n));
+  let reduced = false;
+  try { reduced = Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches); } catch { /* No media queries in this host. */ }
+  const panel = createCameraPanel(document, {
+    i18n,
+    execute: async (command, args, options) => {
+      const response = await client.execute(command, args, options ?? {});
+      logger.recordResponse(command, response);
+      return response;
+    },
+    error: (response) => response.error ? hostFailureMessage(response.error, i18n) : i18n.t("message.failureWithoutReason"),
+    busy: (value) => setBusy(shell, value),
+    status: (message, tone) => shell.setStatus(message, tone === "error" ? "error" : "ok"),
+    ...(!reduced && typeof window !== "undefined" && window.requestAnimationFrame
+      ? { frame: (callback: (now: number) => void) => window.requestAnimationFrame(callback), cancelFrame: (handle: number) => window.cancelAnimationFrame(handle) }
+      : {})
+  });
+  regions.content.appendChild(panel.element);
+  regions.actions.appendChild(panel.actions);
+  const refresh = (): void => { void panel.refresh(); };
+  refreshToolContext = refresh;
+  const stopPositioning = keepFeedbackAboveActions(regions.actions);
+  disposeView = () => { panel.dispose(); stopPositioning(); refreshToolContext = null; };
+  void panel.refresh();
+}
+
 function renderToolBrowser(
   regions: RenderRegions, i18n: I18n, shell: Shell, logger: MotionLogger, client: Client
 ): void {
@@ -2437,8 +2520,7 @@ function renderToolBrowser(
   const edit = (tool: ToolDefinition): void => {
     state.activeTool = tool.id;
     state.lastError = null;
-    if (shell.activeView() === "tools") shell.rerender();
-    else shell.navigate("tools");
+    openToolView(shell, tool.id);
     void tool.load?.();
   };
   const quickOptions = () => ({ locale: i18n.locale(), busy: state.busy,
@@ -2537,9 +2619,52 @@ function operationQuickProfile(id: ToolId): Pick<QuickProfile, "derive" | "liveC
 
 function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): void {
   disposeView?.();
+  toolNumbers.dispose();
   disposeView = null;
   refreshLibrary = null; refreshToolContext = null; refreshPresetContext = null;
   globalFeedback?.refreshLabels();
+  if (viewId !== "tools" || !state.activeTool || !wiring.adapter) {
+    renderViewContent(viewId, regions, wiring); return;
+  }
+  regions.content.classList.add("ch-context-body");
+  regions.content.parentElement?.setAttribute("data-browser","true");
+  const workspace = createElement(document, "div", "ch-context-workspace");
+  const library = createElement(document, "div", "ch-context-library");
+  const inspector = createElement(document, "aside", "ch-context-inspector");
+  const heading = createElement(document, "div", "ch-context-heading");
+  const title = createElement(document, "strong", ""); title.id = "tool-inspector-title";
+  inspector.setAttribute("aria-labelledby", title.id);
+  heading.appendChild(title);
+  const close = button(document, {label:wiring.i18n.locale() === "pt-BR" ? "Fechar ajustes" : "Close adjustments", onClick:() => {
+    const id = state.activeTool;
+    regions.shell.navigate("home");
+    document.getElementById(`library-adjust-${id}`)?.focus();
+  }});
+  close.id = "tool-inspector-close"; heading.appendChild(close);
+  const content = createElement(document, "div", "ch-context-content");
+  const actions = createElement(document, "div", "ch-context-actions");
+  inspector.appendChild(heading); inspector.appendChild(content); inspector.appendChild(actions);
+  workspace.appendChild(library); workspace.appendChild(inspector); regions.content.appendChild(workspace);
+  renderToolBrowser({...regions,content:library},wiring.i18n,regions.shell,wiring.logger,wiring.adapter.client);
+  const disposeLibrary = disposeView as (()=>void)|null;
+  const updateLibrary = refreshLibrary;
+  disposeView = null;
+  const contextualShell:Shell = {...regions.shell,setViewTitle:text => {title.textContent=text;}};
+  renderViewContent(viewId,{content,actions,shell:contextualShell},wiring);
+  const disposeEditor = disposeView as (()=>void)|null;
+  refreshLibrary = updateLibrary;
+  const escape = (event:KeyboardEvent):void => {
+    if(event.key === "Escape" && !event.defaultPrevented && !isColorPickerOpen(document) && !content.querySelector('[aria-expanded="true"]')) {
+      event.preventDefault(); close.click();
+    }
+  };
+  inspector.addEventListener("keydown",escape);
+  disposeView = () => {inspector.removeEventListener?.("keydown",escape);disposeEditor?.();disposeLibrary?.();};
+  close.focus();
+}
+
+/** Existing editors retain their drafts, validation and command ownership. */
+function renderViewContent(viewId:string, regions:RenderRegions, wiring:Wiring):void {
   const { i18n, logger, adapter, motionPreference } = wiring;
 
   if (viewId === "settings") {
@@ -2601,16 +2726,30 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
       locale: i18n.locale(), preferences: panelPreferences, busy: state.busy, navigation: presetNavigation,
       apply: (preset, settings, mode) => {
         if (preset.category === "camera-transitions" && mode !== "layers") {
-          void applyLibraryCommand("camera-transition", { presetId: preset.motion!.id,
+          return applyLibraryCommand("camera-transition", { presetId: preset.motion!.id,
             durationFrames: settings?.durationFrames ?? preset.params.durationFrames,
-            intensity: settings?.intensity ?? preset.params.intensity }, preset.id, shell, i18n, logger, client); return;
+            intensity: settings?.intensity ?? preset.params.intensity }, preset.id, shell, i18n, logger, client);
         }
-        if (preset.motion) { void applyLibraryCommand(preset.motion.mode==="transition"?"phase-apply":"apply", { presetId: preset.motion.id, ...settings }, preset.id, shell, i18n, logger, client); return; }
+        if (preset.motion) return applyLibraryCommand(preset.motion.mode==="transition"?"phase-apply":"apply", { presetId: preset.motion.id, ...settings }, preset.id, shell, i18n, logger, client);
         const tool = TOOLS.find(item => item.commandId === preset.handler);
         if (tool) void applyQuickPreset(tool, preset.handler, { derive: context => presetArgs(preset, context), liveControls: [] },
           shell, i18n, logger, client, { name: preset.displayName[i18n.locale()] ?? preset.id, recentId: preset.id });
+        return;
       },
       lifecycle: action => { void applyLibraryCommand(action, {}, "", shell, i18n, logger, client); },
+      elements: {
+        execute: async args => {
+          const response = await client.execute("ae.elements.insert", { ...args });
+          logger.recordResponse("ae.elements.insert", response);
+          return response;
+        },
+        error: response => response.error ? hostFailureMessage(response.error, i18n) : i18n.t("elements.invalid"),
+        busy: value => { state.busy = value; shell.setBusy(value); },
+        // The generated WAVs ship next to the panel (scripts/generate-sfx.mjs).
+        play: sound => { try { void new Audio(`../assets/sounds/${sound}.wav`).play().catch(() => undefined); } catch { /* No audio device. */ } },
+        ...(typeof window !== "undefined" && window.requestAnimationFrame
+          ? { frame: (callback: (now: number) => void) => window.requestAnimationFrame(callback), cancelFrame: (handle: number) => window.cancelAnimationFrame(handle) } : {})
+      },
       edit: preset => {
         if (!state.context) return;
         const args = presetArgs(preset, quickContextFromState(state.context));
@@ -2654,8 +2793,13 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
     return;
   }
 
-  if (viewId === "tools" || viewId === "ease") {
-    const tool = TOOLS.find((item) => item.id === (viewId === "ease" ? "ease" : state.activeTool));
+  if (viewId === "parallax" && state.parallaxSegment === "camera") {
+    renderCameraView(regions, shell, i18n, logger, client);
+    return;
+  }
+
+  if (viewId === "tools" || viewId === "ease" || viewId === "parallax") {
+    const tool = TOOLS.find((item) => item.id === (viewId === "ease" ? "ease" : viewId === "parallax" ? "parallax" : state.activeTool));
 
     // Sem ferramenta escolhida: so a grade. A §22 proibe inspector antes da
     // escolha — parametros de quatro ferramentas na mesma tela seriam quatro
@@ -2693,12 +2837,13 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
       const overflow = attachActionOverflow(document, editor.actions, { label: i18n.t("action.moreActions") });
       const refresh = () => { void editor.refresh(); };
       refreshToolContext = refresh;
-      const polling = focusedPoll(document, refresh, CONTEXT_POLL_MS);
+      const polling = focusedPoll(document, refresh, CONTEXT_POLL_MS, undefined, pointerInPanel);
       const stopPositioning = keepFeedbackAboveActions(regions.actions);
       disposeView = () => { editor.dispose(); overflow.dispose(); polling.dispose(); stopPositioning(); refreshToolContext = null; };
       void editor.refresh();
       return;
     }
+    if (viewId === "parallax") regions.content.appendChild(parallaxSegments(shell, i18n));
     tool.render(regions, i18n);
     groupToolSections(document, regions.content);
     for (const section of Array.from(regions.content.getElementsByTagName("details"))) {
@@ -2729,7 +2874,8 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
     };
     const removing = tool.id === "verticalPulse" && verticalPulseAction(state.context?.compFrameRate ?? null) === "remove"
       || tool.id === "wordReveal" && textEffectArgs("wordReveal").action === "remove"
-      || tool.id === "variableMorph" && textEffectArgs("variableMorph").action === "remove";
+      || tool.id === "variableMorph" && textEffectArgs("variableMorph").action === "remove"
+      || tool.id === "parallax" && state.parallaxFull.operation === "remove";
     const applyControl = appendAction({
       id: `tool-${tool.id}-apply`,
       label: tool.id === "wordReveal" ? wordRevealActionLabel(i18n) : tool.id === "variableMorph" ? variableMorphActionLabel(i18n)
@@ -2912,7 +3058,7 @@ function renderFlicker(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "flicker-rate",
       label: i18n.t("flicker.rate"),
-      value: draft.rate,
+      value: draft.rate, defaultValue: DEFAULT_FLICKER.rate,
       min: 0.1,
       max: 120,
       step: 1,
@@ -2929,7 +3075,7 @@ function renderFlicker(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "flicker-min",
       label: i18n.t("flicker.minFactor"),
-      value: draft.minFactor,
+      value: draft.minFactor, defaultValue: DEFAULT_FLICKER.minFactor,
       min: 0,
       max: 10,
       step: 0.05,
@@ -2945,7 +3091,7 @@ function renderFlicker(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "flicker-max",
       label: i18n.t("flicker.maxFactor"),
-      value: draft.maxFactor,
+      value: draft.maxFactor, defaultValue: DEFAULT_FLICKER.maxFactor,
       min: 0,
       max: 10,
       step: 0.05,
@@ -2962,7 +3108,7 @@ function renderFlicker(regions: RenderRegions, i18n: I18n): void {
       id: "flicker-seed",
       label: i18n.t("flicker.seed"),
       description: i18n.t("flicker.seed.description"),
-      value: draft.seed,
+      value: draft.seed, defaultValue: DEFAULT_FLICKER.seed,
       min: 0,
       max: 100_000,
       step: 1,
@@ -3021,7 +3167,7 @@ function renderWiggle(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wiggle-frequency",
       label: i18n.t("wiggle.frequency"),
-      value: draft.frequency,
+      value: draft.frequency, defaultValue: DEFAULT_WIGGLE.frequency,
       min: 0.01,
       max: 100,
       step: 0.1,
@@ -3038,7 +3184,7 @@ function renderWiggle(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wiggle-amplitude",
       label: i18n.t("wiggle.amplitude"),
-      value: draft.amplitude,
+      value: draft.amplitude, defaultValue: DEFAULT_WIGGLE.amplitude,
       min: 0,
       max: 100_000,
       step: 1,
@@ -3058,7 +3204,7 @@ function renderWiggle(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wiggle-octaves",
       label: i18n.t("wiggle.octaves"),
-      value: draft.octaves,
+      value: draft.octaves, defaultValue: DEFAULT_WIGGLE.octaves,
       min: 1,
       max: 10,
       step: 1,
@@ -3074,7 +3220,7 @@ function renderWiggle(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wiggle-falloff",
       label: i18n.t("wiggle.amplitudeMultiplier"),
-      value: draft.amplitudeMultiplier,
+      value: draft.amplitudeMultiplier, defaultValue: DEFAULT_WIGGLE.amplitudeMultiplier,
       min: 0,
       max: 10,
       step: 0.05,
@@ -3091,7 +3237,7 @@ function renderWiggle(regions: RenderRegions, i18n: I18n): void {
       id: "wiggle-seed",
       label: i18n.t("wiggle.seed"),
       description: i18n.t("wiggle.seed.description"),
-      value: draft.seed,
+      value: draft.seed, defaultValue: DEFAULT_WIGGLE.seed,
       min: 0,
       max: 100_000,
       step: 1,
@@ -3162,7 +3308,7 @@ function renderSmooth(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "smooth-width",
       label: i18n.t("smooth.width"),
-      value: draft.widthSeconds,
+      value: draft.widthSeconds, defaultValue: DEFAULT_SMOOTH.widthSeconds,
       min: 0.001,
       max: 3600,
       step: 0.05,
@@ -3179,7 +3325,7 @@ function renderSmooth(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "smooth-samples",
       label: i18n.t("smooth.samples"),
-      value: draft.samples,
+      value: draft.samples, defaultValue: DEFAULT_SMOOTH.samples,
       min: 1,
       max: 101,
       step: 1,
@@ -3216,7 +3362,7 @@ function renderSmooth(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "smooth-reference-time",
         label: i18n.t("smooth.referenceTime"),
-        value: draft.referenceTime,
+        value: draft.referenceTime, defaultValue: DEFAULT_SMOOTH.referenceTime,
         min: 0,
         max: 10800,
         step: 0.1,
@@ -3296,7 +3442,7 @@ function renderLoopOut(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "motion-loopout-keyframes",
         label: i18n.t("loopOut.numKeyframes"),
-        value: draft.numKeyframes,
+        value: draft.numKeyframes, defaultValue: DEFAULT_LOOP_OUT.numKeyframes,
         min: 1,
         max: 1000,
         step: 1,
@@ -3319,7 +3465,7 @@ function renderLoopOut(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "motion-loopout-duration",
         label: i18n.t("loopOut.duration"),
-        value: draft.duration,
+        value: draft.duration, defaultValue: DEFAULT_LOOP_OUT.duration,
         min: 0.01,
         max: 3600,
         step: 0.01,
@@ -3484,7 +3630,7 @@ function setBusy(shell: Shell, busy: boolean, reason?: string): void {
   state.busy = busy;
   state.busyReason = busy ? reason ?? null : null;
   shell.setBusy(busy);
-  if (refreshLibrary) refreshLibrary();
+  if (refreshLibrary && shell.activeView() !== "tools") refreshLibrary();
   else shell.rerender();
 }
 
@@ -3541,6 +3687,10 @@ const CONTEXT_POLL_MS = 700;
  * 3. **Não concorre.** Pula o tique enquanto uma operação está em curso ou
  *    enquanto a leitura anterior não voltou, senão uma fila de leituras se
  *    empilha atrás de um comando lento.
+ * 4. **Não lê com o ponteiro no painel.** No Windows cada `evalScript` faz o AE
+ *    redefinir o cursor; sobre um número arrastável ou um slider ele piscava a
+ *    cada tique. Com o ponteiro aqui a seleção do AE não muda sozinha; uma
+ *    leitura na entrada do ponteiro basta.
  *
  * 700 ms é o meio-termo: rápido o bastante para a troca de seleção parecer
  * instantânea, e folgado o bastante para o custo do `evalScript` sumir no ruído.
@@ -3548,7 +3698,7 @@ const CONTEXT_POLL_MS = 700;
 function startContextWatch(shell: Shell, logger: MotionLogger, client: Client): () => void {
   let signature = contextFingerprint(state.context);
   const blocked = (): boolean => state.busy || isColorPickerOpen(document) || hasColorDraft(document) || Boolean(document.querySelector("[data-scrub-pressed], [data-scrubbing], [data-gesture-active], .ch-bezier[data-dragging]"));
-  const coordinator = createSelectionCoordinator({ document, window, blocked,
+  const coordinator = createSelectionCoordinator({ document, window, blocked, paused: pointerInPanel,
     read: async () => {
       const response = await client.execute<ContextData>("ae.context.read");
       if (blocked() || !response.ok || !response.data) return;
@@ -3564,7 +3714,8 @@ function startContextWatch(shell: Shell, logger: MotionLogger, client: Client): 
   });
   selectionCoordinator = coordinator;
   for (const reader of selectionReaders) coordinator.subscribe(reader);
-  return () => { coordinator.dispose(); selectionCoordinator = null; };
+  const stopEnter = pointerPresence?.onEnter(() => coordinator.refresh());
+  return () => { stopEnter?.(); coordinator.dispose(); selectionCoordinator = null; };
 }
 
 async function refreshContext(
@@ -4109,7 +4260,7 @@ function renderAnchor(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "anchor-seed",
         label: i18n.t("anchor.randomSeed"),
-        value: draft.randomSeed,
+        value: draft.randomSeed, defaultValue: DEFAULT_ANCHOR.randomSeed,
         min: 0,
         max: 2_147_483_647,
         step: 1,
@@ -4146,7 +4297,7 @@ function renderAnchor(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "anchor-fixed-time",
         label: i18n.t("anchor.fixedTime"),
-        value: draft.fixedTime,
+        value: draft.fixedTime, defaultValue: DEFAULT_ANCHOR.fixedTime,
         min: 0,
         max: 10_800,
         step: 0.1,
@@ -4433,7 +4584,7 @@ function renderCutKeys(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: `cutkeys-${campo}`,
           label: i18n.t(rotulo),
-          value: draft[campo],
+          value: draft[campo], defaultValue: DEFAULT_CUT_KEYS[campo],
           min: -10_800,
           max: 10_800,
           step: 0.1,
@@ -4570,7 +4721,7 @@ function renderDelay(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "delay-frames",
       label: i18n.t("delay.delayFrames"),
-      value: draft.delayFrames,
+      value: draft.delayFrames, defaultValue: DEFAULT_DELAY.delayFrames,
       min: -100_000,
       max: 100_000,
       step: 1,
@@ -4628,7 +4779,7 @@ function renderDelay(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "delay-seed",
         label: i18n.t("delay.randomSeed"),
-        value: draft.randomSeed,
+        value: draft.randomSeed, defaultValue: DEFAULT_DELAY.randomSeed,
         min: 0,
         max: 2_147_483_647,
         step: 1,
@@ -4650,7 +4801,7 @@ function renderDelay(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: `delay-${campo}`,
           label: i18n.t(rotulo),
-          value: draft[campo],
+          value: draft[campo], defaultValue: DEFAULT_DELAY[campo],
           min: -100_000,
           max: 100_000,
           step: 10,
@@ -4823,7 +4974,7 @@ function renderRename(regions: RenderRegions, i18n: I18n): void {
       id: "rename-padding",
       label: i18n.t("rename.padding"),
       description: i18n.t("rename.padding.description"),
-      value: draft.padding,
+      value: draft.padding, defaultValue: DEFAULT_RENAME.padding,
       min: 0,
       max: 8,
       step: 1,
@@ -4841,7 +4992,7 @@ function renderRename(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "rename-counter-start",
         label: i18n.t("rename.counterStart"),
-        value: draft.counterStart,
+        value: draft.counterStart, defaultValue: DEFAULT_RENAME.counterStart,
         min: -9999,
         max: 9999,
         step: 1,
@@ -5387,7 +5538,7 @@ function renderCreateNull(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "createnull-size",
       label: i18n.t("createNull.size"),
-      value: draft.size,
+      value: draft.size, defaultValue: DEFAULT_CREATE_NULL.size,
       min: 1,
       max: 10_000,
       step: 10,
@@ -5405,7 +5556,7 @@ function renderCreateNull(regions: RenderRegions, i18n: I18n): void {
       id: "createnull-label",
       label: i18n.t("createNull.label"),
       description: i18n.t("createNull.label.description"),
-      value: draft.label,
+      value: draft.label, defaultValue: DEFAULT_CREATE_NULL.label,
       min: 0,
       max: 16,
       step: 1,
@@ -5704,7 +5855,7 @@ function renderTextBox(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "textbox-padding-x",
       label: i18n.t("textBox.paddingX"),
-      value: draft.paddingX,
+      value: draft.paddingX, defaultValue: DEFAULT_TEXT_BOX.paddingX,
       min: 0,
       max: 10_000,
       step: 1,
@@ -5722,7 +5873,7 @@ function renderTextBox(regions: RenderRegions, i18n: I18n): void {
       id: "textbox-padding-y",
       label: i18n.t("textBox.paddingY"),
       description: i18n.t("textBox.paddingY.description"),
-      value: draft.paddingY,
+      value: draft.paddingY, defaultValue: DEFAULT_TEXT_BOX.paddingY,
       min: 0,
       max: 10_000,
       step: 1,
@@ -5739,7 +5890,7 @@ function renderTextBox(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "textbox-roundness",
       label: i18n.t("textBox.roundness"),
-      value: draft.roundness,
+      value: draft.roundness, defaultValue: DEFAULT_TEXT_BOX.roundness,
       min: 0,
       max: 10_000,
       step: 1,
@@ -5771,7 +5922,7 @@ function renderTextBox(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "textbox-fill-opacity",
       label: i18n.t("textBox.fillOpacity"),
-      value: draft.fillOpacity,
+      value: draft.fillOpacity, defaultValue: DEFAULT_TEXT_BOX.fillOpacity,
       min: 0,
       max: 100,
       step: 1,
@@ -6225,7 +6376,8 @@ function renderEase(regions: RenderRegions, i18n: I18n): void {
       regions.shell.setStatus(i18n.t(live ? "ease.liveOn" : "ease.liveOff"), "ok");
       if (!live) controller.cancelPending("live-off");
     },
-    onApply: () => { if (wiringAtual && !easeDisabledReason(i18n)) void controller.apply(); }
+    onApply: () => { if (wiringAtual && !easeDisabledReason(i18n)) void controller.apply(); },
+    onLibraryChange: () => quickBar?.refreshItems()
   });
   easeEditorHandle = editor;
   disposeView = () => { actions.dispose(); editor.dispose(); easeEditorHandle = null; controller.cancelPending("close"); };
@@ -6361,6 +6513,7 @@ function startEaseSurfaces(shell: Shell, i18n: I18n, client: Client): () => void
     doc: document, files: cepNativeFiles(window, "QuickBar"),
     enabled: () => readEaseAutoOpen(easeStorage()),
     isBusy: () => state.busy,
+    paused: pointerInPanel,
     read: async () => {
       const response = await client.execute<ContextData>("ae.context.read");
       wiringAtual?.logger.recordResponse("ae.context.read", response);
@@ -6635,7 +6788,7 @@ function renderNeon(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "neon-stroke-width",
       label: i18n.t("neon.strokeWidth"),
-      value: draft.strokeWidth,
+      value: draft.strokeWidth, defaultValue: DEFAULT_NEON.strokeWidth,
       // 0 a 1000 e a faixa que a referencia do TextDocument documenta; o host
       // valida a mesma faixa, entao o painel nao inventa um teto mais apertado.
       min: 0,
@@ -6653,7 +6806,7 @@ function renderNeon(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "neon-glow-radius",
       label: i18n.t("neon.glowRadius"),
-      value: draft.glowRadius,
+      value: draft.glowRadius, defaultValue: DEFAULT_NEON.glowRadius,
       min: 0,
       max: 1000,
       step: 1,
@@ -6669,7 +6822,7 @@ function renderNeon(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "neon-intensity",
       label: i18n.t("neon.intensity"),
-      value: draft.intensity,
+      value: draft.intensity, defaultValue: DEFAULT_NEON.intensity,
       min: 0,
       max: 100,
       step: 0.1,
@@ -6792,7 +6945,7 @@ function renderTimeController(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "timeController-speedPercent",
       label: i18n.t("timeController.speedPercent"),
-      value: t.speedPercent,
+      value: t.speedPercent, defaultValue: DEFAULT_TIME_CONTROLLER.speedPercent,
       min: 0,
       max: 1000,
       step: 1,
@@ -6807,7 +6960,7 @@ function renderTimeController(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "timeController-offsetFrames",
       label: i18n.t("timeController.offsetFrames"),
-      value: t.offsetFrames,
+      value: t.offsetFrames, defaultValue: DEFAULT_TIME_CONTROLLER.offsetFrames,
       min: -99999,
       max: 99999,
       step: 1,
@@ -6847,7 +7000,7 @@ function renderTimeController(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "timeController-freezeFrame",
         label: i18n.t("timeController.freezeFrame"),
-        value: t.freezeFrame,
+        value: t.freezeFrame, defaultValue: DEFAULT_TIME_CONTROLLER.freezeFrame,
         min: 0,
         max: 99999,
         step: 1,
@@ -6938,7 +7091,7 @@ function renderAnimateKinetic(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "animateKinetic-" + campo.id,
         label: i18n.t(campo.key),
-        value: t[campo.id],
+        value: t[campo.id], defaultValue: DEFAULT_ANIMATE_KINETIC[campo.id],
         min: campo.min,
         max: campo.max,
         step: campo.step,
@@ -7018,7 +7171,7 @@ function renderInertial(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "inertial-amplitude",
       label: i18n.t("inertial.amplitude"),
-      value: t.amplitude,
+      value: t.amplitude, defaultValue: DEFAULT_INERTIAL.amplitude,
       min: 0,
       max: 1000,
       step: 1,
@@ -7034,7 +7187,7 @@ function renderInertial(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "inertial-frequency",
       label: i18n.t("inertial.frequency"),
-      value: t.frequency,
+      value: t.frequency, defaultValue: DEFAULT_INERTIAL.frequency,
       min: 0,
       max: 60,
       step: 0.1,
@@ -7050,7 +7203,7 @@ function renderInertial(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "inertial-decay",
       label: i18n.t("inertial.decay"),
-      value: t.decay,
+      value: t.decay, defaultValue: DEFAULT_INERTIAL.decay,
       min: 0,
       max: 100,
       step: 0.1,
@@ -7065,7 +7218,7 @@ function renderInertial(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "inertial-maxDurationFrames",
       label: i18n.t("inertial.maxDuration"),
-      value: t.maxDurationFrames,
+      value: t.maxDurationFrames, defaultValue: DEFAULT_INERTIAL.maxDurationFrames,
       min: 1,
       max: 10000,
       step: 1,
@@ -7134,7 +7287,7 @@ function renderJump(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "jump-height",
       label: i18n.t("jump.height"),
-      value: t.height,
+      value: t.height, defaultValue: DEFAULT_JUMP.height,
       min: 1,
       max: 100000,
       step: 1,
@@ -7150,7 +7303,7 @@ function renderJump(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "jump-durationFrames",
       label: i18n.t("jump.durationFrames"),
-      value: t.durationFrames,
+      value: t.durationFrames, defaultValue: DEFAULT_JUMP.durationFrames,
       min: 4,
       max: 10000,
       step: 1,
@@ -7184,7 +7337,7 @@ function renderJump(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "jump-squashStretch",
       label: i18n.t("jump.squashStretch"),
-      value: t.squashStretch,
+      value: t.squashStretch, defaultValue: DEFAULT_JUMP.squashStretch,
       min: 0,
       max: 90,
       step: 1,
@@ -7200,7 +7353,7 @@ function renderJump(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "jump-anticipationFrames",
       label: i18n.t("jump.anticipation"),
-      value: t.anticipationFrames,
+      value: t.anticipationFrames, defaultValue: DEFAULT_JUMP.anticipationFrames,
       min: 0,
       max: Math.max(0, t.durationFrames - 4),
       step: 1,
@@ -7216,7 +7369,7 @@ function renderJump(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "jump-staggerFrames",
       label: i18n.t("jump.stagger"),
-      value: t.staggerFrames,
+      value: t.staggerFrames, defaultValue: DEFAULT_JUMP.staggerFrames,
       min: 0,
       max: 10000,
       step: 1,
@@ -7438,7 +7591,7 @@ function renderLookAt(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: `lookAt-offset-${axis}`,
         label: i18n.t(labelKey),
-        value: t.offsetOrientation[index],
+        value: t.offsetOrientation[index], defaultValue: DEFAULT_LOOK_AT.offsetOrientation[index],
         min: -3600,
         max: 3600,
         step: 1,
@@ -7563,7 +7716,7 @@ function renderOrbit(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: `orbit-${campo.id}`,
         label: i18n.t(campo.key),
-        value: t[campo.id],
+        value: t[campo.id], defaultValue: DEFAULT_ORBIT[campo.id],
         min: campo.min,
         max: campo.max,
         step: campo.step,
@@ -7759,7 +7912,7 @@ function renderEffector(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "effector-radius",
       label: i18n.t("effector.radius"),
-      value: t.radius,
+      value: t.radius, defaultValue: DEFAULT_EFFECTOR.radius,
       min: 1,
       max: 1000000,
       step: 10,
@@ -7817,7 +7970,7 @@ function renderEffector(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "effector-" + campo.id,
         label: i18n.t(campo.key),
-        value: t[campo.id],
+        value: t[campo.id], defaultValue: DEFAULT_EFFECTOR[campo.id],
         min: -100000,
         max: 100000,
         step: 1,
@@ -7896,7 +8049,7 @@ function renderCameraTransition(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "cameraTransition-amount",
       label: i18n.t("cameraTransition.amount"),
-      value: t.amount,
+      value: t.amount, defaultValue: DEFAULT_CAMERA_TRANSITION.amount,
       min: -1000000,
       max: 1000000,
       step: 10,
@@ -7916,7 +8069,7 @@ function renderCameraTransition(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "cameraTransition-durationFrames",
       label: i18n.t("cameraTransition.duration"),
-      value: t.durationFrames,
+      value: t.durationFrames, defaultValue: DEFAULT_CAMERA_TRANSITION.durationFrames,
       min: 1,
       max: 10000,
       step: 1,
@@ -8005,7 +8158,7 @@ function renderCylinder(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "cylinder-" + campo.id,
         label: i18n.t(campo.key),
-        value: t[campo.id],
+        value: t[campo.id], defaultValue: DEFAULT_CYLINDER[campo.id],
         min: campo.min,
         max: campo.max,
         step: campo.step,
@@ -8093,7 +8246,7 @@ function renderCube(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "cube-size",
       label: i18n.t("cube.size"),
-      value: t.size,
+      value: t.size, defaultValue: DEFAULT_CUBE.size,
       min: 1,
       max: 100000,
       step: 10,
@@ -8218,7 +8371,7 @@ function renderWave(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wave-amplitude",
       label: i18n.t("wave.amplitude"),
-      value: t.amplitude,
+      value: t.amplitude, defaultValue: DEFAULT_WAVE.amplitude,
       min: -100000,
       max: 100000,
       step: 1,
@@ -8234,7 +8387,7 @@ function renderWave(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wave-speed",
       label: i18n.t("wave.speed"),
-      value: t.speed,
+      value: t.speed, defaultValue: DEFAULT_WAVE.speed,
       min: -1000,
       max: 1000,
       step: 0.1,
@@ -8253,7 +8406,7 @@ function renderWave(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "wave-frequency",
         label: i18n.t("wave.frequency"),
-        value: t.frequency,
+        value: t.frequency, defaultValue: DEFAULT_WAVE.frequency,
         min: 1,
         max: 1000,
         step: 1,
@@ -8285,7 +8438,7 @@ function renderWave(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wave-phase",
       label: i18n.t("wave.phase"),
-      value: t.phase,
+      value: t.phase, defaultValue: DEFAULT_WAVE.phase,
       min: -36000,
       max: 36000,
       step: 1,
@@ -8301,7 +8454,7 @@ function renderWave(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wave-falloff",
       label: i18n.t("wave.falloff"),
-      value: t.falloff,
+      value: t.falloff, defaultValue: DEFAULT_WAVE.falloff,
       min: 0,
       max: 1,
       step: 0.05,
@@ -8388,7 +8541,7 @@ function renderTile(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: "tile-" + campo,
           label: i18n.t(chave),
-          value: t[campo],
+          value: t[campo], defaultValue: DEFAULT_TILE[campo],
           min: 1,
           max: 10000,
           step: 10,
@@ -8421,7 +8574,7 @@ function renderTile(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: "tile-" + campo,
           label: i18n.t(chave),
-          value: t[campo],
+          value: t[campo], defaultValue: DEFAULT_TILE[campo],
           min: 1,
           max: maximo,
           step: 1,
@@ -8437,7 +8590,7 @@ function renderTile(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "tile-spacing",
         label: i18n.t("tile.spacing"),
-        value: t.spacing,
+        value: t.spacing, defaultValue: DEFAULT_TILE.spacing,
         min: 0,
         max: 100000,
         step: 10,
@@ -8514,7 +8667,7 @@ function renderGlitch(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "glitch-" + campo,
         label: i18n.t(chave),
-        value: t[campo],
+        value: t[campo], defaultValue: DEFAULT_GLITCH[campo],
         min: minimo,
         max: maximo,
         step: passo,
@@ -8530,7 +8683,7 @@ function renderGlitch(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "glitch-seed",
       label: i18n.t("glitch.seed"),
-      value: t.seed,
+      value: t.seed, defaultValue: DEFAULT_GLITCH.seed,
       min: 0,
       max: 1000000,
       step: 1,
@@ -8547,7 +8700,7 @@ function renderGlitch(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "glitch-durationFrames",
         label: i18n.t("glitch.durationFrames"),
-        value: t.durationFrames,
+        value: t.durationFrames, defaultValue: DEFAULT_GLITCH.durationFrames,
         min: 1,
         max: 10000,
         step: 1,
@@ -8609,7 +8762,7 @@ function renderEcho(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "echo-echoTime",
       label: i18n.t("echo.echoTime"),
-      value: t.echoTime,
+      value: t.echoTime, defaultValue: DEFAULT_ECHO.echoTime,
       min: -10,
       max: 10,
       step: 0.01,
@@ -8625,7 +8778,7 @@ function renderEcho(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "echo-numberOfEchoes",
       label: i18n.t("echo.numberOfEchoes"),
-      value: t.numberOfEchoes,
+      value: t.numberOfEchoes, defaultValue: DEFAULT_ECHO.numberOfEchoes,
       min: 1,
       max: 100,
       step: 1,
@@ -8640,7 +8793,7 @@ function renderEcho(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "echo-startingIntensity",
       label: i18n.t("echo.startingIntensity"),
-      value: t.startingIntensity,
+      value: t.startingIntensity, defaultValue: DEFAULT_ECHO.startingIntensity,
       min: 0,
       max: 1,
       step: 0.05,
@@ -8655,7 +8808,7 @@ function renderEcho(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "echo-decay",
       label: i18n.t("echo.decay"),
-      value: t.decay,
+      value: t.decay, defaultValue: DEFAULT_ECHO.decay,
       min: 0,
       max: 1,
       step: 0.05,
@@ -8742,7 +8895,7 @@ async function executeParallaxFull(
   // existing rig is intentionally reused without changes.
   if (t.operation === "adjust") return { command: "ae.parallax.adjust", response: await client.execute("ae.parallax.adjust", { ...state.parallax }, { mode: "advanced" }) };
   if (t.operation === "remove") return { command: "ae.parallax.remove", response: await client.execute("ae.parallax.remove", {}, { allowDestructive: true }) };
-  if (["subtle", "truck", "vertical", "dolly"].includes(t.operation)) return {
+  if ((PARALLAX_MOVE_OPS as readonly string[]).includes(t.operation)) return {
     command: "ae.parallax.move", response: await client.execute("ae.parallax.move", { preset: t.operation, durationSeconds: 3 })
   };
   if (t.operation === "autoFocus") {
@@ -8803,10 +8956,10 @@ function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
       options: [
         { value: "create", label: i18n.t("parallaxFull.op.create") },
         { value: "adjust", label: i18n.t("parallaxFull.op.adjust") },
-        { value: "subtle", label: i18n.t("parallaxFull.op.subtle") },
-        { value: "truck", label: i18n.t("parallaxFull.op.truck") },
-        { value: "vertical", label: i18n.t("parallaxFull.op.vertical") },
-        { value: "dolly", label: i18n.t("parallaxFull.op.dolly") },
+        ...PARALLAX_MOVE_OPS.map((op) => ({
+          value: op,
+          label: i18n.t(("parallaxFull.op." + op) as MessageKey)
+        })),
         { value: "remove", label: i18n.t("parallaxFull.op.remove") },
         { value: "autoFocus", label: i18n.t("parallaxFull.op.autoFocus") },
         { value: "zoom", label: i18n.t("parallaxFull.op.zoom") },
@@ -8838,7 +8991,7 @@ function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "parallaxFull-focusOffset",
         label: i18n.t("parallaxFull.focusOffset"),
-        value: t.focusOffset,
+        value: t.focusOffset, defaultValue: DEFAULT_PARALLAX_FULL.focusOffset,
         min: -100000,
         max: 100000,
         step: 10,
@@ -8878,7 +9031,7 @@ function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: "parallaxFull-" + campo.id,
           label: i18n.t(campo.key),
-          value: t[campo.id],
+          value: t[campo.id], defaultValue: DEFAULT_PARALLAX_FULL[campo.id],
           min: campo.min,
           max: campo.max,
           step: campo.step,
@@ -8894,7 +9047,7 @@ function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
 
   if (t.operation === "wiggle") {
     for (const campo of [
-      { id: "frequency", key: "parallaxFull.frequency", min: 0, max: 1000, step: 0.1, unit: "parallaxFull.unit.hertz" },
+      { id: "frequency", key: "parallaxFull.frequency", min: 0, max: 100, step: 0.1, unit: "parallaxFull.unit.hertz" },
       { id: "amplitude", key: "parallaxFull.amplitude", min: 0, max: 100000, step: 1, unit: "parallaxFull.unit.px" },
       { id: "seed", key: "parallaxFull.seed", min: 0, max: 1000000, step: 1, unit: null }
     ] as const) {
@@ -8902,7 +9055,7 @@ function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: "parallaxFull-" + campo.id,
           label: i18n.t(campo.key),
-          value: t[campo.id],
+          value: t[campo.id], defaultValue: DEFAULT_PARALLAX_FULL[campo.id],
           min: campo.min,
           max: campo.max,
           step: campo.step,
@@ -8923,7 +9076,7 @@ function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "parallaxFull-stepFrames",
         label: i18n.t("parallaxFull.stepFrames"),
-        value: t.stepFrames,
+        value: t.stepFrames, defaultValue: DEFAULT_PARALLAX_FULL.stepFrames,
         min: 1,
         max: 100,
         step: 1,
@@ -8964,7 +9117,7 @@ async function applyParallaxFull(
 
   if (response.ok) {
     shell.setStatus(i18n.t(state.parallaxFull.operation === "remove" ? "message.parallaxRemoved" :
-      ["subtle", "truck", "vertical", "dolly"].includes(state.parallaxFull.operation) ? "message.parallaxMotionApplied" :
+      (PARALLAX_MOVE_OPS as readonly string[]).includes(state.parallaxFull.operation) ? "message.parallaxMotionApplied" :
       state.parallaxFull.operation === "create" ? "message.parallaxCreated" :
       state.parallaxFull.operation === "adjust" ? "message.parallaxAdjusted" : "message.parallaxFullApplied"), "ok");
   } else {
@@ -8990,7 +9143,7 @@ function renderParallax(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: `parallax-${campo.id}`,
         label: i18n.t(campo.key),
-        value: t[campo.id],
+        value: t[campo.id], defaultValue: DEFAULT_PARALLAX[campo.id],
         min: campo.min,
         max: campo.max,
         step: campo.step,
@@ -9014,6 +9167,38 @@ function renderParallax(regions: RenderRegions, i18n: I18n): void {
       ],
       onChange: (value) => {
         t.orderMode = value as ParallaxOrderMode;
+        shell.rerender();
+      }
+    })
+  );
+  regions.content.appendChild(
+    selectField(document, {
+      id: "parallax-depthMode",
+      label: i18n.t("parallax.depthMode"),
+      value: t.depthMode,
+      options: [
+        { value: "linear", label: i18n.t("parallax.depthMode.linear") },
+        { value: "front", label: i18n.t("parallax.depthMode.front") },
+        { value: "area", label: i18n.t("parallax.depthMode.area") }
+      ],
+      onChange: (value) => {
+        t.depthMode = value === "front" || value === "area" ? value : "linear";
+        shell.rerender();
+      }
+    })
+  );
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "parallax-backgroundDepth",
+      label: i18n.t("parallax.backgroundDepth"),
+      value: Math.round(t.backgroundDepth * 100), defaultValue: Math.round(DEFAULT_PARALLAX.backgroundDepth * 100),
+      min: 0,
+      max: 50,
+      step: 1,
+      unit: "%",
+      onCommit: (value) => {
+        state.parallax = { ...state.parallax, backgroundDepth: value / 100 };
         shell.rerender();
       }
     })
@@ -9099,7 +9284,7 @@ function renderFastEdit(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "fastEdit-duration",
         label: i18n.t("fastEdit.duration"),
-        value: t.duration,
+        value: t.duration, defaultValue: DEFAULT_FAST_EDIT.duration,
         min: 0.001,
         max: 10800,
         step: 0.1,
@@ -9117,7 +9302,7 @@ function renderFastEdit(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "fastEdit-frameRate",
         label: i18n.t("fastEdit.frameRate"),
-        value: t.frameRate,
+        value: t.frameRate, defaultValue: DEFAULT_FAST_EDIT.frameRate,
         min: 1,
         max: 999,
         step: 1,
@@ -9139,7 +9324,7 @@ function renderFastEdit(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: `fastEdit-${campo}`,
           label: i18n.t(chave),
-          value: t[campo],
+          value: t[campo], defaultValue: DEFAULT_FAST_EDIT[campo],
           min: 4,
           max: 30000,
           step: 1,
@@ -9330,7 +9515,7 @@ function renderShapeLibrary(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "shapeLibrary-size",
       label: i18n.t("shapeLibrary.size"),
-      value: t.size,
+      value: t.size, defaultValue: DEFAULT_SHAPE_LIBRARY.size,
       min: 1,
       max: 100000,
       step: 1,
@@ -9349,7 +9534,7 @@ function renderShapeLibrary(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "shapeLibrary-roundness",
         label: i18n.t("shapeLibrary.roundness"),
-        value: t.roundness,
+        value: t.roundness, defaultValue: DEFAULT_SHAPE_LIBRARY.roundness,
         min: 0,
         max: 100000,
         step: 1,
@@ -9367,7 +9552,7 @@ function renderShapeLibrary(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "shapeLibrary-points",
         label: i18n.t("shapeLibrary.points"),
-        value: t.points,
+        value: t.points, defaultValue: DEFAULT_SHAPE_LIBRARY.points,
         min: 3,
         max: 1000,
         step: 1,
@@ -9383,7 +9568,7 @@ function renderShapeLibrary(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "shapeLibrary-strokeWidth",
       label: i18n.t("shapeLibrary.strokeWidth"),
-      value: t.strokeWidth,
+      value: t.strokeWidth, defaultValue: DEFAULT_SHAPE_LIBRARY.strokeWidth,
       min: 0,
       max: 1000,
       step: 1,
@@ -9484,7 +9669,7 @@ function renderTrimPath(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "trimPath-start",
       label: i18n.t("trimPath.start"),
-      value: t.start,
+      value: t.start, defaultValue: DEFAULT_TRIM_PATH.start,
       min: 0,
       max: 100,
       step: 1,
@@ -9500,7 +9685,7 @@ function renderTrimPath(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "trimPath-end",
       label: i18n.t("trimPath.end"),
-      value: t.end,
+      value: t.end, defaultValue: DEFAULT_TRIM_PATH.end,
       min: 0,
       max: 100,
       step: 1,
@@ -9516,7 +9701,7 @@ function renderTrimPath(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "trimPath-offset",
       label: i18n.t("trimPath.offset"),
-      value: t.offset,
+      value: t.offset, defaultValue: DEFAULT_TRIM_PATH.offset,
       min: -3600,
       max: 3600,
       step: 1,
@@ -9547,7 +9732,7 @@ function renderTrimPath(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "trimPath-durationFrames",
         label: i18n.t("trimPath.durationFrames"),
-        value: t.durationFrames,
+        value: t.durationFrames, defaultValue: DEFAULT_TRIM_PATH.durationFrames,
         min: 1,
         max: 10000,
         step: 1,
@@ -9737,9 +9922,9 @@ function particlesDisabledReason(i18n: I18n): string | null {
 }
 function renderParticles(regions: RenderRegions, i18n: I18n): void {
   const shell = regions.shell;
-  regions.content.appendChild(numberField(document, { id: "field.particles.birthRate", label: i18n.t("field.particles.birthRate"), value: state.particles.birthRate, min: 0.1, max: 10, step: 0.1, onCommit: (val: number) => { state.particles.birthRate = val; shell.rerender(); }}));
-  regions.content.appendChild(numberField(document, { id: "field.particles.longevity", label: i18n.t("field.particles.longevity"), value: state.particles.longevity, min: 0.1, max: 10, step: 0.1, onCommit: (val: number) => { state.particles.longevity = val; shell.rerender(); }}));
-  regions.content.appendChild(numberField(document, { id: "field.particles.velocity", label: i18n.t("field.particles.velocity"), value: state.particles.velocity, min: 0, max: 5, step: 0.1, onCommit: (val: number) => { state.particles.velocity = val; shell.rerender(); }}));
+  regions.content.appendChild(numberField(document, { id: "field.particles.birthRate", label: i18n.t("field.particles.birthRate"), value: state.particles.birthRate, defaultValue: DEFAULT_PARTICLES.birthRate, min: 0.1, max: 10, step: 0.1, onCommit: (val: number) => { state.particles.birthRate = val; shell.rerender(); }}));
+  regions.content.appendChild(numberField(document, { id: "field.particles.longevity", label: i18n.t("field.particles.longevity"), value: state.particles.longevity, defaultValue: DEFAULT_PARTICLES.longevity, min: 0.1, max: 10, step: 0.1, onCommit: (val: number) => { state.particles.longevity = val; shell.rerender(); }}));
+  regions.content.appendChild(numberField(document, { id: "field.particles.velocity", label: i18n.t("field.particles.velocity"), value: state.particles.velocity, defaultValue: DEFAULT_PARTICLES.velocity, min: 0, max: 5, step: 0.1, onCommit: (val: number) => { state.particles.velocity = val; shell.rerender(); }}));
   regions.content.appendChild(hint(document, i18n.t("message.particlesInstructions")));
 }
 async function applyParticles(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
@@ -9758,7 +9943,7 @@ function textureDisabledReason(i18n: I18n): string | null {
 }
 function renderTexture(regions: RenderRegions, i18n: I18n): void {
   const shell = regions.shell;
-  regions.content.appendChild(numberField(document, { id: "field.texture.opacity", label: i18n.t("field.texture.opacity"), value: state.texture.opacity, min: 0, max: 100, step: 1, onCommit: (val: number) => { state.texture.opacity = val; shell.rerender(); }}));
+  regions.content.appendChild(numberField(document, { id: "field.texture.opacity", label: i18n.t("field.texture.opacity"), value: state.texture.opacity, defaultValue: DEFAULT_TEXTURE.opacity, min: 0, max: 100, step: 1, onCommit: (val: number) => { state.texture.opacity = val; shell.rerender(); }}));
   regions.content.appendChild(hint(document, i18n.t("message.textureInstructions")));
 }
 async function applyTexture(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
