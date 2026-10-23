@@ -1,5 +1,19 @@
 # Fundação Visual — CrossHost Workstation
 
+## After Effects — direção de 22/10/2026
+
+No AE, esta direção substitui a paleta fixa e as linhas de ferramentas da revisão anterior. O Premiere conserva sua aparência atual.
+
+- Origem canônica: `packages/ui-tokens/src/after-effects.css`, anexada apenas ao CSS do AE; espelho gerado em `shared/after-effects.tokens.json`.
+- Tema automático acompanha `appSkinInfo` e `ThemeColorChanged`, com fundo exato do host e superfícies derivadas com contraste verificado. Fallback da captura: fundo `#323232`, campos `#262626`, elevado `#393939`, divisórias `#4a4a4a`, texto `#dddddd`; azul discreto em foco e valores. Claro/Escuro continuam disponíveis manualmente.
+- Ferramentas mantém categorias e quadradinhos com ícones de 56 px (44 px compacto), gap de 8 px, nome/descrição no tooltip e clique rápido. Ajustes têm comando separado ao hover/foco; menu contextual por botão direito ou Shift+F10.
+- Um único inspetor de 300 px a partir de 720 px; em larguras menores, controles no conteúdo com a barra de busca/filtros preservada. Conteúdo rola e ações permanecem visíveis.
+- Presets conserva miniaturas e abas Navegar/Editar sempre visíveis. Aplicação confirmada abre Editar; falhas mantêm a biblioteca. Busca, filtros, rolagem e rascunhos são preservados. Ferramentas reutilizam o padrão de números/sliders expansíveis, resets e controles do editor.
+- Ajustes de um card de preset abrem como continuação da miniatura, na mesma largura, sobrepondo a grade. A lista compacta mostra as quatro direções; hover altera apenas a prévia, clique escolhe o rascunho e "Ver todas" expõe as miniaturas e os ajustes adicionais. O menu mantém a passagem entre card e opções, fecha por Escape/clique fora e abre acima quando faltar espaço abaixo. Esta direção segue a gravação fornecida em 22/10 e substitui o inspetor fixo para os ajustes de navegação dos presets.
+- Evitar caixas em torno de cada seção. Tipografia de sistema, controles de 28 px, alvos mínimos de 24 px, espaços 4/8/12/16 px. Movimento explica estados e respeita movimento reduzido.
+- Os resultados de checks, navegador, integridade da instalação e runtime Adobe são evidências separadas. Ver `docs/implementation/2026-10-22-ae-workstation.md`.
+
+
 > **Atualização normativa (2026-09-02):** `docs/ADDENDUM_A_QUICK_UX_SPEC.md`
 > substitui os detalhes de interação, acessibilidade, cor e movimento das
 > seções §22.3/§22.4 do MASTER. A fonte executável dos tokens agora é

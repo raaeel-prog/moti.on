@@ -328,6 +328,30 @@ test('compact direction list exposes all previews on demand and preserves its ch
   assert.equal(navigation.drafts[navigation.selectedId].direction,'left');assert.equal(applied.length,0);
 });
 
+test('Escape and disposal cancel an unopened hover menu',async t=>{
+  const {gallery,doc}=fixture(t),root=gallery.element;
+  const trigger=root.getElementsByTagName('button').find(node=>node.dataset.focusKey==='adjust.builtin.motion.premium-arc-arrival');
+  const panel=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-settings-panel');
+  trigger.emit('mouseenter');doc.emit('keydown',{key:'Escape'});
+  await new Promise(resolve=>setTimeout(resolve,160));assert.equal(panel.hidden,true);
+  trigger.emit('mouseenter');gallery.dispose();
+  await new Promise(resolve=>setTimeout(resolve,160));assert.equal(panel.hidden,true);
+});
+
+test('a short viewport attaches the menu above and queued unchanged scroll cannot close it',t=>{
+  const {gallery}=fixture(t),root=gallery.element;
+  globalThis.window.innerHeight=280;
+  const card=root.getElementsByTagName('article').find(node=>node.id==='builtin.motion.premium-arc-arrival');
+  card.getBoundingClientRect=()=>({left:40,right:200,top:180,bottom:220,width:160,height:40});
+  const trigger=card.getElementsByTagName('button').find(node=>node.dataset.focusKey===`adjust.${card.id}`);
+  const panel=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-settings-panel');
+  panel.getBoundingClientRect=()=>({height:140});trigger.click();
+  assert.equal(panel.getAttribute('data-side'),'above');assert.equal(panel.style.top,'40px');
+  const grid=root.querySelector('.ch-preset-grid');grid.emit('scroll');
+  assert.equal(panel.getAttribute('data-open'),'true');
+  grid.scrollTop=100;grid.emit('scroll');assert.equal(panel.getAttribute('data-open'),'false');
+});
+
 test('Apply bar is outside the scrolling gallery and stays blocked while busy',t=>{
   const {gallery,applied}=fixture(t,{busy:true}),root=gallery.element;
   const scroll=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-scroll');
@@ -463,8 +487,8 @@ test('every direction is a painted preview tile, and before applying only direct
   // Even a recipe that can travel diagonally offers four sides here, 2×2 under Original; diagonals stay in Edit.
   const grid=panel.getElementsByTagName('div').find(node=>node.className==='ch-preset-direction-grid');
   assert.equal(grid.dataset.layout,undefined,'no 3×3 compass and no center dot');
-  assert.deepEqual(grid.children.map(node=>node.dataset.direction),['top','bottom','left','right']);
-  assert.deepEqual(tiles.map(node=>node.dataset.direction),['top','bottom','left','right']);
+  assert.deepEqual(grid.children.map(node=>node.dataset.direction),['bottom','left','right','top']);
+  assert.deepEqual(tiles.map(node=>node.dataset.direction),['bottom','left','right','top']);
   for(const tile of tiles){assert.ok(tile.getElementsByTagName('svg')[0].children.length>0,`${tile.dataset.direction} is painted`);assert.ok(tile.getAttribute('aria-label'));}
   tiles.find(node=>node.dataset.direction==='top').click();
   assert.equal(navigation.drafts['builtin.motion.momentum-push'].direction,'top');assert.equal(applied.length,0);
@@ -477,7 +501,7 @@ test('a reveal keeps the four sides of its wipe, in the 2×2 grid under Original
   const {gallery,navigation}=fixture(t),panel=openSettings(gallery.element,'reveal-curtain');
   const grid=panel.getElementsByTagName('div').find(node=>node.className==='ch-preset-direction-grid');
   assert.equal(grid.dataset.layout,undefined);
-  assert.deepEqual(grid.children.map(node=>node.dataset.direction),['top','bottom','left','right']);
+  assert.deepEqual(grid.children.map(node=>node.dataset.direction),['bottom','left','right','top']);
   panel.getElementsByTagName('button').find(node=>node.dataset.direction==='left').click();
   assert.equal(navigation.drafts['builtin.motion.reveal-curtain'].direction,'left');
 });

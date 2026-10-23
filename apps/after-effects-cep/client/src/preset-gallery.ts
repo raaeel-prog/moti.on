@@ -1,12 +1,73 @@
-import { attachScrubbableNumber, button, createActionButton, type ActionButtonController, clearNode, createElement, createIcon, createBadge, createEmptyState, createI18n, searchField, selectField, type PanelPreferences } from "@motion/ui-core";
-import { MOTION_LIBRARY_PRESETS, MOTION_LIBRARY_DEFAULTS, motionLibraryRequirements, type MotionLibraryRequirements, type MotionLibraryPreset, type MotionLibraryOptions, type PersonalPresetCatalog, type PersonalPresetItem, type PersonalPresetPreview, type PresetDefinitionV1, type QuickContext } from "@motion/contracts";
-import { paintLibraryPreview, libraryPreviewPlayback, libraryPreviewEnd, cameraPreviewPlayback } from "./motion-library-preview.js";
+import { button, checkboxField, createActionButton, type ActionButtonController, clearNode, createElement, createIcon, createEmptyState, createI18n, searchField, selectField, type PanelPreferences } from "@motion/ui-core";
+import { MOTION_LIBRARY_PRESETS, MOTION_LIBRARY_DEFAULTS, MOTION_PENNER_FAMILIES, libraryUsesDirection, motionLibraryRequirements, parsePennerEasing, type MotionPennerShape, type MotionLibraryRequirements, type MotionLibraryPreset, type MotionLibraryOptions, type PersonalPresetCatalog, type PersonalPresetItem, type PersonalPresetPreview, type PresetDefinitionV1, type QuickContext } from "@motion/contracts";
+import { paintLibraryPreview, libraryPreviewPlayback, libraryPreviewEnd, cameraPreviewPlayback, librarySample } from "./motion-library-preview.js";
 import { createPersonalMediaPreview } from "./personal-media-preview.js";
 import { normalizeSearch } from "./quick-library.js";
+import { createElementsEditor, type ElementsEditor, type ElementsEditorOptions } from "./elements-editor.js";
+import { TEXT_PRESET_FAMILIES, textPresetNavigation, type TextPresetNavigation } from "./preset-navigation.js";
+import { textReferenceAsset, type TextReferenceAsset } from "./text-reference-assets.js";
+import { TEXT_REFERENCE_MANIFEST } from "./generated/text-reference-manifest.js";
+import { textPreviewBounds, type TextPreviewUnit } from "./text-preview-sample.js";
 
-export function presetEasingChoices(locale:string):[string,string][] {
+/** Bundled renders live next to the panel; the manifest never supplies a path. */
+const TEXT_REFERENCE_BASE = "../assets/text-previews/";
+/** Options that change what a text render shows. Phase is not one: the render
+ * plays the entrance and the exit, and the card loops whichever is chosen. */
+const RENDERED_KEYS = ["direction", "unit", "easing", "order", "seed", "intensity", "durationFrames", "staggerFrames", "elasticity", "overlap", "speed", "settleAmount", "settleCount", "settleDamping"] as const;
+/** True when the card's current settings are the ones the AE render used. */
+export function textReferenceMatches(asset: TextReferenceAsset, draft: MotionLibraryOptions): boolean {
+  return RENDERED_KEYS.every(key => draft[key] === undefined || asset.options[key] === undefined || draft[key] === asset.options[key]);
+}
+
+/** Curves for the easing selector. A classic family appears once; its entry
+ * carries the current acceleration so the selector keeps showing it, and
+ * {@link presetEasingShapeChoices} picks In, Out or In-Out. */
+export function presetEasingChoices(locale:string,current?:string):[string,string][] {
+  const pt=locale==="pt-BR",shape=parsePennerEasing(current)?.shape??"out";
+  const families:Record<typeof MOTION_PENNER_FAMILIES[number],[string,string]>={sine:["Senoidal","Sine"],quad:["Quadrática","Quad"],quart:["Quártica","Quart"],quint:["Quíntica","Quint"],expo:["Exponencial","Expo"],circ:["Circular","Circ"]};
+  return [["preset",pt?"Original":"Original"],["smooth",pt?"Suave":"Smooth"],["cubic",pt?"Acelerada":"Cubic"],["silk",pt?"Sedosa":"Silk"],["glide",pt?"Deslizante":"Glide"],["velvet",pt?"Aveludada":"Velvet"],["drift",pt?"Cauda longa":"Drift"],["snap",pt?"Precisa":"Snap"],["overshoot",pt?"Recuo":"Back"],["bounce",pt?"Salto":"Bounce"],["spring",pt?"Elástica":"Spring"],["settle-wave",pt?"Ricochete":"Ricochet"],["settle-hop",pt?"Quique":"Hop"],["flicker",pt?"Intermitente":"Flicker"],
+    ...MOTION_PENNER_FAMILIES.map((family):[string,string]=>[`${family}-${shape}`,families[family][pt?0:1]])];
+}
+
+/** Acceleration of a classic family: Out settles into the resting pose. */
+export function presetEasingShapeChoices(locale:string):[MotionPennerShape,string][] {
   const pt=locale==="pt-BR";
-  return [["preset",pt?"Original":"Original"],["smooth",pt?"Suave":"Smooth"],["cubic",pt?"Acelerada":"Cubic"],["silk",pt?"Sedosa":"Silk"],["glide",pt?"Deslizante":"Glide"],["velvet",pt?"Aveludada":"Velvet"],["drift",pt?"Cauda longa":"Drift"],["snap",pt?"Precisa":"Snap"],["overshoot",pt?"Ultrapassagem":"Overshoot"],["bounce",pt?"Salto":"Bounce"],["spring",pt?"Elástica":"Spring"],["flicker",pt?"Intermitente":"Flicker"]];
+  return [["out",pt?"Out · desacelera":"Out · decelerate"],["in",pt?"In · acelera":"In · accelerate"],["in-out",pt?"In-Out · os dois":"In-Out · both"]];
+}
+
+/** The same family with another acceleration; other curves stay unchanged. */
+export function withEasingShape(easing:string,shape:MotionPennerShape):string {
+  const penner=parsePennerEasing(easing);return penner?`${penner.family}-${shape}`:easing;
+}
+
+/** Layer motion blur requested by a preset; the host turns on only switches
+ * that are off, and turns off only the ones it turned on. */
+export function motionBlurField(doc:Document,options:{id:string;locale:string;checked:boolean;disabled:boolean;onChange(checked:boolean):void}):HTMLElement {
+  const pt=options.locale==="pt-BR",field=checkboxField(doc,{id:options.id,label:"Motion blur",checked:options.checked,disabled:options.disabled,onChange:options.onChange});
+  field.title=pt?"Liga o motion blur da camada e, se preciso, da composição. Remover o preset desliga só o que o Moti.on ligou.":"Turns on the layer's motion blur and, when needed, the composition's. Removing the preset turns off only what Moti.on turned on.";
+  return field;
+}
+
+/** Acceleration select under the curve, visible only for a classic family.
+ * `sync` follows a curve changed elsewhere without rebuilding the form. */
+export function createEasingShapeField(doc:Document,options:{id:string;locale:string;easing:string|undefined;disabled:boolean;className:string;onChange(easing:NonNullable<MotionLibraryOptions["easing"]>):void}):{element:HTMLElement;sync(easing:string|undefined):void} {
+  const label=options.locale==="pt-BR"?"Aceleração":"Acceleration";let current=options.easing;
+  const element=selectField(doc,{id:options.id,label,value:parsePennerEasing(current)?.shape??"out",disabled:options.disabled,
+    options:presetEasingShapeChoices(options.locale).map(([value,text])=>({value,label:text})),
+    onChange:value=>{const shape=presetEasingShapeChoices(options.locale).find(([item])=>item===value)?.[0];if(!shape||!current)return;current=withEasingShape(current,shape);options.onChange(current as NonNullable<MotionLibraryOptions["easing"]>);}});
+  element.className+=` ${options.className}`;element.getElementsByTagName("select")[0]?.setAttribute("aria-label",label);
+  const sync=(easing:string|undefined):void=>{current=easing;const penner=parsePennerEasing(easing);element.hidden=!penner;const select=element.getElementsByTagName("select")[0];if(select&&penner)select.value=penner.shape;};
+  sync(current);return {element,sync};
+}
+
+/** Settle controls shown for Ricochet/Hop curves, with curve-specific wording. */
+export function settleFieldLabels(kind: string, locale: string): [keyof Pick<MotionLibraryOptions, "settleAmount" | "settleCount" | "settleDamping">, string, number, number][] {
+  const pt = locale === "pt-BR", hop = kind === "settle-hop";
+  return [
+    ["settleAmount", hop ? pt ? "Altura do quique · %" : "Hop height · %" : pt ? "Ricochete · %" : "Ricochet · %", 0, 100],
+    ["settleCount", hop ? pt ? "Quiques" : "Hops" : pt ? "Oscilações" : "Oscillations", .5, 8],
+    ["settleDamping", hop ? pt ? "Perda por quique · %" : "Loss per hop · %" : pt ? "Amortecimento · %" : "Damping · %", 0, 100]
+  ];
 }
 let gallerySequence = 0;
 type Curve = { x1: number; y1: number; x2: number; y2: number };
@@ -20,6 +81,7 @@ export interface GalleryPreset extends Pick<PresetDefinitionV1, "id" | "version"
   applyMode: "properties" | "camera" | "layers" | "precomp";
   reapplyPolicy: "update-ease" | "reject-existing-keys" | "adjust-managed";
   motion?: MotionLibraryPreset;
+  navigation?: TextPresetNavigation;
   params: Record<string, unknown>;
 }
 const cameraCurve = { x1: 0.33, y1: 0, x2: 0.67, y2: 1 };
@@ -51,7 +113,7 @@ export function signatureDurationRange(p: MotionLibraryPreset, fps?: number): [n
   return [signatureFrames(p.tempo.minFrames, fps, 1, 600), signatureFrames(p.tempo.maxFrames, fps, 1, 600)];
 }
 
-/** One phase selector shared by Browse, Edit, and the copied preset. */
+/** A phase selector for editing and preparing a copied preset; never applies. */
 export function createPresetPhaseControl(doc: Document, options: {
   locale: string;
   value: MotionLibraryOptions["phase"];
@@ -97,6 +159,29 @@ export function createPresetPhaseControl(doc: Document, options: {
   row.appendChild(group);
   return row;
 }
+
+/** Independent commands, deliberately separate from the Edit/Paste selector.
+ * Arrow keys move focus only; Enter and Space activate the focused command. */
+export function createPresetPhaseActions(doc: Document, options: {
+  locale: string; onApply(phase: MotionLibraryOptions["phase"]): void;
+}): { element: HTMLElement; controls: Map<MotionLibraryOptions["phase"], ActionButtonController> } {
+  const pt = options.locale === "pt-BR", element = createElement(doc, "div", "ch-preset-phase-actions");
+  element.setAttribute("role", "group"); element.setAttribute("aria-label", pt ? "Aplicar animação" : "Apply animation");
+  element.setAttribute("data-motion", "view-enter"); element.setAttribute("data-active", "true");
+  const controls = new Map<MotionLibraryOptions["phase"], ActionButtonController>();
+  for (const [index, phase] of (["in", "out", "both"] as const).entries()) {
+    const control = createActionButton(doc, { label: (pt ? ["Entrada", "Saída", "Ambos"] : ["In", "Out", "Both"])[index]!, variant: "primary", onPress: () => options.onApply(phase) });
+    control.button.dataset.phase = phase; controls.set(phase, control); element.appendChild(control.element);
+    control.button.addEventListener("keydown", event => {
+      const direction = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
+      if (!direction && event.key !== "Home" && event.key !== "End") return;
+      event.preventDefault();
+      const next = event.key === "Home" ? 0 : event.key === "End" ? 2 : (index + direction + 3) % 3;
+      [...controls.values()][next]?.button.focus();
+    });
+  }
+  return { element, controls };
+}
 interface RequirementLabel { id: string; label: string; detail: string }
 
 /** Selos curtos do inspector, na ordem em que o usuário decide: tipo de camada,
@@ -122,23 +207,40 @@ export function requirementReason(needs: MotionLibraryRequirements, context: { s
   return null;
 }
 
+/** Search words for the Momentum techniques, in both locales. */
+function momentumTags(motion: MotionLibraryPreset): string {
+  if (motion.collection !== "momentum") return "";
+  const words = ["impulso"];
+  if (motion.easing === "settle-wave") words.push("ricochete ricochet");
+  if (motion.easing === "settle-hop") words.push("quique hop bounce");
+  if (motion.travel === "offscreen") words.push("fora do quadro offscreen push");
+  if (motion.pivot === "offset") words.push("pêndulo pendulum pivô pivot");
+  if (motion.pivot === "edge") words.push("dobradiça hinge borda edge");
+  if (motion.mode === "continuous") words.push("loop contínuo");
+  return `${words.join(" ")} `;
+}
+
 export const GALLERY_PRESETS: GalleryPreset[] = [
   ...[...MOTION_LIBRARY_PRESETS].sort((a, b) => {
-    const rank = (p: MotionLibraryPreset): number => p.collection === "premium" ? (p.cameraSpec ? 1 : 0) : p.collection === "signature" ? 1.5 : p.collection === "studio" ? 2 : 3;
+    const rank = (p: MotionLibraryPreset): number => p.collection === "premium" ? (p.cameraSpec ? 1 : 0) : p.collection === "signature" ? 1.5 : p.collection === "momentum" ? 1.75 : p.collection === "reveal" ? 1.8 : p.collection === "looks" ? 1.85 : p.collection === "text" ? 1.9 : p.collection === "studio" ? 2 : 3;
     return rank(a) - rank(b);
   }).map((motion): GalleryPreset => {
     const transition = motion.id.startsWith("camera-");
     const handler = transition ? "ae.presets.camera-transition" : motion.mode==="transition"?"ae.presets.phase-apply":"ae.presets.apply";
     const defaults = defaultLibraryOptions(motion);
+    const navigation = textPresetNavigation(motion);
     const params = transition ? { presetId: motion.id, durationFrames: defaults.durationFrames, intensity: defaults.intensity } : { presetId: motion.id, ...defaults };
     return {
-    id: `builtin.motion.${motion.id}`, version: "1.0.0", displayName: motion.name,
+    // Text collection cards already sit in their unit's folder: the card shows the
+    // variant ("Cascata de luz"), while search tags keep the full recipe name.
+    id: `builtin.motion.${motion.id}`, version: "1.0.0", displayName: motion.textVariant?.name ?? motion.name,
     category: motion.id.startsWith("camera-") ? "camera-transitions" : motion.category, hosts: ["after-effects"], minHostVersion: { "after-effects": "25.0" },
     requirements: [transition ? "active-composition" : motion.category.startsWith("text-") ? "selected-text-layers" : "selected-visual-layers"],
     operationPlan: { command: handler, args: params },
-    tags: `${motion.collection ?? ""} ${motion.family ?? ""} ${motion.tempo?.character ?? ""} ${motion.category} ${motion.easing} ${motion.effect} ${motion.waveform} ${motion.choreography?.path ?? ""} ${motion.choreography?.distribution ?? ""} ${motion.name["pt-BR"]} ${motion.name["en-US"]}`,
+    tags: `${motion.collection ?? ""} ${motion.family ?? ""} ${motion.tempo?.character ?? ""} ${motion.category} ${motion.easing} ${motion.effect} ${motion.waveform} ${motion.choreography?.path ?? ""} ${motion.choreography?.distribution ?? ""} ${momentumTags(motion)}${motion.name["pt-BR"]} ${motion.name["en-US"]}`,
     curve: cameraCurve, preview: { renderer: "motion", fixtureId: `${motion.id}-v1` },
-    handler, applyMode: transition ? "precomp" : "layers", reapplyPolicy: "adjust-managed", motion, params
+    handler, applyMode: transition ? "precomp" : "layers", reapplyPolicy: "adjust-managed", motion, params,
+    ...(navigation ? { navigation } : {})
   }; }),
   ...cameraDefinitions.map(([id, pt, en]): GalleryPreset => {
     const params = { preset: id, durationFrames: 30, amount: /^(pan|tilt)/.test(id) ? 15 : 400, curve: cameraCurve, cameraName: "" };
@@ -153,16 +255,20 @@ export const GALLERY_PRESETS: GalleryPreset[] = [
 
 /** Saved collection IDs remain stable when their visible labels improve. */
 export function galleryCategoryMatches(category: string, preset: GalleryPreset): boolean {
+  if (category.includes("/")) return preset.navigation?.filter === category;
   if (category === "camera-impact") return Boolean(preset.motion?.cameraSpec?.impact);
   if (category === "signature") return preset.motion?.collection === "signature";
   if (category.startsWith("signature-")) return preset.motion?.collection === "signature" && preset.motion.family === category.substring("signature-".length);
+  if (category === "momentum") return preset.motion?.collection === "momentum";
+  if (category === "reveal" || category === "looks") return preset.motion?.collection === category;
+  if (category.startsWith("momentum-")) return preset.motion?.collection === "momentum" && preset.category === `motion-${category.substring("momentum-".length)}`;
   if (category === "premium") return preset.motion?.collection === "premium";
   if (category.startsWith("premium-")) return preset.motion?.collection === "premium" &&
     (category === "premium-camera" ? preset.category === "camera-transitions" : preset.category.startsWith(category === "premium-text" ? "text-" : "motion-") && preset.category !== "camera-transitions");
   return category === "all" || category === "animation" && Boolean(preset.motion) && !preset.category.startsWith("camera") ||
     category === "motion" && preset.category.startsWith("motion-") || category === "text" && preset.category.startsWith("text-") ||
     category === "studio" && preset.motion?.collection === "studio" || category === "gemini" && preset.motion?.collection === "gemini" ||
-    category === "classics" && Boolean(preset.motion) && preset.motion?.collection !== "premium" && preset.motion?.collection !== "signature" ||
+    category === "classics" && Boolean(preset.motion) && preset.motion?.collection !== "premium" && preset.motion?.collection !== "signature" && preset.motion?.collection !== "momentum" && preset.motion?.collection !== "reveal" && preset.motion?.collection !== "looks" && preset.motion?.collection !== "text" ||
     category === "camera" && preset.category.startsWith("camera") || category === "camera-moves" && preset.category === "camera" || preset.category === category;
 }
 
@@ -225,12 +331,13 @@ export interface PresetNavigation {
   sidebarWidth?: number; view?: "browse" | "edit";
   cameraApplyMode?: "precomp" | "layers";
 }
+export interface GalleryApplyResult { ok: boolean; message?: string; }
 
 export function createPresetGallery(doc: Document, options: {
   locale: string; preferences: PanelPreferences; busy: boolean;
   navigation: PresetNavigation;
   revealId?: string | undefined;
-  apply(preset: GalleryPreset, settings?: MotionLibraryOptions, mode?: "precomp" | "layers"): void;
+  apply(preset: GalleryPreset, settings?: MotionLibraryOptions, mode?: "precomp" | "layers"): void | Promise<GalleryApplyResult>;
   edit(preset: GalleryPreset): void;
   personal?: PersonalPresetCatalog | undefined;
   personalAction?(action: "add" | "list" | "remove", rootId?: string): void;
@@ -241,10 +348,15 @@ export function createPresetGallery(doc: Document, options: {
   /** Grava os ajustes atuais como variação, sem aplicar. Devolve a frase de resultado. */
   saveVariant?(presetId: string, name: string, settings: MotionLibraryOptions): { ok: boolean; message: string };
   context?(): { hasComp: boolean; selectionCount: number; selectedKeys: number; fps?: number | undefined; textLayers?: number | undefined; lockedLayers?: number | undefined };
+  /** Pasta Elementos: insercao de formas, tarjas e titulos (`ae.elements.insert`). */
+  elements?: Omit<ElementsEditorOptions, "i18n" | "context" | "category" | "query"> | undefined;
 }): { element: HTMLElement; updateContext(): void; dispose(): void } {
   const i18n = createI18n({ locale: options.locale });
   const pt = i18n.locale() === "pt-BR", nav = options.navigation;
   let primaryApply: ActionButtonController | undefined;
+  let phaseActions: ReturnType<typeof createPresetPhaseActions> | undefined;
+  let applying = false;
+  let applyFeedback: { presetId: string; phase?: MotionLibraryOptions["phase"]; state: "loading" | "success" | "error"; message: string } | undefined;
   nav.drafts ??= {};
   // Curve editing belongs to Suavização. Keep user curve libraries untouched.
   if (nav.category === "ease") nav.category = "all";
@@ -272,11 +384,17 @@ export function createPresetGallery(doc: Document, options: {
     "motion-effects": pt ? "Motion · Efeitos" : "Motion · Effects", "text-characters": pt ? "Texto · Caracteres" : "Text · Characters",
     "text-words": pt ? "Texto · Palavras" : "Text · Words", "text-lines": pt ? "Texto · Linhas" : "Text · Lines",
     "text-effects": pt ? "Texto · Efeitos" : "Text · Effects", ease: pt ? "Curvas" : "Curves", camera: pt ? "Câmera" : "Camera",
-    text: pt ? "Tipografia" : "Typography", motion: "Motion", transitions: pt ? "Transições" : "Transitions"
+    text: pt ? "Tipografia" : "Typography", motion: "Motion", transitions: pt ? "Transições" : "Transitions",
+    momentum: pt ? "Impulso" : "Momentum", "momentum-2d": pt ? "Impulso · 2D" : "Momentum · 2D",
+    "momentum-3d": pt ? "Impulso · 3D" : "Momentum · 3D", "momentum-effects": pt ? "Impulso · Efeitos" : "Momentum · Effects",
+    reveal: pt ? "Revelações" : "Reveals", looks: "Looks"
   };
+  for (const category of ["text-characters", "text-words", "text-lines"]) for (const [family, labelPt, labelEn] of TEXT_PRESET_FAMILIES)
+    labels[`${category}/${family}`] = `${labels[category]} · ${pt ? labelPt : labelEn}`;
   const galleryId=`preset-gallery-${++gallerySequence}`;
   const invalidNumbers=new Map<string,Map<string,string>>();
   let personalPreview:ReturnType<typeof createPersonalMediaPreview>|undefined;
+  let elementsView:ElementsEditor|undefined;
   const element = createElement(doc, "div", "ch-preset-gallery");
   const scroll = createElement(doc, "div", "ch-preset-scroll");
   const toolbar = createElement(doc, "div", "ch-quick-toolbar ch-preset-toolbar-approved"); element.appendChild(toolbar);
@@ -303,7 +421,7 @@ export function createPresetGallery(doc: Document, options: {
     if(open) closeEditor();
     filterButton.setAttribute("aria-expanded", String(open));
     filterMenu.setAttribute("aria-hidden", String(!open));
-    if (open) { filterMenu.hidden = false; void filterMenu.offsetWidth; filterMenu.setAttribute("data-open", "true"); filterMenu.querySelector<HTMLButtonElement>("button")?.focus(); }
+    if (open) { filterMenu.hidden = false; void filterMenu.offsetWidth; filterMenu.setAttribute("data-open", "true"); menuEntries()[0]?.focus(); }
     else { filterMenu.setAttribute("data-open", "false"); filterTimer = setTimeout(() => { filterMenu.hidden = true; }, 200); }
   }
   element.appendChild(filterMenu);
@@ -320,7 +438,7 @@ export function createPresetGallery(doc: Document, options: {
     const b = button(doc, { label: pt ? scope === "favorites" ? "Favoritos" : "Recentes" : scope === "favorites" ? "Favorites" : "Recent", onClick: () => { if(disposed)return; cancelReveal(); nav.scope = nav.scope === scope ? "all" : scope; delete nav.recentOrder; b.setAttribute("aria-pressed", String(nav.scope === scope)); draw(); } });
     b.dataset.scope = scope; b.setAttribute("aria-pressed", String(nav.scope === scope)); filters.appendChild(b);
   }
-  filterMenu.appendChild(filters);
+  filters.classList.add("ch-preset-toolbar-scope"); toolbar.appendChild(filters);
   const browser = createElement(doc, "div", "ch-preset-browser"); scroll.appendChild(browser);
   const categories = createElement(doc, "nav", "ch-preset-categories"); categories.setAttribute("aria-label", pt ? "Categorias de presets" : "Preset categories"); filterMenu.appendChild(categories);
   function focusKey(): string | undefined { return (doc.activeElement as HTMLElement | null)?.dataset?.focusKey; }
@@ -339,9 +457,17 @@ export function createPresetGallery(doc: Document, options: {
     {id: "signature", label: "Signature", children: [
       {id:"signature-essentials",label:pt?"Entrada e saída":"In & out"},{id:"signature-cinema",label:"Cinema"},
       {id:"signature-light-matter",label:pt?"Luz e matéria":"Light & matter"},{id:"signature-variation",label:pt?"Variação":"Variation"}]},
+    {id: "momentum", label: pt ? "Impulso" : "Momentum", children: [
+      {id:"momentum-2d",label:pt?"Transições 2D":"2D transitions"},{id:"momentum-3d",label:pt?"Transições 3D":"3D transitions"},
+      {id:"momentum-effects",label:pt?"Efeitos":"Effects"}]},
+    {id: "elements", label: pt ? "Elementos" : "Elements", children: [
+      {id:"elements-shape",label:pt?"Formas":"Shapes"},{id:"elements-lower-third",label:pt?"Tarjas":"Lower thirds"},{id:"elements-title",label:pt?"Títulos":"Titles"}]},
+    {id: "reveal", label: pt ? "Revelações" : "Reveals"},
+    {id: "looks", label: "Looks"},
     {id: "text", label: pt ? "Tipografia" : "Typography", children: [
-      {id:"text-characters",label:pt?"Caracteres":"Characters"},{id:"text-words",label:pt?"Palavras":"Words"},
-      {id:"text-lines",label:pt?"Linhas":"Lines"},{id:"text-effects",label:pt?"Efeitos de texto":"Text effects"}]},
+      ...(["text-characters", "text-words", "text-lines"] as const).map((category,index) => ({id:category,label:(pt?["Caracteres","Palavras","Linhas"]:["Characters","Words","Lines"])[index]!,
+        children:TEXT_PRESET_FAMILIES.filter(([family])=>GALLERY_PRESETS.some(preset=>preset.navigation?.filter===`${category}/${family}`)).map(([family,labelPt,labelEn])=>({id:`${category}/${family}`,label:pt?labelPt:labelEn}))})),
+      {id:"text-effects",label:pt?"Efeitos de texto":"Text effects"}]},
     {id: "motion", label: "Motion", children: [
       {id:"motion-2d",label:pt?"Transições 2D":"2D transitions"}, {id:"motion-3d",label:pt?"Transições 3D":"3D transitions"}, {id:"motion-effects",label:pt?"Efeitos":"Effects"}]},
     {id:"transitions",label:pt?"Transições":"Transitions",children:[{id:"camera-transitions",label:pt?"Transições de corte":"Cut transitions"},{id:"camera-impact",label:pt?"Impacto e tremor":"Impact & shake"},{id:"camera-moves",label:pt?"Movimentos 3D":"3D movements"}]},
@@ -446,6 +572,11 @@ export function createPresetGallery(doc: Document, options: {
   settingsPanel.appendChild(settingsHeader);
   const settingsBody = createElement(doc, "div", "ch-preset-settings-body"); settingsPanel.appendChild(settingsBody);
   let settingsOpen = false, settingsTimer: ReturnType<typeof setTimeout> | undefined;
+  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+  let leaveTimer: ReturnType<typeof setTimeout> | undefined;
+  let hoverOpened = false;
+  let settingsGridScroll = 0, settingsOuterScroll = 0;
+  const previewDirections = new Map<string, MotionLibraryOptions["direction"]>();
   const savedTabStops = new Map<HTMLElement,string|null>();
   function settingsTabStops(enabled: boolean): void {
     for(const node of Array.from(settingsPanel.querySelectorAll<HTMLElement>("button,input,select,summary"))) {
@@ -558,8 +689,12 @@ export function createPresetGallery(doc: Document, options: {
   }
   function resumePreviews(): void {
     if(disposed||doc.hidden)return;
-    panelActive=true;lastPaint=0;
-    for(const id of visible){const scene=scenes.get(id);if(scene)scene.start=performance.now();}
+    // Clicks, focus and the pointer re-entering (the card repaints under it)
+    // arrive while previews already play: only a real pause restarts the clock,
+    // or the playing preview would be pinned to its first, empty frame.
+    const paused=!panelActive;
+    panelActive=true;
+    if(paused){lastPaint=0;for(const id of visible){const scene=scenes.get(id);if(scene)scene.start=performance.now();}}
     schedulePreviews();
   }
   function restartPreviews(): void {
@@ -577,46 +712,82 @@ export function createPresetGallery(doc: Document, options: {
   motionObserver?.observe(doc.documentElement,{attributes:true,attributeFilter:["data-reduced-motion"]});
   function positionSettings(): void {
     if(!settingsOpen || !editorTrigger)return;
-    const box = editorTrigger.getBoundingClientRect();
-    const width = doc.documentElement.clientWidth || 360;
-    const height = doc.documentElement.clientHeight || doc.defaultView?.innerHeight || 640;
-    const panelWidth = Math.min(280, width - 16);
-    const panelHeight = Math.min(settingsPanel.scrollHeight || 320, height - 96);
-    const below = height - box.bottom - 48, above = box.top - 8;
-    const opensAbove = below < Math.min(panelHeight, 180) && above > below;
-    const top = opensAbove ? Math.max(8,box.top-panelHeight-6) : Math.min(box.bottom+6,Math.max(8,height-128));
-    settingsPanel.style.left = `${Math.max(8,Math.min(box.right-panelWidth,width-panelWidth-8))}px`;
-    settingsPanel.style.top = `${top}px`;
-    settingsPanel.style.width = `${panelWidth}px`;
-    settingsPanel.style.maxHeight = `${Math.max(80, Math.min(panelHeight,height-top-48))}px`;
-    settingsPanel.setAttribute("data-side", opensAbove ? "above" : "below");
+    const card = Array.from(grid.querySelectorAll<HTMLElement>(".ch-preset-card")).find(node => node.contains(editorTrigger));
+    if (!card) { closeEditor(); return; }
+    const bounds = card.getBoundingClientRect();
+    const viewportWidth = window.innerWidth || 800, viewportHeight = window.innerHeight || 800;
+    const width = Math.min(bounds.width, viewportWidth - 8);
+    settingsPanel.style.width = `${width}px`;
+    settingsPanel.style.maxHeight = `${Math.max(24,viewportHeight - 8)}px`;
+    const height = settingsPanel.scrollHeight || settingsPanel.getBoundingClientRect().height;
+    const below = viewportHeight - bounds.bottom - 4, above = bounds.top - 4;
+    const side = below >= Math.min(height,160) || below >= above ? "below" : "above";
+    const available = Math.max(24, side === "below" ? below : above);
+    settingsPanel.style.left = `${Math.max(4,Math.min(bounds.left,viewportWidth - width - 4))}px`;
+    settingsPanel.style.top = `${side === "below" ? bounds.bottom : Math.max(4,bounds.top - Math.min(height,available))}px`;
+    settingsPanel.style.maxHeight = `${available}px`;
+    settingsPanel.setAttribute("data-side", side);
+    attach(card,side);
+  }
+
+  /** Marks the card that the open settings grow out of; null clears it. */
+  let attachedCard: HTMLElement | null = null;
+  function attach(card: HTMLElement | null, side?: "above" | "below"): void {
+    if (attachedCard && attachedCard !== card) attachedCard.removeAttribute("data-attached");
+    attachedCard = card;
+    if (card && side) { card.setAttribute("data-attached", side); settingsPanel.setAttribute("data-attached", side); }
+    else settingsPanel.removeAttribute("data-attached");
   }
   function closeEditor(restoreFocus = false): void {
+    clearTimeout(hoverTimer); clearTimeout(leaveTimer);
+    previewDirections.clear();
     if(!settingsOpen && settingsPanel.hidden)return;
-    settingsOpen=false; clearTimeout(settingsTimer);
+    settingsOpen=false; element.removeAttribute("data-settings-open"); clearTimeout(settingsTimer);
+    // The card keeps its open shape until the popover has folded back into it.
+    const folding = attachedCard; setTimeout(() => { if (!settingsOpen && attachedCard === folding) { folding?.removeAttribute("data-attached"); attachedCard = null; } }, 200);
     settingsPanel.setAttribute("data-open", "false"); settingsPanel.setAttribute("aria-hidden", "true");
     settingsTabStops(false); editorTrigger?.setAttribute("aria-expanded", "false");
-    if (restoreFocus) editorTrigger?.focus();
+    if (restoreFocus) editorTrigger?.focus({preventScroll:true});
     const reduce = reduced() || doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if(reduce)settingsPanel.hidden=true;
     else settingsTimer=setTimeout(()=>{settingsPanel.hidden=true;},200);
   }
-  function openEditor(preset: GalleryPreset, trigger: HTMLElement): void {
-    if(settingsOpen && nav.selectedId===preset.id && editorTrigger===trigger){closeEditor(true);return;}
+  function openEditor(preset: GalleryPreset, trigger: HTMLElement, hover = false): void {
+    clearTimeout(hoverTimer); clearTimeout(leaveTimer);
+    if(settingsOpen && nav.selectedId===preset.id && editorTrigger===trigger){
+      if(hover)return;
+      if(hoverOpened){hoverOpened=false;(settingsBody.querySelector<HTMLButtonElement>(".ch-preset-direction-tile") ?? settingsBody.querySelector<HTMLButtonElement>("button") ?? settingsClose).focus({preventScroll:true});return;}
+      closeEditor(true);return;
+    }
     setFilters(false); select(preset); clearTimeout(settingsTimer);
-    editorTrigger = trigger; settingsOpen = true; settingsPanel.hidden=false;
+    hoverOpened = hover;
+    editorTrigger = trigger; settingsOpen = true; element.setAttribute("data-settings-open", "true"); settingsPanel.hidden=false;
+    settingsGridScroll=grid.scrollTop;settingsOuterScroll=scroll.scrollTop;
     trigger.setAttribute("aria-expanded", "true"); settingsPanel.setAttribute("aria-hidden","false");
     settingsTabStops(true); positionSettings(); void settingsPanel.offsetWidth;
     settingsPanel.setAttribute("data-open","true");
-    (settingsBody.querySelector<HTMLButtonElement>("button") ?? settingsClose).focus();
+    // Measure again once open: while closed the content reports no height and
+    // the panel would fall back to a fixed cap that forces a scrollbar.
+    positionSettings();
+    if(!hover)(settingsBody.querySelector<HTMLButtonElement>(".ch-preset-direction-tile") ?? settingsBody.querySelector<HTMLButtonElement>("button") ?? settingsClose).focus({preventScroll:true});
     previewPlayers.get(preset.id)?.();
   }
+  function keepSettings(): void { clearTimeout(leaveTimer); }
+  function leaveSettings(): void {
+    clearTimeout(hoverTimer); clearTimeout(leaveTimer);
+    leaveTimer=setTimeout(()=>{
+      if(settingsOpen && !settingsPanel.contains(doc.activeElement))closeEditor();
+    },160);
+  }
+  settingsPanel.addEventListener("mouseenter",keepSettings);
+  settingsPanel.addEventListener("mouseleave",leaveSettings);
   // Categories live in the anchored menu, which sizes itself to its labels.
   const resize = (): void => { positionSettings(); };
   const outside = (event: MouseEvent): void => { const target = event.target as Node;
     if(settingsOpen && !settingsPanel.contains(target) && !editorTrigger?.contains(target) && !(target as HTMLElement).closest?.(".ch-select-menu"))closeEditor();
     if(!element.contains(target))pausePreviews(); if (!filterMenu.hidden && !filterMenu.contains(target) && !filterButton.contains(target)) setFilters(false); };
   const escape = (event: KeyboardEvent): void => { if(event.key!=="Escape"||event.defaultPrevented)return;
+    clearTimeout(hoverTimer);
     if(settingsOpen){event.preventDefault();closeEditor(true);return;}
     if(colorFolder){event.preventDefault();const id=colorFolder;colorFolder="";drawFolders();restoreFocus(`more.${id}`);}else if(!filterMenu.hidden){event.preventDefault();setFilters(false);filterButton.focus();}
     };
@@ -628,6 +799,17 @@ export function createPresetGallery(doc: Document, options: {
     if (!preset.motion) return { ...MOTION_LIBRARY_DEFAULTS };
     return nav.drafts![preset.id] ?? (nav.drafts![preset.id] = defaultLibraryOptions(preset.motion, options.context?.()?.fps));
   }
+  /** Second click on the selected preset: clear the choice and fold the box away. */
+  function deselect(): void {
+    if (disposed) return;
+    cancelReveal(); closeEditor(); nav.selectedId = "";
+    for (const card of Array.from(grid.querySelectorAll(".ch-preset-card"))) {card.setAttribute("data-selected","false");card.querySelector(".ch-preset-preview")?.setAttribute("aria-pressed","false");}
+    drawInspector();
+  }
+  function toggle(preset: GalleryPreset): boolean {
+    if (nav.selectedId === preset.id) { deselect(); return false; }
+    select(preset); return true;
+  }
   function select(preset: GalleryPreset): void {
     if (disposed) return;
     cancelReveal();
@@ -637,29 +819,104 @@ export function createPresetGallery(doc: Document, options: {
     for (const card of Array.from(grid.querySelectorAll(".ch-preset-card"))) {card.setAttribute("data-selected", String(card.id === preset.id));card.querySelector(".ch-preset-preview")?.setAttribute("aria-pressed",String(card.id===preset.id));}
     drawInspector(preset);
   }
-  function applyPreset(preset: GalleryPreset): void {
-    if (disposed || options.busy) return;
+  function directPhaseApply(preset: GalleryPreset): boolean {
+    return preset.motion?.mode === "transition" && !(preset.category === "camera-transitions" && (Boolean(preset.motion.cameraSpec) || nav.cameraApplyMode !== "layers"));
+  }
+  function applyPreset(preset: GalleryPreset, phase?: MotionLibraryOptions["phase"]): void {
+    if (disposed || options.busy || applying) return;
     if (nav.selectedId !== preset.id) select(preset);
     updateContext();
     if(options.busy||invalidNumbers.get(preset.id)?.size||actions.querySelector<HTMLButtonElement>("button")?.disabled)return;
+    if (phase) settings(preset).phase = phase;
     rememberScroll();
-    options.apply(preset, preset.motion ? { ...settings(preset) } : undefined,
-      preset.motion?.cameraSpec ? "precomp" : preset.category === "camera-transitions" ? nav.cameraApplyMode ?? "precomp" : "layers");
+    applying = true;
+    applyFeedback = { presetId: preset.id, ...(phase ? {phase} : {}), state: "loading", message: pt ? "Aplicando…" : "Applying…" };
+    updateContext(); refreshPreview(preset);
+    const finish = (result?: GalleryApplyResult): void => {
+      if (disposed) return;
+      applying = false;
+      applyFeedback = result ? {presetId:preset.id,...(phase?{phase}:{}),state:result.ok?"success":"error",message:result.message || (result.ok?(pt?"Aplicado":"Applied"):(pt?"Não foi possível aplicar":"Could not apply"))} : undefined;
+      updateContext();
+    };
+    try {
+      const result = options.apply(preset, preset.motion ? { ...settings(preset) } : undefined,
+        preset.motion?.cameraSpec ? "precomp" : preset.category === "camera-transitions" ? nav.cameraApplyMode ?? "precomp" : "layers");
+      if (result) void result.then(finish, () => finish({ok:false,message:pt?"Não foi possível aplicar. Tente novamente.":"Could not apply. Try again."}));
+      else finish(); // A legacy void callback provides no evidence of success.
+    } catch { finish({ok:false,message:pt?"Não foi possível aplicar. Tente novamente.":"Could not apply. Try again."}); }
+  }
+  /** Share of the thumbnail that a painted subject must cover to count as shown. */
+  const REST_VISIBLE = .004;
+  /** Largest visible painted shape, as a share of the thumbnail; null without layout (tests). */
+  function paintedArea(svg: SVGSVGElement): number | null {
+    const box = svg.getBoundingClientRect?.();
+    if (!box || !box.width || !box.height || typeof getComputedStyle !== "function") return null;
+    let best = 0;
+    for (const el of Array.from(svg.querySelectorAll("path,text,rect,circle,ellipse,polygon,line,polyline"))) {
+      if (el.closest("defs,clipPath,mask,filter,pattern")) continue;
+      const r = el.getBoundingClientRect(), w = Math.max(0, Math.min(r.right, box.right) - Math.max(r.left, box.left)), h = Math.max(0, Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top));
+      if (!w || !h) continue;
+      let opacity = 1;
+      for (let node: Element | null = el; node && node !== svg.parentElement; node = node.parentElement) {
+        const own = node.getAttribute("opacity"); if (own !== null) opacity *= Number(own);
+        opacity *= Number(getComputedStyle(node).opacity || 1);
+      }
+      best = Math.max(best, w * h * opacity);
+    }
+    return best / (box.width * box.height);
+  }
+  /** Paints the first candidate time that shows the subject, or the best one. */
+  function paintFirstVisible(svg: SVGSVGElement, candidates: number[], paintAt: (time: number) => void, shown?: (time: number) => boolean): void {
+    let best = candidates[0] ?? 0, bestArea = -1;
+    for (const time of candidates) {
+      paintAt(time);
+      const area = paintedArea(svg);
+      // Not laid out yet (hidden grid, tests): judge by the motion math instead.
+      if (area === null) { if (!shown || shown(time)) return; continue; }
+      if (area > bestArea) { bestArea = area; best = time; }
+      if (area >= REST_VISIBLE) return;
+    }
+    paintAt(best);
   }
   function preview(preset: GalleryPreset): HTMLElement {
+    const previewOptions = (): MotionLibraryOptions => ({...settings(preset), ...(previewDirections.has(preset.id) ? {direction:previewDirections.get(preset.id)!} : {})});
     const overlay = (): boolean => preset.category === "camera-transitions" && (Boolean(preset.motion?.cameraSpec) || nav.cameraApplyMode !== "layers");
     const name = preset.displayName[options.locale] ?? preset.id;
-    const view = button(doc, { label: "", onClick: () => { select(preset); play(); } });
+    const view = button(doc, { label: "", onClick: () => { if (toggle(preset)) play(); } });
     view.className = "ch-preset-preview";
     if (preset.motion?.cameraSpec?.native || preset.motion?.cameraSpec?.impact || preset.motion?.effect.startsWith("native-")) view.title = pt ? "Prévia ilustrativa; o efeito se adapta à imagem aplicada." : "Illustrative preview; the effect adapts to the applied image.";
     view.setAttribute("aria-label", `${pt ? "Prévia" : "Preview"}: ${name}`);
     view.setAttribute("aria-pressed",String(nav.selectedId===preset.id));view.dataset.focusKey=`preview.${preset.id}`;
-    view.addEventListener("dblclick",()=>{if(!options.busy)applyPreset(preset);});
+    view.addEventListener("dblclick",()=>{if(!options.busy && !directPhaseApply(preset))applyPreset(preset);});
     const svg = doc.createElementNS(ns, "svg"); svg.setAttribute("viewBox", "0 0 320 180"); svg.setAttribute("aria-hidden", "true"); view.appendChild(svg);
+    // Text recipes show their real After Effects render while the card keeps
+    // the rendered settings; any other choice falls back to the drawn preview.
+    const reference = preset.motion?.category.startsWith("text-") ? textReferenceAsset(TEXT_REFERENCE_MANIFEST, preset.motion.id) : undefined;
+    let video: HTMLVideoElement | undefined, poster: HTMLImageElement | undefined;
+    const usesReference = (): boolean => Boolean(reference) && !overlay() && textReferenceMatches(reference!, previewOptions());
+    const showReference = (playing: boolean): void => {
+      if (!reference) return;
+      view.dataset.media = "true";
+      if (!poster) { poster = doc.createElement("img"); poster.className = "ch-preset-media"; poster.alt = ""; poster.setAttribute("aria-hidden", "true"); poster.src = TEXT_REFERENCE_BASE + reference.poster; view.appendChild(poster); }
+      if (!playing) { poster.hidden = false; if (video) { video.pause?.(); video.hidden = true; } return; }
+      if (!video) {
+        video = doc.createElement("video"); video.className = "ch-preset-media"; video.setAttribute("aria-hidden", "true");
+        video.muted = true; video.loop = true; video.playsInline = true; video.preload = "auto"; video.src = TEXT_REFERENCE_BASE + reference.video;
+        view.appendChild(video);
+      }
+      video.hidden = false; poster.hidden = true;
+      if (video.paused !== false && typeof video.play === "function") { video.currentTime = 0; void video.play()?.catch?.(() => undefined); }
+    };
+    const hideReference = (): void => { delete view.dataset.media; if (video) { video.pause?.(); video.hidden = true; } if (poster) poster.hidden = true; };
+    const releaseReference = (): void => {
+      if (video) { video.pause?.(); video.removeAttribute("src"); video.load?.(); video.parentNode?.removeChild(video); video = undefined; }
+      if (poster) { poster.parentNode?.removeChild(poster); poster = undefined; }
+      delete view.dataset.media;
+    };
     const path = (d: string, cls: string): void => { const n = doc.createElementNS(ns, "path"); n.setAttribute("d", d); n.setAttribute("class", cls); svg.appendChild(n); };
     function paint(seconds: number): void {
       clearNode(svg);
-      if (preset.motion) { paintLibraryPreview(svg, preset.motion, settings(preset), seconds, overlay()); return; }
+      if (preset.motion) { paintLibraryPreview(svg, preset.motion, previewOptions(), seconds, overlay()); return; }
       const time = Math.min(1, seconds), progress = curveProgress(preset.curve, time);
       if (preset.category === "ease") {
         const { x1, y1, x2, y2 } = preset.curve;
@@ -675,12 +932,26 @@ export function createPresetGallery(doc: Document, options: {
       }
     }
     const rest = (): void => {
-      const draft=settings(preset),duration=draft.durationFrames/30;
+      if (usesReference()) { showReference(false); return; }
+      hideReference();
+      const draft=previewOptions(),duration=draft.durationFrames/30,end=libraryPreviewEnd(draft);
       // A still frame should reveal the movement, rather than show every entrance at rest.
-      const time=overlay()?duration*.25:preset.motion?.mode==="transition"
-        ?draft.phase==="out"?libraryPreviewEnd(draft)-duration*.65:duration*.65
+      const preferred=overlay()?duration*.25:preset.motion?.mode==="transition"
+        ?draft.phase==="out"?end-duration*.65:duration*.65
         :preset.motion?1.4:.5;
-      svg.setAttribute("opacity", "1");paint(time);
+      svg.setAttribute("opacity", "1");
+      // Staggered text, blinks, delayed parts and cut transitions can be
+      // invisible at that instant: walk forward to the first frame that shows
+      // the subject (toward the exit start for Out), so no card looks empty.
+      const candidates=[preferred];
+      if(preset.motion){
+        const from=overlay()?0:preset.motion.mode==="transition"&&draft.phase==="out"?end-duration:preferred;
+        const to=overlay()?duration:preset.motion.mode==="transition"?(draft.phase==="out"?Math.max(0,end-duration*1.6):end):preferred+4;
+        for(let k=1;k<=12;k++)candidates.push(from+(to-from)*k/12);
+      }
+      const motion=preset.motion;
+      const shown=motion&&!overlay()?(time:number):boolean=>{const sample=librarySample(motion,draft,time,motion.category.startsWith("text-")?6:0,motion.category.startsWith("text-")?7:1);return sample.opacity>.4&&Math.abs(sample.sx)>.25&&Math.abs(sample.sy)>.25;}:undefined;
+      paintFirstVisible(svg,candidates,paint,shown);
     };
     const halt = (): void => { if(activePreview===preset.id)activePreview="";if(!options.preferences.snapshot().presetAutoplay){rest();cancelAnimationFrame(animationFrame);animationFrame=0;} };
     function play(): void {
@@ -695,8 +966,10 @@ export function createPresetGallery(doc: Document, options: {
       activePreview=preset.id;const scene=scenes.get(preset.id);if(scene)scene.start=performance.now();schedulePreviews();
     }
     view.dataset.previewId=preset.id;
-    scenes.set(preset.id,{view,rest,release:()=>clearNode(svg),start:performance.now(),paint:elapsed=>{
-      const sample=overlay()?cameraPreviewPlayback(settings(preset),elapsed):preset.motion?libraryPreviewPlayback(preset.motion,settings(preset),elapsed):{time:elapsed%1.65,opacity:1};
+    scenes.set(preset.id,{view,rest,release:()=>{clearNode(svg);releaseReference();},start:performance.now(),paint:elapsed=>{
+      if (usesReference()) { showReference(true); return; }
+      hideReference();
+      const sample=overlay()?cameraPreviewPlayback(previewOptions(),elapsed):preset.motion?libraryPreviewPlayback(preset.motion,previewOptions(),elapsed):{time:elapsed%1.65,opacity:1};
       svg.setAttribute("opacity",String(sample.opacity));paint(sample.time);
     }});
     if(intersections)intersections.observe(view);else if(visible.size<2){visible.add(preset.id);rest();}
@@ -705,49 +978,102 @@ export function createPresetGallery(doc: Document, options: {
     view.addEventListener("mouseleave",halt);view.addEventListener("blur",halt);
     return view;
   }
+  /** Moment that shows where a transition comes from or goes to: halfway along
+   * its path, wherever the curve places it (a ricochet arrives early). */
+  function directionStill(p: MotionLibraryPreset, draft: MotionLibraryOptions): number {
+    if(p.mode!=="transition")return 1.4;
+    const duration=draft.durationFrames/30,exit=draft.phase==="out",start=exit?libraryPreviewEnd(draft)-duration:0;
+    for(let i=0;i<=60;i++){const time=start+duration*i/60,weight=librarySample(p,draft,time).weight;if(exit?weight>=.5:weight<=.5)return time;}
+    return start+duration*.3;
+  }
+  /** Direction tiles are a quarter of a card: text tiles frame the sample text
+   * itself (with room for its travel) so the letters stay legible. */
+  function directionViewBox(p: MotionLibraryPreset, draft: MotionLibraryOptions): string {
+    if(!p.category.startsWith("text-"))return "0 0 320 180";
+    const unit=(draft.unit==="preset"?p.text.unit:draft.unit) as TextPreviewUnit,box=textPreviewBounds(unit);
+    const width=Math.min(320,Math.max((box.right-box.left)*1.45,(box.bottom-box.top)*1.45*16/9)),height=width*9/16;
+    return `${(160-width/2).toFixed(1)} ${(90-height/2).toFixed(1)} ${width.toFixed(1)} ${height.toFixed(1)}`;
+  }
+  /** "Original" plus the four directions as small previews, to choose by sight
+   * (2×2). Diagonals stay in the Edit tab. Tiles are still frames; the hovered
+   * or focused one plays. */
+  function directionPicker(preset: GalleryPreset, p: MotionLibraryPreset, draft: MotionLibraryOptions): HTMLElement {
+    const directions=createElement(doc,"div","ch-preset-directions");directions.setAttribute("role","group");directions.setAttribute("aria-label",pt?"Direção":"Direction");
+    directions.setAttribute("data-view","list");settingsPanel.setAttribute("data-direction-view","list");
+    const items:HTMLElement[]=[];
+    const choose=(direction:MotionLibraryOptions["direction"]):void=>{previewDirections.delete(preset.id);draft.direction=direction;for(const item of items)item.setAttribute("aria-pressed",String(item.dataset.direction===direction));refreshPreview(preset);};
+    const original=button(doc,{label:pt?"Original":"Original",disabled:options.busy,onClick:()=>choose("preset")});original.dataset.direction="preset";items.push(original);directions.appendChild(original);
+    const tiles=createElement(doc,"div","ch-preset-direction-grid");tiles.setAttribute("aria-label",pt?"Todas as direções":"All directions");directions.appendChild(tiles);
+    const order:readonly (readonly [MotionLibraryOptions["direction"],string])[]=[["bottom",pt?"De baixo":"From bottom"],["left",pt?"Da esquerda":"From left"],["right",pt?"Da direita":"From right"],["top",pt?"De cima":"From top"]];
+    for(const [direction,label] of order){
+      const tile=button(doc,{label:"",disabled:options.busy,onClick:()=>choose(direction)});tile.className="ch-preset-direction-tile";tile.dataset.direction=direction;tile.setAttribute("aria-label",label);tile.title=label;
+      const svg=doc.createElementNS(ns,"svg");svg.setAttribute("viewBox",directionViewBox(p,draft));svg.setAttribute("aria-hidden","true");tile.appendChild(svg);tile.appendChild(createElement(doc,"span","",label));
+      const look=():MotionLibraryOptions=>({...draft,direction});
+      const still=():void=>{
+        svg.setAttribute("opacity","1");const at=directionStill(p,look()),duration=look().durationFrames/30;
+        const candidates=[at];for(let k=1;k<=10;k++)candidates.push(at+duration*k/10);
+        paintFirstVisible(svg as SVGSVGElement,candidates,time=>{clearNode(svg);paintLibraryPreview(svg as SVGSVGElement,p,look(),time);});
+      };
+      let frame=0;
+      const stop=():void=>{previewDirections.delete(preset.id);refreshPreview(preset);if(!frame)return;cancelAnimationFrame(frame);frame=0;still();};
+      const play=():void=>{
+        if(!options.busy){previewDirections.set(preset.id,direction);refreshPreview(preset);previewPlayers.get(preset.id)?.();}
+        if(directions.getAttribute("data-view")==="list")return;
+        if(frame||options.busy||reduced())return;const started=performance.now();
+        const step=(now:number):void=>{if(disposed||!tile.isConnected){frame=0;return;}const sample=libraryPreviewPlayback(p,look(),(now-started)/1000);clearNode(svg);svg.setAttribute("opacity",String(sample.opacity));paintLibraryPreview(svg,p,look(),sample.time);frame=requestAnimationFrame(step);};
+        frame=requestAnimationFrame(step);
+      };
+      tile.addEventListener("mouseenter",play);tile.addEventListener("focus",play);tile.addEventListener("mouseleave",stop);tile.addEventListener("blur",stop);
+      numericCleanups.push(()=>{cancelAnimationFrame(frame);frame=0;});
+      still();items.push(tile);tiles.appendChild(tile);
+    }
+    const all=button(doc,{label:pt?"Ver todas":"View all at once",onClick:()=>{
+      const expanded=directions.getAttribute("data-view")!=="previews";
+      directions.setAttribute("data-view",expanded?"previews":"list");
+      settingsPanel.setAttribute("data-direction-view",expanded?"previews":"list");
+      all.setAttribute("aria-expanded",String(expanded));all.textContent=expanded?(pt?"Ver lista":"View list"):(pt?"Ver todas":"View all at once");
+      positionSettings();
+    }});all.classList.add("ch-preset-directions-toggle");all.setAttribute("aria-expanded","false");directions.appendChild(all);
+    for(const item of items)item.setAttribute("aria-pressed",String(item.dataset.direction===draft.direction));
+    return directions;
+  }
+  /** Quick character choices; the curve selector below keeps every option. */
+  function characterChips(preset: GalleryPreset, p: MotionLibraryPreset, draft: MotionLibraryOptions): HTMLElement {
+    const chips=createElement(doc,"div","ch-preset-characters");chips.setAttribute("role","group");chips.setAttribute("aria-label",pt?"Caráter":"Character");
+    const current=draft.easing&&draft.easing!=="preset"?draft.easing:p.easing;
+    for(const [easing,label] of [["smooth",pt?"Suave":"Smooth"],["overshoot",pt?"Recuo":"Back"],["settle-wave",pt?"Ricochete":"Ricochet"],["settle-hop",pt?"Quique":"Hop"]] as const){
+      const chip=button(doc,{label,disabled:options.busy,onClick:()=>{draft.easing=easing;refreshPreview(preset);drawInspector(preset);}});
+      chip.dataset.easing=easing;chip.setAttribute("aria-pressed",String(current===easing));chips.appendChild(chip);
+    }
+    return chips;
+  }
   function refreshPreview(preset?: GalleryPreset): void {
     if(!preset)return;
     const scene=scenes.get(preset.id);if(!scene)return;
     if(visible.has(preset.id))scene.rest();scene.start=performance.now();schedulePreviews();
   }
   function drawInspector(preset?: GalleryPreset): void {
+    settingsPanel.setAttribute("data-direction-view","previews");
     const sameSelection = inspector.dataset.preset === preset?.id;
     const focusedId = sameSelection && (inspector.contains?.(doc.activeElement) || settingsBody.contains?.(doc.activeElement)) ? (doc.activeElement as HTMLElement)?.id : "";
     inspector.dataset.preset = preset?.id ?? "";
     // Restore the persistent close button before replacing the body controls.
     settingsTabStops(true);
     disposeNumbers();clearNode(inspector); clearNode(settingsBody);
-    primaryApply = undefined; clearNode(actions);
+    primaryApply = undefined; phaseActions = undefined; clearNode(actions); actions.removeAttribute("data-phase-actions"); actions.removeAttribute("data-floating"); element.removeAttribute("data-phase-actions");
     editor.hidden = !preset;
     actions.hidden = !preset;
     if (!preset) { actions.appendChild(createElement(doc,"span","ch-preset-hint",pt?"Selecione uma miniatura":"Select a preview")); inspector.appendChild(createElement(doc, "p", "ch-preset-hint", pt ? "Escolha um preset para aplicar ou ajustar." : "Choose a preset to apply or adjust.")); return; }
     const presetId=preset.id;
     settingsTitle.textContent = preset.displayName[options.locale] ?? preset.id;
-    const heading = createElement(doc, "div", "ch-preset-approved-heading");
-    heading.appendChild(createElement(doc, "span", "", preset.displayName[options.locale] ?? preset.id));
-    heading.appendChild(createBadge(doc, { label: pt ? "Ajustável" : "Editable", showIcon: false }).element);
-    inspector.appendChild(heading);
-    if (preset.motion) {
-      const needs = requirementLabels(motionLibraryRequirements(preset.motion), pt);
-      const list = createElement(doc, "div", "ch-preset-requirements");
-      list.setAttribute("aria-label", pt ? "Requisitos" : "Requirements");
-      for (const need of needs) {
-        const badge = createBadge(doc, { label: need.label, showIcon: false }).element;
-        badge.title = need.detail; badge.dataset.requirement = need.id;
-        list.appendChild(badge);
-      }
-      inspector.appendChild(list);
-      inspector.appendChild(createElement(doc, "p", "ch-preset-hint ch-preset-illustrative", pt
-        ? "A prévia mostra a receita numa cena de exemplo; o resultado se adapta às suas camadas."
-        : "The preview shows the recipe on a sample scene; the result adapts to your layers."));
-    }
+    // Lean box: name, badges and notes stay out; the card already shows them,
+    // and an unmet requirement explains itself on the disabled Apply button.
     const primaryFields = createElement(doc, "div", "ch-preset-primary-fields"); inspector.appendChild(primaryFields);
     const p = preset.motion;
     const camera = preset.category === "camera-transitions";
     const overlay = camera && (Boolean(p?.cameraSpec) || nav.cameraApplyMode !== "layers");
     if (p) {
-      const draft = settings(preset), fields = createElement(doc, "div", "ch-preset-fields");
-      const activeNumbers=new Set<string>();
+      const draft = settings(preset);
       if (camera && !p.cameraSpec) {
         const label=pt?"Aplicação":"Apply to";
         const row=selectField(doc,{id:`${galleryId}-camera-mode`,label,value:nav.cameraApplyMode??"precomp",disabled:options.busy,
@@ -757,105 +1083,38 @@ export function createPresetGallery(doc: Document, options: {
         row.getElementsByTagName("select")[0]?.setAttribute("aria-label",label);
         inspector.appendChild(row);
       }
+      // Before applying, the settings only choose how it moves: the direction
+      // by sight and its character. Duration, intensity, curve, motion blur and
+      // the rest live in Edit, on the applied preset.
       const adjustments = createElement(doc, "div", "ch-preset-adjustments");
-      function choice(key: "direction" | "phase" | "unit" | "order" | "easing", label: string, choices: [string, string][]): void {
-        const row=selectField(doc,{id:`${galleryId}-${key}`,label,value:draft[key]??"preset",disabled:options.busy,
-          options:choices.map(([value,text])=>({value,label:text})),onChange:value=>{Object.assign(draft,{[key]:value});refreshPreview(preset);if(key==="unit"||key==="order"||key==="phase"||key==="easing")drawInspector(preset);}});
-        row.className+=" ch-preset-field ch-preset-field--select";
-        row.getElementsByTagName("select")[0]?.setAttribute("aria-label",label);
-        fields.appendChild(row);
-      }
-      function number(key: "durationFrames" | "intensity" | "staggerFrames" | "elasticity" | "overlap" | "speed" | "seed", label: string, min: number, max: number, container: HTMLElement = fields): void {
-        activeNumbers.add(key);
-        const step=["intensity","elasticity","overlap","speed"].includes(key) ? 0.1 : 1;
-        const wrapper=createElement(doc,"div","ch-preset-field--number");
-        const row=createElement(doc,"label","ch-preset-field");row.appendChild(createElement(doc,"span","",label));
-        const field=doc.createElement("input");field.type="number";field.id=`${galleryId}-${key}-input`;field.min=String(min);field.max=String(max);field.step=String(step);field.value=invalidNumbers.get(presetId)?.get(key)??String(draft[key]);field.disabled=options.busy;field.setAttribute("aria-label",label);
-        const validation=createElement(doc,"div","ch-field__error");validation.id=`${galleryId}-${key}-error`;validation.setAttribute("role","alert");field.setAttribute("aria-describedby",validation.id);
-        function validationState(valid:boolean):void {
-          field.setAttribute("aria-invalid",String(!valid));validation.hidden=valid;
-          validation.textContent=valid?"":pt?`Use ${step===1?"um número inteiro":"um número"} entre ${min} e ${max}.`:`Enter ${step===1?"a whole number":"a number"} from ${min} to ${max}.`;
-        }
-        function commit():void {
-          const text=field.value.trim().replace(",","."),n=Number(text);
-          const valid=/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(text)&&Number.isFinite(n)&&n>=min&&n<=max&&(step!==1||Number.isInteger(n));
-          validationState(valid);
-          if(!valid){if(!invalidNumbers.has(presetId))invalidNumbers.set(presetId,new Map());invalidNumbers.get(presetId)!.set(key,field.value);}
-          else{invalidNumbers.get(presetId)?.delete(key);draft[key]=n;refreshPreview(preset);}
-          updateContext();
-        }
-        validationState(!invalidNumbers.get(presetId)?.has(key));
-        numericCleanups.push(attachScrubbableNumber(field,{helpText:pt?"Arraste para ajustar · Shift: precisão · Alt: rápido · Clique para digitar":"Drag to adjust · Shift: fine · Alt: fast · Click to type"}));
-        field.addEventListener("input",commit);field.addEventListener("change",commit);field.addEventListener("keydown",event=>{if(event.key==="Enter")commit();});row.appendChild(field);wrapper.appendChild(row);wrapper.appendChild(validation);container.appendChild(wrapper);
-      }
-      if (p.mode === "transition" && !overlay) primaryFields.appendChild(createPresetPhaseControl(doc, {
-        locale: options.locale, value: draft.phase, disabled: options.busy,
-        onChange: value => { draft.phase = value; refreshPreview(preset); }
-      }));
-      if (!overlay && (p.position[0] || p.position[1] || p.pivot === "edge")) {
-        const directions = createElement(doc, "div", "ch-preset-directions"); directions.setAttribute("role", "group"); directions.setAttribute("aria-label", pt ? "Direção" : "Direction");
-        for (const [direction, label] of [["preset",pt?"Original":"Original"],["bottom",pt?"De baixo":"From bottom"],["left",pt?"Da esquerda":"From left"],["right",pt?"Da direita":"From right"],["top",pt?"De cima":"From top"]] as const) {
-          const item = button(doc, {label, disabled: options.busy, onClick: () => { draft.direction = direction; for (const child of Array.from(directions.children)) child.setAttribute("aria-pressed", String((child as HTMLElement).dataset.direction === direction)); refreshPreview(preset); }});
-          item.dataset.direction = direction; item.setAttribute("aria-pressed", String(draft.direction === direction)); directions.appendChild(item);
-        }
-        adjustments.appendChild(directions);
-      }
-      // Signature recipes keep their duration inside the authored tempo window.
-      if (p.mode === "transition") { const [minimum, maximum] = overlay ? [2, 600] : signatureDurationRange(p, options.context?.()?.fps); number("durationFrames", pt ? "Duração · frames" : "Duration · frames", minimum, maximum, primaryFields); }
-      number("intensity", pt ? "Intensidade · %" : "Intensity · %", 0, 300);
-      if(p.mode==="transition"&&!overlay)choice("easing",pt?"Suavização":"Easing",presetEasingChoices(options.locale));
-      if (p.category.startsWith("text-")) {
-        choice("unit", pt ? "Dividir texto" : "Text units", [["preset",pt?"Padrão do preset":"Preset default"],["characters",pt?"Caracteres":"Characters"],["words",pt?"Palavras":"Words"],["lines",pt?"Linhas":"Lines"],["all",pt?"Texto inteiro":"Whole text"]]);
-        if (p.mode === "transition") number("staggerFrames", pt ? "Intervalo · frames" : "Stagger · frames", 0, 60);
-      }
-      const sequenceControls = gallerySequenceControls(p, draft);
-      if (!overlay && sequenceControls.order) choice("order", pt ? "Ordem" : "Order", [["preset",pt?"Original":"Original"],["forward",pt?"Primeiro ao último":"First to last"],["reverse",pt?"Último ao primeiro":"Last to first"],["center-out",pt?"Centro para fora":"Center outward"],["edges-in",pt?"Bordas para dentro":"Edges inward"],["random",pt?"Aleatória":"Random"]]);
-      if (!overlay && sequenceControls.seed) { draft.seed ??= p.defaults?.seed ?? 17; number("seed", pt ? "Variação" : "Variation", 0, 9999); }
-      adjustments.appendChild(fields);
-      adjustments.appendChild(button(doc,{label:pt?"Restaurar padrão":"Reset defaults",disabled:options.busy,onClick:()=>{nav.drafts![preset.id]=defaultLibraryOptions(p,options.context?.()?.fps);invalidNumbers.delete(presetId);drawInspector(preset);previewPlayers.get(preset.id)?.();}}));
-      if (options.saveVariant && !p.cameraSpec && !p.id.startsWith("camera-")) {
-        // Guardar o ajuste antes de aplicar: a variação aparece em Editar →
-        // Variações salvas e pode ser aplicada depois em qualquer seleção.
-        const status = createElement(doc, "p", "ch-preset-hint ch-preset-variant-status");
-        status.setAttribute("role", "status");
-        adjustments.appendChild(button(doc, { label: pt ? "Salvar como variação" : "Save as variation", disabled: options.busy || Boolean(invalidNumbers.get(presetId)?.size), onClick: () => {
-          if (disposed || invalidNumbers.get(presetId)?.size) return;
-          const result = options.saveVariant!(p.id, preset.displayName[options.locale] ?? p.id, { ...settings(preset) });
-          status.textContent = result.message;
-          status.dataset.state = result.ok ? "ok" : "error";
-        } }));
-        adjustments.appendChild(status);
-      }
-      if (p.collection === "studio" || p.collection === "premium" || p.collection === "native" || p.collection === "signature" || draft.easing==="spring") {
-        const details = createElement(doc, "details", "ch-preset-refine");
-        details.appendChild(createElement(doc, "summary", "", pt ? "Refinar movimento" : "Refine motion"));
-        const advanced = createElement(doc, "div", "ch-preset-fields");
-        if ((draft.easing&&draft.easing!=="preset"?draft.easing:p.easing) === "spring") number("elasticity", pt ? "Elasticidade · %" : "Elasticity · %", 0, 100, advanced);
-        if (p.category.startsWith("text-") && p.mode === "transition") number("overlap", pt ? "Sobreposição · %" : "Overlap · %", 0, 100, advanced);
-        if (p.mode === "continuous") number("speed", pt ? "Velocidade · %" : "Speed · %", 25, 200, advanced);
-        if (advanced.children.length) {
-          details.appendChild(advanced);
-          details.appendChild(createElement(doc,"p","ch-preset-hint",p.mode === "continuous" ? pt ? "Menor velocidade deixa o ciclo mais lento." : "Lower speed makes the cycle slower." : pt ? "Sobreposição maior aproxima as entradas; elasticidade controla a acomodação." : "More overlap brings arrivals closer; elasticity controls settling."));
-          adjustments.appendChild(details);
-        }
-      }
-      adjustments.appendChild(createElement(doc, "p", "ch-preset-hint", overlay ? pt ? "Cria uma pré-comp acima das camadas, com o marcador CUT no tempo atual. Arraste o marcador para mover o pico da transição." : "Creates a precomp above the layers with a CUT marker at the current time. Drag the marker to move the transition peak." : p.mode === "transition" ? pt ? "Entrada no início da camada; saída no fim." : "In at the layer start; out at its end." : pt ? "Ajustes editáveis nos Controles do efeito." : "Editable settings in Effect Controls."));
-      for(const key of invalidNumbers.get(presetId)?.keys()??[])if(!activeNumbers.has(key))invalidNumbers.get(presetId)?.delete(key);
+      if (!overlay && libraryUsesDirection(p)) adjustments.appendChild(directionPicker(preset, p, draft));
+      if (p.mode === "transition" && !overlay) adjustments.appendChild(characterChips(preset, p, draft));
+      invalidNumbers.delete(presetId);
       settingsBody.appendChild(adjustments);
 
     } else inspector.appendChild(createElement(doc, "p", "ch-preset-hint", preset.category === "ease" ? pt ? "Selecione dois ou mais keyframes." : "Select two or more keyframes." : pt ? "Selecione uma câmera sem parent nem animação na propriedade." : "Select an unparented camera without keys on the target property."));
     if(!p) settingsBody.appendChild(button(doc,{label:preset.category==="ease"?(pt?"Editar curva":"Edit curve"):(pt?"Editar movimento":"Edit motion"),onClick:()=>{if(disposed)return;rememberScroll();options.edit(preset);}}));
-    const target = createElement(doc, "span", "ch-preset-target"); actions.appendChild(target);
-    primaryApply = createActionButton(doc, { id: "preset-primary-apply", label: overlay ? (pt ? "Criar transição" : "Create transition") : (pt ? "Aplicar preset" : "Apply preset"),
+    if (directPhaseApply(preset)) {
+      actions.setAttribute("data-phase-actions", "true");
+      phaseActions = createPresetPhaseActions(doc, {locale: options.locale, onApply: phase => applyPreset(preset,phase)});
+      actions.appendChild(phaseActions.element);
+    } else {
+      primaryApply = createActionButton(doc, { id: "preset-primary-apply", label: overlay ? (pt ? "Criar transição" : "Create transition") : (pt ? "Aplicar preset" : "Apply preset"),
       variant: "primary", onPress: () => { if (!disposed) applyPreset(preset); } });
-    primaryApply.button.classList.add("ch-preset-primary-apply");
-    primaryApply.element.classList.add("ch-preset-primary-action"); actions.appendChild(primaryApply.element);
+      primaryApply.button.classList.add("ch-preset-primary-apply");
+      primaryApply.element.classList.add("ch-preset-primary-action"); actions.appendChild(primaryApply.element);
+    }
+    // The lean transition inspector has no inline fields; do not leave its
+    // empty bordered section between the cards and the application buttons.
+    editor.hidden = inspector.children.length === 1 && primaryFields.children.length === 0;
+    if(phaseActions&&editor.hidden){actions.setAttribute("data-floating","true");element.setAttribute("data-phase-actions","true");}
     updateContext();
     if(focusedId) doc.getElementById(focusedId)?.focus();
     if(settingsOpen)positionSettings();
     else settingsTabStops(false);
   }
   function updateContext(): void {
+    if(nav.category.startsWith("elements")){elementsView?.refresh();return;}
     const context = options.context?.();
     if(nav.category.startsWith("personal")){
       const selected=options.personal?.items.find(item=>item.id===nav.selectedId);
@@ -866,19 +1125,27 @@ export function createPresetGallery(doc: Document, options: {
     const selected = GALLERY_PRESETS.find(preset => preset.id === nav.selectedId);
     const reason = !context ? null : !context.hasComp ? (pt ? "Abra uma composição" : "Open a composition")
       : selected?.category === "ease" && context.selectedKeys < 1 ? (pt ? "Selecione keyframes" : "Select keyframes")
-      : context.selectionCount < 1 && !selected?.category.startsWith("camera") ? (pt ? "Nenhuma camada selecionada" : "No layer selected")
+      : context.selectionCount < 1 && (!selected?.category.startsWith("camera") || selected && directPhaseApply(selected)) ? (pt ? "Nenhuma camada selecionada" : "No layer selected")
       : selected?.motion ? requirementReason(motionLibraryRequirements(selected.motion), context, pt) : null;
     const target = actions.querySelector<HTMLElement>(".ch-preset-target");
     if (target) target.textContent = reason ?? (context ? `${context.selectionCount} ${context.selectionCount === 1 ? (pt ? "camada selecionada" : "selected layer") : (pt ? "camadas selecionadas" : "selected layers")}` : "");
     for (const control of Array.from(actions.getElementsByTagName("button"))) {
-      control.disabled = options.busy || Boolean(reason) || Boolean(selected && invalidNumbers.get(selected.id)?.size);
+      control.disabled = options.busy || applying || Boolean(reason) || Boolean(selected && invalidNumbers.get(selected.id)?.size);
       control.setAttribute("aria-disabled", String(control.disabled));
       control.title = reason ?? "";
     }
+    for (const [phase, control] of phaseActions?.controls ?? []) {
+      const feedback = applyFeedback?.presetId === selected?.id && applyFeedback?.phase === phase ? applyFeedback : undefined;
+      control.setState(feedback?.state ?? "default", feedback?.message);
+      const unavailable = options.busy || applying || Boolean(reason) || Boolean(selected && invalidNumbers.get(selected.id)?.size);
+      control.setDisabled(unavailable, options.busy || applying ? (pt ? "Aguarde a operação atual." : "Wait for the current operation.") : reason ?? (pt ? "Corrija os campos indicados." : "Correct the highlighted fields."));
+    }
     if (primaryApply) {
+      const feedback = applyFeedback?.presetId === selected?.id ? applyFeedback : undefined;
+      primaryApply.setState(feedback?.state ?? "default", feedback?.message);
       const invalid = Boolean(selected && invalidNumbers.get(selected.id)?.size);
-      const unavailable = options.busy || Boolean(reason) || invalid;
-      primaryApply.setDisabled(unavailable, options.busy ? (pt ? "Aguarde a operação atual." : "Wait for the current operation.")
+      const unavailable = options.busy || applying || Boolean(reason) || invalid;
+      primaryApply.setDisabled(unavailable, options.busy || applying ? (pt ? "Aguarde a operação atual." : "Wait for the current operation.")
         : reason ?? (invalid ? (pt ? "Corrija os campos indicados." : "Correct the highlighted fields.") : undefined));
     }
   }
@@ -954,8 +1221,17 @@ export function createPresetGallery(doc: Document, options: {
     updateContext();
   }
 
+  /** Elementos sao inseridos, nao aplicados a camadas: a pasta mostra a tela de insercao. */
+  function drawElements(): void {
+    if(!options.elements){grid.appendChild(emptyState());return;}
+    const kind=nav.category==="elements"?undefined:nav.category.substring("elements-".length) as "shape"|"lower-third"|"title";
+    elementsView=createElementsEditor(doc,{...options.elements,i18n,category:kind,query:nav.query,
+      context:()=>({isComposition:Boolean(options.context?.().hasComp)})});
+    grid.appendChild(elementsView.element);
+    primaryApply=undefined;clearNode(actions);actions.hidden=false;actions.appendChild(elementsView.actions);
+  }
   function draw(): void {
-    personalPreview?.dispose();personalPreview=undefined;
+    personalPreview?.dispose();personalPreview=undefined;elementsView?.dispose();elementsView=undefined;
     if (nav.scope !== "recent") delete nav.recentOrder;
     scrollRestoreRevision++;
     if(scrollRestoreFrame){cancelAnimationFrame(scrollRestoreFrame);scrollRestoreFrame=0;}
@@ -964,9 +1240,10 @@ export function createPresetGallery(doc: Document, options: {
     const category = folders.flatMap(folder => [folder, ...(folder.children ?? []).flatMap(child => [child, ...(child.children ?? [])])]).find(folder => folder.id === nav.category);
     filterLabel.textContent = category?.label ?? labels[nav.category] ?? labels.all!;
     cancelAnimationFrame(animationFrame); animationFrame=0;activePreview="";intersections?.disconnect();visible.clear();scenes.clear();previewPlayers.clear();closeEditor();clearNode(grid);drawFolders();
-    grid.classList.toggle("ch-preset-grid--personal",nav.category.startsWith("personal"));
-    filters.hidden=nav.category.startsWith("personal");
+    grid.classList.toggle("ch-preset-grid--personal",nav.category.startsWith("personal")||nav.category.startsWith("elements"));
+    filters.hidden=nav.category.startsWith("personal")||nav.category.startsWith("elements");
     if(nav.category.startsWith("personal")){drawInspector();drawPersonal();restoreFocus(focused);restoreScroll();return;}
+    if(nav.category.startsWith("elements")){drawInspector();drawElements();restoreFocus(focused);restoreScroll();return;}
     for (const b of Array.from(filters.querySelectorAll<HTMLButtonElement>("[data-scope]"))) b.setAttribute("aria-pressed", String(nav.scope === b.dataset.scope));
     const prefs = options.preferences.snapshot();
     // Applying records recency immediately. Retain this browsing order while
@@ -988,15 +1265,21 @@ export function createPresetGallery(doc: Document, options: {
         core.title = pt ? "Precisa do plugin Moti.on Core instalado." : "Needs the Moti.on Core plugin installed.";
         card.appendChild(core);
       }
-      const title = button(doc, { label: name, onClick: () => { select(preset); previewPlayers.get(preset.id)?.(); } }); title.classList.add("ch-preset-apply"); title.title = name;
+      const title = button(doc, { label: name, onClick: () => { if (toggle(preset)) previewPlayers.get(preset.id)?.(); } }); title.classList.add("ch-preset-apply"); title.title = name;
       title.dataset.focusKey=`title.${preset.id}`;
       const actions = createElement(doc, "div", "ch-preset-actions");
       actions.appendChild(title);
       const adjust = button(doc, {label: "", disabled: options.busy, onClick: () => openEditor(preset, adjust)});
+      const motion = preset.motion, cut = preset.category === "camera-transitions" && (Boolean(motion?.cameraSpec) || nav.cameraApplyMode !== "layers");
+      // Loops, looks and cut transitions have nothing to choose before applying.
+      if (motion && (cut || (motion.mode !== "transition" && !libraryUsesDirection(motion)))) adjust.hidden = true;
       adjust.classList.add("ch-preset-settings-trigger"); adjust.appendChild(createIcon(doc,"settings"));
       adjust.setAttribute("aria-haspopup","dialog"); adjust.setAttribute("aria-controls",settingsPanel.id);
       adjust.setAttribute("aria-label", `${pt ? "Ajustes" : "Settings"}: ${name}`); adjust.setAttribute("aria-expanded", "false"); adjust.title = pt ? "Direção e ajustes" : "Direction and settings"; actions.appendChild(adjust);
       adjust.dataset.focusKey=`adjust.${preset.id}`;
+      adjust.addEventListener("mouseenter",()=>{keepSettings();clearTimeout(hoverTimer);hoverTimer=setTimeout(()=>{if(!disposed)openEditor(preset,adjust,true);},120);});
+      adjust.addEventListener("mouseleave",leaveSettings);
+      card.addEventListener("mouseenter",keepSettings);card.addEventListener("mouseleave",leaveSettings);
       const fav = button(doc, { label: "", onClick: () => { options.preferences.toggleFavorite(preset.id); draw(); } });
       const isFavorite = prefs.favorites.includes(preset.id);
       const favoriteLabel = i18n.t(isFavorite ? "presets.unfavorite" : "presets.favorite", { name });
@@ -1015,10 +1298,10 @@ export function createPresetGallery(doc: Document, options: {
       nav.scroll = grid.scrollTop;
       if (pendingScroll !== undefined) pendingScroll = grid.scrollTop;
     }
-    closeEditor();
+    if(grid.scrollTop!==settingsGridScroll)closeEditor();
   });
-  scroll.addEventListener("scroll", () => { closeEditor(); if(filterButton.getAttribute("aria-expanded")==="true")setFilters(false); });
+  scroll.addEventListener("scroll", () => { if(scroll.scrollTop!==settingsOuterScroll)closeEditor(); if(filterButton.getAttribute("aria-expanded")==="true")setFilters(false); });
   const visibility = (): void => { if(doc.hidden)pausePreviews();else if(pointerInside&&(typeof doc.hasFocus!=="function"||doc.hasFocus()))resumePreviews(); }; doc.addEventListener("visibilitychange", visibility);
   draw();
-  return { element, updateContext, dispose() { if(disposed)return;rememberScroll();personalPreview?.dispose();personalPreview=undefined;disposeNumbers();clearTimeout(filterTimer); clearTimeout(settingsTimer); savedTabStops.clear(); searchObserver?.disconnect(); disposed = true; scrollRestoreRevision++;if(scrollRestoreFrame)cancelAnimationFrame(scrollRestoreFrame);scrollRestoreFrame=0; cancelAnimationFrame(animationFrame);animationFrame=0;for(const scene of scenes.values())scene.release();scenes.clear();visible.clear();previewPlayers.clear();window.removeEventListener("blur",pausePreviews);window.removeEventListener("focus",windowFocus);intersections?.disconnect();motionObserver?.disconnect(); clearTimeout(debounce); observer?.disconnect(); window.removeEventListener("resize", resize); doc.removeEventListener("mousedown", outside); doc.removeEventListener("keydown", escape); doc.removeEventListener("visibilitychange", visibility); } };
+  return { element, updateContext, dispose() { if(disposed)return;rememberScroll();personalPreview?.dispose();personalPreview=undefined;elementsView?.dispose();elementsView=undefined;disposeNumbers();clearTimeout(filterTimer); clearTimeout(settingsTimer); clearTimeout(hoverTimer); clearTimeout(leaveTimer); previewDirections.clear(); savedTabStops.clear(); searchObserver?.disconnect(); disposed = true; scrollRestoreRevision++;if(scrollRestoreFrame)cancelAnimationFrame(scrollRestoreFrame);scrollRestoreFrame=0; cancelAnimationFrame(animationFrame);animationFrame=0;for(const scene of scenes.values())scene.release();scenes.clear();visible.clear();previewPlayers.clear();window.removeEventListener("blur",pausePreviews);window.removeEventListener("focus",windowFocus);intersections?.disconnect();motionObserver?.disconnect(); clearTimeout(debounce); observer?.disconnect(); window.removeEventListener("resize", resize); doc.removeEventListener("mousedown", outside); doc.removeEventListener("keydown", escape); doc.removeEventListener("visibilitychange", visibility); } };
 }
