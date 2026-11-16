@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 const built=await build({entryPoints:[fileURLToPath(new URL('../client/src/preset-gallery.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
-const {GALLERY_PRESETS,curveProgress,cameraPoint,presetArgs,defaultLibraryOptions,galleryCategoryMatches,gallerySequenceControls,signatureDurationRange}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+const {GALLERY_PRESETS,curveProgress,cameraPoint,presetArgs,defaultLibraryOptions,galleryCategoryMatches,gallerySequenceControls,signatureDurationRange,presetEasingChoices,settleFieldLabels}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
 test('curated and legacy presets retain unique identities and real application handlers',()=>{
-  assert.equal(GALLERY_PRESETS.length,232);assert.equal(new Set(GALLERY_PRESETS.map(p=>p.id )).size,232);
+  assert.equal(GALLERY_PRESETS.length,485);assert.equal(new Set(GALLERY_PRESETS.map(p=>p.id )).size,485);
   for(const p of GALLERY_PRESETS){
     assert.ok(p.version&&p.displayName['pt-BR']&&p.displayName['en-US']&&p.preview.fixtureId);
     assert.equal(p.operationPlan.command,p.handler);
@@ -16,7 +16,7 @@ test('curated and legacy presets retain unique identities and real application h
 });
 test('camera transitions default to a precomp without requiring a selected layer',()=>{
   const presets=GALLERY_PRESETS.filter(p=>p.category==='camera-transitions');
-  assert.equal(presets.length,35);
+  assert.equal(presets.length,38);
   for(const p of presets){
     assert.equal(p.handler,'ae.presets.camera-transition');
     assert.equal(p.applyMode,'precomp');
@@ -57,9 +57,9 @@ test('aplicação usa um segundo no fps atual; dimensões e fps não são altera
 
 test('premium selection comes first while legacy collection IDs remain reachable',()=>{
   const premium=GALLERY_PRESETS.filter(p=>p.motion?.collection==='premium');
-  assert.equal(premium.length,57);
-  assert.deepEqual(GALLERY_PRESETS.slice(0,57),premium);
-  assert.equal(GALLERY_PRESETS.filter(p=>galleryCategoryMatches('premium-motion',p)).length,12);
+  assert.equal(premium.length,65);
+  assert.deepEqual(GALLERY_PRESETS.slice(0,65),premium);
+  assert.equal(GALLERY_PRESETS.filter(p=>galleryCategoryMatches('premium-motion',p)).length,20);
   assert.equal(GALLERY_PRESETS.filter(p=>galleryCategoryMatches('premium-text',p)).length,29);
   assert.equal(GALLERY_PRESETS.filter(p=>galleryCategoryMatches('premium-camera',p)).length,16);
   assert.ok(GALLERY_PRESETS.some(p=>galleryCategoryMatches('studio',p)));
@@ -70,7 +70,7 @@ test('premium selection comes first while legacy collection IDs remain reachable
 test('signature collection follows premium, filters by family and stays out of classics',()=>{
   const signature=GALLERY_PRESETS.filter(p=>p.motion?.collection==='signature');
   assert.equal(signature.length,24);
-  assert.deepEqual(GALLERY_PRESETS.slice(57,81),signature,'signature is the block right after premium');
+  assert.deepEqual(GALLERY_PRESETS.slice(65,89),signature,'signature is the block right after premium');
   assert.equal(GALLERY_PRESETS.filter(p=>galleryCategoryMatches('signature',p)).length,24);
   for(const family of ['essentials','cinema','light-matter','variation'])assert.equal(GALLERY_PRESETS.filter(p=>galleryCategoryMatches(`signature-${family}`,p)).length,6,family);
   assert.ok(!signature.some(p=>galleryCategoryMatches('classics',p)||galleryCategoryMatches('premium',p)));
@@ -109,3 +109,29 @@ test('order and variation controls follow text grouping and actual randomness',(
   assert.deepEqual(gallerySequenceControls(text,{...settings,order:'random',unit:'all'}),{order:false,seed:false});
 });
 
+
+test('momentum follows signature, filters by category and stays out of classics',()=>{
+  const momentum=GALLERY_PRESETS.filter(p=>p.motion?.collection==='momentum');
+  assert.equal(momentum.length,20);
+  assert.deepEqual(GALLERY_PRESETS.slice(89,109),momentum,'momentum is the block right after signature');
+  assert.equal(GALLERY_PRESETS.filter(p=>galleryCategoryMatches('momentum',p)).length,20);
+  for(const [folder,count] of [['momentum-2d',11],['momentum-3d',5],['momentum-effects',4]])assert.equal(GALLERY_PRESETS.filter(p=>galleryCategoryMatches(folder,p)).length,count,folder);
+  assert.ok(!momentum.some(p=>galleryCategoryMatches('classics',p)||galleryCategoryMatches('premium',p)||galleryCategoryMatches('signature',p)));
+  for(const p of momentum){
+    assert.ok(galleryCategoryMatches('motion',p),p.id);assert.match(p.tags,/impulso/);
+    assert.equal(p.handler,p.motion.mode==='transition'?'ae.presets.phase-apply':'ae.presets.apply');
+  }
+  assert.match(GALLERY_PRESETS.find(p=>p.motion?.id==='momentum-push').tags,/fora do quadro/);
+  assert.match(GALLERY_PRESETS.find(p=>p.motion?.id==='momentum-pendulum').tags,/pêndulo/);
+});
+test('settle curves are offered everywhere with curve-specific control labels',()=>{
+  for(const locale of ['pt-BR','en-US']){
+    const values=presetEasingChoices(locale).map(([value])=>value);
+    assert.ok(values.includes('settle-wave')&&values.includes('settle-hop'));
+    assert.equal(new Set(values).size,values.length);
+  }
+  assert.deepEqual(settleFieldLabels('settle-wave','pt-BR').map(([key,label])=>[key,label]),[['settleAmount','Ricochete · %'],['settleCount','Oscilações'],['settleDamping','Amortecimento · %']]);
+  assert.deepEqual(settleFieldLabels('settle-hop','en-US').map(([,label])=>label),['Hop height · %','Hops','Loss per hop · %']);
+  const push=GALLERY_PRESETS.find(p=>p.motion?.id==='momentum-push');
+  assert.deepEqual([push.params.settleAmount,push.params.settleCount,push.params.settleDamping],[30,2,55],'apply sends the tuned settle');
+});

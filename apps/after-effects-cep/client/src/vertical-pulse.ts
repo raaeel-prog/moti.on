@@ -1,6 +1,7 @@
+import {toolNumberField as numberField} from "./tool-number-fields.js";
 import { PULSE_PRESETS, pulsePresetArgs, validateCommandRequest,
   type PulseAnimationMode, type PulseArgs, type PulsePreset, type PulseReadData } from "@motion/contracts";
-import { colorField, createElement, notice, numberField, selectField, type I18n, type RenderRegions } from "@motion/ui-core";
+import { colorField, createElement, notice, selectField, type I18n, type RenderRegions } from "@motion/ui-core";
 
 type PulseAction = PulseArgs["action"];
 type Key = Parameters<I18n["t"]>[0];
@@ -135,7 +136,7 @@ export function renderVerticalPulse(regions: RenderRegions, i18n: I18n, busy: bo
     }
   }));
   const numeric = (target: HTMLElement, key: NumericKey, label: Key, min: number, max: number, unit: string): void => {
-    const field = numberField(document, { id: `verticalPulse-${key}`, label: i18n.t(label), value: Number(v[key].toFixed(3)), min, max,
+    const field = numberField(document, { id: `verticalPulse-${key}`, label: i18n.t(label), value: Number(v[key].toFixed(3)), defaultValue: Number(defaultDraft(frameRate)[key]), min, max,
       step: key === "durationFrames" || key === "seed" ? 1 : .1, unit, disabled: busy || locked(key) || v.action !== "apply",
       ...(locked(key) ? { description: i18n.t("verticalPulse.lockedHelp") } : {}),
       onInput: value => { rawNumbers.set(key, String(value)); revision += 1; },

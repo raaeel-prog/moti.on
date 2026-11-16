@@ -32,7 +32,7 @@ test('automatic dock follows selection and closed controls leave the tab order',
   dock.update(context());
   assert.equal(isOpen(),false);assert.equal(body.style.height,'0px');assert.equal(body.getAttribute('aria-hidden'),'true');
   assert.equal(action.getAttribute('tabindex'),'-1');
-  t.mock.timers.tick(280);assert.equal(body.hidden,true);
+  t.mock.timers.tick(440);assert.equal(body.hidden,false,'still gliding (450 ms)');t.mock.timers.tick(20);assert.equal(body.hidden,true);
 });
 test('manual opening remains through polling but resets for a real context change',t=>{
   const {dock,context,toggle,isOpen}=fixture(t);
@@ -83,3 +83,12 @@ test('an initially pinned dock remains open before and after first host snapshot
   assert.equal(isOpen(),true);dock.update(context());assert.equal(isOpen(),true);
 });
 
+test('the header strip toggles and carries no selection counter (compact review 2026-10-24)',t=>{
+  const {dock,context,toggle,isOpen}=fixture(t);
+  const header=toggle.parentNode;
+  assert.equal(header.children.some(node=>String(node.className).includes('ch-quick-dock-context')),false,'no live context pill');
+  dock.update(context({selectionCount:2,contextKey:'comp:a,b'}));
+  assert.equal(header.children.some(node=>/camada|seleção|composição/.test(node.textContent??'')),false,'no technical counter in the header');
+  header.emit('click',{target:header});assert.equal(isOpen(),false);
+  header.emit('click',{target:header});assert.equal(isOpen(),true);
+});

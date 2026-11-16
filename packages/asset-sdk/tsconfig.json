@@ -1,8 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist"
-  },
-  "include": ["src/**/*"]
+  "compilerOptions": { "lib": ["ES2022", "DOM"], "types": [], "rootDir": "src", "outDir": "dist", "tsBuildInfoFile": "../../.tsbuildinfo/asset-sdk.tsbuildinfo" },
+  "include": ["src/**/*.ts"],
+  "references": [{ "path": "../contracts" }]
 }

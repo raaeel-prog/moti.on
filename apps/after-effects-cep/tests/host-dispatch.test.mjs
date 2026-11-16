@@ -25,6 +25,70 @@ const HOST_MODULES = [
   "src/dispatch.jsx"
 ];
 
+for (const cleanupFails of [false, true]) {
+  test(`failed command cleans only new unused sources inside Undo (cleanup fails: ${cleanupFails})`, async () => {
+    let calls;
+    const items = [];
+    class FootageItem {
+      constructor(id, usedIn = []) { this.id=id; this.usedIn=usedIn; }
+      remove() { calls.push({type:'removeSource', id:this.id}); if(cleanupFails) throw Error('remove failed'); items.splice(items.indexOf(this),1); }
+    }
+    class FolderItem {
+      constructor(id, children=[]) {this.id=id;this.children=children;}
+      get numItems(){return this.children.filter(x=>items.includes(x)).length;}
+      remove(){calls.push({type:'removeFolder',id:this.id});items.splice(items.indexOf(this),1);}
+    }
+    const loaded=await loadDispatcher(null,{FootageItem,FolderItem});
+    const {scope,app}=loaded;calls=loaded.calls;
+    const oldSource=new FootageItem(1), oldFolder=new FolderItem(2);
+    items.push(oldSource,oldFolder);
+    Object.defineProperty(app.project,'numItems',{get:()=>items.length});
+    app.project.item=i=>items[i-1];
+    scope.MotionRegistry.register('ae.demo.createComposition',{
+      preflight:()=>null,
+      run:()=>{
+        const orphan=new FootageItem(3), used=new FootageItem(4,[{}]);
+        items.push(orphan,new FolderItem(5,[orphan]),used,new FolderItem(6,[used]),{id:7});
+        throw Error('native failure after layer rollback');
+      }
+    });
+    const response=JSON.parse(scope.MotionAE.dispatch(requestFor('ae.demo.createComposition')));
+    assert.equal(response.ok,false);
+    assert.equal(response.error.code,cleanupFails?'ROLLBACK_FAILED':'HOST_OPERATION_FAILED');
+    assert.deepEqual(items.map(x=>x.id),cleanupFails?[1,2,3,5,4,6,7]:[1,2,4,6,7]);
+    assert.equal(calls.at(-1).type,'endUndoGroup');
+    assert.equal(calls.filter(x=>x.type==='removeSource').length,1);
+  });
+}
+
+test('successful command retains its unused resources and does not run failure cleanup', async()=>{
+  const items=[];
+  class FootageItem {constructor(){this.id=1;this.usedIn=[];} remove(){throw Error('must not clean a successful command');}}
+  const {scope,app}=await loadDispatcher(null,{FootageItem});
+  Object.defineProperty(app.project,'numItems',{get:()=>items.length});app.project.item=i=>items[i-1];
+  scope.MotionRegistry.register('ae.demo.createComposition',{preflight:()=>null,run:()=>{items.push(new FootageItem());return {changed:true,data:{},warnings:[]};}});
+  assert.equal(JSON.parse(scope.MotionAE.dispatch(requestFor('ae.demo.createComposition'))).ok,true);
+  assert.equal(items.length,1);
+});
+
+test('failed creation restores key selection through fresh property handles after native invalidation',async()=>{
+ const {scope,app,CompItem}=await loadDispatcher();const comp=new CompItem();
+ let current,invalid=false;
+ const layer={selected:true,parentProperty:null,property:()=>group};
+ const group={propertyIndex:1,matchName:'Transform',parentProperty:layer,property:()=>current};
+ function property(flags){return {propertyIndex:1,matchName:'Opacity',parentProperty:group,selected:true,numKeys:3,keyTime:k=>k/2,keySelected:k=>flags[k-1],setSelectedAtKey:(k,v)=>{flags[k-1]=v;}};}
+ const original=property([true,false,true]);current=original;
+ comp.numLayers=1;comp.layer=()=>layer;comp.selectedProperties=[original];app.project.activeItem=comp;
+ scope.MotionRegistry.register('ae.demo.createComposition',{preflight:()=>null,run:()=>{
+  current=property([false,false,false]);current.selected=false;layer.selected=false;invalid=true;throw Error('native effect creation failed');
+ }});
+ // Accessing a stale handle after run must not be required for restoration.
+ Object.defineProperty(original,'selected',{get(){if(invalid)throw Error('invalidated property');return true;}});
+ const response=JSON.parse(scope.MotionAE.dispatch(requestFor('ae.demo.createComposition')));
+ assert.equal(response.ok,false);assert.equal(layer.selected,true);assert.equal(current.selected,true);
+ assert.deepEqual([1,2,3].map(k=>current.keySelected(k)),[true,false,true]);
+});
+
 /**
  * Monta um After Effects falso com espioes nas chamadas que importam.
  */
@@ -59,11 +123,12 @@ function createFakeAe() {
   return { app, CompItem: FakeCompItem, calls };
 }
 
-async function loadDispatcher(register) {
+async function loadDispatcher(register, globals = {}) {
   const fake = createFakeAe();
   const scope = await loadHostModules(HOST_MODULES, {
     app: fake.app,
-    CompItem: fake.CompItem
+    CompItem: fake.CompItem,
+    ...globals
   });
 
   if (register) register(scope);

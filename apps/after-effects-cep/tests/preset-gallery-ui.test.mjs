@@ -1,18 +1,19 @@
 import test from 'node:test';
-import assert from 'node:assert/strict';
+import strictAssert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
-import { createCepDocument } from './cep-dom.mjs';
+import { createCepDocument, domSafeAssert } from './cep-dom.mjs';
+const assert = domSafeAssert(strictAssert);
 import { createFakeWindow } from '../../../packages/ui-core/tests/fake-dom.mjs';
 
 const built=await build({entryPoints:[fileURLToPath(new URL('../client/src/preset-gallery.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
-const {createPresetGallery}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+const {createPresetGallery,GALLERY_PRESETS}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
-function fixture(t, { category = 'all', scope = 'all', query = '', locale = 'pt-BR', context = {hasComp:true, selectionCount:2, selectedKeys:4}, busy = false, personal, personalAction, onApply, pick = true } = {}) {
+function fixture(t, { category = 'all', scope = 'all', query = '', locale = 'pt-BR', context = {hasComp:true, selectionCount:2, selectedKeys:4}, busy = false, personal, personalAction, onApply, pick = true, elements, width = 360, observer } = {}) {
   const saved={window:globalThis.window,requestAnimationFrame:globalThis.requestAnimationFrame,cancelAnimationFrame:globalThis.cancelAnimationFrame,IntersectionObserver:globalThis.IntersectionObserver};
-  globalThis.window=createFakeWindow();globalThis.window.setTimeout=setTimeout;
+  globalThis.window=createFakeWindow(width);globalThis.window.setTimeout=setTimeout;
   globalThis.requestAnimationFrame=()=>1;globalThis.cancelAnimationFrame=()=>{};
-  globalThis.IntersectionObserver=class {observe(){} disconnect(){}};
+  globalThis.IntersectionObserver=observer??class {observe(){} disconnect(){}};
   const doc=createCepDocument(),applied=[];
   const events=new Map();
   doc.addEventListener=(type,handler)=>events.set(type,[...(events.get(type)??[]),handler]);
@@ -42,43 +43,49 @@ function fixture(t, { category = 'all', scope = 'all', query = '', locale = 'pt-
   };
   const navigation={query,category,scope,scroll:0};
   const preferences={favorites:[],recent:[],folderColors:{},collapsedFolders:[],presetAutoplay:false,presetSize:200};
-  const gallery=createPresetGallery(doc,{locale,navigation,busy,context:()=>context,openApplied(){},personal,personalAction,
-    preferences:{snapshot:()=>preferences,toggleFolder(id){preferences.collapsedFolders=preferences.collapsedFolders.includes(id)?preferences.collapsedFolders.filter(item=>item!==id):[...preferences.collapsedFolders,id];},toggleFavorite(id){preferences.favorites=preferences.favorites.includes(id)?preferences.favorites.filter(item=>item!==id):[...preferences.favorites,id];}},
-    apply(preset,settings,mode){applied.push({preset,settings,mode});onApply?.(preset,navigation);},edit(){}});
+  const gallery=createPresetGallery(doc,{locale,navigation,busy,context:()=>context,openApplied(){},personal,personalAction,...(elements?{elements}:{}),
+    preferences:{snapshot:()=>preferences,toggleFolder(id){preferences.collapsedFolders=preferences.collapsedFolders.includes(id)?preferences.collapsedFolders.filter(item=>item!==id):[...preferences.collapsedFolders,id];},toggleFavorite(id){preferences.favorites=preferences.favorites.includes(id)?preferences.favorites.filter(item=>item!==id):[...preferences.favorites,id];},
+      setFolderColor(id,color){const next={...preferences.folderColors};if(color)next[id]=color;else delete next[id];preferences.folderColors=next;},clearFolderColors(){preferences.folderColors={};}},
+    apply(preset,settings,mode){applied.push({preset,settings,mode});return onApply?.(preset,navigation);},edit(){}});
   doc.documentElement.appendChild(gallery.element);
   // Details appear only after a choice; most tests start from the user picking the first card.
-  if(pick)gallery.element.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-apply'))?.click();
+  if(pick){gallery.element.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-apply'))?.click();doc.documentElement.setAttribute('data-reduced-motion','true');doc.emit('keydown',{key:'Escape'});doc.documentElement.removeAttribute('data-reduced-motion');}
   t.after(()=>{gallery.dispose();Object.assign(globalThis,saved);});
   return {doc,navigation,gallery,applied,context,preferences};
 }
 
-test('gallery search starts compact and retains query/focus without rebuilding its control',t=>{
-  const f=fixture(t),root=f.gallery.element;
-  const control=root.getElementsByTagName('div').find(n=>n.className.includes('ch-preset-search'));
-  const trigger=control.getElementsByTagName('button')[0],input=control.getElementsByTagName('input')[0];
-  assert.equal(control.getAttribute('data-expanded'),'false');
-  trigger.click();assert.equal(control.getAttribute('data-expanded'),'true');assert.equal(f.doc.activeElement,input);
-  input.value='arco';input.emit('input');assert.equal(f.navigation.query,'arco');
-  input.emit('blur');assert.equal(control.getAttribute('data-expanded'),'true');
-  input.keydown('Escape');assert.equal(input.value,'arco');assert.equal(f.navigation.query,'arco');
-  input.value='';input.emit('input');input.emit('blur');assert.equal(control.getAttribute('data-expanded'),'false');
+test('gallery search is always visible and retains its query without recreating the control',t=>{
+ const f=fixture(t),control=f.gallery.element.querySelector('.ch-preset-search'),input=control.getElementsByTagName('input')[0];
+ assert.deepEqual(control.getElementsByTagName('button').map(node=>node.className),['ch-label-filter__button'],'only the filter lives inside the field; no expand trigger');input.focus();input.value='arco';input.emit('input');input.emit('blur');
+ assert.equal(f.navigation.query,'arco');assert.equal(control.getElementsByTagName('input')[0]===input,true);
+ input.value='';input.emit('input');assert.equal(f.navigation.query,'');
 });
 
-test('gallery invalid draft blocks button and double-click application until correction',t=>{
-  const f=fixture(t),root=f.gallery.element;
-  const preset=root.getElementsByTagName('button').find(n=>n.className.includes('ch-preset-apply'));
-  preset.click();
-  const intensity=root.getElementsByTagName('input').find(n=>n.getAttribute('aria-label')==='Intensidade · %');
-  assert.ok(intensity);intensity.value='301';intensity.emit('input');
-  assert.equal(intensity.value,'301');assert.equal(intensity.getAttribute('aria-invalid'),'true');
-  assert.match(root.allText,/Use um número entre 0 e 300/);
-  const bar=root.getElementsByTagName('div').find(n=>n.className==='ch-preset-applybar');
-  assert.ok(bar.getElementsByTagName('button').every(n=>n.disabled));
-  const preview=root.getElementsByTagName('button').find(n=>n.className==='ch-preset-preview');
-  preview.emit('dblclick');assert.equal(f.applied.length,0);
-  intensity.value='75';intensity.emit('input');assert.equal(intensity.getAttribute('aria-invalid'),'false');
-  assert.ok(bar.getElementsByTagName('button').every(n=>!n.disabled));
-  preview.emit('dblclick');assert.equal(f.applied.length,1);assert.equal(f.applied[0].settings.intensity,75);
+test('collection path and count follow folders; clearing filters preserves the folder',t=>{
+ const f=fixture(t,{category:'text-characters',query:'zzzzmissing',pick:false}),root=f.gallery.element;
+ const path=()=>root.querySelector('.ch-preset-breadcrumb');
+ assert.match(path().allText,/Tipografia/);assert.match(path().allText,/Caracteres/);
+ assert.equal(root.querySelector('.ch-preset-result-count').textContent,'0 itens');
+ root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-clear-filters')).click();
+ assert.equal(f.navigation.category,'text-characters');assert.equal(f.navigation.query,'');
+ assert.equal(root.querySelector('.ch-preset-result-count').textContent,`${root.querySelectorAll('.ch-preset-card').length} itens`);
+ path().getElementsByTagName('button')[0].click();assert.equal(f.navigation.category,'text');
+ assert.equal(f.doc.activeElement.dataset.focusKey,'path.text');assert.equal(f.applied.length,0);
+});
+
+test('selection summary identifies an applied candidate even when filters hide its card',async t=>{
+ const f=fixture(t),root=f.gallery.element,name=root.querySelector('.ch-preset-selected-name').textContent;
+ assert.notEqual(name,'Selecione um preset');assert.equal(root.querySelector('.ch-preset-selection-status').textContent,'2 camadas selecionadas');
+ const search=root.getElementsByTagName('input').find(node=>node.type==='search');search.value='zzzzmissing';search.emit('input');
+ await new Promise(resolve=>setTimeout(resolve,280));
+ assert.equal(root.querySelectorAll('.ch-preset-card').length,0);assert.equal(root.querySelector('.ch-preset-selected-name').textContent,name);
+ assert.equal(root.querySelector('.ch-preset-selection-status').textContent,'Seleção fora do filtro');assert.equal(f.applied.length,0);
+});
+
+test('context refresh never enables phase actions before a preset is selected',t=>{
+ const f=fixture(t,{pick:false});f.gallery.updateContext();
+ const phases=f.gallery.element.getElementsByTagName('button').filter(node=>node.dataset.phase);
+ assert.equal(phases.length,3);assert.ok(phases.every(node=>node.disabled));assert.equal(f.applied.length,0);
 });
 
 test('application captures the actual grid position before the next scroll event and selects its target',t=>{
@@ -88,7 +95,8 @@ test('application captures the actual grid position before the next scroll event
   const cards=gallery.element.querySelectorAll('.ch-preset-card');
   const target=cards[23];
   grid.scrollTop=684;
-  target.querySelector('.ch-preset-preview').emit('dblclick');
+  target.querySelector('.ch-preset-preview').click();
+  gallery.element.getElementsByTagName('button').find(node=>node.dataset.phase==='in').click();
   assert.deepEqual(observed,[{id:target.id,selectedId:target.id,scroll:684}]);
   assert.equal(navigation.scroll,684);
   assert.equal(target.getAttribute('data-selected'),'true');
@@ -123,73 +131,31 @@ test('opening applied presets captures the live offset before the shell detaches
   assert.equal(navigation.scroll,712);
 });
 
-test('gallery keeps nondecimal drafts visible and never sends them to the host',t=>{
-  const f=fixture(t),root=f.gallery.element;
-  const intensity=root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Intensidade · %');
-  const apply=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-primary-apply'));
-  const preview=root.getElementsByTagName('button').find(node=>node.className==='ch-preset-preview');
-  const original=f.navigation.drafts[f.navigation.selectedId].intensity;
-  for(const value of ['0x20','0b10']){
-    intensity.value=value;intensity.emit('input');
-    assert.equal(intensity.value,value);
-    assert.equal(intensity.getAttribute('aria-invalid'),'true');
-    assert.equal(f.navigation.drafts[f.navigation.selectedId].intensity,original);
-    assert.equal(apply.disabled,true);
-    preview.emit('dblclick');apply.click();assert.equal(f.applied.length,0);
-  }
-  intensity.value='32';intensity.emit('input');apply.click();
-  assert.equal(f.applied.length,1);assert.equal(f.applied[0].settings.intensity,32);
+test('the default gallery exposes every collection in its persistent sidebar',t=>{
+ const {gallery,navigation}=fixture(t),root=gallery.element,sidebar=root.querySelector('.ch-preset-sidebar');
+ assert.equal(navigation.category,'all');const cards=root.getElementsByTagName('article');assert.ok(cards.length>30);assert.ok(!cards.some(card=>card.id.startsWith('builtin.ease.')));assert.ok(cards.some(card=>card.id==='builtin.camera.pushIn'));
+ const menu=root.querySelector('.ch-preset-filter-menu'),categories=root.querySelector('.ch-preset-categories');assert.equal(menu.hidden,false);assert.equal(sidebar.contains(categories),true);assert.equal(menu.getAttribute('data-open'),'true');
+ assert.equal(sidebar.contains(root.querySelector('.ch-preset-search')),true);assert.equal(root.querySelector('.ch-preset-scroll').contains(sidebar),false);
 });
 
-
-test('the default gallery exposes all collections with its filters in a closed anchored menu',t=>{
-  const {gallery,navigation}=fixture(t),root=gallery.element;
-  assert.equal(navigation.category,'all');
-  const cards=root.getElementsByTagName('article');
-  assert.ok(cards.length>30,'all collections include more than the former premium-only default');
-  assert.ok(!cards.some(card=>card.id.startsWith('builtin.ease.')));
-  assert.ok(cards.some(card=>card.id==='builtin.camera.pushIn'));
-  const menu=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-filter-menu');
-  const categories=root.getElementsByTagName('nav').find(node=>node.className==='ch-preset-categories');
-  const trigger=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-filter-trigger'));
-  assert.equal(categories.parentNode,menu);
-  assert.equal(menu.hidden,true);assert.equal(trigger.getAttribute('aria-expanded'),'false');
-  assert.match(trigger.allText,/Todos os presets/);
-  const edit=root.getElementsByTagName('button').find(node=>node.getAttribute('aria-label')==='Editar preset aplicado');
-  const autoplay=root.getElementsByTagName('button').find(node=>node.getAttribute('aria-label')==='Autoplay');
-  const size=root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Tamanho das miniaturas');
-  assert.equal(edit.parentNode,trigger.parentNode);assert.equal(autoplay.parentNode,trigger.parentNode);
-  assert.equal(menu.contains(edit),false);assert.equal(menu.contains(autoplay),false);assert.equal(menu.contains(size),false);
-  const scroll=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-scroll');
-  assert.equal(scroll.contains(trigger),false);assert.equal(scroll.contains(size),false);
-  trigger.click();assert.equal(menu.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');
-});
-
-test('thumbnail size shares the catalog toolbar and the category menu sizes itself',t=>{
-  const {gallery}=fixture(t),root=gallery.element;
-  const toolbar=root.getElementsByTagName('div').find(node=>node.className.includes('ch-preset-toolbar-approved'));
-  const size=root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Tamanho das miniaturas');
-  assert.ok(toolbar.contains(size),'the thumbnail control no longer owns a row of its own');
-  const categories=root.getElementsByTagName('nav').find(node=>node.className==='ch-preset-categories');
-  assert.equal(categories.style.width,undefined,'no inherited sidebar width narrows the menu');
-  assert.equal(root.getElementsByTagName('div').some(node=>node.className==='ch-preset-divider'),false);
+test('thumbnail size lives in the fixed footer and the tree exposes a splitter',t=>{
+ const {gallery}=fixture(t),root=gallery.element;const size=root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Tamanho das miniaturas');
+ assert.equal(root.querySelector('.ch-preset-reference-footer').contains(size),true);assert.equal(root.querySelector('.ch-preset-toolbar-approved').contains(size),false);
+ assert.equal(root.getElementsByRole('separator').length,1);
 });
 
 test('category menu supports arrow, Home/End and fold keys',t=>{
   const {gallery,doc,preferences}=fixture(t),root=gallery.element;
   const menu=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-filter-menu');
-  const trigger=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-filter-trigger'));
-  trigger.click();
+  menu.getElementsByTagName('button').find(node=>node.dataset.category==='signature').focus();
   const key=name=>menu.emit('keydown',{key:name,target:doc.activeElement});
-  assert.equal(doc.activeElement.dataset.scope,'favorites');
-  key('ArrowDown');assert.equal(doc.activeElement.dataset.scope,'recent');
-  key('ArrowDown');assert.equal(doc.activeElement.dataset.category,'signature');
+  assert.equal(doc.activeElement.dataset.category,'signature');
   key('ArrowDown');assert.equal(doc.activeElement.dataset.category,'signature-essentials');
   key('ArrowLeft');assert.equal(doc.activeElement.dataset.category,'signature','Left on a child returns to its group');
   key('ArrowLeft');assert.deepEqual(preferences.collapsedFolders,['signature']);
   key('ArrowRight');assert.deepEqual(preferences.collapsedFolders,[]);
   key('End');assert.equal(doc.activeElement.dataset.category,'personal','a disabled Add folder is skipped');
-  key('Home');assert.equal(doc.activeElement.dataset.scope,'favorites');
+  key('Home');assert.equal(doc.activeElement.dataset.category,'all','Todos os presets opens the tree (design system 2026-11)');
   key('ArrowUp');assert.equal(doc.activeElement.dataset.category,'personal','arrows wrap around');
 });
 
@@ -197,40 +163,39 @@ test('a selected preset persists when closing settings or pressing Escape',t=>{
   const {gallery,navigation,doc}=fixture(t,{pick:false}),root=gallery.element;
   const editor=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-editor');
   const bar=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-applybar');
-  assert.equal(navigation.selectedId,undefined);assert.equal(editor.hidden,true);assert.equal(bar.hidden,true);
+  assert.equal(navigation.selectedId,undefined);assert.equal(editor.hidden,true);assert.equal(bar.hidden,false);
   const title=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-apply'));
   title.click();const selected=navigation.selectedId;
-  assert.equal(editor.hidden,false);assert.equal(bar.hidden,false);
+  assert.equal(editor.hidden,true,'the empty inspector has no visible container');assert.equal(bar.hidden,false);
   assert.equal(root.getElementsByTagName('button').some(node=>node.getAttribute('aria-label')==='Fechar ajustes do preset'),false);
   title.focus();doc.emit('keydown',{key:'Escape'});
-  assert.equal(navigation.selectedId,selected);assert.equal(editor.hidden,false);assert.equal(bar.hidden,false);
+  assert.equal(navigation.selectedId,selected);assert.equal(editor.hidden,true);assert.equal(bar.hidden,false);
   assert.equal(doc.activeElement,title);
 });
 
-test('the selected preset inspector stays inline and keeps the exact draft during context refresh',t=>{
+test('the empty inspector stays hidden while phase actions keep their draft during context refresh',t=>{
   const {gallery,context,navigation,doc}=fixture(t),root=gallery.element;
   const editor=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-editor');
   const inspector=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-inspector');
-  const input=root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Duração · frames');
-  const apply=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-primary-apply'));
-  assert.equal(editor.hidden,false);assert.equal(editor.parentNode.className,'ch-preset-stage');
-  assert.ok(navigation.selectedId);assert.ok(input);assert.equal(apply.allText,'Aplicar preset');
-  input.value='42';input.emit('input');input.focus();
+  const out=root.getElementsByTagName('button').find(node=>node.dataset.phase==='out');
+  const apply=root.getElementsByTagName('button').find(node=>node.dataset.phase==='in');
+  assert.equal(editor.hidden,true);assert.equal(editor.parentNode.className,'ch-preset-stage');
+  assert.ok(navigation.selectedId);assert.ok(out);assert.equal(apply.allText,'Entrada');
+  out.click();out.focus();
   context.selectionCount=0;gallery.updateContext();
   assert.equal(root.getElementsByTagName('section').find(node=>node.className==='ch-preset-inspector'),inspector);
-  assert.equal(root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Duração · frames'),input);
-  assert.equal(input.value,'42');assert.equal(doc.activeElement,input);
-  assert.equal(apply.disabled,true);assert.match(root.allText,/Nenhuma camada selecionada/);
+  assert.equal(root.getElementsByTagName('button').find(node=>node.dataset.phase==='out'),out);assert.equal(doc.activeElement,out);
+  assert.equal(apply.disabled,true);assert.equal(apply.title,'Nenhuma camada selecionada','the reason rides on the button');
   context.selectionCount=3;gallery.updateContext();
-  assert.equal(apply.disabled,false);assert.match(root.allText,/3 camadas selecionadas/);
-  assert.equal(input.value,'42');assert.equal(navigation.drafts[navigation.selectedId].durationFrames,42);
+  assert.equal(apply.disabled,false);assert.equal(apply.title,'Entrada');
+  assert.equal(navigation.drafts[navigation.selectedId].phase,'out');
 });
 
 test('a missing composition or selection blocks both Apply and preview double-click',t=>{
   const {gallery,context,applied}=fixture(t,{context:{hasComp:false,selectionCount:0,selectedKeys:0}}),root=gallery.element;
-  const apply=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-primary-apply'));
+  const apply=root.getElementsByTagName('button').find(node=>node.dataset.phase==='in');
   const preview=root.getElementsByTagName('button').find(node=>node.className==='ch-preset-preview');
-  assert.equal(apply.disabled,true);assert.match(root.allText,/Abra uma composição/);
+  assert.equal(apply.disabled,true);assert.match(apply.title,/Abra uma composição/);
   apply.click();preview.emit('dblclick');assert.equal(applied.length,0);
   context.hasComp=true;gallery.updateContext();assert.equal(apply.disabled,true);
   apply.click();preview.emit('dblclick');assert.equal(applied.length,0);
@@ -244,33 +209,10 @@ test('legacy Curves navigation migrates to all presets without a dead selected i
   assert.ok(!gallery.element.getElementsByTagName('article').some(card=>card.id.startsWith('builtin.ease.')));
 });
 
-test('invalid draft remains visible and cannot be bypassed by losing and restoring selection',t=>{
-  const {gallery,context,applied}=fixture(t),root=gallery.element;
-  const intensity=root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Intensidade · %');
-  const apply=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-primary-apply'));
-  intensity.value='301';intensity.emit('input');
-  context.selectionCount=0;gallery.updateContext();context.selectionCount=1;gallery.updateContext();
-  assert.equal(intensity.value,'301');assert.equal(intensity.getAttribute('aria-invalid'),'true');assert.equal(apply.disabled,true);
-  apply.click();assert.equal(applied.length,0);
-  intensity.value='60';intensity.emit('input');apply.click();
-  assert.equal(applied.length,1);assert.equal(applied[0].settings.intensity,60);
-});
-
-
-test('filter menu transfers focus on opening and reverses an unfinished closing animation',async t=>{
-  const {gallery,doc}=fixture(t),root=gallery.element;
-  const menu=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-filter-menu');
-  const trigger=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-filter-trigger'));
-  trigger.focus();trigger.click();
-  assert.equal(menu.hidden,false);assert.equal(trigger.getAttribute('aria-expanded'),'true');
-  assert.equal(doc.activeElement,menu.getElementsByTagName('button')[0],'keyboard navigation enters the menu that precedes its trigger in the DOM');
-  trigger.click();assert.equal(menu.getAttribute('data-open'),'false');assert.equal(menu.hidden,false,'exit animation is still running');
-  trigger.click();assert.equal(trigger.getAttribute('aria-expanded'),'true');assert.equal(menu.getAttribute('data-open'),'true');
-  await new Promise(resolve=>setTimeout(resolve,240));
-  assert.equal(menu.hidden,false,'the cancelled exit timer must not hide the reopened menu');
-  assert.equal(menu.getAttribute('aria-hidden'),'false');
-  trigger.click();await new Promise(resolve=>setTimeout(resolve,240));
-  assert.equal(menu.hidden,true);assert.equal(trigger.getAttribute('aria-expanded'),'false');
+test('the persistent tree remains visible after Escape and pointer movement',async t=>{
+ const {gallery,doc}=fixture(t),root=gallery.element,tree=root.querySelector('.ch-preset-filter-menu');
+ const first=tree.getElementsByTagName('button').find(node=>node.className==='ch-folder-select');first.focus();doc.emit('keydown',{key:'Escape'});tree.emit('mouseleave');await new Promise(resolve=>setTimeout(resolve,240));
+ assert.equal(tree.hidden,false);assert.equal(tree.getAttribute('data-open'),'true');assert.equal(doc.activeElement===first,true);
 });
 
 test('switching to personal presets clears the previous inspector and preserves its draft for return',t=>{
@@ -278,42 +220,22 @@ test('switching to personal presets clears the previous inspector and preserves 
   const editor=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-editor');
   const inspector=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-inspector');
   const selected=navigation.selectedId;
-  const duration=inspector.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Duração · frames');
-  duration.value='53';duration.emit('input');
+  const left=()=>root.getElementsByTagName('button').find(node=>node.dataset.direction==='left');
+  left().click();
   const chooseCategory=id=>root.getElementsByTagName('button').find(node=>node.dataset.category===id).click();
   chooseCategory('personal');
   assert.equal(editor.hidden,true);assert.equal(inspector.getElementsByTagName('input').length,0);
   assert.equal(inspector.getElementsByTagName('div').some(node=>node.className==='ch-preset-approved-heading'),false);
-  assert.equal(navigation.selectedId,selected);assert.equal(navigation.drafts[selected].durationFrames,53);
+  assert.equal(navigation.selectedId,selected);assert.equal(navigation.drafts[selected].direction,'left');
   chooseCategory('all');
-  assert.equal(editor.hidden,false,'returning restores the explicit selection');assert.equal(navigation.selectedId,selected);
-  root.getElementsByTagName('button').find(node=>node.dataset.focusKey===`title.${selected}`).click();
-  assert.equal(editor.hidden,false);assert.equal(navigation.selectedId,selected);
-  assert.equal(inspector.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Duração · frames').value,'53');
+  assert.equal(editor.hidden,true,'returning keeps the empty inspector hidden');assert.equal(navigation.selectedId,selected);
+  const title=()=>root.getElementsByTagName('button').find(node=>node.dataset.focusKey===`title.${selected}`);
+  title().click();
+  assert.equal(editor.hidden,true,'a second click clears the choice and folds the box');assert.ok(navigation.selectedId);
+  title().click();
+  assert.equal(editor.hidden,true);assert.equal(navigation.selectedId,selected);assert.equal(root.getElementsByTagName('div').find(node=>node.className==='ch-preset-applybar').hidden,false);
+  assert.equal(left().getAttribute('aria-pressed'),'true','the draft survives deselection');
 });
-
-test('unit and order updates preserve the open settings panel, focus and invalid draft',t=>{
-  const {gallery,doc,navigation}=fixture(t,{category:'premium-text'}),root=gallery.element;
-  root.getElementsByTagName('button').find(node=>node.dataset.focusKey==='title.builtin.motion.premium-glyph-ribbon').click();
-  const panel=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-settings-panel');
-  const trigger=root.getElementsByTagName('button').find(node=>node.dataset.focusKey==='adjust.builtin.motion.premium-glyph-ribbon');
-  const field=label=>root.getElementsByTagName('select').find(node=>node.getAttribute('aria-label')===label);
-  const number=label=>root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')===label);
-  trigger.click(); assert.equal(panel.hidden,false); assert.equal(panel.getAttribute('data-open'),'true');
-  number('Intensidade · %').value='301';number('Intensidade · %').emit('input');
-  const oldUnit=field('Dividir texto');oldUnit.focus();oldUnit.value='characters';oldUnit.emit('change');
-  assert.notEqual(field('Dividir texto'),oldUnit,'dependent controls were rebuilt');
-  assert.equal(panel.hidden,false); assert.equal(panel.getAttribute('data-open'),'true');assert.equal(doc.activeElement,field('Dividir texto'));
-  assert.equal(number('Intensidade · %').value,'301');assert.equal(number('Intensidade · %').getAttribute('aria-invalid'),'true');
-  const oldOrder=field('Ordem');oldOrder.focus();oldOrder.value='random';oldOrder.emit('change');
-  assert.equal(panel.hidden,false); assert.equal(panel.getAttribute('data-open'),'true');assert.equal(doc.activeElement,field('Ordem'));
-  assert.ok(number('Variação'),'random ordering exposes its editable seed');
-  assert.equal(navigation.drafts[navigation.selectedId].unit,'characters');
-  assert.equal(navigation.drafts[navigation.selectedId].order,'random');
-  assert.equal(number('Intensidade · %').value,'301');
-  assert.equal(root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-primary-apply')).disabled,true);
-});
-
 
 test('settings SVG sits beside each name and opens directions without applying',t=>{
   const {gallery,applied,navigation}=fixture(t),root=gallery.element;
@@ -356,44 +278,234 @@ test('settings Escape restores its origin and a quick reversal cannot be hidden 
   assert.equal(panel.hidden,true);assert.equal(doc.activeElement,trigger);
 });
 
-test('settings context updates preserve popup, focused invalid draft and disable the fixed action',t=>{
-  const {gallery,context,navigation,doc}=fixture(t),root=gallery.element;
+test('variations open as a compact popover hanging under the card, as wide as it, without moving any card',t=>{
+  const {gallery}=fixture(t),root=gallery.element;
+  const grid=root.querySelector('.ch-preset-grid');
+  const cards=grid.children.filter(node=>node.tagName==='article');
+  const card=cards.find(node=>node.id==='builtin.motion.premium-arc-arrival');
+  const order=cards.map(node=>node.id);
+  card.getBoundingClientRect=()=>({left:40,right:200,top:100,bottom:220,width:160,height:120});
+  grid.getBoundingClientRect=()=>({left:20,top:80,right:520,bottom:600,width:500,height:520});
+  grid.scrollTop=30;
+  const panel=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-settings-panel');
+  const trigger=card.getElementsByTagName('button').find(node=>node.dataset.focusKey===`adjust.${card.id}`);
+  assert.equal(trigger.getAttribute('aria-label'),'Variações: '+trigger.getAttribute('aria-label').slice('Variações: '.length));
+  assert.equal(trigger.getElementsByTagName('svg')[0]?.getAttribute('data-icon'),'variants','three plain lines, like a variant list');
+  trigger.click();
+  assert.equal(panel.parentNode,grid,'it lives in the grid and scrolls with it');
+  assert.equal(panel.getAttribute('data-layout'),'popover');assert.equal(panel.getAttribute('data-side'),'below');
+  assert.equal(panel.style.top,'170px','right under the card (220 - 80 + 30 scrolled)');
+  assert.equal(panel.style.left,'20px');assert.equal(panel.style.width,'160px','as wide as the card');
+  assert.deepEqual(grid.children.filter(node=>node.tagName==='article').map(node=>node.id),order,'no card moves');
+  assert.equal(card.getAttribute('data-attached'),'below');
+});
+
+test('hover never opens or transfers a preset menu, and leaving keeps the clicked menu open',async t=>{
+  const {gallery,doc,applied}=fixture(t),root=gallery.element;
+  const trigger=root.getElementsByTagName('button').find(node=>node.dataset.focusKey==='adjust.builtin.motion.premium-arc-arrival');
+  const panel=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-settings-panel');
+  const originalFocus=doc.activeElement;
+  trigger.emit('mouseenter');await new Promise(resolve=>setTimeout(resolve,160));
+  assert.equal(panel.getAttribute('data-open'),'false');
+  assert.equal(doc.activeElement,originalFocus);
+  trigger.click();const selected=root.getElementsByTagName('article').find(node=>node.getAttribute('data-selected')==='true').id;
+  trigger.emit('mouseleave');panel.emit('mouseleave');
+  const other=root.getElementsByTagName('button').find(node=>node.dataset.focusKey?.startsWith('adjust.')&&node!==trigger&&!node.hidden);
+  other.emit('mouseenter');
+  await new Promise(resolve=>setTimeout(resolve,220));
+  assert.equal(panel.getAttribute('data-open'),'true');assert.equal(applied.length,0);
+  assert.equal(root.getElementsByTagName('article').find(node=>node.getAttribute('data-selected')==='true').id,selected);
+  assert.equal(other.getAttribute('aria-expanded'),'false');
+});
+
+test('clicking a card only selects it; direction choices open from its settings button',t=>{
+  const {gallery,navigation,applied}=fixture(t,{pick:false}),root=gallery.element;
+  const card=root.getElementsByTagName('article').find(node=>node.id==='builtin.motion.premium-arc-arrival');
+  const button=cls=>card.getElementsByTagName('button').find(node=>node.className.includes(cls));
+  const panel=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-settings-panel');
+  button('ch-preset-preview').click();assert.notEqual(panel.getAttribute('data-open'),'true');assert.equal(navigation.selectedId,card.id);
+  button('ch-preset-apply').click();assert.notEqual(panel.getAttribute('data-open'),'true','the name selects too, without a popover');
+  button('ch-preset-settings-trigger').click();assert.equal(panel.getAttribute('data-open'),'true');
+  panel.getElementsByTagName('button').find(node=>node.dataset.direction==='right').click();
+  button('ch-preset-preview').click();assert.equal(panel.getAttribute('data-open'),'false');assert.equal(navigation.selectedId,card.id);
+  button('ch-preset-settings-trigger').click();assert.equal(panel.getElementsByTagName('button').find(node=>node.dataset.direction==='right').getAttribute('aria-pressed'),'true');
+  assert.equal(applied.length,0);
+});
+
+test('library keeps search and folders beside the cards and exposes a keyboard splitter',t=>{
+  const {gallery}=fixture(t,{pick:false}),root=gallery.element;
+  const sidebar=root.querySelector('.ch-preset-sidebar');assert.ok(sidebar);
+  assert.ok(sidebar.querySelector('input'));assert.ok(sidebar.querySelector('.ch-preset-categories'));
+  const splitter=root.getElementsByRole('separator')[0];assert.ok(splitter);assert.equal(splitter.getAttribute('aria-orientation'),'vertical');
+  const before=Number(splitter.getAttribute('aria-valuenow'));splitter.emit('keydown',{key:'ArrowLeft'});
+  assert.equal(Number(splitter.getAttribute('aria-valuenow')),Math.max(120,before-8));
+  const footer=root.querySelector('.ch-preset-reference-footer');assert.ok(footer);
+  assert.ok(footer.querySelector('input'));assert.ok(footer.getElementsByTagName('button').find(node=>node.allText==='Ações de presets'));
+  assert.equal(root.getAttribute('data-folder-picker'),'false','from 360 px the tree stays beside the cards');
+});
+
+test('with no preset chosen the footer asks once, and its status adds only a missing composition',t=>{
+  const {gallery,context}=fixture(t,{pick:false}),root=gallery.element;
+  const name=()=>root.querySelector('.ch-preset-selected-name').textContent,status=()=>root.querySelector('.ch-preset-selection-status').textContent;
+  gallery.updateContext();
+  assert.equal(name(),'Selecione um preset');assert.equal(status(),'','the status never repeats the name');
+  const apply=root.querySelector('.ch-preset-reference-footer').getElementsByTagName('button').find(node=>node.dataset.phase==='in');
+  assert.equal(apply.disabled,true);
+  context.hasComp=false;gallery.updateContext();assert.equal(status(),'Abra uma composição');
+  context.hasComp=true;root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-apply')).click();gallery.updateContext();
+  assert.notEqual(name(),'Selecione um preset');assert.equal(status(),'2 camadas selecionadas','a chosen preset still reports the selection');
+});
+
+/** Narrow docks: the picker above the cards and the tree sheet it opens. */
+function narrow(t, options = {}) {
+  const f=fixture(t,{width:280,pick:false,...options}),root=f.gallery.element;
+  return {...f,root,picker:root.querySelector('.ch-preset-folder-picker'),menu:root.querySelector('.ch-preset-filter-menu'),folder:id=>root.querySelector('.ch-preset-filter-menu').getElementsByTagName('button').find(node=>node.dataset.category===id)};
+}
+
+test('below 360 px the folder tree folds into a picker above the cards',t=>{
+  const {root,picker,menu,navigation}=narrow(t,{category:'signature-cinema'});
+  assert.equal(root.getAttribute('data-folder-picker'),'true');
+  assert.equal(root.querySelector('.ch-preset-browser-heading').contains(picker),true,'the picker takes the breadcrumb row above the grid');
+  assert.equal(menu.hidden,true);assert.equal(menu.getAttribute('aria-hidden'),'true');
+  assert.equal(picker.getAttribute('aria-expanded'),'false');assert.equal(picker.getAttribute('aria-controls'),menu.id);
+  assert.equal(picker.getAttribute('aria-label'),'Pasta: Signature › Cinema');assert.equal(picker.title,'Signature › Cinema');
+  assert.match(picker.allText,/Signature.*›.*Cinema/);
+  assert.equal(navigation.sidebarWidth,undefined,'a narrow dock leaves the saved tree width alone');
+});
+
+test('the picker opens the same tree on the current folder and closes on a choice',t=>{
+  const {doc,picker,menu,navigation,folder}=narrow(t);
+  picker.click();
+  assert.equal(picker.getAttribute('aria-expanded'),'true');assert.equal(menu.hidden,false);assert.equal(menu.getAttribute('data-open'),'true');
+  assert.equal(doc.activeElement,folder('all'),'the current folder takes focus');
+  menu.emit('keydown',{key:'ArrowDown',target:doc.activeElement});assert.equal(doc.activeElement,folder('emulsion'),'arrow keys walk the same tree');
+  folder('signature-cinema').click();
+  assert.equal(navigation.category,'signature-cinema');assert.equal(menu.hidden,true);assert.equal(picker.getAttribute('aria-expanded'),'false');
+  assert.equal(doc.activeElement,picker,'focus returns to the picker');
+  assert.equal(picker.getAttribute('aria-label'),'Pasta: Signature › Cinema');
+  picker.click();assert.equal(doc.activeElement,folder('signature-cinema'));
+});
+
+test('the tree sheet keeps folding and labels; Escape and focus leaving close it',t=>{
+  const {doc,root,picker,menu,preferences}=narrow(t);
+  picker.click();
+  menu.getElementsByTagName('button').find(node=>node.className==='ch-folder-toggle'&&node.getAttribute('aria-expanded')==='true').click();
+  assert.deepEqual(preferences.collapsedFolders,['emulsion'],'folding is the same preference as the sidebar');
+  menu.emit('focusout',{relatedTarget:null});assert.equal(menu.hidden,false,'a redraw inside the sheet does not close it');
+  menu.getElementsByTagName('button').find(node=>node.getAttribute('aria-label')==='Etiqueta e opções: Impulso').click();
+  doc.emit('keydown',{key:'Escape'});
+  assert.equal(menu.getElementsByTagName('div').some(node=>node.className==='ch-folder-palette'),false,'Escape closes the label palette first');
+  assert.equal(menu.hidden,false);
+  doc.emit('keydown',{key:'Escape'});assert.equal(menu.hidden,true);assert.equal(doc.activeElement,picker);
+  picker.click();menu.emit('focusout',{relatedTarget:root.querySelector('.ch-preset-search')});
+  assert.equal(menu.hidden,true,'Tab out of the sheet closes it');assert.equal(picker.getAttribute('aria-expanded'),'false');
+  picker.click();picker.emit('focusout',{relatedTarget:menu.getElementsByTagName('button')[0]});assert.equal(menu.hidden,false,'moving from the picker into the sheet keeps it');
+  picker.emit('focusout',{relatedTarget:root.querySelector('.ch-preset-grid')});assert.equal(menu.hidden,true,'Tab from the picker into the cards closes it');
+});
+
+test('widening the panel brings the sidebar back at its saved width; narrowing folds it again',t=>{
+  const {doc,root,picker,menu,navigation,preferences,folder}=narrow(t);
+  preferences.gallery={category:'all',scope:'all',query:'',presetId:'',sidebarWidth:260};
+  root.getBoundingClientRect=()=>({left:0,top:0,right:480,bottom:640,width:480,height:640});
+  picker.click();picker.focus();
+  globalThis.window.innerWidth=480;globalThis.window.emit('resize');
+  assert.equal(root.getAttribute('data-folder-picker'),'false');assert.equal(menu.hidden,false);assert.equal(menu.getAttribute('data-open'),'true');
+  assert.equal(picker.getAttribute('aria-expanded'),'false');
+  assert.equal(root.getElementsByRole('separator')[0].getAttribute('aria-valuenow'),'260','the splitter returns at the saved width');
+  assert.equal(doc.activeElement,folder('all'),'focus moves off the hidden picker to the same folder');
+  globalThis.window.innerWidth=300;globalThis.window.emit('resize');
+  assert.equal(root.getAttribute('data-folder-picker'),'true');assert.equal(menu.hidden,true);assert.equal(doc.activeElement,picker);
+  assert.equal(navigation.sidebarWidth,260,'folding again keeps that width');
+});
+
+test('the variations popover is only the list of directions; a click keeps the choice without applying',t=>{
+  const {gallery,navigation,applied}=fixture(t),root=gallery.element;
   root.getElementsByTagName('button').find(node=>node.dataset.focusKey==='adjust.builtin.motion.premium-arc-arrival').click();
   const panel=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-settings-panel');
-  const input=panel.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Intensidade · %');
-  const apply=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-primary-apply'));
-  input.value='301';input.emit('input');input.focus();
-  context.selectionCount=0;gallery.updateContext();context.selectionCount=5;gallery.updateContext();
-  assert.equal(panel.getAttribute('data-open'),'true');assert.equal(panel.hidden,false);
-  assert.equal(panel.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Intensidade · %'),input);
-  assert.equal(doc.activeElement,input);assert.equal(input.value,'301');assert.equal(apply.disabled,true);
-  input.value='80';input.emit('input');assert.equal(navigation.drafts[navigation.selectedId].intensity,80);assert.equal(apply.disabled,false);
+  const rows=panel.getElementsByTagName('button').filter(node=>node.className==='ch-preset-direction-option');
+  assert.ok(rows.length>=2,'one row per direction');
+  const left=rows.find(node=>node.dataset.direction==='left');
+  left.emit('mouseenter');assert.notEqual(navigation.drafts[navigation.selectedId].direction,'left','hover does not commit');
+  left.click();
+  assert.equal(navigation.drafts[navigation.selectedId].direction,'left');assert.equal(left.getAttribute('aria-pressed'),'true');assert.equal(applied.length,0);
+  assert.equal(panel.getElementsByTagName('button').some(node=>node.className==='ch-preset-directions-toggle'),false,'no "view all" link');
+  assert.equal(panel.getElementsByTagName('button').some(node=>node.dataset.easing),false,'no character chips: only directions');
+});
+
+test('Escape and disposal cancel an unopened hover menu',async t=>{
+  const {gallery,doc}=fixture(t),root=gallery.element;
+  const trigger=root.getElementsByTagName('button').find(node=>node.dataset.focusKey==='adjust.builtin.motion.premium-arc-arrival');
+  const panel=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-settings-panel');
+  trigger.emit('mouseenter');doc.emit('keydown',{key:'Escape'});
+  await new Promise(resolve=>setTimeout(resolve,160));assert.equal(panel.hidden,true);
+  trigger.emit('mouseenter');gallery.dispose();
+  await new Promise(resolve=>setTimeout(resolve,160));assert.equal(panel.hidden,true);
+});
+
+test('a short viewport still opens the drawer below its row, and scrolling the grid never closes it',t=>{
+  const {gallery}=fixture(t),root=gallery.element;
+  globalThis.window.innerHeight=280;
+  const card=root.getElementsByTagName('article').find(node=>node.id==='builtin.motion.premium-arc-arrival');
+  card.getBoundingClientRect=()=>({left:40,right:200,top:180,bottom:220,width:160,height:40});
+  const panel=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-settings-panel');
+  card.getElementsByTagName('button').find(node=>node.dataset.focusKey===`adjust.${card.id}`).click();
+  assert.equal(panel.getAttribute('data-side'),'below','no flipping above: the drawer is part of the grid');
+  const grid=root.querySelector('.ch-preset-grid');grid.emit('scroll');
+  grid.scrollTop=100;grid.emit('scroll');assert.equal(panel.getAttribute('data-open'),'true','it scrolls with the cards');
 });
 
 test('Apply bar is outside the scrolling gallery and stays blocked while busy',t=>{
   const {gallery,applied}=fixture(t,{busy:true}),root=gallery.element;
   const scroll=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-scroll');
   const bar=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-applybar');
-  assert.ok(scroll);assert.equal(bar.parentNode,scroll.parentNode);assert.equal(bar.parentNode,root);
+  assert.ok(scroll);assert.equal(bar.parentNode===root.querySelector('.ch-preset-reference-footer'),true);
   assert.equal(scroll.contains(bar),false);
-  const apply=bar.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-primary-apply'));
+  const apply=bar.getElementsByTagName('button').find(node=>node.dataset.phase==='in');
   assert.equal(apply.disabled,true);apply.click();assert.equal(applied.length,0);
 });
 
-test('primary phase keeps Both explicit across settings redraws and application',t=>{
+test('phase buttons apply directly; arrows only move focus and Edit selectors remain independent',t=>{
   const {gallery,applied,navigation,doc}=fixture(t),root=gallery.element;
-  const group=()=>root.getElementsByRole('radiogroup').find(node=>node.getAttribute('aria-label')==='Animação');
-  assert.ok(group());assert.equal(root.getElementsByTagName('input').some(node=>node.type==='checkbox'),false);
+  const group=()=>root.getElementsByRole('group').find(node=>node.getAttribute('aria-label')==='Aplicar animação');
+  assert.ok(group());assert.equal(applied.length,0,'selecting the card never applies');
+  assert.equal(root.getElementsByTagName('button').some(node=>node.className.includes('ch-preset-primary-apply')),false);
   const both=group().getElementsByTagName('button')[2];both.click();
-  assert.equal(navigation.drafts[navigation.selectedId].phase,'both');assert.equal(both.getAttribute('aria-checked'),'true');
+  assert.equal(applied.length,1);assert.equal(applied[0].settings.phase,'both');
+  assert.equal(navigation.drafts[navigation.selectedId].phase,'both');
   root.getElementsByTagName('button').find(node=>node.dataset.focusKey===`adjust.${navigation.selectedId}`).click();
-  assert.equal(group().getElementsByTagName('button')[2].getAttribute('aria-checked'),'true');
-  assert.equal(group().closest('.ch-preset-settings-panel'),null,'phase is always visible in the primary inspector');
   group().getElementsByTagName('button')[2].keydown('ArrowLeft');
-  assert.equal(navigation.drafts[navigation.selectedId].phase,'out');assert.equal(doc.activeElement,group().getElementsByTagName('button')[1]);
-  group().getElementsByTagName('button')[1].keydown('End');
-  root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-primary-apply')).click();
-  assert.equal(applied[0].settings.phase,'both');
+  assert.equal(navigation.drafts[navigation.selectedId].phase,'both');assert.equal(applied.length,1);
+  assert.equal(doc.activeElement,group().getElementsByTagName('button')[1]);
+  group().getElementsByTagName('button')[1].keydown('Enter');
+  assert.equal(applied[1].settings.phase,'out');
+  group().getElementsByTagName('button')[0].keydown(' ');
+  assert.equal(applied[2].settings.phase,'in');
+});
+
+test('transition double-click applies once and shares one real operation lock with the phase buttons',async t=>{
+  let resolve;
+  const {gallery,applied}=fixture(t,{onApply:()=>new Promise(done=>{resolve=done;})}),root=gallery.element;
+  const phase=value=>root.getElementsByTagName('button').find(node=>node.dataset.phase===value);
+  root.querySelector('.ch-preset-preview').emit('dblclick');assert.equal(applied.length,1);
+  root.querySelector('.ch-preset-preview').emit('dblclick');phase('both').click();phase('in').keydown('Enter');
+  assert.equal(applied.length,1,'nothing else starts while the double-click apply runs');
+  resolve({ok:false,message:'Host refused the target'});await Promise.resolve();
+  phase('both').click();phase('in').click();phase('both').keydown('Enter');
+  assert.equal(applied.length,2);assert.equal(phase('both').getAttribute('aria-busy'),'true');
+  resolve({ok:false,message:'Host refused the target'});await Promise.resolve();
+  assert.equal(phase('both').parentNode.getAttribute('data-state'),'error');
+  assert.equal(phase('both').disabled,false);assert.equal(phase('in').disabled,false);
+  phase('out').click();assert.equal(applied.length,3);
+  resolve({ok:true,message:'Applied in one Undo'});await Promise.resolve();
+  assert.equal(phase('out').parentNode.getAttribute('data-state'),'success');
+  assert.equal(phase('both').parentNode.getAttribute('data-state'),'default');
+});
+
+test('void callbacks never report success and failed promises recover',async t=>{
+  const {gallery}=fixture(t,{onApply:()=>Promise.reject(new Error('offline'))}),root=gallery.element;
+  const phase=root.getElementsByTagName('button').find(node=>node.dataset.phase==='in');
+  phase.click();await Promise.resolve();
+  assert.equal(phase.parentNode.getAttribute('data-state'),'error');assert.equal(phase.disabled,false);
 });
 
 for (const locale of ['pt-BR','en-US']) {
@@ -418,20 +530,18 @@ test('empty search retains selection, draft, search identity and focus until exp
   const second=root.getElementsByTagName('button').filter(node=>node.dataset.focusKey?.startsWith('title.'))[1];
   second.click();
   const selected=navigation.selectedId;
-  const duration=root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Duração · frames');
-  duration.value='53';duration.emit('input');
+  root.getElementsByTagName('button').find(node=>node.dataset.direction==='left').click();
   const search=root.getElementsByTagName('input').find(node=>node.type==='search');
-  const searchControl=root.getElementsByTagName('div').find(node=>node.className.includes('ch-preset-search'));
-  searchControl.getElementsByTagName('button')[0].click();
+  search.focus();
   search.value='does-not-exist';search.emit('input');t.mock.timers.tick(250);
-  assert.equal(navigation.selectedId,selected);assert.equal(navigation.drafts[selected].durationFrames,53);
+  assert.equal(navigation.selectedId,selected);assert.equal(navigation.drafts[selected].direction,'left');
   assert.equal(doc.activeElement,search);assert.equal(navigation.query,'does-not-exist');
   assert.match(root.allText,/Tente outro nome ou limpe os filtros/);
   root.getElementsByTagName('button').find(node=>node.textContent==='Ver todos os presets').click();
   assert.equal(root.getElementsByTagName('input').find(node=>node.type==='search'),search);
   assert.equal(doc.activeElement,search);assert.equal(search.value,'');
-  assert.equal(navigation.selectedId,selected);assert.equal(navigation.drafts[selected].durationFrames,53);
-  assert.equal(root.getElementsByTagName('input').find(node=>node.getAttribute('aria-label')==='Duração · frames').value,'53');
+  assert.equal(navigation.selectedId,selected);assert.equal(navigation.drafts[selected].direction,'left');
+  assert.equal(root.getElementsByTagName('button').find(node=>node.dataset.direction==='left').getAttribute('aria-pressed'),'true');
   t.mock.timers.tick(300);
   assert.ok(root.getElementsByTagName('article').length>0,'a superseded search cannot replace the restored library');
 });
@@ -468,4 +578,206 @@ test('empty personal library explains local storage and adds a folder through it
   assert.match(root.allText,/Os arquivos permanecem no local original/);
   root.getElementsByTagName('button').find(node=>node.textContent==='Adicionar pasta').click();
   assert.deepEqual(calls,['add']);
+});
+
+function openSettings(root,id){
+  const trigger=root.getElementsByTagName('button').find(node=>node.dataset.focusKey===`adjust.builtin.motion.${id}`);trigger.click();
+  return root.getElementsByTagName('section').find(node=>node.className==='ch-preset-settings-panel');
+}
+
+test('even a diagonal recipe lists four sides under Original, and nothing else is offered before applying',t=>{
+  const {gallery,navigation,applied}=fixture(t),panel=openSettings(gallery.element,'momentum-push');
+  const list=panel.getElementsByTagName('div').find(node=>node.className==='ch-preset-direction-list');
+  assert.deepEqual(list.children.map(node=>node.dataset.direction),['preset','bottom','left','right','top']);
+  list.children.find(node=>node.dataset.direction==='top').click();
+  assert.equal(navigation.drafts['builtin.motion.momentum-push'].direction,'top');assert.equal(applied.length,0);
+  assert.equal(list.children.find(node=>node.dataset.direction==='preset').getAttribute('aria-pressed'),'false');
+  assert.equal(panel.getElementsByTagName('input').length+panel.getElementsByTagName('select').length,0,'duration, intensity, curve and motion blur live in Edit');
+  assert.doesNotMatch(panel.allText,/Restaurar padrão|Salvar como variação|Refinar movimento|Ver todas/);
+});
+test('a reveal keeps the four sides of its wipe, listed under Original',t=>{
+  const {gallery,navigation}=fixture(t),panel=openSettings(gallery.element,'reveal-curtain');
+  const grid=panel.getElementsByTagName('div').find(node=>node.className==='ch-preset-direction-list');
+  assert.deepEqual(grid.children.map(node=>node.dataset.direction),['preset','bottom','left','right','top']);
+  panel.getElementsByTagName('button').find(node=>node.dataset.direction==='left').click();
+  assert.equal(navigation.drafts['builtin.motion.reveal-curtain'].direction,'left');
+});
+test('the box under the gallery is lean: only In, Out and Both; a second click folds it',t=>{
+  const {gallery,navigation}=fixture(t),root=gallery.element;
+  const inspector=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-inspector');
+  const editor=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-editor');
+  assert.doesNotMatch(inspector.allText,/Ajustável|Camada visual|cena de exemplo|Duração/);
+  assert.match(root.querySelector('.ch-preset-applybar').allText,/Entrada.*Saída.*Ambos/);
+  assert.doesNotMatch(root.querySelector('.ch-preset-applybar').allText,/Aplicar preset/);
+  const bar=root.getElementsByTagName('div').find(n=>n.className==='ch-preset-applybar');
+  assert.doesNotMatch(bar.allText,/composição|camada/i);
+  const selected=navigation.selectedId,card=root.getElementsByTagName('article').find(node=>node.id===selected);
+  assert.equal(card.getAttribute('data-selected'),'true');
+  card.getElementsByTagName('button').find(node=>node.className==='ch-preset-preview').click();
+  assert.equal(card.getAttribute('data-selected'),'true');assert.equal(navigation.selectedId,selected);assert.equal(editor.hidden,true);
+});
+
+test('a preset with no direction to choose has no variations button',t=>{
+  const {gallery}=fixture(t),root=gallery.element;
+  for(const card of root.getElementsByTagName('article')){
+    const trigger=card.getElementsByTagName('button').find(node=>node.dataset.focusKey===`adjust.${card.id}`);
+    if(!trigger||trigger.hidden)continue;
+    trigger.click();
+    const panel=root.getElementsByTagName('section').find(node=>node.className==='ch-preset-settings-panel');
+    const hasList=panel.getElementsByTagName('div').some(node=>node.className==='ch-preset-direction-list');
+    const hint=panel.getElementsByTagName('button').some(node=>/Editar/.test(node.allText??''));
+    assert.ok(hasList||hint,`${card.id} opens an empty popover`);
+    trigger.click();
+  }
+});
+
+test('the Elements folder lives in Presets and inserts through the gallery action bar',async t=>{
+  const inserted=[];
+  const f=fixture(t,{pick:false,elements:{execute:async args=>{inserted.push(args);return {protocolVersion:1,requestId:'e',ok:true,data:{},warnings:[],error:null};},error:()=> 'erro'}});
+  const folder=f.gallery.element.getElementsByTagName('button').find(node=>node.dataset?.category==='elements-lower-third');
+  assert.ok(folder,'Elementos › Tarjas is a gallery folder');
+  folder.click();
+  assert.equal(f.navigation.category,'elements-lower-third');
+  const cards=f.gallery.element.getElementsByTagName('button').filter(node=>node.id.startsWith('element-'));
+  assert.deepEqual(cards.slice(0,3).map(c=>c.id),['element-lt-bar','element-lt-line','element-lt-tag'],'the three originals lead the folder');
+  assert.ok(cards.length>3&&cards.every(c=>c.id.startsWith('element-lt-')),'only lower thirds, families included');
+  assert.equal(f.gallery.element.getElementsByTagName('button').filter(node=>node.className?.includes?.('ch-preset-apply')).length,0,'no motion presets mixed in');
+  cards[0].click();
+  f.gallery.element.getElementsByTagName('button').find(node=>node.id==='elements-insert').click();
+  for(let i=0;i<4;i++)await Promise.resolve();
+  assert.deepEqual(inserted,[{elementId:'lt-bar'}]);
+  const all=f.gallery.element.getElementsByTagName('button').find(node=>node.dataset?.category==='elements');
+  all.click();
+  assert.ok(f.gallery.element.getElementsByTagName('button').filter(node=>node.id.startsWith('element-')).length>cards.length,'Elements shows every kind, not only lower thirds');
+});
+
+
+test('text family filters combine with favorites and preserve draft animation units',t=>{
+  const f=fixture(t,{category:'text-characters',pick:false}),root=f.gallery.element;
+  const filters=root.getElementsByTagName('button').filter(node=>node.dataset.category?.startsWith('text-characters/'));
+  assert.ok(filters.length>3);
+  for(const filter of filters)assert.ok(GALLERY_PRESETS.some(preset=>preset.navigation?.filter===filter.dataset.category),'no empty family');
+  const family=filters.find(node=>node.dataset.category==='text-characters/position');
+  family.click();
+  const cards=root.getElementsByTagName('article');assert.ok(cards.length);
+  for(const card of cards)assert.equal(GALLERY_PRESETS.find(p=>p.id===card.id).navigation.filter,'text-characters/position');
+  const card=cards[0];card.querySelector('.ch-preset-preview').click();
+  const draft=f.navigation.drafts[card.id];draft.unit='lines';
+  root.getElementsByTagName('button').find(node=>node.dataset.focusKey===`favorite.${card.id}`)?.click();
+  f.preferences.favorites=[card.id];
+  root.getElementsByTagName('button').find(node=>node.dataset.scope==='favorites').click();
+  assert.equal(root.getElementsByTagName('article').length,1);
+  assert.equal(f.navigation.drafts[card.id],draft);assert.equal(draft.unit,'lines');
+});
+
+test('phase activation revalidates current context before dispatch and never changes draft on rejection',t=>{
+  const f=fixture(t),root=f.gallery.element;
+  const phase=root.getElementsByTagName('button').find(node=>node.dataset.phase==='out');
+  const draft=f.navigation.drafts[f.navigation.selectedId],before=draft.phase;
+  f.context.hasComp=false;phase.click();
+  assert.equal(f.applied.length,0);assert.equal(draft.phase,before);assert.equal(phase.disabled,true);
+});
+
+test('camera overlays and continuous effects retain their dedicated primary action',async t=>{
+  for(const [category,query,label] of [['camera-transitions','','Criar transição'],['motion-effects','','Aplicar preset']]){
+    await t.test(category,child=>{
+    const f=fixture(child,{category,query}),root=f.gallery.element;
+    assert.equal(root.getElementsByTagName('button').filter(node=>node.dataset.phase).length,0);
+    const action=root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-primary-apply'));
+    assert.equal(action.allText,label);action.click();assert.equal(f.applied.length,1);
+    assert.equal(action.parentNode.getAttribute('data-state'),'default','void callback cannot confirm success');
+    });
+  }
+});
+
+test('pending result stays associated with its recipe after selecting another card',async t=>{
+  let resolve;
+  const f=fixture(t,{onApply:()=>new Promise(done=>{resolve=done;})}),root=f.gallery.element;
+  root.getElementsByTagName('button').find(node=>node.dataset.phase==='in').click();
+  const next=root.getElementsByTagName('article')[1];next.querySelector('.ch-preset-preview').click();
+  const nextAction=root.getElementsByTagName('button').find(node=>node.dataset.phase==='in');
+  assert.equal(nextAction.disabled,true);nextAction.click();assert.equal(f.applied.length,1);
+  resolve({ok:true,message:'Applied'});await Promise.resolve();
+  assert.equal(nextAction.disabled,false);assert.equal(nextAction.parentNode.getAttribute('data-state'),'default');
+});
+
+test('all three phase actions share text and locked-layer requirements',t=>{
+  const f=fixture(t,{category:'text-characters',context:{hasComp:true,selectionCount:2,selectedKeys:0,textLayers:1,lockedLayers:0}});
+  const phases=f.gallery.element.getElementsByTagName('button').filter(node=>node.dataset.phase);
+  assert.equal(phases.length,3);
+  for(const phase of phases){assert.equal(phase.disabled,true);assert.match(phase.title,/apenas camadas de texto/);phase.click();}
+  assert.equal(f.applied.length,0);
+  f.context.textLayers=2;f.context.lockedLayers=1;f.gallery.updateContext();
+  for(const phase of phases){assert.equal(phase.disabled,true);assert.match(phase.title,/Desbloqueie/);}
+  f.context.lockedLayers=0;f.gallery.updateContext();
+  assert.ok(phases.every(phase=>!phase.disabled));
+});
+test('direction tiles repaint while hovered, so their drawing never takes the click (CEF drops a click whose target was removed)',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const css=await readFile(new URL('../../../packages/ui-core/src/preset-approved.css',import.meta.url),'utf8');
+  assert.match(css,/\.ch-preset-direction-tile>svg,\.ch-preset-direction-tile>span \{ pointer-events:none; \}/);
+  assert.doesNotMatch(css,/data-layout="compass"/);
+});
+
+test('clicking the selected card again clears the selection, while a double-click applies and keeps it',async t=>{
+  const {gallery,navigation,applied}=fixture(t,{pick:false}),root=gallery.element;
+  const card=root.getElementsByTagName('article').find(node=>node.id==='builtin.motion.premium-arc-arrival');
+  const view=card.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-preview'));
+  const wait=ms=>new Promise(done=>setTimeout(done,ms));
+  view.click();assert.equal(navigation.selectedId,card.id);
+  view.click();assert.equal(navigation.selectedId,card.id,'the selection waits for a possible second click');
+  await wait(350);assert.ok(!navigation.selectedId,'a lone second click deselects');assert.equal(card.getAttribute('data-selected'),'false');
+  view.click();view.click();view.emit('dblclick');
+  await wait(350);assert.equal(navigation.selectedId,card.id,'a double-click on a new card selects and applies');assert.equal(applied.length,1);
+  view.click();view.click();view.emit('dblclick');
+  await wait(350);assert.equal(navigation.selectedId,card.id,'a double-click on the selected card keeps it selected');
+});
+
+test('folder "…" menu follows the Composer: Focus Folder, eight labels with No label first, Clear all labels',t=>{
+  const f=fixture(t,{pick:false,width:720}),root=f.gallery.element;
+  const buttons=()=>root.getElementsByTagName('button');
+  const more=label=>buttons().find(node=>node.getAttribute('aria-label')===`Etiqueta e opções: ${label}`);
+  const row=id=>buttons().find(node=>node.className==='ch-folder-select'&&node.dataset.category===id)?.parentNode;
+  more('Impulso').click();
+  const menu=root.getElementsByTagName('div').find(node=>node.className==='ch-folder-palette');
+  assert.ok(menu,'the menu opens under the folder');
+  const swatches=menu.getElementsByTagName('button').filter(node=>node.className==='ch-folder-swatch');
+  assert.deepEqual(swatches.map(node=>node.getAttribute('aria-label')),['Sem etiqueta','Vermelho','Amarelo','Verde','Verde-água','Azul','Roxo','Magenta']);
+  assert.equal(swatches[0].getAttribute('aria-checked'),'true','folders ship without a label');
+  swatches[1].click();
+  assert.deepEqual(f.preferences.folderColors,{momentum:'red'});
+  assert.equal(row('momentum').dataset.color,'red');assert.equal(row('momentum-2d').dataset.color,'red','children inherit the label');
+  assert.equal(root.getElementsByTagName('div').some(node=>node.className==='ch-folder-palette'),false,'choosing a label closes the menu');
+  more('Signature').click();
+  root.getElementsByTagName('button').find(node=>node.className==='ch-folder-menu-item'&&node.textContent==='Limpar todas as etiquetas').click();
+  assert.deepEqual(f.preferences.folderColors,{});assert.equal(row('momentum').dataset.color,undefined);
+  more('Impulso').click();
+  root.getElementsByTagName('button').find(node=>node.className==='ch-folder-menu-item'&&node.textContent==='Focar pasta').click();
+  assert.equal(f.navigation.focusFolder,'momentum');assert.equal(f.navigation.category,'momentum');
+  assert.equal(root.querySelector('.ch-folder-focus-path').textContent,'Impulso');
+  assert.ok(row('momentum-3d'),'the focused folder lists its children');assert.equal(row('signature'),undefined,'other roots are hidden');
+  buttons().find(node=>node.getAttribute('aria-label')==='Mostrar todos os itens').click();
+  assert.equal(f.navigation.focusFolder,undefined);assert.ok(row('signature'),'Show all items restores the tree');
+});
+
+test('autoplay starts a rendered preview only once its card is in view, always from the first frame of its cycle',async t=>{
+ const observers=[];
+ class Recorder{constructor(callback,options){this.callback=callback;this.options=options;this.targets=[];observers.push(this);}observe(node){this.targets.push(node);}disconnect(){}}
+ const f=fixture(t,{category:'text',pick:false,observer:Recorder});f.preferences.presetAutoplay=true;
+ const view_=observers.find(o=>!o.options.rootMargin),ahead=observers.find(o=>o.options.rootMargin);
+ assert.deepEqual(view_.options.threshold,[0,0.5],'a card shows its still at once and plays once half of it shows');
+ const card=view_.targets.find(node=>node.dataset.previewId&&!node.dataset.previewId.includes('--'));assert.ok(card,'a text card with a render');
+ const still=()=>card.getElementsByTagName('img').find(node=>node.className==='ch-preset-media');
+ const player=()=>card.getElementsByTagName('canvas').find(node=>node.className==='ch-preset-player');
+ const fire=(observer,ratio)=>observer.callback([{target:card,isIntersecting:ratio>0,intersectionRatio:ratio}]);
+ assert.ok(still(),'the still is on the card from the start, so scrolling never meets an empty card');
+ assert.equal(still().loading,'lazy');assert.equal(card.dataset.loading,'true','a skeleton shows until the still has loaded');
+ still().emit('load');assert.equal(card.dataset.loading,undefined);
+ fire(ahead,1);assert.equal(player(),undefined,'near the view it waits on its still');
+ fire(view_,.3);assert.equal(player(),undefined,'peeking in at the edge it still waits');
+ fire(view_,1);const first=player();assert.ok(first,'in view it plays');assert.equal(card.dataset.media,'true');
+ fire(view_,0);fire(view_,1);assert.equal(player(),first,'grazing the edge keeps its cycle');
+ fire(view_,0);await new Promise(done=>setTimeout(done,1000));
+ assert.equal(player(),undefined,'once it has really left it is rewound to its still');
+ fire(view_,1);const again=player();assert.ok(again,'back in view it plays again');assert.notEqual(again,first,'from a fresh start, not where it stopped');
 });

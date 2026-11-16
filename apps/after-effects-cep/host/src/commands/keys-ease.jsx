@@ -30,11 +30,12 @@
   }
 
   /** Argumentos opcionais. Apenas os de MODE_ARGS sao mutuamente exclusivos. */
-  var EXTRA_ARGS = { build: true, points: true, bake: true, expectedSelection: true, session: true };
+  var EXTRA_ARGS = { build: true, points: true, bake: true, expectedSelection: true, session: true, convertHold: true };
   var MODE_ARGS = { build: true, points: true, bake: true };
   var SESSION_FIELDS = ["signature", "segments"];
-  var SEGMENT_FIELDS = ["propertyId", "layerIndex", "t0", "t1", "generated"];
-  var GENERATED_FIELDS = ["time", "value"];
+  var SEGMENT_FIELDS = ["propertyId", "layerIndex", "t0", "t1", "generated", "spatial"];
+  var GENERATED_FIELDS = ["time", "value", "fingerprint"];
+  var SPATIAL_SESSION_FIELDS = ["outTangent", "inTangent", "outAuto", "inAuto", "outContinuous", "inContinuous", "firstFingerprint", "lastFingerprint"];
   var MAX_SESSION_SEGMENTS = 200;
   var MAX_SESSION_GENERATED = 10000;
   var MAX_VALUE_COMPONENTS = 4;
@@ -204,6 +205,15 @@
       if (!(Number(seg.t1) > Number(seg.t0))) {
         return failure(MotionContracts.ERROR.INVALID_PRESET, "Segmento da sessao precisa de t1 maior que t0.", { field: "session.segments", index: i });
       }
+      if (Object.prototype.hasOwnProperty.call(seg, "spatial")) {
+        var spatial = /** @type {Record<string, unknown>} */ (seg.spatial);
+        if (!isPlainObject(spatial) || unknownKey(SPATIAL_SESSION_FIELDS, spatial) !== null || !(spatial.outTangent instanceof Array) || !(spatial.inTangent instanceof Array)) return failure(MotionContracts.ERROR.INVALID_PRESET, "Caminho espacial da sessao invalido.", null);
+        var outgoing = /** @type {unknown[]} */ (spatial.outTangent);
+        var incoming = /** @type {unknown[]} */ (spatial.inTangent);
+        if (outgoing.length < 2 || outgoing.length > 3 || incoming.length !== outgoing.length) return failure(MotionContracts.ERROR.INVALID_PRESET, "Dimensao espacial da sessao invalida.", null);
+        for (c = 0; c < outgoing.length; c += 1) if (!isNumber(outgoing[c]) || !isNumber(incoming[c])) return failure(MotionContracts.ERROR.INVALID_PRESET, "Tangente da sessao nao finita.", null);
+        if (typeof spatial.outAuto !== "boolean" || typeof spatial.inAuto !== "boolean" || typeof spatial.outContinuous !== "boolean" || typeof spatial.inContinuous !== "boolean" || typeof spatial.firstFingerprint !== "string" || typeof spatial.lastFingerprint !== "string") return failure(MotionContracts.ERROR.INVALID_PRESET, "Estado espacial da sessao invalido.", null);
+      }
       var generated = seg.generated;
       if (!(generated instanceof Array)) {
         return failure(MotionContracts.ERROR.INVALID_PRESET, "Segmento da sessao sem lista de keyframes gerados.", { field: "session.segments", index: i });
@@ -214,9 +224,12 @@
       }
       for (g = 0; g < generated.length; g += 1) {
         var entry = /** @type {Record<string, unknown>} */ (generated[g]);
-        if (!isPlainObject(entry) || unknownKey(GENERATED_FIELDS, entry) !== null || !isNumber(entry.time)) {
+        if (!isPlainObject(entry) || unknownKey(GENERATED_FIELDS, entry) !== null || !isNumber(entry.time) || (Object.prototype.hasOwnProperty.call(entry, "fingerprint") && (typeof entry.fingerprint !== "string" || entry.fingerprint.length > 8192))) {
           return failure(MotionContracts.ERROR.INVALID_PRESET, "Keyframe gerado da sessao com formato desconhecido.", { field: "session.segments", index: i });
         }
+        var generatedTime = Number(entry.time);
+        var previousGenerated = g > 0 ? /** @type {Record<string, unknown>} */ (generated[g - 1]) : null;
+        if (generatedTime <= Number(seg.t0) || generatedTime >= Number(seg.t1) || (previousGenerated && generatedTime <= Number(previousGenerated.time))) return failure(MotionContracts.ERROR.INVALID_PRESET, "Keyframes gerados precisam estar ordenados dentro do segmento.", { field: "session.segments", index: i });
         var value = entry.value;
         if (value instanceof Array) {
           if (value.length < 1 || value.length > MAX_VALUE_COMPONENTS) {
@@ -263,6 +276,7 @@
     if (Object.prototype.hasOwnProperty.call(args, "expectedSelection") && typeof args.expectedSelection !== "string") {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "expectedSelection precisa ser texto.", { field: "expectedSelection" });
     }
+    if (Object.prototype.hasOwnProperty.call(args, "convertHold") && typeof args.convertHold !== "boolean") return failure(MotionContracts.ERROR.INVALID_PRESET, "convertHold precisa ser booleano.", null);
     if (Object.prototype.hasOwnProperty.call(args, "session")) {
       error = validateSession(args.session);
       if (error) return error;
@@ -323,7 +337,9 @@
    *   escalar fazendo `Number([100, 200, 0])` — que e NaN. O NaN virava
    *   `new KeyframeEase(NaN, ...)` e o After Effects lancava, com a mensagem
    *   descartada pelo dispatcher.
-   * - **Vetorial nao espacial** (Scale, Color): um ease por dimensao, e cada um
+   * - **Cor**: um ease compartilhado, com distancia RGBA em unidades 0..255.
+   *   Medido no Color Control nativo: verde .1 -> .9 em 2s exige 102 unidades/s.
+   * - **Vetorial nao espacial** (Scale): um ease por dimensao, e cada um
    *   descreve a propria componente. Diferenca por dimensao.
    * - **Escalar** (Opacity, Rotation): diferenca direta.
    *
@@ -337,7 +353,8 @@
    * @returns {number}
    */
   function diferencaDeValor(property, valorA, valorB, dimensao) {
-    if (ehEspacial(property)) {
+    var color = property.propertyValueType === PropertyValueType.COLOR;
+    if (ehEspacial(property) || color) {
       var a = /** @type {number[]} */ (valorA);
       var b = /** @type {number[]} */ (valorB);
       if (!a || !b || typeof a.length !== "number") return 0;
@@ -348,7 +365,7 @@
         if (isNaN(delta)) return 0;
         soma += delta * delta;
       }
-      return Math.sqrt(soma);
+      return Math.sqrt(soma) * (color ? 255 : 1);
     }
 
     var arrA = /** @type {number[]} */ (valorA);
@@ -387,12 +404,17 @@
    * @param {number} keyIndex
    * @param {EaseCurve|null} inCurve
    * @param {EaseCurve|null} outCurve
+   * @param {boolean|undefined} convertHold
    * @returns {boolean} true quando o keyframe recebeu curva.
    */
-  function applyEaseSides(property, keyIndex, inCurve, outCurve) {
+  function applyEaseSides(property, keyIndex, inCurve, outCurve, convertHold) {
     var numKeys = property.numKeys;
     var applyIn = !!inCurve && keyIndex > 1;
     var applyOut = !!outCurve && keyIndex < numKeys;
+    if (convertHold !== true) {
+      if (property.keyInInterpolationType(keyIndex) === KeyframeInterpolationType.HOLD) applyIn = false;
+      if (property.keyOutInterpolationType(keyIndex) === KeyframeInterpolationType.HOLD) applyOut = false;
+    }
     if (!applyIn && !applyOut) return false;
     var linearIn = applyIn ? curvaLinear(/** @type {EaseCurve} */ (inCurve)) : true;
     var linearOut = applyOut ? curvaLinear(/** @type {EaseCurve} */ (outCurve)) : true;
@@ -419,7 +441,7 @@
       var inVal2 = property.keyValue(keyIndex);
 
       for (d = 0; d < dimensions; d++) {
-        var diffIn = diferencaDeValor(property, inVal1, inVal2, d);
+        var diffIn = ehEspacial(property) ? MotionKeyframes.spatialSegmentLength(property, keyIndex - 1, keyIndex) : diferencaDeValor(property, inVal1, inVal2, d);
         var easeInResult = MotionKeyframes.curveToEase(/** @type {EaseCurve} */ (inCurve), inDuration, diffIn);
         newInEase.push(new KeyframeEase(easeInResult.inSpeed, easeInResult.inInfluence));
       }
@@ -434,7 +456,7 @@
       var outVal2 = property.keyValue(keyIndex + 1);
 
       for (d = 0; d < dimensions; d++) {
-        var diffOut = diferencaDeValor(property, outVal1, outVal2, d);
+        var diffOut = ehEspacial(property) ? MotionKeyframes.spatialSegmentLength(property, keyIndex, keyIndex + 1) : diferencaDeValor(property, outVal1, outVal2, d);
         var easeOutResult = MotionKeyframes.curveToEase(/** @type {EaseCurve} */ (outCurve), outDuration, diffOut);
         newOutEase.push(new KeyframeEase(easeOutResult.outSpeed, easeOutResult.outInfluence));
       }
@@ -476,11 +498,12 @@
    * @param {number} y2
    * @param {boolean} applyIn
    * @param {boolean} applyOut
+   * @param {boolean|undefined} convertHold
    * @returns {boolean} true quando o keyframe recebeu a curva.
    */
-  function applyEaseToKeyframe(property, keyIndex, x1, y1, x2, y2, applyIn, applyOut) {
+  function applyEaseToKeyframe(property, keyIndex, x1, y1, x2, y2, applyIn, applyOut, convertHold) {
     var curva = { x1: x1, y1: y1, x2: x2, y2: y2 };
-    return applyEaseSides(property, keyIndex, applyIn ? curva : null, applyOut ? curva : null);
+    return applyEaseSides(property, keyIndex, applyIn ? curva : null, applyOut ? curva : null, convertHold);
   }
 
   /**
@@ -502,6 +525,7 @@
         rollbackFailed = true;
       }
     }
+    try { MotionKeyframes.restoreSelections(intactos); } catch (selectionError) { rollbackFailed = true; }
     if (rollbackFailed) {
       var rollbackError = /** @type {Error & {motionCode?: string}} */ (
         new Error("Ease falhou e o estado anterior nao pode ser restaurado.")
@@ -565,7 +589,7 @@
    * @returns {number}
    */
   function indexAt(property, time, frameDuration) {
-    var tolerance = frameDuration / 2;
+    var tolerance = Math.min(0.0000001, frameDuration / 1000);
     var idx;
     var i;
     if (!property.numKeys) return 0;
@@ -609,6 +633,41 @@
     return true;
   }
 
+  /** Two independent 32-bit checks keep a 10k-key session within the bridge
+   * budget without omitting metadata. This is an edit guard, not a secret.
+   * @param {unknown} state @returns {string} */
+  function metadataFingerprint(state) {
+    var source = MotionJson.stringify(state), a = 2166136261, b = 5381;
+    for (var i = 0; i < source.length; i += 1) {
+      var code = source.charCodeAt(i);
+      a = a ^ code;
+      a = (a + (a << 1) + (a << 4) + (a << 7) + (a << 8) + (a << 24)) >>> 0;
+      b = (((b << 5) + b) ^ code) >>> 0;
+    }
+    return "k2:" + a.toString(16) + ":" + b.toString(16);
+  }
+
+  /** Metadata is part of ownership: a user-adjusted ease/tangent/label is no
+   * longer disposable even when its value and frame are unchanged.
+   * @param {Property} property @param {number} index @returns {string} */
+  function keyFingerprint(property, index) {
+    var state = /** @type {unknown[]} */ ([property.keyInInterpolationType(index), property.keyOutInterpolationType(index), property.keyTemporalContinuous(index), property.keyTemporalAutoBezier(index)]);
+    var incoming = property.keyInTemporalEase(index), outgoing = property.keyOutTemporalEase(index);
+    for (var i = 0; i < incoming.length; i += 1) { var easeIn = incoming[i]; if (easeIn) state.push([easeIn.speed, easeIn.influence]); }
+    for (var o = 0; o < outgoing.length; o += 1) { var easeOut = outgoing[o]; if (easeOut) state.push([easeOut.speed, easeOut.influence]); }
+    if (ehEspacial(property)) state.push(property.keyInSpatialTangent(index), property.keyOutSpatialTangent(index), property.keySpatialContinuous(index), property.keySpatialAutoBezier(index), property.keyRoving(index));
+    if (typeof property.keyLabel === "function") state.push(property.keyLabel(index));
+    return metadataFingerprint(state);
+  }
+
+  /** Only the managed tangent side participates, so adjacent managed segments
+   * can independently restore their incoming/outgoing geometry.
+   * @param {Property} property @param {number} index @param {boolean} outgoing
+   * @returns {string} */
+  function spatialFingerprint(property, index, outgoing) {
+    return metadataFingerprint([outgoing ? property.keyOutSpatialTangent(index) : property.keyInSpatialTangent(index), property.keySpatialContinuous(index), property.keySpatialAutoBezier(index), property.keyValue(index), property.keyRoving(index)]);
+  }
+
   /**
    * Propriedades selecionadas, suportadas e com keyframes selecionados, por id
    * estavel de `describeProperty`. E o universo que uma sessao pode referenciar.
@@ -632,7 +691,8 @@
     return byId;
   }
 
-  /** @typedef {{ propertyId: string, layerIndex: number, t0: number, t1: number, generated: Array<{time: number, value: unknown}> }} EaseSessionSegment */
+  /** @typedef {{outTangent: number[], inTangent: number[], outAuto: boolean, inAuto: boolean, outContinuous: boolean, inContinuous: boolean, firstFingerprint: string, lastFingerprint: string}} EaseSpatialSession */
+  /** @typedef {{ propertyId: string, layerIndex: number, t0: number, t1: number, generated: Array<{time: number, value: unknown, fingerprint?: string}>, spatial?: EaseSpatialSession }} EaseSessionSegment */
   /** @typedef {{ signature: string, segments: EaseSessionSegment[] }} EaseSession */
 
   /**
@@ -700,10 +760,11 @@
       if (!k0 || !k1 || k1 <= k0) {
         return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Os keyframes do segmento foram editados ou removidos.", { messageKey: "hostError.easeGeneratedEdited", propertyName: nome });
       }
+      if (seg.spatial && (!ehEspacial(prop) || spatialFingerprint(prop, k0, true) !== seg.spatial.firstFingerprint || spatialFingerprint(prop, k1, false) !== seg.spatial.lastFingerprint)) return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "O caminho espacial foi editado depois de aplicar a curva.", { messageKey: "hostError.easeGeneratedEdited", propertyName: nome });
       for (g = 0; g < seg.generated.length; g += 1) {
-        var entry = /** @type {{time: number, value: unknown}} */ (seg.generated[g]);
+        var entry = /** @type {{time: number, value: unknown, fingerprint?: string}} */ (seg.generated[g]);
         var idx = indexAt(prop, Number(entry.time), fd);
-        if (!idx || !valuesMatch(prop.keyValue(idx), entry.value)) {
+        if (!idx || !valuesMatch(prop.keyValue(idx), entry.value) || !entry.fingerprint || keyFingerprint(prop, idx) !== entry.fingerprint) {
           return failure(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Os keyframes gerados pela curva foram editados.", { messageKey: "hostError.easeGeneratedEdited", propertyName: nome, time: Number(entry.time) });
         }
       }
@@ -810,6 +871,11 @@
         var pair = /** @type {SegmentPair} */ (candidates[c]);
         var t0 = pair.t0;
         var t1 = pair.t1;
+        if (mode !== "plain") {
+          var pairEnd = indexAt(prop, t1, fd);
+          if (args.convertHold !== true && (prop.keyOutInterpolationType(pair.k) === KeyframeInterpolationType.HOLD || prop.keyInInterpolationType(pairEnd) === KeyframeInterpolationType.HOLD)) return rejected(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Ative Converter keyframes Hold para substituir um segmento Hold.", { propertyName: nome });
+          if (ehEspacial(prop) && (prop.keyRoving(pair.k) || prop.keyRoving(pairEnd))) return rejected(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desative Roving nos limites do trecho ou use Bezier sem pontos.", { propertyName: nome });
+        }
         if (!(t1 - t0 > 0)) {
           if (mode !== "plain") semSegmento += 1;
           continue;
@@ -1014,6 +1080,109 @@
     try { property.setSelectedAtKey(idx, selected); } catch (selectError) { /* host sem suporte */ }
   }
 
+  /** @typedef {{a: number[], b: number[], c: number[], d: number[], lengths: number[], total: number, straight: boolean}} SpatialPath */
+  /** @param {SpatialPath} path @param {number} t @returns {number[]} */
+  function pathValue(path, t) {
+    var value = [], u = 1 - t;
+    for (var i = 0; i < path.a.length; i += 1) value.push(u * u * u * Number(path.a[i]) + 3 * u * u * t * Number(path.b[i]) + 3 * u * t * t * Number(path.c[i]) + t * t * t * Number(path.d[i]));
+    return value;
+  }
+  /** @param {SpatialPath} path @param {number} t @returns {number[]} */
+  function pathDerivative(path, t) {
+    var value = [], u = 1 - t;
+    for (var i = 0; i < path.a.length; i += 1) value.push(3 * u * u * (Number(path.b[i]) - Number(path.a[i])) + 6 * u * t * (Number(path.c[i]) - Number(path.b[i])) + 3 * t * t * (Number(path.d[i]) - Number(path.c[i])));
+    return value;
+  }
+  /** @param {Property} property @param {number} first @param {number} last @returns {SpatialPath} */
+  function readPath(property, first, last) {
+    var a = /** @type {number[]} */ (property.keyValue(first));
+    var d = /** @type {number[]} */ (property.keyValue(last));
+    var outgoing = /** @type {number[]} */ (property.keyOutSpatialTangent(first));
+    var incoming = /** @type {number[]} */ (property.keyInSpatialTangent(last));
+    var path = /** @type {SpatialPath} */ ({ a: a, b: [], c: [], d: d, lengths: [0], total: 0, straight: false });
+    for (var i = 0; i < a.length; i += 1) { path.b.push(Number(a[i]) + Number(outgoing[i] || 0)); path.c.push(Number(d[i]) + Number(incoming[i] || 0)); }
+    // A straight path has exact constant arc-length progress regardless of
+    // the old parameter speed. Normalize its control polygon, not its shape.
+    var squaredChord = 0, outProjection = 0, inProjection = 0;
+    for (i = 0; i < a.length; i += 1) { var delta = Number(d[i]) - Number(a[i]); squaredChord += delta * delta; outProjection += Number(outgoing[i] || 0) * delta; inProjection += Number(incoming[i] || 0) * delta; }
+    if (squaredChord > 0) {
+      var outRatio = outProjection / squaredChord, inRatio = 1 + inProjection / squaredChord, residual = 0;
+      for (i = 0; i < a.length; i += 1) { var chord = Number(d[i]) - Number(a[i]); residual += Math.pow(Number(outgoing[i] || 0) - outRatio * chord, 2) + Math.pow(Number(incoming[i] || 0) - (inRatio - 1) * chord, 2); }
+      if (residual < 0.000000000001 * squaredChord && outRatio >= 0 && outRatio <= inRatio && inRatio <= 1) {
+        path.straight = true; path.total = Math.sqrt(squaredChord);
+        for (i = 0; i < a.length; i += 1) { path.b[i] = Number(a[i]) + (Number(d[i]) - Number(a[i])) / 3; path.c[i] = Number(a[i]) + 2 * (Number(d[i]) - Number(a[i])) / 3; }
+        return path;
+      }
+    }
+    var previous = a;
+    for (var s = 1; s <= 512; s += 1) {
+      var current = pathValue(path, s / 512), squared = 0;
+      for (var n = 0; n < a.length; n += 1) squared += Math.pow(Number(current[n]) - Number(previous[n]), 2);
+      path.total += Math.sqrt(squared); path.lengths.push(path.total); previous = current;
+    }
+    return path;
+  }
+  /** Arc-length progress -> cubic parameter. Outside [0,1], continue the
+   * same cubic for intentional bounce/elastic overshoot rather than flattening.
+   * @param {SpatialPath} path @param {number} progress @returns {number} */
+  function pathParameter(path, progress) {
+    if (path.straight) return progress;
+    if (path.total < 0.0000001) return progress;
+    if (progress <= 0 || progress >= 1) return progress;
+    var target = progress * path.total, lo = 0, hi = 512;
+    while (hi - lo > 1) { var mid = Math.floor((lo + hi) / 2); if (Number(path.lengths[mid]) < target) lo = mid; else hi = mid; }
+    var from = Number(path.lengths[lo]), span = Number(path.lengths[hi]) - from;
+    return (lo + (span > 0 ? (target - from) / span : 0)) / 512;
+  }
+  /** Cubic restriction via endpoint derivatives is de Casteljau in closed
+   * form, including reversed subsegments. Outside tangents are never touched.
+   * @param {Property} property @param {SpatialPath} path @param {number[]} indices @param {number[]} parameters
+   * @returns {void} */
+  function splitSpatialPath(property, path, indices, parameters) {
+    for (var i = 0; i < indices.length - 1; i += 1) {
+      var first = Number(indices[i]), last = Number(indices[i + 1]);
+      var t0 = Number(parameters[i]), t1 = Number(parameters[i + 1]), span = (t1 - t0) / 3;
+      var a = pathDerivative(path, t0), b = pathDerivative(path, t1), outgoing = [], incoming = [];
+      for (var d = 0; d < a.length; d += 1) { outgoing.push(Number(a[d]) * span); incoming.push(-Number(b[d]) * span); }
+      property.setSpatialContinuousAtKey(first, false); property.setSpatialAutoBezierAtKey(first, false);
+      property.setSpatialContinuousAtKey(last, false); property.setSpatialAutoBezierAtKey(last, false);
+      property.setSpatialTangentsAtKey(first, property.keyInSpatialTangent(first), outgoing);
+      property.setSpatialTangentsAtKey(last, incoming, property.keyOutSpatialTangent(last));
+      if (i > 0) property.setRovingAtKey(first, false);
+    }
+  }
+  /** @param {Property} property @param {EaseSessionSegment[]} segs @param {number} fd @returns {void} */
+  function restoreSourcePaths(property, segs, fd) {
+    for (var i = 0; i < segs.length; i += 1) {
+      var seg = segs[i]; if (!seg || !seg.spatial) continue;
+      var first = indexAt(property, seg.t0, fd), last = indexAt(property, seg.t1, fd), source = seg.spatial;
+      if (!first || !last) throw new Error("O caminho original perdeu seus limites.");
+      property.setSpatialContinuousAtKey(first, false); property.setSpatialAutoBezierAtKey(first, false);
+      property.setSpatialContinuousAtKey(last, false); property.setSpatialAutoBezierAtKey(last, false);
+      property.setSpatialTangentsAtKey(first, property.keyInSpatialTangent(first), source.outTangent);
+      property.setSpatialTangentsAtKey(last, source.inTangent, property.keyOutSpatialTangent(last));
+      property.setSpatialContinuousAtKey(first, source.outContinuous); property.setSpatialAutoBezierAtKey(first, source.outAuto);
+      property.setSpatialContinuousAtKey(last, source.inContinuous); property.setSpatialAutoBezierAtKey(last, source.inAuto);
+    }
+  }
+
+  /** Restore selection by time after sibling recreation; inserted keys are
+   * unselected and no key index from the input is reused after mutation.
+   * @param {Property} property @param {MotionPropertySnapshot} original @returns {MotionPropertySnapshot} */
+  function selectedResult(property, original) {
+    var target = MotionKeyframes.captureProperty(property);
+    target.propertySelected = original.propertySelected;
+    var sourceIndex = 0;
+    for (var i = 0; i < target.keys.length; i += 1) {
+      var key = target.keys[i]; if (!key) throw new Error("Keyframe ausente.");
+      key.selected = false;
+      var source = original.keys[sourceIndex];
+      while (source && source.time < key.time - 0.0000001) { sourceIndex += 1; source = original.keys[sourceIndex]; }
+      if (source && source.selected && Math.abs(source.time - key.time) < 0.0000001) key.selected = true;
+    }
+    return target;
+  }
+
   /**
    * Executa o plano: curva multiponto, easing assado ou curva simples. Por
    * propriedade: snapshot PRIMEIRO, descarte dos keyframes da sessao, e so
@@ -1059,14 +1228,34 @@
     var q;
     var n;
     var k;
+    // A later property's selection may be cleared by AE when an earlier one
+    // inserts keys. Capture the entire batch before the first mutation.
+    for (i = 0; i < plan.items.length; i += 1) {
+      var captureItem = plan.items[i]; if (!captureItem) throw new Error("Plano incompleto.");
+      intactos.push(MotionKeyframes.captureProperty(captureItem.property));
+    }
     try {
       for (i = 0; i < plan.items.length; i += 1) {
         var item = plan.items[i];
         if (!item) throw new Error("Plano incompleto.");
         var prop = item.property;
-        intactos.push(MotionKeyframes.captureProperty(prop));
+        var original = /** @type {MotionPropertySnapshot} */ (intactos[i]);
+        MotionKeyframes.restoreSelections([selectedResult(prop, original)]);
         if (bySession && Object.prototype.hasOwnProperty.call(bySession, item.id)) {
           removedCount += removeGenerated(prop, /** @type {EaseSessionSegment[]} */ (bySession[item.id]), fd);
+          restoreSourcePaths(prop, /** @type {EaseSessionSegment[]} */ (bySession[item.id]), fd);
+        }
+        /** @type {Array<SpatialPath|null>} */
+        var paths = [];
+        /** @type {Array<EaseSpatialSession|null>} */
+        var spatialStates = [];
+        for (q = 0; q < item.pairs.length; q += 1) {
+          var sourcePair = item.pairs[q]; if (!sourcePair) throw new Error("Plano incompleto.");
+          if (ehEspacial(prop) && mode !== "plain") {
+            var sourceFirst = indexAt(prop, sourcePair.t0, fd), sourceLast = indexAt(prop, sourcePair.t1, fd);
+            paths.push(readPath(prop, sourceFirst, sourceLast));
+            spatialStates.push({ outTangent: /** @type {number[]} */ (prop.keyOutSpatialTangent(sourceFirst)), inTangent: /** @type {number[]} */ (prop.keyInSpatialTangent(sourceLast)), outAuto: prop.keySpatialAutoBezier(sourceFirst), inAuto: prop.keySpatialAutoBezier(sourceLast), outContinuous: prop.keySpatialContinuous(sourceFirst), inContinuous: prop.keySpatialContinuous(sourceLast), firstFingerprint: "", lastFingerprint: "" });
+          } else { paths.push(null); spatialStates.push(null); }
         }
         /** @type {EaseSessionSegment[]} */
         var produced = [];
@@ -1076,29 +1265,35 @@
           var k0 = indexAt(prop, pair.t0, fd);
           var k1 = indexAt(prop, pair.t1, fd);
           if (!k0 || k1 !== k0 + 1) throw new Error("Keyframes do segmento deixaram de ser vizinhos.");
-          /** @type {Array<{time: number, value: unknown}>} */
+          /** @type {Array<{time: number, value: unknown, fingerprint?: string}>} */
           var generated = [];
+          var path = paths[q];
+          var parameters = [0];
           if (mode === "points" && points && segments) {
             var v0 = prop.keyValue(k0);
             var v1 = prop.keyValue(k1);
             for (n = 0; n < pair.times.length; n += 1) {
               var pontoN = /** @type {{y: number}} */ (points[n]);
-              prop.setValueAtTime(Number(pair.times[n]), valorNaCorda(v0, v1, Number(pontoN.y)));
+              var parameter = path ? pathParameter(path, Number(pontoN.y)) : 0;
+              parameters.push(parameter);
+              prop.setValueAtTime(Number(pair.times[n]), path ? pathValue(path, parameter) : valorNaCorda(v0, v1, Number(pontoN.y)));
             }
             /** @type {number[]} */
             var indices = [indiceNoTempo(prop, pair.t0)];
             for (n = 0; n < pair.times.length; n += 1) {
               var idx = indiceNoTempo(prop, Number(pair.times[n]));
-              fixarEspacial(prop, idx);
+              if (!path) fixarEspacial(prop, idx);
               indices.push(idx);
             }
             indices.push(indiceNoTempo(prop, pair.t1));
+            parameters.push(1);
+            if (path) splitSpatialPath(prop, path, indices, parameters);
             for (n = 0; n < indices.length; n += 1) {
               var inCurve = n === 0 ? null : /** @type {EaseCurve} */ (segments[n - 1]);
               var outCurve = n === indices.length - 1 ? null : /** @type {EaseCurve} */ (segments[n]);
               if (n === 0 && !applyOut) outCurve = null;
               if (n === indices.length - 1 && !applyIn) inCurve = null;
-              if (applyEaseSides(prop, Number(indices[n]), inCurve, outCurve)) appliedCount += 1;
+              if (applyEaseSides(prop, Number(indices[n]), inCurve, outCurve, args.convertHold === true)) appliedCount += 1;
             }
           } else if (mode === "bake" && bake && bakeParams) {
             var b0 = prop.keyValue(k0);
@@ -1106,26 +1301,37 @@
             for (n = 0; n < pair.times.length; n += 1) {
               var tempo = Number(pair.times[n]);
               var u = (tempo - pair.t0) / (pair.t1 - pair.t0);
-              prop.setValueAtTime(tempo, valorNaCorda(b0, b1, MotionKeyframes.easingValue(String(bake.mode), /** @type {any} */ (bakeParams), String(bake.direction), u)));
+              var progress = MotionKeyframes.easingValue(String(bake.mode), /** @type {any} */ (bakeParams), String(bake.direction), u);
+              var bakeParameter = path ? pathParameter(path, progress) : 0;
+              parameters.push(bakeParameter);
+              prop.setValueAtTime(tempo, path ? pathValue(path, bakeParameter) : valorNaCorda(b0, b1, progress));
             }
             for (n = 0; n < pair.times.length; n += 1) {
               var bidx = indiceNoTempo(prop, Number(pair.times[n]));
               prop.setInterpolationTypeAtKey(bidx, LINEAR, LINEAR);
-              fixarEspacial(prop, bidx);
+              if (!path) fixarEspacial(prop, bidx);
               appliedCount += 1;
             }
             var idx0 = indiceNoTempo(prop, pair.t0);
             var idx1 = indiceNoTempo(prop, pair.t1);
             prop.setInterpolationTypeAtKey(idx0, prop.keyInInterpolationType(idx0), LINEAR);
             prop.setInterpolationTypeAtKey(idx1, LINEAR, prop.keyOutInterpolationType(idx1));
+            if (path) {
+              var spatialIndices = [idx0];
+              for (n = 0; n < pair.times.length; n += 1) spatialIndices.push(indiceNoTempo(prop, Number(pair.times[n])));
+              spatialIndices.push(idx1); parameters.push(1);
+              splitSpatialPath(prop, path, spatialIndices, parameters);
+            }
           }
           for (n = 0; n < pair.times.length; n += 1) {
             var gidx = indexAt(prop, Number(pair.times[n]), fd);
             if (!gidx) throw new Error("Keyframe gerado nao encontrado apos a escrita.");
-            generated.push({ time: prop.keyTime(gidx), value: prop.keyValue(gidx) });
+            generated.push({ time: prop.keyTime(gidx), value: prop.keyValue(gidx), fingerprint: keyFingerprint(prop, gidx) });
             trySelect(prop, gidx, false);
           }
-          produced.unshift({ propertyId: item.id, layerIndex: item.layerIndex, t0: pair.t0, t1: pair.t1, generated: generated });
+          var producedSegment = /** @type {EaseSessionSegment} */ ({ propertyId: item.id, layerIndex: item.layerIndex, t0: pair.t0, t1: pair.t1, generated: generated });
+          var sourceState = spatialStates[q]; if (sourceState) producedSegment.spatial = sourceState;
+          produced.unshift(producedSegment);
         }
         if (mode === "plain") {
           // Caminho historico da curva simples, intacto: cada key selecionada
@@ -1138,7 +1344,7 @@
             if (typeof keyIndex === "number") {
               if (applyEaseToKeyframe(prop, keyIndex, x1, y1, x2, y2,
                 applyIn && (selectedKeys.length === 1 || containsKey(selectedKeys, keyIndex - 1)),
-                applyOut && (selectedKeys.length === 1 || containsKey(selectedKeys, keyIndex + 1)))) {
+                applyOut && (selectedKeys.length === 1 || containsKey(selectedKeys, keyIndex + 1)), args.convertHold === true)) {
                 appliedCount += 1;
                 escreveuNesta = true;
               }
@@ -1152,9 +1358,13 @@
           var s1 = indexAt(prop, seg.t1, fd);
           if (s0) trySelect(prop, s0, true);
           if (s1) trySelect(prop, s1, true);
+          if (seg.spatial) { seg.spatial.firstFingerprint = spatialFingerprint(prop, s0, true); seg.spatial.lastFingerprint = spatialFingerprint(prop, s1, false); }
           outSegments.push(seg);
         }
       }
+      var selections = [];
+      for (i = 0; i < intactos.length; i += 1) { var originalSelection = intactos[i]; if (originalSelection) selections.push(selectedResult(originalSelection.property, originalSelection)); }
+      MotionKeyframes.restoreSelections(selections);
     } catch (easeError) {
       rollback(intactos);
     }
@@ -1259,14 +1469,15 @@
         var prop = item.property;
         prop.setValueAtTime(item.t0, item.from); prop.setValueAtTime(item.t1, item.to);
         var first = /** @type {Property & {nearestKeyIndex(time: number): number}} */ (prop).nearestKeyIndex(item.t0), last = /** @type {Property & {nearestKeyIndex(time: number): number}} */ (prop).nearestKeyIndex(item.t1);
-        applyEaseToKeyframe(prop, first, Number(args.x1), Number(args.y1), Number(args.x2), Number(args.y2), false, true);
-        applyEaseToKeyframe(prop, last, Number(args.x1), Number(args.y1), Number(args.x2), Number(args.y2), true, false);
+        applyEaseToKeyframe(prop, first, Number(args.x1), Number(args.y1), Number(args.x2), Number(args.y2), false, true, args.convertHold === true);
+        applyEaseToKeyframe(prop, last, Number(args.x1), Number(args.y1), Number(args.x2), Number(args.y2), true, false, args.convertHold === true);
       }
     } catch (error) {
       var failed = false;
       for (i = snapshots.length - 1; i >= 0; i--) {
         try { var snapshot = snapshots[i]; if (snapshot) { MotionKeyframes.restoreProperty(snapshot, null); if (snapshot.keys.length === 0) snapshot.property.setValue(values[i]); } } catch (restoreError) { failed = true; }
       }
+      try { MotionKeyframes.restoreSelections(snapshots); } catch (selectionRestoreError) { failed = true; }
       var result = /** @type {Error & {motionCode?: string}} */ (new Error(failed ? "Animacao: restauracao incompleta." : "Nao foi possivel criar a animacao; estado restaurado."));
       result.motionCode = failed ? MotionContracts.ERROR.ROLLBACK_FAILED : MotionContracts.ERROR.HOST_OPERATION_FAILED;
       throw result;

@@ -23,6 +23,8 @@ if [[ -d "$TARGET" ]]; then
   mkdir -p "$BACKUP"
   ditto "$TARGET" "$BACKUP/MotionCore.plugin"
   echo "Backup: $BACKUP/MotionCore.plugin"
+  # Rodizio: guarda so os 3 backups mais recentes do binario nativo.
+  ls -1d "$(dirname "$BACKUP")"/native-* 2>/dev/null | sort -r | tail -n +4 | while read -r OLD; do rm -rf -- "$OLD"; done
 fi
 mkdir -p "$TARGET_ROOT"
 ditto "$SOURCE" "$TARGET"

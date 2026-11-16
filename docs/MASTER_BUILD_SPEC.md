@@ -565,6 +565,13 @@ export interface RigMetadata {
 | `ae.presets.remove` | Remover o preset gerenciado da seleção | After Effects | P1 |
 | `ae.presets.bake` | Converter motion gerenciado em keyframes | After Effects | P1 |
 | `ae.animate.parallax.quick` | Parallax — Quick Rig | After Effects | P2 |
+| `ae.camera.shot.apply` | Motor de câmera (ADR 0007): aplicar um shot vivo (receita por intenção) sobre o Parallax ou num rig próprio | After Effects | P2 |
+| `ae.camera.choreography.apply` | Coreografia de câmera: lê as camadas 3D da cena e escreve uma cadeia de visitas (abertura lá de trás, revelação entre camadas, zoom em cada camada com foco, volta ao layout) | After Effects | P2 |
+| `ae.camera.shot.adjust` | Ajustar intensidade, tempo, eixos, curva, impacto e loop de um shot sem duplicar o rig | After Effects | P2 |
+| `ae.camera.shot.remove` | Remover um shot; o último devolve as expressões originais | After Effects | P2 |
+| `ae.camera.remove` | Remover o rig de câmera inteiro (e a câmera criada no modo independente) | After Effects | P2 |
+| `ae.camera.inspect` | Ler rig, shots e o motivo quando a cena ainda não aceita câmera (somente leitura) | After Effects | P2 |
+| `ae.camera.bake` | Converter a pose e a óptica do motor em keyframes por quadro e desligar o motor | After Effects | P2 |
 | `ae.expression.wiggle` | Wiggle | After Effects | P1 |
 | `ae.expression.flicker` | Flicker | After Effects | P1 |
 | `ae.style.neon` | Neon | After Effects | P3 |
@@ -600,6 +607,9 @@ export interface RigMetadata {
 | `ae.effect.gradient` | Gradientes — cores, relevo, brilho e difusão com CPU/Metal | After Effects / macOS | P3 |
 | `ae.effect.particles` | Particles | After Effects | P4 |
 | `ae.asset.texture` | Texture | After Effects | P4 |
+| `ae.elements.insert` | Elementos — formas, traços à mão, tarjas, caixas de texto, títulos, redes sociais, transições de formas e fundos, com som próprio | After Effects | P2 |
+| `ae.sound.insert` | Sons — biblioteca de efeitos sonoros sintetizados pelo Moti.on | After Effects | P2 |
+| `ae.stock.import` | Banco de mídia — vídeos, imagens e efeitos sonoros de Pexels, Pixabay, Unsplash e Freesound | After Effects | P2 |
 | `ae.effect.wave` | Wave | After Effects | P3 |
 | `ae.effect.tile` | Tile | After Effects | P3 |
 | `ae.3d.cube` | Cube | After Effects | P3 |
@@ -989,6 +999,34 @@ export interface RigMetadata {
 - **Implementação obrigatória:** Usar asset pipeline, sidecar de licença, cache com checksum e importação idempotente.
 - **Critério de aceite:** Reaplicar o mesmo asset reutiliza o footage item/cache e mantém attribution ledger.
 
+### `ae.elements.insert` — Elementos
+
+- **Host:** After Effects com Propriedades essenciais por script (15.1+). Composição ativa; a seleção não é usada.
+- **Interface:** pasta Elementos da galeria de Presets (subpastas Formas, Traços à mão, Tarjas, Caixas de texto, Títulos, Redes sociais, Transições e Fundos); não é uma ferramenta da tela inicial.
+- **Inputs:** `elementId` (catálogo `MOTION_ELEMENTS`, receitas próprias por tipo; a contagem vive em `packages/contracts/tests/elements.test.mjs`), `durationFrames` 6–1800, `animationFrames` 2–120 (Entrada e Saída precisam caber na duração), `size` 25–400 %, `sound` (`preset`, `none` ou um dos sons gerados de `MOTION_SOUNDS`), `colors` por papel (`primary`, `accent`, `text`, RGB 0–1) e `texts` por papel (`title`, `subtitle`, até 120 caracteres sem controle). O painel e o host aplicam a mesma regra (`elementInsertError`).
+- **Comportamento:** cria uma pré-comp do tamanho e da taxa da composição na pasta "Moti.on Elementos" e a coloca no tempo atual, selecionada e com transformação contínua. Formas usam operadores nativos (Trim Paths, Repetidor, traço com ponta redonda); textos usam Arial quando instalada. Textos e cores ficam nas Propriedades essenciais da pré-comp e aparecem como substituições na camada pai. As cores vivem em Controles de cor numa nula guia; caixas e linhas medem o texto com `sourceRectAtTime`. A animação é expressão sobre `thisComp.duration` com a mesma `elementTrack` da prévia: mudar a duração da pré-comp leva a Saída junto. O som, se pedido, é importado uma vez por projeto na pasta "Sons" e entra dentro da pré-comp.
+- **Implementação obrigatória:** validar tudo e checar som e Propriedades essenciais antes de mutar; um grupo de Undo; rollback remove pré-comp, camada, sólido da nula, som importado e pastas criadas. Nenhum asset de terceiros: receitas, nomes e sons são do Moti.on ([ADR 0006](adr/0006-elementos-procedurais-e-sons-gerados.md)).
+- **Critério de aceite:** cada elemento entra invisível e sai invisível (disparos únicos terminam invisíveis), aparece no repouso, e duas cópias da mesma camada aceitam textos diferentes pelas Propriedades essenciais.
+
+### `ae.sound.insert` — Sons
+
+- **Host:** After Effects. Composição ativa; a seleção não é usada.
+- **Interface:** pasta Sons da galeria de Presets, com uma subpasta por família (Aproximação, Grave, Bipe, Explosão, Estrondo, Metal, Clique, Vidro, Rangido, Ambiência, Estalo, Deslize, Passagem, Batida, Transição). Clicar num som o toca; Inserir confirma.
+- **Inputs:** `soundId` (catálogo `MOTION_SOUNDS`), `reverse` opcional (booleano) e `gainDb` opcional de -24 a +6. O painel e o host aplicam a mesma regra (`soundInsertError`).
+- **Comportamento:** importa o WAV uma vez por projeto na pasta "Moti.on Elementos/Sons" e adiciona uma camada de áudio no tempo atual, selecionada. `reverse` estica a camada a -100 % e mantém o ponto de entrada no tempo atual; `gainDb` ajusta os Níveis de áudio.
+- **Implementação obrigatória:** validar e checar o arquivo e a importação antes de mutar; um grupo de Undo; rollback remove a camada, o footage importado nesta chamada e as pastas criadas. Os sons são sintetizados no build (`scripts/generate-sfx.mjs`, `scripts/sfx-library.mjs`), sem samples de terceiros ([ADR 0006](adr/0006-elementos-procedurais-e-sons-gerados.md)).
+- **Critério de aceite:** inserir o mesmo som duas vezes reutiliza o footage; a camada começa no tempo atual com ou sem `reverse`.
+
+### `ae.stock.import` — Banco de mídia
+
+- **Host:** After Effects. Composição ativa; a seleção não é usada.
+- **Interface:** aba própria Banco de mídia, logo depois de Presets, com o seletor Vídeos · Imagens · Efeitos sonoros no topo. Um banco por grade, busca, prévia, crédito e licença no inspetor, Copiar crédito e Importar.
+- **Fluxo:** o painel busca pelo BFF `motion-assets` (§18.3; chaves só nos segredos da função, contas aprovadas, limite por minuto, cache de 24 h). Ao importar, o BFF relê o item no banco e devolve a URL permitida (o Unsplash recebe o registro de download); `account/stock-download.cjs` baixa para `Folder.userData/Moti.on/Banco de midia/<banco>/<id>.<ext>` validando host, redirecionamentos, tamanho, assinatura do arquivo e SHA-256, e grava a ficha `.chms-asset.json`.
+- **Inputs:** `provider`, `assetId`, `extension`, `title`, `credit` — nunca um caminho. O painel e o host aplicam a mesma regra (`stockImportError`).
+- **Comportamento:** importa o arquivo uma vez por projeto na pasta "Moti.on Banco de mídia/<banco>", grava o crédito no comentário do item e adiciona uma camada no tempo atual (imagens ocupam o resto da composição).
+- **Implementação obrigatória:** um grupo de Undo; rollback remove a camada, o footage importado nesta chamada e as pastas criadas. Freesound só entrega CC0 e CC BY ([ADR 0008](adr/0008-banco-de-midia.md)).
+- **Critério de aceite:** importar o mesmo item duas vezes reutiliza o footage; uma falha de importação mantém o arquivo baixado e explica o motivo.
+
 ### `ae.effect.wave` — Wave
 
 - **Host:** After Effects
@@ -1070,6 +1108,26 @@ export interface RigMetadata {
 - O navegador conserva o último preset selecionado, filtros e posição da lista durante a sessão. Após remoção integral confirmada ou remoção da última fase com inspeção nova em estado sem preset gerenciado, retorna a Navegar no mesmo contexto. Se outra fase permanecer, Editar continua aberto; falhas e remoções sem efeito não mudam a aba automaticamente. Mostrar na biblioteca/Revelar preserva a posição do mesmo item visível; para outro item ou um item oculto, remove somente filtros impeditivos e o traz à área visível. Eventos e callbacks de galerias descartadas não alteram a posição atual.
 - Recentes conserva a ordem exibida durante aplicar/editar/remover, sem impedir o registro de uso. Ao sair e entrar novamente no filtro, a ordem atualizada aparece. Pedidos de Revelar sobrevivem à remontagem antes da restauração do scroll; uma nova escolha explícita de preset ou filtro cancela o pedido anterior.
 - A suavização das transições pode seguir a receita ou usar smooth, cubic, silk, glide, overshoot, bounce, spring ou flicker. A prévia e a expressão usam a mesma função própria; spring oferece elasticidade ajustável, com controle nativo preservado no lifecycle.
+- Coleção Impulso (12/10/2026): 16 receitas próprias (`collection: "momentum"`) e três técnicas do motor:
+  - **Curvas de assentamento.** `settle-wave` (Ricochete) e `settle-hop` (Quique), com `settleAmount` 0–100, `settleCount` 0,5–8 e `settleDamping` 0–100, viram sliders nativos ao vivo. Terminam exatamente no repouso; na saída, viram antecipação única. Qualquer transição pode escolhê-las.
+  - **`travel: "offscreen"`.** O host mede, na composição e através de parents 2D, a distância para a camada sair inteira do quadro. O valor vai para o slider "Distância (px)", não é escalado pela Intensidade e é recusado em hierarquia 3D antes de mutar.
+  - **`pivot: "offset"`.** Gira em torno de um Point Control "Centro da transição" compensando Position, sem alterar o Anchor Point. Em 3D, exige Orientation e rotações X/Y zeradas.
+  - **Geometria em reconstrução.** Centro e distância editados sobrevivem à reconstrução e ao rollback da mesma receita; o Reset volta ao padrão. Animados ou com expressão, bloqueiam a edição. Ficam fora das opções do painel e da impressão digital. Receitas ocultas por escala zero não passam do zero acima de 100% de Intensidade.
+  - **Fade dispensado.** Receitas sem fade só são aceitas quando invisíveis por geometria (fora do quadro ou escala zero).
+  - **Referências.** [Entrega](implementation/2026-10-12-motion-momentum.md) e [pesquisa com REA](research/2026-10-12-ac4-badfx-rea.md).
+- Revelações e Looks (14/10/2026; [entrega](implementation/2026-10-14-reveals-looks-palettes.md)): coleções `reveal` (6 transições por efeito nativo, sem fade, completas nas bordas) e `looks` (8 pilhas de efeitos nativos e Cycore misturadas pela Opacidade do efeito). Os efeitos são listados em `libraryRequiredEffects` e `MotionLookEffects` (mesma tabela) e resolvidos por match name. O catálogo tem 255 receitas. O Gradiente ganha 96 paletas OKLCH que trocam só as cores.
+- Catálogo de motion (14/10/2026; [entrega](implementation/2026-10-14-motion-catalog-upgrade.md)): o catálogo tem 241 receitas, com 20 na coleção Impulso.
+  - **Motion blur por padrão.** `MOTION_BLUR_BY_DEFAULT` liga motion blur nas transições que passam de 40 px ou 8° por frame na prévia; um teste mantém a lista igual à medida.
+  - **Qualidade do catálogo.** Nenhuma transição de camada pode mover-se como outra com o mesmo efeito: a distância das assinaturas de movimento tem de ser de pelo menos 0,04.
+  - **Pivô em loops.** O peso de rotação é único por eixo (`rotationWeight`) e vale também para a compensação de pivô em loops. Nova onda `heartbeat`.
+- Curvas clássicas, motion blur e direções (14/10/2026; [entrega](implementation/2026-10-14-motion-blur-curves-directions.md)):
+  - **Famílias.** `sine`, `quad`, `quart`, `quint`, `expo` e `circ`, cada uma com `-out`, `-in` e `-in-out` (18 valores de `easing`), exatas em 0 e 1 e serializadas na mesma `libraryEase` da prévia. O seletor mostra cada família uma vez; "Aceleração" escolhe Out, In ou In-Out.
+  - **`motionBlur`.** Opção booleana opcional. Liga o motion blur da camada e, se estiver desligado, o da composição. Remover, desligar a opção ou tirar a última fase que pede motion blur desliga só os switches que o Moti.on ligou; o da composição continua ligado enquanto outra camada usar motion blur. Fases somam os pedidos: a camada usa motion blur enquanto qualquer slot pedir.
+  - **Ajuste do card.** Chips de caráter (Suave, Recuo, Ricochete, Quique) e uma grade 2×2 com cada direção pintada pela mesma prévia; a miniatura sob o ponteiro ou o foco anima. A curva `overshoot` passa a se chamar Recuo (Back).
+- Efeito empilhado (fases v3, 14/10/2026; [ADR 0005](adr/0005-fases-v3-efeito-empilhado.md)): um loop ou look convive com Entrada e Saída na mesma camada.
+  - **Slot.** A raiz `[Moti.on.library.v3]` ganha o slot `effect`. Os comandos de fase aceitam `phase: "effect"`.
+  - **Janela.** O marcador `Moti.on Efeito` tem duração: o padrão é a camada inteira, e arrastar o marcador ou a duração reprograma o efeito ao vivo. As bordas têm rampas suaves de até 6 frames (`libraryEffectWindow`). A rotação contínua desacelera até parar e mantém o ângulo.
+  - **Aplicar.** `ae.presets.apply` de loop/look delega às fases quando a camada já tem fases ou uma transição v1. Entrada/Saída sobre um loop v1 o migram para o slot. Raízes v2 continuam legíveis e são regravadas como v3 na próxima edição.
 - Copiar preset aplicado guarda somente ID da receita e opções validadas no cache da sessão do painel. Colar usa `ae.presets.apply` na seleção atual, com fase escolhida pelo usuário. Não transfere identidade de camada, expressão arbitrária, projeto ou clipboard do sistema. A seção Variações salvas fornece persistência separada e explícita: até 100 receitas com nomes de 1 a 80 caracteres, ID de receita e opções validados; carregar prepara a cópia; Aplicar variação na seleção é uma ação explícita que usa o fluxo validado de colagem sem trocar a cópia da sessão. Excluir oferece desfazer durante a sessão. Falhas de armazenamento ficam visíveis, sem sucesso falso nem sobrescrita silenciosa de dados inválidos. Gerenciar permite renomear, duplicar e atualizar a partir de uma nova inspeção dos ajustes aplicados, preservando ID/nome ao atualizar. Backup JSON manual exporta/importa apenas configurações conhecidas: importação valida tudo antes de gravar, adiciona cópias nos conflitos, ignora repetidos exatos e não apaga itens existentes. Não há sincronização automática. Mostrar na biblioteca localiza a categoria/item e remove filtros impeditivos.
 - Transições de camada usam marcadores gerenciados `Moti.on In` (fim da entrada) e `Moti.on Out` (início da saída). Quando coincidem, usam `Moti.on In / Out`. Identidade e papel vivem nos parâmetros do marcador; nomes isolados não autorizam excluir cues do usuário. Arrastar os cues altera o timing. Duração nativa escala os intervalos; alterar a duração pelo painel redefine os intervalos. Colisões com cues do usuário são rejeitadas antes de mutar qualquer camada.
 - `ae.presets.timing` organiza cues próprios de uma fase (`in` ou `out`) em 1 a 50 camadas: `shift` desloca em frames, `align` alinha ao tempo exato do cursor e `stagger` escalona a partir dele na ordem da timeline, inversa ou aleatória determinística com semente de 0 a 9.999 (padrão 17). `duration` define a fase em 1 a 600 frames a partir do limite da própria camada, preservando a outra fase. Deslocamento/intervalo inteiro entre −600 e 600 frames; todos os destinos são validados antes da escrita. A ação conserva limites das camadas, keys de animação, expressões, payload dos markers, seleção e CTI. Recusa camadas travadas, ownership inconsistente, markers ausentes/duplicados/combinados, mais de 250 cues por camada, colisões, sobreposição e fases sem duração. Duração precisa estar sem expressão/keyframes e no valor original registrado pelos markers. Não move camadas completas ou in/out points e não opera markers de outros plugins.
@@ -1320,6 +1378,9 @@ Desloca o grupo para que o último key fique no fim da composição, outPoint ou
 | Duplicar + Inverter                  | `ae.keys.clone` com `mode: "mirror"`             |
 | Enviar ao começo                     | `ae.keys.send-to-edge` com `edge: "start"`       |
 | Enviar ao final                      | `ae.keys.send-to-edge` com `edge: "end"`         |
+| Alinhar o início/fim ao cursor       | `ae.keys.send-to-edge` com `reference: "playhead"` |
+| Copiar suavização                    | `ae.keys.ease-copy`                              |
+| Colar suavização / valor             | `ae.keys.ease-paste` com `target: "ease"`/`"value"` |
 | Duplicar + Inverter + Mover ao final  | **ausente** — ver abaixo                        |
 
 `ae.keys.send-to-edge` implementa as duas últimas linhas num comando só porque
@@ -1481,6 +1542,32 @@ Localiza rig existente por metadata e preenche a UI. Nunca cria novo rig silenci
 - duplicar composição sem colisão de UUID;
 - remoção restaura members conforme backup.
 
+### 16.12 Profundidade e motor de câmera — 18/10/2026
+
+- `ae.animate.parallax.quick` aceita `depthMode`:
+  - `linear` é o padrão;
+  - `front` dá mais espaço perto da câmera;
+  - `area` manda o maior plano para o fundo.
+- Também aceita `backgroundDepth` (0–0,5 do zoom): o fundo vai para trás do plano focal, ampliado, com o aviso `PARALLAX_BACKGROUND_UPSCALED`.
+- O Parallax grava `pluginVersion`. Ajustar, mover e remover têm rótulos de Undo próprios. O Remove só olha as expressões do próprio rig.
+- O motor de câmera ([ADR 0007](adr/0007-motor-de-camera.md)) adota o master v3 como controle. Enquanto o motor estiver ligado:
+  - `ae.parallax.move` é recusado;
+  - `ae.parallax.remove` espera `ae.camera.remove`.
+- Wiggle, foco e zoom legados continuam disponíveis. Delegá-los ao motor fica para a próxima fase.
+- **Coreografias** (`ae.camera.choreography.apply`, 19/10/2026) leem os membros do Parallax e montam uma cadeia de visitas:
+  - abertura lá de trás, com as camadas da frente atrás da câmera;
+  - zoom em cada camada, com rack focus, e o texto sempre inteiro (a camada perto da borda fica fora do centro em vez de o fundo ganhar zoom);
+  - volta ao layout, ou, no Mergulho, a passagem pela camada do protagonista até o fundo.
+
+  Removê-las devolve o motion blur e a ótica (DOF, abertura, desfoque) que ligaram. `scripts/verify-camera-choreography.jsx` passou 6/6 no AE 26.5x89/Windows (20/10/2026).
+- **Fase 3 (25/10/2026):**
+  - abertura em Z +2500 px (argumento `depth`, editável no painel);
+  - foco planejado em racks de 0,3 s que leem a camada viva por Layer Control;
+  - impacto na chegada e avanço contínuo nas pausas;
+  - ordem `spread` e a coreografia Zooms rápidos;
+  - limite de 32 shots por comp.
+- Status: `IMPLEMENTED_HOST_PARTIALLY_VERIFIED`. `scripts/verify-camera-engine.jsx` passou 14/14 no AE 26.5x89/Windows, com o Parallax antes e depois dos shots, a ordem de remoção e salvar/reabrir. Painel dentro do AE e macOS: NOT RUN.
+
 ---
 
 ## 17. Presets de transição de câmera
@@ -1606,6 +1693,13 @@ applyToSelectionOrComp
 - fallback controlado;
 - render sem missing effect;
 - um Undo.
+
+**Shots de câmera (18/10/2026).** Os movimentos de câmera do estudo de 18/10 não entram nas tabelas fixas desta seção. Eles são receitas do motor de câmera (`ae.camera.shot.*`, [ADR 0007](adr/0007-motor-de-camera.md)), ficam na aba Parallax e seguem estas regras:
+- são vivas, com controles nativos e um marcador por shot;
+- funcionam com o Parallax ou num rig próprio;
+- viram keyframes com `ae.camera.bake`.
+
+Os 11 movimentos clássicos de `camera-transition.jsx` continuam como estão.
 
 ### 17.6 Transições de impacto (tremor)
 
@@ -2330,6 +2424,12 @@ Captions
 Settings
 ```
 
+**Aba Parallax (18/10/2026).** A aba Parallax fica no topo, ao lado de Suavização, como pediu o usuário, e é `primary` em `VIEWS` de `client/src/main.ts`. Ela reúne dois segmentos:
+- **Parallax:** o editor que antes ficava só em Ferramentas.
+- **Câmera:** receitas por intenção com prévia do mesmo núcleo, a lista de shots com ajuste fino, Bake e Remover.
+
+O tile de Parallax em Ferramentas abre a mesma aba. O layout fica sem rolagem horizontal em 280, 360, 480 e 720 px.
+
 ### 22.2 Home
 
 - busca global/command palette;
@@ -2437,6 +2537,13 @@ recolhido. A direção aprovada e as evidências estão em
 ---
 
 ## 23. Presets e schemas
+
+A biblioteca de presets recebe navegação por caminho, contador de resultados,
+seleção identificada no rodapé e editor separado em todas as larguras. O estudo
+estático do Composer e a implementação original estão documentados em
+[Presets: biblioteca e edição](implementation/2026-10-22-composer-presets.md).
+Contratos e mecanismos de aplicação permanecem existentes; validação de browser
+não substitui evidência de host.
 
 ### 23.1 Preset base
 

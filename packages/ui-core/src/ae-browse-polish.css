@@ -1,0 +1,189 @@
+/*
+ * Polimento da aba Presets e da busca (2026-11-04). Por último no tema do AE.
+ * Referência estática: browser.css do Animation Composer 4.2.6 (lido pelo REA):
+ *   .split-pane__resizer:hover { background: --background-panel-selected (#303030) }
+ *   .popover-menu-container { radius 5; 0 10px 30px #0000004d, inset 0 0 1px #fff9; padding 2px }
+ *   .popover-menu-item { height 20px; padding 0 21px }  [data-hovered] → #303030
+ *   .active-label-button__icon { opacity 0 → 1 on hover }  (bolinha vira ×)
+ * O Composer quase não anima (transition:none nos botões Spectrum); aqui o movimento segue
+ * MOTION_INTENSITY 5/10: só transform/opacity/cores, sempre explicando uma mudança de estado.
+ * Chromium 99 (CEP 12): :is() ok; sem :has(), color-mix() ou @container.
+ */
+
+/* ---------- Divisor das pastas: acende ao passar o mouse (Composer) ----------
+   ae-composer-browse.css pinta o divisor de #1d1d1d com especificidade maior que o
+   :hover de ae-workstation.css, então ele nunca acendia. Mesma cadeia + :hover vence. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-splitter {
+  transition: background-color 120ms var(--ease-std, ease), box-shadow 120ms var(--ease-std, ease);
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-splitter:hover,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-splitter:focus-visible,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-splitter[data-dragging="true"] {
+  background: #303030; box-shadow: inset 1px 0 #3a3a3a, inset -1px 0 #3a3a3a;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-splitter[data-dragging="true"] { background: #3a3a3a; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-splitter:hover::after,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-splitter[data-dragging="true"]::after { color: #ebebeb; }
+
+/* ---------- Árvore: "…" aparece com a linha, chevron gira ao abrir/fechar ---------- */
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row .ch-folder-more {
+  opacity: 0; transition: opacity 120ms var(--ease-std, ease), background-color 120ms var(--ease-std, ease);
+}
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row:hover .ch-folder-more,
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row:focus-within .ch-folder-more,
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row .ch-folder-more[aria-expanded="true"] { opacity: 1; }
+[data-host="after-effects"] .ch-preset-categories .ch-folder-toggle:not(:disabled):hover,
+[data-host="after-effects"] .ch-preset-categories .ch-folder-more:hover { color: #ffffff; }
+[data-host="after-effects"] .ch-preset-categories .ch-folder-select .ch-folder-icon { transition: color 120ms var(--ease-std, ease), transform 200ms var(--ease-spring, ease); }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row:hover .ch-folder-icon { color: #ebebeb; transform: translateY(-1px); }
+@keyframes ch-chevron-open { from { transform: rotate(-90deg); } to { transform: rotate(0); } }
+@keyframes ch-chevron-close { from { transform: rotate(90deg); } to { transform: rotate(0); } }
+[data-host="after-effects"] .ch-folder-toggle[data-turn="open"] > .ch-ui-icon { animation: ch-chevron-open 180ms var(--ease-out, ease-out); }
+[data-host="after-effects"] .ch-folder-toggle[data-turn="close"] > .ch-ui-icon { animation: ch-chevron-close 180ms var(--ease-out, ease-out); }
+/* Menu da pasta aberto pelo clique direito: cresce do ponteiro. */
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-palette { animation: ch-menu-pop 140ms cubic-bezier(.16, 1, .3, 1); }
+
+/* ---------- Cards: estrela com cor de estado e pop ao favoritar ---------- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-favorite[aria-pressed="true"] { color: #1d80f5; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-favorite:hover:not([aria-pressed="true"]) { color: #ebebeb; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-settings-trigger > svg { transition: transform var(--dur-spring, 420ms) var(--ease-spring, ease); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-settings-trigger:hover:not(:disabled) > svg { transform: rotate(45deg); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-preview { transition: filter 160ms var(--ease-std, ease); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-card:hover .ch-preset-preview { filter: brightness(1.08); }
+
+/* ---------- Menu de contexto (context-menu.ts): superfície do popover do Composer ---------- */
+@keyframes ch-menu-pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+[data-host="after-effects"] .ch-context-menu {
+  position: fixed; z-index: 1700; display: flex; flex-direction: column; box-sizing: border-box;
+  min-width: 168px; max-width: min(280px, calc(100vw - 8px)); padding: 6px 2px;
+  background: #1d1d1d; border-radius: 5px; color: #d0d0d0; font-size: 12px;
+  box-shadow: 0 10px 30px 0 #0000004d, inset 0 0 1px 0 #fff9;
+  animation: ch-menu-pop 130ms cubic-bezier(.16, 1, .3, 1);
+}
+[data-host="after-effects"] .ch-context-menu__section { padding: 4px 12px 4px 30px; color: #8d8d8d; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-host="after-effects"] .ch-context-menu__separator { flex-shrink: 0; padding: 6px 5px 5px; }
+[data-host="after-effects"] .ch-context-menu__separator::before { content: ""; display: block; height: 1px; background: #4b4b4b; }
+[data-host="after-effects"] .ch-context-menu__item {
+  display: flex; align-items: center; gap: 6px; width: 100%; min-height: 24px; padding: 0 12px 0 8px; box-sizing: border-box;
+  border: 0; border-radius: 3px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: default;
+  transition: background-color 90ms var(--ease-std, ease), color 90ms var(--ease-std, ease);
+}
+[data-host="after-effects"] .ch-context-menu__item:hover,
+[data-host="after-effects"] .ch-context-menu__item:focus { background: #303030; color: #ebebeb; outline: none; }
+[data-host="after-effects"] .ch-context-menu__item:focus-visible { box-shadow: inset 0 0 0 1px #1d80f5; }
+[data-host="after-effects"] .ch-context-menu__item[aria-disabled="true"] { opacity: .5; }
+[data-host="after-effects"] .ch-context-menu__item[aria-disabled="true"]:hover { background: transparent; color: inherit; }
+[data-host="after-effects"] .ch-context-menu__icon { display: grid; place-items: center; flex: 0 0 16px; width: 16px; height: 16px; color: #b0b0b0; }
+[data-host="after-effects"] .ch-context-menu__icon .ch-ui-icon { width: 14px; height: 14px; transition: transform 160ms var(--ease-spring, ease); }
+[data-host="after-effects"] .ch-context-menu__item:hover:not([aria-disabled="true"]) .ch-context-menu__icon { color: #ebebeb; }
+[data-host="after-effects"] .ch-context-menu__item:hover:not([aria-disabled="true"]) .ch-context-menu__icon .ch-ui-icon { transform: scale(1.1); }
+[data-host="after-effects"] .ch-context-menu__item[aria-checked="true"] .ch-context-menu__icon { color: #4096f3; }
+[data-host="after-effects"] .ch-context-menu__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-host="after-effects"] .ch-context-menu__kbd { margin-left: 16px; color: #8d8d8d; font: inherit; font-size: 11px; }
+[data-host="after-effects"] .ch-context-menu__swatch { flex: 0 0 10px; width: 10px; height: 10px; border-radius: 50%; background: var(--folder-color, #fff); }
+[data-host="after-effects"] .ch-context-menu__swatch[data-color="red"], [data-host="after-effects"] .ch-label-chip[data-color="red"] { --folder-color: #c40706; }
+[data-host="after-effects"] .ch-context-menu__swatch[data-color="yellow"], [data-host="after-effects"] .ch-label-chip[data-color="yellow"] { --folder-color: #e9c700; }
+[data-host="after-effects"] .ch-context-menu__swatch[data-color="green"], [data-host="after-effects"] .ch-label-chip[data-color="green"] { --folder-color: #0dab25; }
+[data-host="after-effects"] .ch-context-menu__swatch[data-color="cyan"], [data-host="after-effects"] .ch-label-chip[data-color="cyan"] { --folder-color: #1ab9b2; }
+[data-host="after-effects"] .ch-context-menu__swatch[data-color="blue"], [data-host="after-effects"] .ch-label-chip[data-color="blue"] { --folder-color: #1d80f5; }
+[data-host="after-effects"] .ch-context-menu__swatch[data-color="purple"], [data-host="after-effects"] .ch-label-chip[data-color="purple"] { --folder-color: #9146ec; }
+[data-host="after-effects"] .ch-context-menu__swatch[data-color="pink"], [data-host="after-effects"] .ch-label-chip[data-color="pink"] { --folder-color: #e34589; }
+[data-host="after-effects"] .ch-context-menu__swatch[data-color="orange"], [data-host="after-effects"] .ch-label-chip[data-color="orange"] { --folder-color: #e87400; }
+
+/* ---------- Filtro por etiqueta: botão + bolinhas ativas (viram × no hover) ---------- */
+[data-host="after-effects"] .ch-label-filter { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; }
+[data-host="after-effects"] .ch-label-filter__button {
+  display: grid; place-items: center; width: 24px; height: 24px; min-height: 24px; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; color: #b0b0b0; cursor: default; transition: background-color 120ms var(--ease-std, ease), color 120ms var(--ease-std, ease);
+}
+[data-host="after-effects"] .ch-label-filter__button:hover { background: #303030; color: #ebebeb; }
+[data-host="after-effects"] .ch-label-filter__button[aria-pressed="true"] { color: #4096f3; }
+[data-host="after-effects"] .ch-label-filter__button:focus-visible { outline: none; box-shadow: 0 0 0 1px #1d80f5; }
+[data-host="after-effects"] .ch-label-filter__chips { display: flex; align-items: center; gap: 4px; }
+[data-host="after-effects"] .ch-label-filter__chips:empty { display: none; }
+@keyframes ch-chip-in { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
+[data-host="after-effects"] .ch-label-chip {
+  position: relative; display: grid; place-items: center; width: 14px; height: 14px; min-height: 14px; padding: 0; border: 0; border-radius: 50%;
+  background: var(--folder-color, #fff); color: #1d1d1d; cursor: default; animation: ch-chip-in 200ms var(--ease-spring, ease);
+  transition: transform 160ms var(--ease-spring, ease);
+}
+[data-host="after-effects"] .ch-label-chip > .ch-ui-icon { width: 10px; height: 10px; opacity: 0; transition: opacity 100ms var(--ease-std, ease); }
+[data-host="after-effects"] .ch-label-chip > .ch-ui-icon path { stroke-width: 2.2; }
+[data-host="after-effects"] .ch-label-chip:hover,
+[data-host="after-effects"] .ch-label-chip:focus-visible { transform: scale(1.15); outline: none; }
+[data-host="after-effects"] .ch-label-chip:hover > .ch-ui-icon,
+[data-host="after-effects"] .ch-label-chip:focus-visible > .ch-ui-icon { opacity: 1; }
+
+/* A busca e a escolha de fase compartilham a mesma largura. */
+[data-host="after-effects"] .ch-palette { inset-inline: 8px; margin-inline: auto; width: min(380px, calc(100vw - 16px)); }
+
+[data-host="after-effects"] .ch-palette__phase {
+  min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding: 8px;
+}
+[data-host="after-effects"] .ch-palette__phase[hidden] { display: none; }
+[data-host="after-effects"] .ch-palette__phase h2 { margin: 8px 0 4px; font-size: 13px; overflow-wrap: anywhere; }
+[data-host="after-effects"] .ch-palette__target { margin: 0 0 8px; color: var(--text-secondary); overflow-wrap: anywhere; }
+[data-host="after-effects"] .ch-palette__target:empty { display: none; }
+[data-host="after-effects"] .ch-palette__back { min-height: 28px; font-size: 11px; }
+[data-host="after-effects"] .ch-palette__phase .ch-preset-phase-actions {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px;
+}
+[data-host="after-effects"] .ch-palette__phase .ch-preset-phase-actions .ch-action-button {
+  width: 100%; min-width: 0; min-height: 28px; margin: 0; padding: 2px; gap: 0; white-space: nowrap;
+  font-size: 11px; line-height: 16px;
+}
+[data-host="after-effects"] .ch-palette__status { overflow-wrap: anywhere; }
+[data-host="after-effects"] .ch-palette__reason { white-space: normal; }
+
+[data-host="after-effects"] .ch-preset-discovery { display: flex; flex: none; flex-wrap: wrap; gap: 4px; padding: 0 0 6px; }
+[data-host="after-effects"] .ch-preset-discovery[hidden] { display: none; }
+[data-host="after-effects"] .ch-preset-discovery .ch-button {
+  min-height: 24px; margin: 0; padding: 2px 7px; background: transparent; border-color: var(--border-subtle); font-size: 11px;
+}
+[data-host="after-effects"] .ch-preset-discovery .ch-button:hover,
+[data-host="after-effects"] .ch-preset-discovery .ch-button[aria-pressed="true"] { background: var(--surface-hover); }
+[data-host="after-effects"] .ch-preset-stage[data-settings-sheet="true"] > .ch-preset-discovery { visibility: hidden; }
+[data-host="after-effects"] .ch-preset-preview[data-preview-style="two-line-type"]::after {
+  content: ""; position: absolute; inset: 12% 10%; border: 1px solid rgba(255, 255, 255, .18); pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-host="after-effects"] .ch-context-menu,
+  [data-host="after-effects"] .ch-label-chip,
+  [data-host="after-effects"] .ch-folder-toggle[data-turn] > .ch-ui-icon,
+  [data-host="after-effects"] .ch-preset-categories > .ch-folder-palette { animation: none !important; }
+  [data-host="after-effects"] .ch-preset-card .ch-preset-settings-trigger > svg,
+  [data-host="after-effects"] .ch-preset-categories .ch-folder-icon { transform: none !important; }
+}
+[data-host="after-effects"][data-reduced-motion="true"] .ch-context-menu,
+[data-host="after-effects"][data-reduced-motion="true"] .ch-label-chip,
+[data-host="after-effects"][data-reduced-motion="true"] .ch-folder-toggle[data-turn] > .ch-ui-icon { animation: none !important; }
+
+/* ---------- Barra da aba Presets (2026-11-04): estrela no canto, busca com o filtro dentro ---------- */
+[data-host="after-effects"] .ch-preset-sidebar .ch-preset-toolbar-scope { order: -2; }
+[data-host="after-effects"] .ch-preset-sidebar .ch-preset-search { order: -1; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar .ch-preset-toolbar-scope > .ch-button { width: 24px; height: 24px; min-height: 24px; border-radius: 4px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar .ch-preset-toolbar-scope > .ch-button:hover { background: #303030; }
+[data-host="after-effects"] .ch-preset-search--with-filter .ch-field__control { position: relative; display: flex; align-items: center; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar .ch-preset-search--with-filter input { padding-right: 26px; }
+[data-host="after-effects"] .ch-preset-search--with-filter .ch-label-filter { position: absolute; top: 0; right: 2px; bottom: 0; gap: 3px; }
+[data-host="after-effects"] .ch-preset-search--with-filter .ch-label-filter__chips { order: -1; }
+[data-host="after-effects"] .ch-preset-search--with-filter .ch-label-filter__button { width: 20px; height: 20px; min-height: 20px; padding: 0; border: 0; background: transparent; }
+[data-host="after-effects"] .ch-preset-search--with-filter .ch-label-filter[data-active="true"] .ch-label-filter__button { color: #4096f3; }
+/* Com etiquetas ativas as bolinhas entram no campo: o texto recua para não passar por baixo delas. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar .ch-preset-search--with-filter[data-chips="true"] input { padding-right: var(--chips-space, 26px); }
+
+/* Autoplay no rodapé, ao lado do tamanho das miniaturas: só o ícone, apagado até o hover. */
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-autoplay {
+  display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; min-height: 20px; min-width: 0;
+  margin-right: 4px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #6a6a6a;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-autoplay::before { display: none; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-autoplay .ch-ui-icon { width: 12px; height: 12px; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-autoplay:hover { background: #303030; color: #b0b0b0; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-autoplay[aria-pressed="true"] { color: #4096f3; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-autoplay:focus-visible { outline: none; box-shadow: 0 0 0 1px #1d80f5; }
+/* ▶ e o slider de miniaturas na mesma linha: o slider não pode quebrar para baixo do botão. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-preview-controls { display: flex; flex: 0 1 128px; flex-wrap: nowrap; align-items: center; min-width: 64px; max-width: 128px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-preview-controls > .ch-preset-size { flex: 1 1 0 !important; width: auto !important; min-width: 40px !important; }

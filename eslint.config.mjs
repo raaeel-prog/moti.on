@@ -156,6 +156,7 @@ export default [
         AutoOrientType: "readonly",
         MotionMenuCommand: "readonly",
         MotionRigMeta: "readonly",
+        MotionCameraRig: "readonly",
         MotionUndo: "readonly",
         MotionErrors: "readonly",
         MotionPreflight: "readonly",

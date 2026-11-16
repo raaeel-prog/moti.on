@@ -1,3 +1,4 @@
+/* global KeyframeInterpolationType */
 /**
  * Parallax completo — foco, zoom, wiggle e bake (CHMS-023).
  *
@@ -232,8 +233,8 @@
     var i;
     for (i = 1; i <= comp.numLayers; i += 1) {
       if (comp.layer(i).name === args.targetLayerName) {
+        if (alvo) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Ha mais de uma camada com esse nome. Renomeie o alvo de foco.", {field: "targetLayerName"});
         alvo = comp.layer(i);
-        break;
       }
     }
     if (!alvo) {
@@ -300,7 +301,9 @@
   function preflightWiggle(args) {
     var falha = validarChaves(args, ALLOWED_WIGGLE);
     if (falha) return falha;
-    if (!isInRange(args.frequency, 0, 1000)) {
+    // Same ceiling as the live Frequency control (GROUP_BINDINGS), so a value the
+    // panel accepts never lands outside the slider.
+    if (!isInRange(args.frequency, 0, 100)) {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Frequencia invalida.", { field: "frequency" });
     }
     if (!isInRange(args.amplitude, 0, 100000)) {
@@ -372,6 +375,9 @@
     if (falha) return falha;
 
     var comp = /** @type {CompItem} */ (app.project.activeItem);
+    if (comp.time < 0 || comp.time + /** @type {number} */ (args.durationFrames) * comp.frameDuration > comp.duration + comp.frameDuration / 1000) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "O movimento de zoom ultrapassa o fim da composicao. Reduza a duracao ou mova o indicador de tempo.", {field: "durationFrames"});
+    }
     var camera = /** @type {CameraLayer} */ (cameraDoRig(comp));
     var zoom = propriedade(camera, MN.cameraOptions, MN.zoom);
     if (!zoom) {
@@ -467,10 +473,26 @@
     if (falha) return falha;
     var comp = /** @type {CompItem} */ (app.project.activeItem);
     var camera = cameraDoRig(comp);
-    var position = propriedade(camera, MN.transform, MN.position);
-    if (!camera || comp.selectedLayers.length !== 1 || comp.selectedLayers[0] !== camera || !position ||
-        !MotionExpressions.isManagedParallaxWiggle(position.expression) || !position.expressionEnabled || position.numKeys > 0) {
+    var controller = controllerDoRig(comp);
+    var selecionada = comp.selectedLayers.length === 1 ? comp.selectedLayers[0] : null;
+    var position = selecionada ? propriedade(selecionada, MN.transform, MN.position) : null;
+    var wiggleCamera =
+      selecionada === camera &&
+      position &&
+      MotionExpressions.isManagedParallaxWiggle(position.expression) &&
+      position.expressionEnabled &&
+      position.numKeys === 0;
+    var loopControle =
+      (selecionada === camera || selecionada === controller) &&
+      position &&
+      MotionExpressions.isManagedLoopOut(position.expression) &&
+      position.expressionEnabled;
+    if (!camera || !position || (!wiggleCamera && !loopControle)) {
       return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Parallax: selecione apenas a camera com Wiggle Moti.on e sem keyframes para assar.", null);
+    }
+    if (position.numKeys > 0) {
+      try { MotionKeyframes.captureProperty(position); }
+      catch (captureError) { return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Parallax: nao foi possivel preservar os keyframes do controle antes de assar.", null); }
     }
     if (comp.workAreaDuration / comp.frameDuration / /** @type {number} */ (args.stepFrames) > 10000) {
       return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Parallax: reduza o intervalo de bake para ate 10000 amostras.", null);
@@ -492,7 +514,7 @@
     // O laco anda por indice de quadro. Somar `frameDuration` repetidamente
     // acumula erro de ponto flutuante e sai da grade de quadros num intervalo
     // longo — a ultima amostra cairia entre dois quadros.
-    var quadros = Math.floor(comp.workAreaDuration / comp.frameDuration);
+    var quadros = Math.floor(comp.workAreaDuration / comp.frameDuration + 0.000001);
 
     var assadas = 0;
     var restaurar = [];
@@ -501,7 +523,9 @@
       var l;
       for (l = 0; l < selecionadas.length; l += 1) {
         var camada = selecionadas[l];
-        var alvos = [propriedade(camada, MN.transform, MN.position), propriedade(camada, MN.transform, MN.scale)];
+        // Preflight authorizes only the managed Position expression. Other
+        // expressions on the camera/controller belong to the user's design.
+        var alvos = [propriedade(camada, MN.transform, MN.position)];
         var p;
         for (p = 0; p < alvos.length; p += 1) {
           var prop = alvos[p];
@@ -513,11 +537,31 @@
             var t = inicio + k * comp.frameDuration;
             amostras.push({ t: t, v: prop.valueAtTime(t, false) });
           }
+          if (quadros % passo !== 0) {
+            var finalTime = inicio + quadros * comp.frameDuration;
+            amostras.push({t: finalTime, v: prop.valueAtTime(finalTime, false)});
+          }
 
-          restaurar.push({ prop: prop, expression: prop.expression, expressionEnabled: prop.expressionEnabled });
+          var keySnapshot = prop.numKeys > 0 ? MotionKeyframes.captureProperty(prop) : null;
+          restaurar.push({
+            prop: prop,
+            expression: prop.expression,
+            expressionEnabled: prop.expressionEnabled,
+            keySnapshot: keySnapshot,
+            value: prop.valueAtTime(comp.time, true)
+          });
+          while (prop.numKeys > 0) prop.removeKey(prop.numKeys);
           for (k = 0; k < amostras.length; k += 1) {
             var amostra = /** @type {{t: number, v: unknown}} */ (amostras[k]);
             prop.setValueAtTime(amostra.t, amostra.v);
+          }
+          for (k = 1; k <= prop.numKeys; k += 1) {
+            prop.setInterpolationTypeAtKey(k, KeyframeInterpolationType.LINEAR, KeyframeInterpolationType.LINEAR);
+            if (prop.propertyValueType === PropertyValueType.TwoD_SPATIAL || prop.propertyValueType === PropertyValueType.ThreeD_SPATIAL) {
+              var tangent = prop.propertyValueType === PropertyValueType.TwoD_SPATIAL ? [0, 0] : [0, 0, 0];
+              prop.setSpatialAutoBezierAtKey(k, false);
+              prop.setSpatialTangentsAtKey(k, tangent, tangent);
+            }
           }
           prop.expression = "";
           assadas += 1;
@@ -525,11 +569,23 @@
       }
     } catch (e) {
       var r;
+      var rollbackFailed = false;
       for (r = restaurar.length - 1; r >= 0; r -= 1) {
-        var item2 = /** @type {{prop: Property, expression: string, expressionEnabled: boolean}} */ (restaurar[r]);
-        while (item2.prop.numKeys > 0) item2.prop.removeKey(item2.prop.numKeys);
-        item2.prop.expression = item2.expression;
-        item2.prop.expressionEnabled = item2.expressionEnabled;
+        var item2 = /** @type {any} */ (restaurar[r]);
+        try {
+          if (item2.keySnapshot) MotionKeyframes.restoreProperty(item2.keySnapshot, null);
+          else {
+            while (item2.prop.numKeys > 0) item2.prop.removeKey(item2.prop.numKeys);
+            item2.prop.setValue(item2.value);
+          }
+          item2.prop.expression = item2.expression;
+          item2.prop.expressionEnabled = item2.expressionEnabled;
+        } catch (restoreError) { rollbackFailed = true; }
+      }
+      if (rollbackFailed) {
+        var rollbackError = /** @type {Error & {motionCode?: string}} */ (new Error("Parallax: restauracao incompleta ao assar. Use Desfazer."));
+        rollbackError.motionCode = MotionContracts.ERROR.ROLLBACK_FAILED;
+        throw rollbackError;
       }
       throw e;
     }

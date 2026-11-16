@@ -58,11 +58,12 @@ test('compact coordinates remain precisely editable with keyboard and decimal co
 });
 test('save and search fields open on demand without changing the selected curve',t=>{
  const f=fixture(t),buttons=f.editor.element.getElementsByTagName('button');
+ // Icon tools since the compact review (2026-10-24): the name is the accessible label and the tooltip.
  const saveRow=f.editor.element.querySelectorAll('.ch-ease-save')[0];
  const search=f.editor.element.querySelectorAll('.ch-ease-library-toolbar')[0];
  assert.equal(saveRow.hidden,true);assert.equal(search.hidden,true);
- buttons.find(b=>b.textContent==='Salvar curva').click();assert.equal(saveRow.hidden,false);
- buttons.find(b=>b.textContent==='Buscar').click();assert.equal(search.hidden,false);
+ buttons.find(b=>b.getAttribute('aria-label')==='Salvar curva').click();assert.equal(saveRow.hidden,false);
+ buttons.find(b=>b.getAttribute('aria-label')==='Buscar curva').click();assert.equal(search.hidden,false);
  assert.equal(search.getElementsByTagName('input')[0].hidden,false);
  assert.equal(f.changes.length,0);
 });
@@ -98,6 +99,20 @@ test('cloneEaseDraft never shares nested objects with the defaults',()=>{
   assert.equal(DEFAULT_EASE.elastic.in.amp,1);assert.equal(DEFAULT_EASE.points.length,0);
 });
 
+test('new easing draft starts with the premium smooth-out and host remains opt-in',()=>{
+ assert.deepEqual([DEFAULT_EASE.x1,DEFAULT_EASE.y1,DEFAULT_EASE.x2,DEFAULT_EASE.y2],[.22,1,.36,1]);
+ assert.equal(DEFAULT_EASE.live,false);assert.equal(DEFAULT_EASE.convertHold,false);
+ assert.equal(easeCommandArgs(DEFAULT_EASE).convertHold,undefined);
+ assert.equal(easeCommandArgs({...DEFAULT_EASE,convertHold:true}).convertHold,true);
+});
+
+test('reset uses the same premium curve without replacing saved input until requested',t=>{
+ const f=fixture(t),draft={...cloneEaseDraft(DEFAULT_EASE),x1:.4,y1:.2,x2:.6,y2:.9,points:[{x:.5,y:.5,inX:.4,inY:.4,outX:.6,outY:.6}]};
+ f.editor.setDraft(draft);assert.equal(f.input('x1').value,'0.4');assert.equal(f.changes.length,0);
+ const reset=f.editor.element.getElementsByTagName('button').find(node=>node.className.split(' ').includes('ch-curve__overlay'));
+ reset.click();const result=f.changes.at(-1);assert.deepEqual([result.x1,result.y1,result.x2,result.y2],[.22,1,.36,1]);assert.deepEqual(result.points,[]);assert.equal(result.live,false);
+});
+
 test('live flag round-trips through protected storage and defaults to off',()=>{
   const data=new Map();const storage={getItem:k=>data.has(k)?data.get(k):null,setItem:(k,v)=>data.set(k,v)};
   assert.equal(readEaseLive(storage),false);assert.equal(readEaseLive(undefined),false);
@@ -119,4 +134,22 @@ test('choosing a preset leaves any other mode, clears the points and commits onc
   assert.equal(editor.element.getAttribute('data-ease-mode'),'bezier');
   const live=editor.element.getElementsByTagName('button').find(node=>node.className.split(' ').includes('ch-ease-live'));
   assert.equal(live.getAttribute('aria-pressed'),'false');
+});
+
+test('v6 influence: Easy Ease in one click, sliders always open and the cubic-bezier follows the curve',t=>{
+  const {editor,changes}=fixture(t);
+  const buttons=()=>editor.element.getElementsByTagName('button');
+  const inputs=()=>editor.element.getElementsByTagName('input');
+  // The slider itself needs document.createEvent (CEP has it, this fake DOM does not); the browser audit covers it open.
+  const out=inputs().find(node=>node.id==='ease-influence-out');
+  assert.ok(out,'Saída is a number below the graph');
+  buttons().find(node=>node.id==='ease-easy-50').click();
+  const last=changes.at(-1);
+  assert.deepEqual([last.x1,last.y1,last.x2,last.y2],[.5,0,.5,1]);
+  assert.equal(buttons().find(node=>node.id==='ease-easy-50').getAttribute('aria-pressed'),'true');
+  assert.equal(buttons().find(node=>node.id==='ease-easy-33').getAttribute('aria-pressed'),'false');
+  assert.equal(out.value,'50');
+  const code=editor.element.getElementsByTagName('code').find(node=>String(node.className).includes('ch-ease-bezier__value'));
+  assert.equal(code.textContent,'0,5; 0; 0,5; 1');
+  assert.ok(buttons().some(node=>node.id==='ease-copy-bezier'));
 });

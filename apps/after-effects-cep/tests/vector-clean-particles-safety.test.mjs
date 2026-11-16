@@ -9,6 +9,14 @@ async function command(file, id, globals) {
   return scope.MotionRegistry.get(id);
 }
 
+function addCleanupFolderApi(project) {
+  const root={id:0};for(const item of project.items)item.parentFolder=root;
+  Object.defineProperty(project.items,'addFolder',{value(name){
+    const folder={id:999,name,get numItems(){return project.items.filter(item=>item.parentFolder===folder).length;},remove(){for(const item of [...project.items])if(item.parentFolder===folder)item.remove();project.items.splice(project.items.indexOf(folder),1);}};
+    project.items.push(folder);return folder;
+  }});
+}
+
 function vectorFixture(kind, config = {}) {
   const calls = [];
   class CompItem {
@@ -98,6 +106,7 @@ test("Clean previews external footage but only removes explicitly selected manag
   const external = new FootageItem(1, "Family footage.mov", false);
   const managed = new FootageItem(2, "Generated.png", true);
   const project = { items: [external, managed], get numItems() { return this.items.length; }, item(i) { return this.items[i - 1]; } };
+  addCleanupFolderApi(project);
   const cmd = await command("clean", "ae.project.clean", { app: { project }, FootageItem });
   assert.equal(cmd.preflight({ removeConfirmed: false }), null);
   const scan = cmd.run({ removeConfirmed: false });
@@ -125,6 +134,21 @@ test("Clean refuses deletion without preview or when a finding became used", asy
   const scan = cmd.run({ removeConfirmed: false });
   item.usedIn = [{}];
   assert.equal(cmd.preflight({ removeConfirmed: true, selectedItemIds: [8], scanToken: scan.data.scanToken }).code, "INVALID_SELECTION_TYPE");
+});
+
+test("Clean verifies removal by persistent ID even when the host returns a replacement wrapper", async () => {
+  const project={items:[],get numItems(){return this.items.length;},item(i){return this.items[i-1];}};
+  class FootageItem {
+    constructor(){this.id=45;this.name='Owned';this.comment='[MOTION_META_V1]{"schemaVersion":1,"rigId":"qa-clean","rigType":"ae.asset.texture"}[/MOTION_META_V1]';this.usedIn=[];}
+    remove(){project.items[0]=new FootageItem();}
+  }
+  project.items.push(new FootageItem());
+  addCleanupFolderApi(project);
+  const cmd=await command('clean','ae.project.clean',{app:{project},FootageItem});
+  assert.equal(cmd.preflight({removeConfirmed:false}),null);const scan=cmd.run({removeConfirmed:false});
+  const args={removeConfirmed:true,selectedItemIds:[45],scanToken:scan.data.scanToken};
+  assert.equal(cmd.preflight(args),null);
+  assert.throws(()=>cmd.run(args),/Clean falhou|HOST_OPERATION_FAILED/,'A remaining ID must not report successful removal merely because its wrapper changed.');
 });
 
 test("Particles rejects missing bundled effect before any solid/effect mutation", async () => {

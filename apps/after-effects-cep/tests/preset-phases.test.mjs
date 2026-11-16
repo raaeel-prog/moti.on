@@ -25,7 +25,7 @@ test('shared transformations evaluate additive position and multiplicative opaci
   assert.equal(opacity.valueAtTime(2),100);assert.equal(opacity.valueAtTime(0),0);assert.equal(opacity.valueAtTime(4),0);
   const original=f.layer.transform.property('ADBE Position').value;
   assert.deepEqual(Array.from(f.layer.transform.property('ADBE Position').valueAtTime(2)),original.slice(0,2));
-  assert.ok(opacity.expression.startsWith('// Moti.on phases v2:'));
+  assert.ok(opacity.expression.startsWith('// Moti.on phases v3:'));
 });
 
 test('timing shifts owned cues in integer frames, retains payload, boundaries and rejects stale identity',async()=>{
@@ -59,8 +59,11 @@ test('adjustments preserve hand-positioned cues and resetting one phase leaves t
 });
 
 test('splitting a coincident legacy cue preserves payload in both independent markers',async()=>{
-  const f=await fixture();f.run('apply',f.args('premium-arc-arrival',{phase:'both',durationFrames:60}));assert.equal(f.layer.markers.numKeys,1);
-  const marker=f.layer.markers.keyValue(1);Object.assign(marker,{comment:'User cue',chapter:'Chapter',url:'https://example.test',frameTarget:'frame',duration:.1,cuePointName:'custom',eventCuePoint:true,label:4,protectedRegion:true});
+  const f=await fixture();f.run('apply',f.args('premium-arc-arrival',{phase:'both',durationFrames:60}));
+  // Single presets now write range cues; rebuild the coincident point cue v1 layers carry.
+  const tag='[Moti.on.library.v1]',meta=JSON.parse(decodeURIComponent(f.layer.comment.split(tag)[1].split('\n')[0]));meta.markerVersion=1;
+  f.layer.comment=f.layer.comment.split(tag)[0]+tag+encodeURIComponent(JSON.stringify(meta));
+  const marker=f.layer.markers.keyValue(1);marker.setParameters({...marker.getParameters(),'Moti.on.phase':'both'});while(f.layer.markers.numKeys)f.layer.markers.removeKey(1);Object.assign(marker,{comment:'User cue',chapter:'Chapter',url:'https://example.test',frameTarget:'frame',duration:.1,cuePointName:'custom',eventCuePoint:true,label:4,protectedRegion:true});
   marker.setParameters({...marker.getParameters(),custom:'preserve'});f.layer.markers.setValueAtTime(2,marker);
   const state=f.run('inspect').data;f.run('phase-timing',{target:state.target,phase:'in',frames:-1});assert.equal(f.layer.markers.numKeys,2);
   for(let i=1;i<=2;i++){const cue=f.layer.markers.keyValue(i);assert.equal(cue.getParameters().custom,'preserve');assert.equal(cue.comment,'User cue');assert.equal(cue.duration,.1);assert.equal(cue.label,4);assert.equal(cue.protectedRegion,true);assert.equal(cue.getParameters()['Moti.on.phase'],i===1?'in':'out');}
@@ -68,7 +71,7 @@ test('splitting a coincident legacy cue preserves payload in both independent ma
 
 test('tampered phase paths and control identities fail before touching user content',async()=>{
   for(const tamper of [root=>root.slots.in.meta.effects[0].name='User slider',root=>root.shared[0].path=['ADBE Transform Group','ADBE Anchor Point'],root=>root.slots.in.meta.instance+='-999']){
-    const f=await fixture();f.run('phase-apply',f.args('premium-arc-arrival',{phase:'in'}));const state=f.run('inspect').data,tag='[Moti.on.library.v2]',root=f.scope.MotionPresetPhases.metadata(f.layer);
+    const f=await fixture();f.run('phase-apply',f.args('premium-arc-arrival',{phase:'in'}));const state=f.run('inspect').data,tag='[Moti.on.library.v3]',root=f.scope.MotionPresetPhases.metadata(f.layer);
     tamper(root);f.layer.comment='Keep this comment\n'+tag+encodeURIComponent(JSON.stringify(root));const before=f.mutations;
     assert.equal(f.run('inspect').data.state,'conflict');assert.ok(f.handler('phase-action').preflight({target:state.target,phase:'in',action:'remove'}));assert.equal(f.mutations,before);
   }

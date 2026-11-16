@@ -85,7 +85,7 @@ mexida junto, para a mudança do neon não arrastar quatro comandos já validado
     "fallback": "recusar com CAPABILITY_UNAVAILABLE"
   },
   "ae.effect.glow.params": {
-    "status": "unproven",
+    "status": "verified_in_native_fixture_26.5x89",
     "probe": "varredura dos filhos do efeito por matchName, com recusa quando ausente",
     "fallback": "CAPABILITY_UNAVAILABLE nomeando o parametro que faltou"
   }
@@ -102,14 +102,32 @@ mexida junto, para a mudança do neon não arrastar quatro comandos já validado
 
 ## Open uncertainty
 
-- Os matchNames de parâmetro do Glow **não foram verificados em After Effects
-  real** por este agente. A guarda de varredura existe exatamente porque eles são
-  um palpite; o comando está marcado `IMPLEMENTED_NOT_HOST_VERIFIED` até alguém
-  rodar `/testing-adobe-hosts`.
+- Os parâmetros usados pelo Neon foram verificados no After Effects 2026
+  26.5x89, na fixture descartável `scripts/verify-neon-tools-audit.jsx`.
+  O limiar nativo `ADBE Glo2-0002` iniciou em 153 (escala 0–255); o preset
+  próprio usa zero para revelar o halo em uma forma vermelha escura. Renders
+  antes/depois estão em `artifacts/tools-audit/neon-native/`.
+  O recibo `result.json` registra reaplicação sem duplicação, proteção de keys
+  e expressão e rollback nativo após falha injetada na segunda camada.
+  Undo/Redo/reabertura têm recibo separado em `undo-native/neon-result.json`.
+  Isso comprova esses cenários, sem generalizar para versões não executadas.
 - `strokeWidth` é documentado como 0–1000, mas a unidade (pixels da camada) não é
   afirmada pela referência.
 
 ## Fontes
+
+## Precisão nativa isolada em 2026-10-25
+
+O controle sem comandos Moti.on `sourceText.setValue(sourceText.value)` mudou
+o canal 0.92156898975372 para 0.92156994342804 na primeira escrita: diferença
+de 2^-20 (9.5367431640625e-7). Nove repetições posteriores permaneceram estáveis.
+O mesmo desvio explicou a diferença observada no rollback do Neon.
+O comparador de QA aceita esse orçamento exclusivamente nos canais fill/stroke
+do TextDocument. Tempos, seleção, expressões e demais valores continuam exatos;
+os valores brutos e desvios tolerados permanecem no recibo.
+Evidência: `artifacts/tools-audit/faults-native/result.json`, controle independente
+“TextDocument unchanged native roundtrip measures color precision”.
+Isso diagnostica a precisão do host; não representa alteração de cor do produto.
 
 - [TextDocument — After Effects Scripting Guide](https://ae-scripting.docsforadobe.dev/text/textdocument/)
 - [First-Party Effect Match Names — After Effects Scripting Guide](https://ae-scripting.docsforadobe.dev/matchnames/effects/firstparty/)

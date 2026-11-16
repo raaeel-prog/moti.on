@@ -67,6 +67,8 @@ async function fixture({ fps = 30, height = 1080, missing = '' } = {}) {
         time, inPoint: layer.inPoint, outPoint: layer.outPoint, value: this.value, thisComp: comp,
         thisLayer: {marker: layer.markers.expressionAPI(), sourceRectAtTime: () => layer.sourceRectAtTime()},
         textIndex: unitIndex + 1, textTotal: unitCount, transform: {scale: [100, 100, 100]},
+        // As AE reads it: the source string with its style, and the live Anchor Point Grouping.
+        text: {sourceText: Object.assign(new String(layer.sourceText ?? 'Moti.on text'), {style: {fontSize: 100}}), moreOption: {anchorPointGrouping: layer.text?.property?.('ADBE Text More Options')?.property?.('ADBE Text Anchor Point Option')?.value ?? 1}},
         effect: name => index => layer.effects.property(name).property(index).value
       });
     }
@@ -118,7 +120,7 @@ async function fixture({ fps = 30, height = 1080, missing = '' } = {}) {
   }
   class Shape {}
   const comp = new CompItem(), layer = new Layer(); comp.layers.push(layer); layer.containingComp = comp;
-  const scope = await loadHostModules(['src/json.jsx', 'src/registry.jsx']);
+  const scope = await loadHostModules(['src/json.jsx', 'src/registry.jsx', 'src/marker-window.jsx'], {MarkerValue});
   scope.MotionLibraryCore = contracts; scope.MotionLibraryCatalog = contracts.MOTION_LIBRARY_PRESETS;
   const globals = {app: {project: {activeItem: comp}}, MarkerValue, CompItem, Shape, CameraLayer: class {}, LightLayer: class {}, KeyframeInterpolationType: {LINEAR: 1}, MotionContracts: {ERROR: errors}, ...scope};
   for (const source of sources) new Function('$', ...Object.keys(globals), source)({global: scope}, ...Object.values(globals));
@@ -250,7 +252,9 @@ test('fill tint returns to the editable source fill, and per-axis blur stays dir
   assert.equal(flat(fill.valueAtTime(3, false, 3, 7))[0], 0);
   const g = await fixture(); g.applyPreset('signature-anamorphic', {phase: 'in'});
   const focus = animators(g).find(a => a.name.endsWith(' · Foco')).property('ADBE Text Animator Properties').property('ADBE Text Blur');
-  assert.equal(JSON.stringify(focus.value), '[18,0]');
+  // The recipe's 18 px on X only, carried at four times its size (TEXT_RANGE) and read in em.
+  assert.equal(JSON.stringify(focus.value), '[72,0]');
+  assert.match(focus.expression, /72\*em,0\*em/);
 });
 
 test('a missing native parameter refuses with CAPABILITY_UNAVAILABLE and rolls back every change', async () => {

@@ -95,6 +95,34 @@
         "$value": "#F5F5F5",
         "$type": "color"
       },
+      "action-fill": {
+        "$value": "#0969DA",
+        "$type": "color"
+      },
+      "action-fill-hover": {
+        "$value": "#0A61C9",
+        "$type": "color"
+      },
+      "action-fill-press": {
+        "$value": "#0757B7",
+        "$type": "color"
+      },
+      "action-on": {
+        "$value": "#FFFFFF",
+        "$type": "color"
+      },
+      "action-text": {
+        "$value": "#58A6FF",
+        "$type": "color"
+      },
+      "action-text-hover": {
+        "$value": "#8BC0FF",
+        "$type": "color"
+      },
+      "action-text-press": {
+        "$value": "#58A6FF",
+        "$type": "color"
+      },
       "icon-keyframes": {
         "$value": "#B4C7F1",
         "$type": "color"
@@ -799,6 +827,34 @@
       },
       "accent": {
         "$value": "#212529",
+        "$type": "color"
+      },
+      "action-fill": {
+        "$value": "#0969DA",
+        "$type": "color"
+      },
+      "action-fill-hover": {
+        "$value": "#0A61C9",
+        "$type": "color"
+      },
+      "action-fill-press": {
+        "$value": "#0757B7",
+        "$type": "color"
+      },
+      "action-on": {
+        "$value": "#FFFFFF",
+        "$type": "color"
+      },
+      "action-text": {
+        "$value": "#0863CE",
+        "$type": "color"
+      },
+      "action-text-hover": {
+        "$value": "#0757B7",
+        "$type": "color"
+      },
+      "action-text-press": {
+        "$value": "#06499B",
         "$type": "color"
       },
       "icon-keyframes": {

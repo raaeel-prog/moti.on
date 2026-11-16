@@ -10,6 +10,7 @@ const { createQuickLibrary } = await import(`data:text/javascript;base64,${Buffe
 function fixture(t, width = 360, overrides = {}) {
   t.mock.timers.enable({apis: ['setTimeout']});
   const doc = createFakeDocument({clientWidth: width});
+  doc.documentElement.clientHeight = 800;
   const {documentView, ...libraryOverrides} = overrides;
   if (documentView) doc.defaultView = documentView;
   const create = doc.createElement;
@@ -82,7 +83,8 @@ test('restores scroll after two frames and cancels stale restoration on scroll o
 });
 
 test('hover shows a legible name outside its icon tile', t => {
-  const {tool, tooltip} = fixture(t);
+  const {doc, tool, tooltip} = fixture(t);
+  doc.documentElement.clientHeight = 410;
   tool.emit('mouseenter');
   t.mock.timers.tick(250);
   assert.equal(tooltip.style.left, '132px');
@@ -145,7 +147,7 @@ test('click dismisses immediately so the hint never covers the resulting action'
   assert.equal(tooltip.hidden, true);
 });
 
-test('collection and category selectors filter the same tiles without replacing focused controls', t => {
+test('favorites star, category menu and search field filter the same tiles without replacing focused controls', t => {
   const doc=createFakeDocument();
   const create=doc.createElement;
   doc.createElement=tag=>{const node=create(tag);node.style={};node.classList={add(){}};return node;};
@@ -158,51 +160,49 @@ test('collection and category selectors filter the same tiles without replacing 
   });
   t.after(()=>library.dispose());
   const find=id=>library.element.getElementsByTagName('button').find(n=>n.id===id);
-  const collection=find('library-collection');
+  const star=find('library-favorites-only');
   const category=find('library-category-select');
   const ids=()=>library.element.getElementsByTagName('button').filter(n=>n.id.startsWith('library-tool-')).map(n=>n.id);
-  collection.focus();collection.click();find('library-scope-favorites').click();
+  assert.equal(star.getAttribute('aria-pressed'),'false');
+  star.focus();star.click();
   assert.deepEqual(ids(),['library-tool-wiggle']);
-  assert.equal(doc.activeElement,collection);
-  collection.click();find('library-scope-recent').click();
-  assert.deepEqual(ids(),['library-tool-clean','library-tool-wiggle']);
+  assert.equal(star.getAttribute('aria-pressed'),'true');
+  assert.equal(navigation.scope,'favorites');
+  assert.equal(doc.activeElement,star);
+  star.click();
+  assert.deepEqual(ids(),['library-tool-wiggle','library-tool-clean']);
   category.click();find('library-category-project').click();
   assert.deepEqual(ids(),['library-tool-clean']);
   assert.equal(navigation.category,'project');
-  const search=library.element.getElementsByTagName('input')[0];
-  search.value='não existe';search.emit('input');
-  assert.deepEqual(ids(),[]);
+  assert.match(category.allText,/Projeto/);
+  category.click();find('library-category-all').click();
+  const input=library.element.getElementsByTagName('input')[0];
+  input.value='trem';input.emit('input');
+  assert.equal(navigation.query,'trem');
+  assert.deepEqual(ids(),['library-tool-wiggle'],'the search matches aliases too');
 });
 
-
-test('search expands in place and Escape preserves a typed query', t => {
+test('the toolbar follows the design system: search field, category "Todas" and the favorites star', t => {
   const {library,find}=fixture(t);
-  const trigger=find('library-search-open');
-  const search=find('library-search');
-  trigger.click();
-  assert.equal(trigger.hidden,true);
-  assert.equal(search.parentNode.hidden,false);
-  search.value='clean';search.emit('input');
-  library.element.keydown('Escape');
-  assert.equal(search.value,'clean');
-  assert.equal(trigger.hidden,true);
-  find('library-search-clear').click();
-  library.element.keydown('Escape');
-  assert.equal(trigger.hidden,false);
-  assert.equal(search.parentNode.hidden,true);
+  const input=library.element.getElementsByTagName('input')[0];
+  assert.equal(input.id,'library-search');
+  assert.equal(input.getAttribute('placeholder'),'Buscar ferramenta');
+  const category=find('library-category-select');
+  assert.match(category.allText,/^Todas$/);
+  const filters=category.parentNode;
+  assert.deepEqual(filters.children.map(node=>node.id),['library-category-select','library-favorites-only']);
+  const heading=library.element.children.find(node=>String(node.className).includes('ch-quick-heading'));
+  assert.match(heading.className,/ch-visually-hidden/,'the old heading row stays for screen readers only');
 });
 
-test('host context updates preserve tool identity, focus, query and current callbacks', t => {
+test('host context updates preserve tool identity, focus and current callbacks', t => {
   const {library,tool,find}=fixture(t);
   let applied=0;
-  find('library-search-open').click();
-  const search=find('library-search');search.value='clean';search.emit('input');
   tool.focus();
   const replacement={id:'clean',name:'Clean updated',description:'Description',aliases:'',category:'all',interaction:'quick',reason:'Select a layer',run(){applied++;},edit(){throw new Error('old route');}};
   library.update([replacement]);
   assert.equal(find('library-tool-clean'),tool);
   assert.equal(tool.ownerDocument.activeElement,tool);
-  assert.equal(search.value,'clean');
   assert.equal(tool.getAttribute('aria-description'),'Select a layer');
   assert.equal(tool.getAttribute('aria-disabled'),'true');
   library.update([{...replacement,reason:null}]);
@@ -211,15 +211,15 @@ test('host context updates preserve tool identity, focus, query and current call
 });
 
 test('filter menus support arrow keys, End, Home and Escape focus restoration', t => {
-  const {library,find}=fixture(t);
-  const collection=find('library-collection');
+  const {library,find}=fixture(t,360,{categories:[{id:'animation',name:'Expressões',icon:'wiggle'},{id:'project',name:'Projeto',icon:'context'}]});
+  const collection=find('library-category-select');
   collection.click();
   const menu=find('library-menu');
   assert.equal(collection.getAttribute('aria-expanded'),'true');
   assert.equal(menu.getAttribute('data-open'),'true');
-  menu.keydown('End');assert.equal(collection.ownerDocument.activeElement.id,'library-scope-recent');
-  menu.keydown('ArrowDown');assert.equal(collection.ownerDocument.activeElement.id,'library-scope-all');
-  menu.keydown('Home');assert.equal(collection.ownerDocument.activeElement.id,'library-scope-all');
+  menu.keydown('End');assert.equal(collection.ownerDocument.activeElement.id,'library-category-project');
+  menu.keydown('ArrowDown');assert.equal(collection.ownerDocument.activeElement.id,'library-category-all');
+  menu.keydown('Home');assert.equal(collection.ownerDocument.activeElement.id,'library-category-all');
   library.element.keydown('Escape');
   assert.equal(collection.ownerDocument.activeElement,collection);
   assert.equal(collection.getAttribute('aria-expanded'),'false');
@@ -229,9 +229,9 @@ test('filter menus support arrow keys, End, Home and Escape focus restoration', 
 
 test('an interrupted menu exit cannot hide a newly opened filter', t => {
   const {library,find}=fixture(t);
-  find('library-collection').click();library.element.keydown('Escape');
+  find('library-category-select').click();library.element.keydown('Escape');
   t.mock.timers.tick(100);
-  find('library-category-select').click();t.mock.timers.tick(200);
+  find('library-options-clean').click();t.mock.timers.tick(200);
   assert.equal(find('library-menu').hidden,false);
   assert.equal(find('library-menu').getAttribute('data-open'),'true');
 });
@@ -261,7 +261,7 @@ test('unavailable tools explain their reason on focus and never execute either r
 });
 
 for (const locale of ['pt-BR','en-US']) {
-  for (const scope of ['favorites','recent']) {
+  for (const scope of ['favorites']) {
     test(`${locale} empty ${scope} explains next step and resets filters through one action`, t => {
       const navigation={category:'all',scope,query:'',scroll:15};
       let navigations=0;
@@ -273,43 +273,39 @@ for (const locale of ['pt-BR','en-US']) {
       assert.deepEqual(navigation,{category:'all',scope:'all',query:'',scroll:0});
       assert.equal(navigations,1);
       assert.ok(find('library-tool-clean'));
-      assert.equal(doc.activeElement,find('library-search'));
-      assert.equal(find('library-search').parentNode.hidden,false);
+      assert.equal(doc.activeElement,find('library-category-select'),'the reset leaves focus on the category menu');
     });
   }
 }
 
-test('empty search keeps its query and focus until the user chooses to reset', t => {
-  const {library,find,doc,navigation}=fixture(t);
-  find('library-search-open').click();
-  const search=find('library-search'); search.value='inexistente'; search.emit('input');
-  assert.equal(doc.activeElement,search);
-  assert.equal(navigation.query,'inexistente');
+test('an empty category explains itself and resets through one action', t => {
+  const navigation={category:'nada',scope:'all',query:'',scroll:0};
+  const {library,find,doc}=fixture(t,360,{navigation});
   assert.match(library.element.allText,/Tente outro nome ou remova os filtros/);
   const count=library.element.getElementsByTagName('span').find(node=>node.className==='ch-library-count');
   assert.equal(count.getAttribute('role'),'status');
   assert.equal(count.getAttribute('aria-label'),'0 ferramentas encontradas');
   const action=library.element.getElementsByTagName('button').find(node=>node.textContent==='Ver todas as ferramentas');
   action.click();
-  assert.equal(find('library-search'),search);
-  assert.equal(search.value,''); assert.equal(doc.activeElement,search);
+  assert.equal(navigation.category,'all');
+  assert.equal(doc.activeElement,find('library-category-select'));
 });
 
-test('changing between empty collections refreshes the guidance', t => {
-  const {library,find}=fixture(t,360,{navigation:{category:'all',scope:'favorites',query:'',scroll:0}});
-  assert.match(library.element.allText,/Use Favoritar/);
-  find('library-collection').click();find('library-scope-recent').click();
-  assert.match(library.element.allText,/As ferramentas que você usar aparecerão aqui/);
-  assert.doesNotMatch(library.element.allText,/Use Favoritar/);
+test('a saved "recent" scope from the old toolbar becomes the whole library instead of an invisible filter', t => {
+  let navigations=0;
+  const navigation={category:'all',scope:'recent',query:'',scroll:40};
+  const {find}=fixture(t,360,{navigation,onNavigate(){navigations++;}});
+  assert.equal(navigation.scope,'all');assert.equal(navigation.scroll,0);assert.equal(navigations,1);
+  assert.ok(find('library-tool-clean'));assert.ok(find('library-tool-wiggle'));
 });
 
 test('tool options describe favorite removal after toggling and keep focus on the originating control',t=>{
   let favorites=[];
   const {find,doc}=fixture(t,360,{preferences:{snapshot:()=>({favorites,recent:[]}),toggleFavorite(id){favorites=favorites.includes(id)?favorites.filter(item=>item!==id):[...favorites,id];}}});
   const options=find('library-options-clean');options.focus();options.click();
-  assert.equal(find('library-favorite-clean').textContent,'Favoritar');
+  assert.equal(find('library-favorite-clean').allText,'Favoritar');
   find('library-favorite-clean').click();assert.equal(doc.activeElement,options);
-  options.click();assert.equal(find('library-favorite-clean').textContent,'Remover favorito');
+  options.click();assert.equal(find('library-favorite-clean').allText,'Remover dos favoritos');
 });
 
 test('a delayed scroll event from opening tool options keeps the menu available', t => {
@@ -325,4 +321,90 @@ test('a delayed scroll event from opening tool options keeps the menu available'
   grid.scrollTop = 170;
   grid.emit('scroll');
   assert.equal(find('library-menu').hidden, true, 'new user scrolling dismisses the positioned menu');
+});
+
+test('icon tile separates quick execution, adjustment and keyboard context menu',t=>{
+ let runs=0,edits=0;const f=fixture(t,360,{items:[{id:'clean',name:'Clean',description:'Description',category:'all',reason:null,interaction:'quick',run(){runs++;},edit(){edits++;}}]});
+ f.tool.click();assert.equal(runs,1);assert.equal(edits,0);const adjust=f.find('library-adjust-clean');adjust.click();assert.equal(edits,1);f.tool.keydown('ArrowRight');assert.equal(f.doc.activeElement,adjust);f.tool.keydown('F10',{shiftKey:true});assert.equal(f.find('library-edit-clean').hidden,false);f.find('library-edit-clean').click();assert.equal(edits,2);assert.equal(runs,1);
+});
+
+test('a saved search shows in the field and keeps filtering; Escape clears it', t => {
+  let navigations=0;const navigation={category:'all',scope:'all',query:'clean',scroll:40};
+  const {library,find}=fixture(t,360,{navigation,onNavigate(){navigations++;}});
+  const input=library.element.getElementsByTagName('input')[0];
+  assert.equal(input.value,'clean');
+  assert.ok(find('library-tool-clean'));assert.equal(find('library-tool-wiggle'),undefined);
+  input.keydown('Escape');
+  assert.equal(navigation.query,'');assert.equal(input.value,'');assert.equal(navigations,1);
+  assert.ok(find('library-tool-wiggle'));
+});
+
+test('right click opens Aplicar, Ajustes… and Favoritar at the pointer, over the tool', t => {
+  let runs=0,edits=0;
+  const {library,tool,find}=fixture(t,360,{items:[{id:'clean',name:'Clean',description:'Description',aliases:'',category:'all',reason:null,interaction:'quick',run(){runs++;},edit(){edits++;}}]});
+  library.element.getBoundingClientRect=()=>({left:120,top:200,width:360,height:600});
+  let prevented=false;
+  tool.emit('contextmenu',{clientX:190,clientY:380,preventDefault(){prevented=true;},stopPropagation(){}});
+  assert.ok(prevented);
+  const menu=find('library-menu');
+  assert.equal(menu.getAttribute('data-open'),'true');
+  assert.equal(menu.style.left,'70px','the menu opens where the pointer is, not at a corner');
+  assert.equal(menu.style.top,'180px');
+  const items=menu.children.filter(node=>node.tagName==='button').map(node=>node.allText);
+  assert.deepEqual(items,['Aplicar','Ajustes… Alt+clique','Favoritar']);
+  assert.ok(menu.children.some(node=>node.className==='ch-library-menu__separator'));
+  find('library-run-clean').click();assert.equal(runs,1);
+  tool.emit('contextmenu',{clientX:470,clientY:790,preventDefault(){},stopPropagation(){}});
+  assert.equal(menu.style.left,'250px','flips left when the pointer is near the right edge');
+  assert.equal(menu.style.top,'566px','and up near the bottom');
+  find('library-edit-clean').click();assert.equal(edits,1);
+});
+
+test('Alt+click and the corner three dots open the tool settings instead of applying', t => {
+  let runs=0,edits=0;
+  const {tool,find}=fixture(t,360,{items:[{id:'clean',name:'Clean',description:'Description',aliases:'',category:'all',reason:null,interaction:'quick',run(){runs++;},edit(){edits++;}}]});
+  tool.emit('mousedown',{altKey:true});tool.click();
+  assert.equal(edits,1);assert.equal(runs,0);
+  tool.emit('mousedown',{altKey:false});tool.click();
+  assert.equal(runs,1);
+  const corner=find('library-adjust-clean');
+  assert.equal(corner.children[0].getAttribute('data-icon'),'more','the corner shows the three dots of the study');
+  corner.click();assert.equal(edits,2);
+});
+
+
+test('status line names the hovered tool and the Details column follows it; idle shows only the hint', t => {
+  const doc=createFakeDocument();
+  const create=doc.createElement;
+  doc.createElement=tag=>{const node=create(tag);node.style={setProperty(){}};node.classList={add(){}};return node;};
+  let favorites=[],edited='';
+  const library=createQuickLibrary(doc,{
+    items:[{id:'wiggle',name:'Wiggle',description:'Oscila a propriedade',aliases:'',category:'animation',interaction:'quick',reason:null,run(){},edit(){edited='wiggle';}},
+      {id:'clean',name:'Limpar',description:'Organizar projeto',aliases:'',category:'project',interaction:'configure',reason:'Abra um projeto.',run(){},edit(){edited='clean';}}],
+    categories:[{id:'animation',name:'Expressões',icon:'wiggle'},{id:'project',name:'Projeto',icon:'context'}],
+    navigation:{category:'all',scope:'all',query:'',scroll:0},
+    preferences:{snapshot:()=>({favorites,recent:[]}),toggleFavorite(id){favorites=favorites.includes(id)?[]:[id];}},locale:'pt-BR',anchor:doc.createElement('div'),onNavigate(){}
+  });
+  t.after(()=>library.dispose());
+  const byClass=name=>{const out=[];(function walk(node){if(node.className===name)out.push(node);for(const child of node.children??[])walk(child);})(library.element);return out;};
+  const text=node=>node.children?.length?node.children.map(text).join(''):(node.textContent??'');
+  const status=byClass('ch-tool-status')[0],details=byClass('ch-tool-details')[0];
+  assert.equal(status.getAttribute('data-idle'),'true');
+  assert.equal(text(status),'Clique abre os ajustes · Botão direito: mais opções');
+  const tiles=byClass('ch-tool-tile');
+  assert.equal(tiles.length,2);
+  assert.equal(text(byClass('ch-tool-group-count')[0]),'1','each group title carries its own count');
+  tiles[1].emit('mouseenter');
+  assert.equal(status.getAttribute('data-idle'),'false');
+  assert.equal(text(status),'Limpar · Abra um projeto.','an unavailable tool explains itself in place of the description');
+  assert.match(text(details),/Limpar/);assert.match(text(details),/Projeto/);assert.match(text(details),/Abra um projeto\./);
+  tiles[1].emit('mouseleave');
+  assert.equal(status.getAttribute('data-idle'),'true');
+  assert.match(text(details),/Limpar/,'Details keeps the last tool instead of emptying');
+  const buttons=()=>library.element.getElementsByTagName('button');
+  buttons().find(n=>n.id==='library-details-settings').click();
+  assert.equal(edited,'clean');
+  buttons().find(n=>n.id==='library-details-favorite').click();
+  assert.equal(favorites.join(),'clean');
+  assert.equal(text(buttons().find(n=>n.id==='library-details-favorite')),'Remover dos favoritos');
 });

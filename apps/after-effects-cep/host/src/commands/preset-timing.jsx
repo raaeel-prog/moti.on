@@ -1,5 +1,7 @@
 /** Move only owned preset timing cues. Layer edges, animation properties and
- * marker payloads remain intact; every destination is checked before mutation. */
+ * marker payloads remain intact; every destination is checked before mutation.
+ * v1 cues are points (end of the entrance, start of the exit); v2 cues are
+ * windows, so shift/align/stagger move the whole phase and Duration resizes it. */
 (function (global) {
   var EPSILON = 0.000001;
   var ALLOWED = {operation:true,phase:true,frames:true,order:true,seed:true};
@@ -52,6 +54,38 @@
   }
   /** @param {any} error @returns {any} */
   function rejected(error) { return {error:error,targets:[]}; }
+  /** Effective In/Out windows of a v2 layer as AE plays them now.
+   * @param {any} layer @param {any} state @param {number} fd @returns {any} */
+  function rangeWindows(layer,state,fd) {
+    var W=/** @type {any} */ (global).MotionMarkerWindow,result=/** @type {any} */ ({valid:true,input:null,output:null});
+    if(state.input)result.input=W.cueWindow("in",state.input.time,state.input.value.duration,state.input.value.getParameters(),layer,fd);
+    if(state.output)result.output=W.cueWindow("out",state.output.time,state.output.value.duration,state.output.value.getParameters(),layer,fd);
+    var list=[result.input,result.output];
+    for(var i=0;i<list.length;i++)if(list[i]&&(!finite(list[i].start)||!finite(list[i].end)||list[i].duration<=EPSILON))result.valid=false;
+    return result;
+  }
+  /** Plan one v2 cue move: the window must stay inside the layer, keep a length
+   * and never cross the other phase.
+   * @param {any} target @param {any} args @param {any} comp @param {number} position @returns {MotionCommandFailure|null} */
+  function planRange(target,args,comp,position) {
+    var W=/** @type {any} */ (global).MotionMarkerWindow,fd=comp.frameDuration,layer=target.layer,own=args.phase==="in"?target.windows.input:target.windows.output,other=args.phase==="in"?target.windows.output:target.windows.input;
+    var length=args.operation==="duration"?args.frames*fd:own.duration;
+    var start=args.operation==="shift"?own.start+args.frames*fd:args.operation==="duration"?(args.phase==="in"?own.start:own.end-length):comp.time+(args.operation==="stagger"?position*args.frames*fd:0),end=start+length;
+    var conflict=fail(MotionContracts.ERROR.KEYFRAME_CONFLICT,"A fase sairia da camada ou cruzaria a outra fase. Ajuste o cursor ou o intervalo.");
+    if(!finite(start)||!finite(end)||length<=EPSILON||start<layer.inPoint-EPSILON||end>layer.outPoint+EPSILON)return conflict;
+    if(other&&(args.phase==="in"?end>other.start+EPSILON:start<other.end-EPSILON))return conflict;
+    for(var k=1;k<=target.property.numKeys;k++)if(k!==target.cue.index&&Math.abs(target.property.keyTime(k)-start)<=EPSILON)return fail(MotionContracts.ERROR.KEYFRAME_CONFLICT,"O destino está ocupado por outro marcador. Ajuste o cursor ou o intervalo.");
+    var before=target.cue.value.getParameters(),after=W.edgeParams(before,args.phase,start,end,layer,fd);
+    target.afterTime=start;target.afterDuration=length;target.afterParams=after;
+    target.changed=Math.abs(start-target.beforeTime)>EPSILON||Math.abs(length-target.cue.value.duration)>EPSILON||before[W.EDGE]!==after[W.EDGE];
+    return null;
+  }
+  /** Value written for a target: v2 gets a fresh copy with its new window.
+   * @param {any} target @returns {any} */
+  function movedValue(target) {
+    if(!target.windows)return target.cue.value;
+    var value=/** @type {any} */ (global).MotionMarkerWindow.copy(target.cue.value);value.duration=target.afterDuration;value.setParameters(target.afterParams);return value;
+  }
   /** @param {any} args @returns {any} */
   function prepare(args) {
     var invalid=validate(args);if(invalid)return rejected(invalid);
@@ -67,9 +101,10 @@
       var layer=/** @type {any} */ (layers[i]),meta,ownership;
       if(layer.locked)return rejected(fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Desbloqueie todas as camadas selecionadas."));
       try{meta=library.metadata(layer);ownership=meta?library.verifyOwnership(layer,meta):null;}catch(metadataError){return rejected(fail(MotionContracts.ERROR.INVALID_PRESET,"Os dados do preset estão incompletos. Reaplique o preset antes de ajustar o timing."));}
-      if(!meta||meta.markerVersion!==1||!finite(meta.markerDurationFrames))return rejected(fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Todas as camadas precisam de marcadores de transição Moti.on. Reaplique o preset nas camadas sem marcadores."));
+      if(!meta||(meta.markerVersion!==1&&meta.markerVersion!==2)||!finite(meta.markerDurationFrames))return rejected(fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Todas as camadas precisam de marcadores de transição Moti.on. Reaplique o preset nas camadas sem marcadores."));
       if(ownership)return rejected(ownership);
-      var durationError=durationPreflight(layer,meta);if(durationError)return rejected(durationError);
+      // v2 reads only the cues, so a changed Duration slider cannot disagree with them.
+      if(meta.markerVersion===1){var durationError=durationPreflight(layer,meta);if(durationError)return rejected(durationError);}
       var property=layer.property("ADBE Marker");
       if(!property||typeof property.keyValue!=="function"||typeof property.setValueAtTime!=="function"||typeof property.removeKey!=="function"||typeof property.keySelected!=="function"||typeof property.setSelectedAtKey!=="function")return rejected(fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE,"A camada não permite editar marcadores."));
       if(property.numKeys>250)return rejected(fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Reduza a camada a até 250 marcadores antes de ajustar o timing."));
@@ -79,9 +114,11 @@
       if(!cue)return rejected(fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,args.phase==="in"?"Uma camada não tem marcador de entrada Moti.on.":"Uma camada não tem marcador de saída Moti.on."));
       if(meta.options&&meta.options.phase==="both"&&(!state.input||!state.output))return rejected(fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Uma fase do preset está sem marcador. Reaplique o preset para restaurar os marcadores antes de ajustar o timing."));
       if(!finite(layer.inPoint)||!finite(layer.outPoint)||layer.outPoint-layer.inPoint<=EPSILON)return rejected(fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"A camada precisa ter duração positiva."));
-      if((state.input&&(!finite(state.input.time)||state.input.time<=layer.inPoint||state.input.time>layer.outPoint))||(state.output&&(!finite(state.output.time)||state.output.time<layer.inPoint||state.output.time>=layer.outPoint)))return rejected(fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Um marcador está fora do intervalo da camada. Corrija-o na timeline antes de continuar."));
+      if(meta.markerVersion===1&&((state.input&&(!finite(state.input.time)||state.input.time<=layer.inPoint||state.input.time>layer.outPoint))||(state.output&&(!finite(state.output.time)||state.output.time<layer.inPoint||state.output.time>=layer.outPoint))))return rejected(fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Um marcador está fora do intervalo da camada. Corrija-o na timeline antes de continuar."));
       var selectedTimes=[];for(var selected=1;selected<=property.numKeys;selected++)if(property.keySelected(selected))selectedTimes.push(property.keyTime(selected));
-      targets.push({layer:layer,meta:meta,property:property,cue:cue,state:state,beforeTime:cue.time,afterTime:cue.time,selectedTimes:selectedTimes,propertySelected:property.selected});
+      var windows=meta.markerVersion===2?rangeWindows(layer,state,comp.frameDuration):null;
+      if(windows&&!windows.valid)return rejected(fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Um marcador de fase está sem duração ou fora da camada. Corrija-o na timeline antes de continuar."));
+      targets.push({layer:layer,meta:meta,property:property,cue:cue,state:state,windows:windows,beforeTime:cue.time,afterTime:cue.time,selectedTimes:selectedTimes,propertySelected:property.selected});
     }
     targets.sort(function(a,b){return args.order==="reverse"?b.layer.index-a.layer.index:a.layer.index-b.layer.index;});
     if(args.order==="random"){
@@ -94,6 +131,7 @@
     }
     var changed=0;
     for(i=0;i<targets.length;i++){
+      if(targets[i].windows){var rangeError=planRange(targets[i],args,comp,i);if(rangeError)return rejected(rangeError);if(targets[i].changed)changed++;continue;}
       var target=targets[i],destination=args.operation==="duration"?(args.phase==="in"?target.layer.inPoint+args.frames*comp.frameDuration:target.layer.outPoint-args.frames*comp.frameDuration):args.operation==="shift"?target.beforeTime+args.frames*comp.frameDuration:comp.time+(args.operation==="stagger"?i*args.frames*comp.frameDuration:0);
       var input=args.phase==="in"?destination:(target.state.input?target.state.input.time:null),output=args.phase==="out"?destination:(target.state.output?target.state.output.time:null);
       if(!finite(destination)||destination<target.layer.inPoint||destination>target.layer.outPoint||(args.phase==="in"&&destination-target.layer.inPoint<=EPSILON)||(args.phase==="out"&&target.layer.outPoint-destination<=EPSILON))return rejected(fail(MotionContracts.ERROR.KEYFRAME_CONFLICT,"O timing solicitado sairia da camada ou deixaria a fase sem duração. Ajuste o cursor ou o intervalo."));
@@ -129,7 +167,7 @@
       for(i=0;i<plan.targets.length;i++){
         var target=plan.targets[i];if(!target.changed)continue;touched.push(target);
         var index=currentIndex(target,args.phase);if(!index)throw new Error("O marcador mudou antes da aplicação.");
-        target.property.removeKey(index);target.property.setValueAtTime(target.afterTime,target.cue.value);restoreSelection(target,true);
+        target.property.removeKey(index);target.property.setValueAtTime(target.afterTime,movedValue(target));restoreSelection(target,true);
       }
     }catch(error){
       var rollbackFailed=false;

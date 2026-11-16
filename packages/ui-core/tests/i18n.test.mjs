@@ -120,7 +120,11 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
   // Copiar o portugues para o catalogo ingles e o jeito mais comum de "traduzir"
   // sem traduzir. Termos que sao iguais nos dois idiomas ficam de fora.
   const iguaisPorNatureza = new Set([
+    // Established optical terms and recipe names shared by both languages.
+    "particles.mode.bokeh", "gradient.preset.halo", "gradient.preset.duotone",
     "library.presets",
+    // Parallax e um termo tecnico igual em portugues e ingles (aba do topo).
+    "nav.parallax",
     // Preset e Plasma mantêm a mesma grafia em português e inglês.
     "verticalPulse.preset",
     "verticalPulse.preset.plasma",
@@ -244,6 +248,8 @@ test("nenhuma mensagem ficou sem traduzir entre os catalogos", () => {
     "gradient.preset", "gradient.option.linear", "gradient.option.radial", "gradient.option.angular", "gradient.preset.aurora",
     // "Normal" e a mesma palavra nos dois idiomas.
     "anchor.mode.normal",
+    // Color and palette words spelled the same in both languages.
+    "gradient.paletteFamily.magenta", "gradient.paletteStyle.pastel", "gradient.paletteStyle.neon",
     "context.compositionValue",
     "value.none",
     "error.withCode"

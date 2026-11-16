@@ -13,12 +13,14 @@ async function fixture(t,{failRead=false,holdAdjust=false,storage,locale='pt-BR'
   globalThis.requestAnimationFrame=()=>1;globalThis.cancelAnimationFrame=()=>{};
   const doc=createCepDocument(),calls=[],context={hasComp:true,selectionCount:1,selectedKeys:0};let readFailure=failRead,adjustFailure=false,holdRead=false,applyFailure=false,timingFailure=false;
   if(phases){
+    doc.createEvent=()=>({initEvent(type){this.type=type;}});
     const create=doc.createElement.bind(doc);
     doc.createElement=tag=>{
       const node=create(tag),listeners=new Map();
       node.addEventListener=(type,handler)=>listeners.set(type,[...(listeners.get(type)??[]),handler]);
       node.removeEventListener=(type,handler)=>listeners.set(type,(listeners.get(type)??[]).filter(listener=>listener!==handler));
       node.emit=(type,init={})=>{const event={target:node,currentTarget:node,defaultPrevented:false,preventDefault(){this.defaultPrevented=true;},...init};for(const listener of [...(listeners.get(type)??[])])listener(event);return event;};
+      node.dispatchEvent=event=>{node.emit(event.type,event);return true;};
       node.classList.remove=(...names)=>{node.className=node.className.split(/\s+/).filter(name=>!names.includes(name)).join(' ');};
       node.blur=()=>{if(doc.activeElement===node)doc.activeElement=null;node.emit('blur');};
       return node;
@@ -37,6 +39,9 @@ async function fixture(t,{failRead=false,holdAdjust=false,storage,locale='pt-BR'
       if(adjustFailure)throw Error('transport');
       if(holdAdjust)await new Promise(resolve=>{resolveAdjust=resolve;});
       state.options={...args.options};state.target.fingerprint+='b';
+    }else if(command==='ae.presets.phase-adjust'){
+      if(holdAdjust)await new Promise(resolve=>{resolveAdjust=resolve;});
+      state.phases.find(phase=>phase.phase===args.phase).options={...args.options};state.options={...args.options};state.target.fingerprint+='p';
     }else if(command==='ae.presets.phase-action'){
       if(phaseActionFailure)return {ok:false,error:{message:'Não foi possível remover a fase.'}};
       if(args.action==='remove'){
@@ -45,7 +50,7 @@ async function fixture(t,{failRead=false,holdAdjust=false,storage,locale='pt-BR'
         else{state.state='unmanaged';state.message='Esta camada não tem um preset Moti.on.';delete state.target;delete state.options;delete state.presetId;}
       }
     }else if(command==='ae.presets.timing'){if(timingFailure)return {ok:false,error:{message:'Destino ocupado por um marcador.'}};if(state.target)state.target.fingerprint+='t';return {ok:true,data:{appliedCount:2}};}else if(command==='ae.presets.phase-apply'&&applyFailure)return {ok:false,error:{message:'A seleção contém um preset. Remova-o antes de aplicar.'}};
-    else if(command==='ae.presets.personal-apply')return {ok:true,data:{kind:cache.personal.items.find(item=>item.id===args.itemId)?.kind??'preset'}};
+    else if(command==='ae.presets.personal-apply')return {ok:true,data:{appliedCount:1,kind:cache.personal.items.find(item=>item.id===args.itemId)?.kind??'preset'}};
     return {ok:true,data:structuredClone(state)};}});
   t.after(()=>{workspace.dispose();Object.assign(globalThis,saved);});await setImmediate();
   const button=label=>workspace.element.getElementsByTagName('button').find(n=>n.allText===label);
@@ -58,7 +63,94 @@ test('host inspection state is explained in the selected language',async t=>{
   const f=await fixture(t,{locale:'en-US',inspectionState:'no-comp'});
   assert.match(f.workspace.element.allText,/Open a composition/);
   assert.doesNotMatch(f.workspace.element.allText,/Abra uma composição/);
-  assert.ok(f.button('Browse presets'));
+  assert.doesNotMatch(f.workspace.element.allText,/Layer Selection|Colors|Arrange entrances and exits/);
+  assert.match(f.workspace.element.allText,/Saved variations/);
+  f.button('Browse presets').click();
+  assert.equal(f.navigation.view,'browse');
+  assert.equal(f.doc.activeElement===f.button('Browse'),true);
+});
+
+test('Browse action menu reads real selection, copies locally, and pastes through the existing command',async t=>{
+ const f=await fixture(t,{navigation:{view:'browse',category:'all',query:'',scope:'all',scroll:0}});
+ const menu=()=>f.workspace.element.getElementsByTagName('section').find(node=>node.className==='ch-preset-library-actions-menu');
+ const action=id=>menu().getElementsByTagName('button').find(node=>node.dataset.action===id);
+ f.button('Ações de presets').click();await setImmediate();
+ assert.ok(f.calls.some(call=>call.command==='ae.presets.inspect'));assert.equal(action('paste-preset').disabled,true);
+ action('copy-preset').click();await setImmediate();
+ assert.equal(f.cache.copied.presetId,f.state.presetId);assert.equal(f.cache.copied.options.direction,'bottom');
+ assert.equal(f.calls.some(call=>call.command==='ae.presets.phase-apply'),false);
+ f.button('Ações de presets').click();await setImmediate();action('paste-preset').click();await setImmediate();await setImmediate();
+ assert.equal(f.calls.filter(call=>call.command==='ae.presets.phase-apply').length,1);
+});
+
+test('Browse action menu rejects a changed target between opening and copy',async t=>{
+ const f=await fixture(t,{navigation:{view:'browse',category:'all',query:'',scope:'all',scroll:0}});
+ f.button('Ações de presets').click();await setImmediate();
+ f.state.target.instance='replacement';
+ const action=f.workspace.element.getElementsByTagName('button').find(node=>node.dataset.action==='copy-preset');action.click();await setImmediate();
+ assert.equal(f.cache.copied,undefined);assert.match(f.workspace.element.allText,/ação não foi confirmada/i);
+});
+
+test('Browse action menu disables source actions when there is no composition',async t=>{
+ const f=await fixture(t,{inspectionState:'no-comp',navigation:{view:'browse',category:'all',query:'',scope:'all',scroll:0}});
+ f.button('Ações de presets').click();await setImmediate();
+ const action=f.workspace.element.getElementsByTagName('button').find(node=>node.dataset.action==='copy-preset');assert.equal(action.disabled,true);action.click();assert.equal(f.cache.copied,undefined);
+});
+
+test('Browse remove action revalidates target and removes only the clicked existing phase',async t=>{
+ const f=await fixture(t,{phases:2,navigation:{view:'browse',category:'all',query:'',scope:'all',scroll:0}});
+ f.button('Ações de presets').click();await setImmediate();
+ f.workspace.element.getElementsByTagName('button').find(node=>node.dataset.action==='remove-out').click();await setImmediate();await setImmediate();
+ const removal=f.calls.filter(call=>call.command==='ae.presets.phase-action');assert.equal(removal.length,1);assert.equal(removal[0].args.phase,'out');assert.equal(removal[0].args.action,'remove');
+ assert.deepEqual(f.state.phases.map(phase=>phase.phase),['in']);assert.equal(f.navigation.view,'browse');
+});
+
+test('Browse remove action refuses replacement selection and reports the failure',async t=>{
+ const f=await fixture(t,{phases:1,navigation:{view:'browse',category:'all',query:'',scope:'all',scroll:0}});
+ f.button('Ações de presets').click();await setImmediate();f.state.target.layerId=33;
+ f.workspace.element.getElementsByTagName('button').find(node=>node.dataset.action==='remove-in').click();await setImmediate();await setImmediate();
+ assert.equal(f.calls.some(call=>call.command==='ae.presets.phase-action'),false);assert.equal(f.state.phases.length,1);assert.match(f.workspace.element.allText,/ação não foi confirmada/i);
+});
+
+test('automatic phase adjustment preserves an open slider and keyboard focus across its host read',async t=>{
+  const f=await fixture(t,{phases:1});
+  const number=()=>f.workspace.element.getElementsByTagName('input').find(node=>node.id.endsWith('-in-intensity'));
+  const old=number(),toggle=old.parentNode.children[0];toggle.click();
+  const range=f.workspace.element.getElementsByTagName('input').find(node=>node.id.endsWith('-in-intensity-slider'));range.focus();range.value='120';range.emit('input');range.emit('change');
+  await setImmediate();await setImmediate();
+  const next=f.workspace.element.getElementsByTagName('input').find(node=>node.id===range.id);
+  assert.equal(next!==range,true);assert.equal(f.doc.activeElement===next,true,JSON.stringify({active:f.doc.activeElement?.id,next:next?.id,disabled:next?.disabled,notice:f.workspace.element.allText.slice(0,180),calls:f.calls.map(call=>call.command)}));assert.equal(number().parentNode.children[0].getAttribute('aria-expanded'),'true');
+  assert.equal(next.value,'120');assert.equal(f.calls.filter(call=>call.command==='ae.presets.phase-adjust').length,1);
+});
+
+test('an adjustment response does not steal focus after the user moves to another control',async t=>{
+  const f=await fixture(t,{phases:1,holdAdjust:true});
+  const number=f.workspace.element.getElementsByTagName('input').find(node=>node.id.endsWith('-in-intensity'));
+  number.focus();number.value='125';number.emit('change');await setImmediate();
+  const external=f.doc.createElement('input');external.id='other-control';external.focus();f.releaseAdjust();await setImmediate();await setImmediate();
+  assert.equal(f.doc.activeElement===external,true);assert.equal(f.calls.filter(call=>call.command==='ae.presets.phase-adjust').length,1);
+});
+
+test('typing in In then clicking Out confirms both phase drafts against fresh target fingerprints',async t=>{
+  const f=await fixture(t,{phases:2});
+  const input=f.workspace.element.getElementsByTagName('input').find(node=>node.id.endsWith('-in-intensity'));
+  const box=f.workspace.element.getElementsByTagName('input').find(node=>node.id.endsWith('-out-motion-blur'));
+  input.focus();input.value='120';input.emit('input');f.doc.emit('pointerdown',{target:box});input.emit('blur');
+  assert.equal(f.calls.filter(call=>call.command==='ae.presets.phase-adjust').length,0);
+  f.doc.emit('pointerup');box.checked=true;box.emit('change');await new Promise(resolve=>setTimeout(resolve,15));
+  const sent=f.calls.filter(call=>call.command==='ae.presets.phase-adjust');
+  assert.deepEqual(sent.map(call=>call.args.phase),['in','out']);assert.equal(sent[0].args.options.intensity,120);assert.equal(sent[1].args.options.motionBlur,true);
+  assert.notEqual(sent[0].args.target.fingerprint,sent[1].args.target.fingerprint);
+  assert.equal(f.state.phases.find(phase=>phase.phase==='in').options.intensity,120);assert.equal(f.state.phases.find(phase=>phase.phase==='out').options.motionBlur,true);
+});
+
+test('a queued phase adjustment never retargets a replaced phase instance',async t=>{
+  const f=await fixture(t,{phases:2,holdAdjust:true});
+  const input=f.workspace.element.getElementsByTagName('input').find(node=>node.id.endsWith('-in-intensity'));
+  const box=f.workspace.element.getElementsByTagName('input').find(node=>node.id.endsWith('-out-motion-blur'));
+  input.focus();input.value='120';input.emit('input');f.doc.emit('pointerdown',{target:box});input.emit('blur');f.doc.emit('pointerup');box.checked=true;box.emit('change');
+  await new Promise(resolve=>setTimeout(resolve,5));f.state.phases[1].instance='replacement-out';f.releaseAdjust();await setImmediate();await setImmediate();
+  assert.equal(f.calls.filter(call=>call.command==='ae.presets.phase-adjust').length,1);assert.equal(f.state.phases[1].options.motionBlur,undefined);assert.match(f.workspace.element.allText,/seleção ou a fase mudou/);
 });
 const selectedPreset='builtin.motion.studio-letter-silk-rise';
 const galleryLocation=navigation=>({category:navigation.category,query:navigation.query,scope:navigation.scope,scroll:navigation.scroll,selectedId:navigation.selectedId});
@@ -132,7 +224,7 @@ test('preset editor exposes initial read failure and reload recovers',async t=>{
   const f=await fixture(t,{failRead:true});assert.match(f.workspace.element.allText,/Falha na leitura/);assert.ok(f.button('Recarregar'));
   f.failRead(false);f.button('Recarregar').click();await setImmediate();assert.equal(f.intensity().value,'100');
 });
-test('active Edit tab does not erase a pending draft',async t=>{
+test('repeated layer adjustment action does not erase a pending draft',async t=>{
   const f=await fixture(t);f.change(135.5);f.button('Editar').click();await setImmediate();assert.equal(f.intensity().value,'135.5');assert.equal(f.button('Aplicar ajustes').disabled,false);
 });
 test('different composition with identical layer id and fingerprint keeps independent drafts',async t=>{
@@ -159,7 +251,7 @@ test('an inspection already in flight cannot replace a number while its press is
   number.setAttribute('data-scrub-pressed','true');
   f.releaseRead();await setImmediate();
   assert.equal(f.intensity(),number);
-  assert.equal(f.workspace.element.getElementsByRole('tabpanel')[0].getAttribute('aria-busy'),'false');
+  assert.equal(f.workspace.element.getElementsByRole('tabpanel').find(node=>node.id===f.button('Editar').getAttribute('aria-controls')).getAttribute('aria-busy'),'false');
   number.removeAttribute('data-scrub-pressed');
   f.win.emit('focus');await setImmediate();
   assert.notEqual(f.intensity(),number);
@@ -168,11 +260,14 @@ test('uncertain adjustment blocks resubmission and failed reload preserves draft
   const f=await fixture(t);f.change(155);f.failAdjust();f.button('Aplicar ajustes').click();await setImmediate();assert.equal(f.button('Aplicar ajustes').disabled,true);assert.equal(f.intensity().value,'155');
   f.failRead(true);f.button('Recarregar').click();await setImmediate();assert.equal(f.intensity().value,'155');assert.equal(f.button('Aplicar ajustes').disabled,true);
 });
-test('preset editor tabs link to their panel and support Home/End',async t=>{
-  const f=await fixture(t);const tabs=f.workspace.element.getElementsByRole('tab');const panel=f.workspace.element.getElementsByRole('tabpanel')[0];
-  assert.equal(panel.getAttribute('aria-labelledby'),tabs[1].id);assert.equal(tabs[1].getAttribute('aria-controls'),panel.id);
-  // End on the already selected Edit tab preserves the draft as well as the tab state.
-  f.change(120);f.workspace.element.getElementsByRole('tablist')[0].keydown('End');assert.equal(f.intensity().value,'120');assert.equal(f.doc.activeElement,tabs[1]);
+test('contextual controls link to their region and never expose a hidden tab stop',async t=>{
+  const f=await fixture(t),edit=f.button('Editar'),back=f.button('Navegar');
+  const panel=f.workspace.element.getElementsByRole('tabpanel').find(node=>node.id===edit.getAttribute('aria-controls'));
+  assert.ok(panel);assert.equal(panel.getAttribute('aria-labelledby'),edit.id);
+  assert.equal(edit.hidden,false);assert.equal(back.hidden,false);
+  assert.equal(edit.getAttribute('aria-selected'),'true');
+  assert.equal(f.workspace.element.getElementsByRole('tab').length,2);
+  f.change(120);edit.click();assert.equal(f.intensity().value,'120');
 });
 
 test('applied preset order shows seed only for random sequencing and keeps the draft',async t=>{
@@ -188,6 +283,19 @@ test('applied preset order shows seed only for random sequencing and keeps the d
   assert.equal(args.order,'random');assert.equal(args.seed,57);assert.equal(args.intensity,135);
 });
 
+test('applied text exits choose their order once the phase leaves, and diagonals join Direction',async t=>{
+  const f=await fixture(t);
+  const choice=label=>f.workspace.element.getElementsByTagName('select').find(n=>n.getAttribute('aria-label')===label);
+  assert.deepEqual(choice('Direção').children.map(n=>n.value).slice(-4),['top-left','top-right','bottom-left','bottom-right']);
+  assert.equal(choice('Saída'),undefined,'an entrance has no exit order');
+  f.workspace.element.getElementsByTagName('div').find(n=>n.className==='ch-preset-workspace-content').getElementsByTagName('button').find(n=>n.dataset.phase==='both').click();
+  assert.equal(choice('Saída').value,'mirror');
+  const exit=choice('Saída');exit.value='repeat';exit.emit('change');
+  f.button('Aplicar ajustes').click();await setImmediate();await setImmediate();
+  const args=f.calls.find(c=>c.command==='ae.presets.adjust').args;
+  assert.equal(args.options.phase,'both');assert.equal(args.options.exitOrder,'repeat');
+});
+
 
 test('invalid numeric draft remains visible and blocks host mutation until corrected',async t=>{
   const f=await fixture(t);f.change(401);
@@ -200,6 +308,23 @@ test('invalid numeric draft remains visible and blocks host mutation until corre
   f.change(151.5);f.button('Aplicar ajustes').click();await setImmediate();await setImmediate();assert.equal(f.state.options.intensity,151.5);
 });
 
+test('applied preset slider and individual reset remain drafts and block on a stale selection',async t=>{
+  const f=await fixture(t),number=f.intensity(),header=number.parentNode,body=header.parentNode.children[1];
+  f.doc.createEvent=()=>({initEvent(type){this.type=type;}});
+  number.dispatchEvent=event=>{number.emit(event.type,event);return true;};
+  const slider=body.getElementsByTagName('input')[0],reset=header.children[2];
+  assert.equal(body.hidden,true);header.children[0].click();assert.equal(body.hidden,false);
+  slider.emit('pointerdown',{button:0});slider.value='140';slider.emit('input');f.doc.emit('pointerup');
+  assert.equal(number.value,'140');assert.equal(f.button('Aplicar ajustes').disabled,false);
+  assert.equal(f.calls.some(call=>call.command==='ae.presets.adjust'),false);
+  reset.click();assert.equal(number.value,'100');assert.equal(f.button('Aplicar ajustes').disabled,true);
+  slider.emit('pointerdown',{button:0});slider.value='160';slider.emit('input');f.doc.emit('pointerup');
+  f.state.target.fingerprint='external-change';f.win.emit('focus');await setImmediate();
+  assert.equal(slider.disabled,true);assert.equal(reset.disabled,true);
+  reset.click();assert.equal(number.value,'160');assert.equal(f.button('Aplicar ajustes').disabled,true);
+  assert.equal(f.calls.some(call=>call.command==='ae.presets.adjust'),false);
+});
+
 test('stale preset notice stays mounted across repeated context polls',async t=>{
   const f=await fixture(t);f.change(120);f.state.target.fingerprint='external-change';f.win.emit('focus');await setImmediate();
   const banner=f.workspace.element.getElementsByTagName('div').find(n=>n.className==='ch-alert ch-alert--warning');
@@ -207,12 +332,20 @@ test('stale preset notice stays mounted across repeated context polls',async t=>
   f.win.emit('focus');await setImmediate();assert.equal(f.workspace.element.getElementsByTagName('div').find(n=>n.className==='ch-alert ch-alert--warning'),banner);
 });
 
-test('Browse and Edit stay visible and keyboard navigation focuses their actual tabs',async t=>{
-  const f=await fixture(t),tabs=f.workspace.element.getElementsByRole('tablist')[0];
-  tabs.keydown('Home');assert.equal(tabs.hidden,false);assert.equal(f.navigation.view,'browse');assert.equal(f.doc.activeElement,f.button('Navegar'));
-  assert.equal(f.button('Navegar').getAttribute('aria-selected'),'true');
-  assert.equal(f.workspace.element.getElementsByTagName('button').some(node=>node.getAttribute('aria-label')==='Editar preset aplicado'),false,'the visible Edit tab replaces the duplicate icon');
-  tabs.keydown('End');await setImmediate();assert.equal(f.navigation.view,'edit');assert.equal(f.doc.activeElement,f.button('Editar'));
+test('layer adjustment returns focus to the visible action and preserves the browser state',async t=>{
+  const f=await fixture(t),back=f.button('Navegar'),edit=f.button('Editar');
+  f.navigation.query='silk';
+  assert.equal(f.workspace.element.getElementsByTagName('div').some(node=>node.className==='ch-preset-grid'),false,'Edit owns the workspace without a hidden playing gallery');
+  back.click();
+  const grid=f.workspace.element.getElementsByTagName('div').find(node=>node.className==='ch-preset-grid');grid.scrollTop=120;grid.emit('scroll');
+  back.click();assert.equal(f.navigation.view,'browse');assert.equal(f.doc.activeElement===back,true);
+  assert.equal(back.hidden,false);assert.equal(edit.hidden,false);
+  assert.equal(f.workspace.element.getElementsByTagName('button').some(node=>node.getAttribute('aria-label')==='Editar preset aplicado'),false);
+  edit.click();await setImmediate();assert.equal(f.navigation.view,'edit');assert.equal(f.doc.activeElement===edit,true);
+  assert.equal(edit.hidden,false);assert.equal(back.hidden,false);
+  assert.equal(edit.getAttribute('aria-selected'),'true');
+  assert.equal(f.navigation.query,'silk');assert.equal(f.navigation.scroll,120);
+  assert.equal(f.workspace.element.getElementsByTagName('div').some(node=>node.className==='ch-preset-grid'),false);
 });
 
 test('Edit phase is explicit, keyboard operable, and reset only changes the draft',async t=>{
@@ -270,7 +403,8 @@ for(const [kind,label,message] of [['preset','Aplicar .ffx','Preset aplicado'],[
   test(`personal ${kind} reports its actual import action`,async t=>{
     const cache={personal:{roots:[],folders:[],items:[{id:'item',rootId:'root',folderId:'folder',name:'Local asset',relativePath:'asset',kind}]}};
     const f=await fixture(t,{cache,navigation:{view:'browse',category:'personal',query:'',scope:'all',scroll:0,selectedId:'item'}});
-    f.button(label).click();await setImmediate();assert.match(f.workspace.element.allText,new RegExp(message));
+    f.button(label).click();await setImmediate();if(kind==='preset'){assert.equal(f.navigation.view,'edit');assert.equal(f.button('Editar').getAttribute('aria-selected'),'true');assert.ok(f.calls.some(call=>call.command==='ae.presets.inspect'));}
+    else {assert.match(f.workspace.element.allText,new RegExp(message));assert.equal(f.navigation.view,'browse');}
     assert.equal(f.calls.find(c=>c.command==='ae.presets.personal-apply').args.itemId,'item');
   });
 }
@@ -393,8 +527,8 @@ test('phase drafts follow their layer and return with invalid text intact',async
   f.state.target.layerId=3;f.state.target.instance='two';f.state.layerName='Another layer';f.win.emit('focus');await setImmediate();
   assert.equal(input().value,'100');assert.match(f.workspace.element.allText,/Another layer/);
   f.state.target.layerId=2;f.state.target.instance='one';f.state.layerName='Title';f.win.emit('focus');await setImmediate();
-  assert.equal(input().value,'401');assert.equal(input().getAttribute('aria-invalid'),'true');assert.equal(f.button('Aplicar ajustes').disabled,true);
-  input().value='125';input().emit('input');assert.equal(f.button('Aplicar ajustes').disabled,false);
+  assert.equal(input().value,'401');assert.equal(input().getAttribute('aria-invalid'),'true');input().emit('change');assert.equal(f.calls.some(call=>call.command==='ae.presets.phase-adjust'),false);
+  input().value='125';input().emit('input');assert.equal(f.calls.some(call=>call.command==='ae.presets.phase-adjust'),false);input().emit('change');await setImmediate();assert.equal(f.calls.some(call=>call.command==='ae.presets.phase-adjust'),true);
 });
 
 test('returning to a changed managed instance preserves its draft but requires explicit reload',async t=>{
@@ -469,4 +603,8 @@ test('phase drafts and a pending timecode survive workspace recreation without h
     assert.equal(inputs.find(node=>node.getAttribute('aria-label')==='Entrada · Deslocamento em frames').value,'12');
     assert.equal(f.calls.some(call=>call.command!=='ae.presets.inspect'),false);
   });
+});
+
+test('Browse/Edit tabs keep focus, selection, drafts and keyboard semantics',async t=>{
+ const f=await fixture(t),edit=f.button('Editar'),browse=f.button('Navegar');f.change(137.5);edit.focus();edit.keydown('Home');assert.equal(f.navigation.view,'browse');assert.equal(f.doc.activeElement,browse);assert.equal(browse.tabIndex,0);assert.equal(edit.tabIndex,-1);browse.keydown('ArrowRight');await setImmediate();assert.equal(f.doc.activeElement,edit);assert.equal(f.intensity().value,'137.5');assert.equal(edit.getAttribute('aria-selected'),'true');
 });

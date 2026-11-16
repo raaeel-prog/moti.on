@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { loadHostModules } from "./grouped-host-harness.mjs";
 
 const PropertyType = { PROPERTY: 1, INDEXED_GROUP: 2 };
-const PropertyValueType = { NO_VALUE: 0, OneD: 1, TwoD: 2, TwoD_SPATIAL: 3, ThreeD: 4 };
+const PropertyValueType = { NO_VALUE: 0, OneD: 1, TwoD: 2, TwoD_SPATIAL: 3, ThreeD: 4, ThreeD_SPATIAL: 5 };
 
 const clone = (v) => (Array.isArray(v) ? [...v] : v);
 
@@ -70,6 +70,9 @@ class FakeProperty {
   setTemporalEaseAtKey(i, dentro, fora) {
     this.keys[i - 1].ease = { dentro, fora };
   }
+  setInterpolationTypeAtKey(i,inside,outside) {this.keys[i-1].interpolation=[inside,outside];}
+  setSpatialAutoBezierAtKey(i,value) {this.keys[i-1].spatialAutoBezier=value;}
+  setSpatialTangentsAtKey(i,inside,outside) {this.keys[i-1].tangents=[inside,outside];}
   valueAtTime(t) {
     // Uma rampa qualquer, so para o bake ter o que amostrar.
     return [t * 100, t * 50, 0];
@@ -122,6 +125,7 @@ class FakeLayer {
     this.comment = opcoes.comment ?? "";
     this.anchorPoint = [0, 0, 0];
     this.position = new FakeProperty("ADBE Position", [960, 540, 0]);
+    this.position.propertyValueType=PropertyValueType.ThreeD_SPATIAL;
     this.scale = new FakeProperty("ADBE Scale", [100, 100, 100]);
     this.efeitos = new FakeParade();
     this.transform = {
@@ -247,7 +251,8 @@ async function fixture({ comCamera = true, nomeCamera = "Qualquer nome" } = {}) 
         }
       },
       PropertyType,
-      PropertyValueType
+      PropertyValueType,
+      KeyframeInterpolationType:{LINEAR:1}
     }
   );
 
@@ -398,6 +403,44 @@ test("Zoom preserves existing camera keys, and writes native keys only on an emp
   assert.equal(responder(g.scope, "ae.parallax.zoom", ZOOM).ok, true);
   assert.equal(g.camera.zoom.numKeys, 2);
   assert.ok(g.camera.zoom.keys[1].ease);
+});
+
+test("zoom beyond composition duration and ambiguous autofocus fail before Undo",async()=>{
+  const f=await fixture();f.comp.time=4.8;
+  assert.equal(responder(f.scope,"ae.parallax.zoom",ZOOM).ok,false);
+  assert.equal(f.calls.length,0);assert.equal(f.camera.zoom.numKeys,0);
+  const g=await fixture();g.comp.todas.push(new FakeLayer({name:"Alvo"}));
+  assert.equal(responder(g.scope,"ae.parallax.auto-focus",FOCO).ok,false);
+  assert.equal(g.calls.length,0);assert.equal(g.camera.focus.expression,"");
+});
+
+test("bake samples endpoint and preserves unrelated scale expression",async()=>{
+  const f=await fixture();f.comp.selectedLayers=[f.camera];f.comp.workAreaDuration=0.2;
+  f.camera.position.expression=f.scope.MotionExpressions.renderParallaxWiggle({controllerName:f.controller.name,seed:12345});
+  f.camera.position.expressionEnabled=true;
+  f.camera.scale.expression="value * 2";f.camera.scale.expressionEnabled=true;
+  const result=responder(f.scope,"ae.parallax.bake",{stepFrames:3});
+  assert.equal(result.ok,true);assert.equal(f.camera.scale.expression,"value * 2");
+  assert.equal(f.camera.scale.numKeys,0);assert.equal(f.camera.position.keys.at(-1).t,0.2);
+  assert.ok(f.camera.position.keys.every(key=>key.interpolation?.every(type=>type===1)),"sampled keys have explicit linear interpolation");
+  assert.ok(f.camera.position.keys.every(key=>key.spatialAutoBezier===false),"host preferences cannot add spatial overshoot");
+});
+
+test("bake failure restores complete native keyframe snapshot including ease",async()=>{
+  const f=await fixture(),position=f.camera.position;f.comp.selectedLayers=[f.camera];
+  position.keys=[{t:0,v:[0,0,0],ease:{dentro:[{speed:5,influence:40}],fora:[{speed:9,influence:65}]}},{t:1,v:[100,100,0],selected:true}];
+  position.expression=f.scope.MotionExpressions.renderLoopOut({type:"cycle",numKeyframes:0,duration:0,useDuration:false});
+  position.expressionEnabled=true;const before=structuredClone(position.keys),expression=position.expression;
+  let captured=0,restored=0;
+  // The generic keyframe serializer is covered independently; verify this
+  // transaction actually delegates complete capture/restore instead of values only.
+  f.scope.MotionKeyframes.captureProperty=p=>{captured++;return {property:p,fixtureKeys:structuredClone(p.keys)};};
+  f.scope.MotionKeyframes.restoreProperty=snapshot=>{restored++;snapshot.property.keys=structuredClone(snapshot.fixtureKeys);};
+  const write=position.setValueAtTime.bind(position);let fail=true;
+  position.setValueAtTime=(time,value)=>{if(time>0&&fail){fail=false;throw new Error("write failure");}write(time,value);};
+  const result=responder(f.scope,"ae.parallax.bake",BAKE);
+  assert.equal(result.ok,false);assert.deepEqual(position.keys,before);assert.equal(position.expression,expression);
+  assert.ok(captured>0);assert.equal(restored,1);
 });
 
 test("o bake anda na grade de quadros, sem acumular erro de ponto flutuante", async () => {

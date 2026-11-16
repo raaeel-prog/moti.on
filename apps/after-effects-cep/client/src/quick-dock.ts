@@ -1,5 +1,4 @@
 import { button, createElement } from "@motion/ui-core";
-import { MOTION_CATALOG } from "@motion/ui-motion";
 
 export interface QuickDockContext {
   hasComp: boolean;
@@ -14,6 +13,10 @@ export interface QuickDockOptions {
   pinned: boolean;
   onPinChange(pinned: boolean): void;
   onHeightChange?(height: number): void;
+  /** Shortcuts shown in the header only while the dock is collapsed. */
+  accessory?: HTMLElement;
+  /** Controls that sit in the header only while the dock is open (the category tabs), so they cost no row. */
+  openAccessory?: HTMLElement;
 }
 export interface QuickDockController {
   element: HTMLElement;
@@ -22,10 +25,14 @@ export interface QuickDockController {
   dispose(): void;
 }
 const COPY = {
-  "pt-BR": { title: "Ações rápidas", noComp: "Sem composição", empty: "Sem seleção", selected: (n: number) => `${n} ${n === 1 ? "camada" : "camadas"}`, pin: "Fixar ações rápidas abertas", unpin: "Desafixar ações rápidas", pinned: "Fixada", automatic: "Automático", manual: "Manual" },
-  "en-US": { title: "Quick actions", noComp: "No composition", empty: "No selection", selected: (n: number) => `${n} ${n === 1 ? "layer" : "layers"}`, pin: "Keep quick actions open", unpin: "Unpin quick actions", pinned: "Pinned", automatic: "Automatic", manual: "Manual" }
+  "pt-BR": { title: "Ações rápidas", pin: "Fixar ações rápidas abertas", unpin: "Desafixar ações rápidas" },
+  "en-US": { title: "Quick actions", pin: "Keep quick actions open", unpin: "Unpin quick actions" }
 };
-const DOCK_MS = MOTION_CATALOG.find(motion => motion.id === "dock-expand")!.durationMs[0]!;
+/**
+ * Height slide of the Onyx Vivo dock (approved prototype: 450 ms, cubic-bezier(.2,.8,.2,1)).
+ * Must match `.ch-quick-dock-body` in ae-quick-actions.css: the body is hidden only after it ends.
+ */
+const DOCK_MS = 450;
 /** Below this panel height the automatic opening would hide the tool grid. */
 const SHORT_PANEL_HEIGHT = 420;
 let sequence = 0;
@@ -46,13 +53,29 @@ export function createQuickDock(doc: Document, options: QuickDockOptions): Quick
   } });
   toggle.className = "ch-button ch-quick-dock-toggle";
   toggle.id = "quick-dock-toggle";
+  toggle.setAttribute("aria-label", copy.title);
+  toggle.title = copy.title;
   const chevron = createElement(doc, "span", "ch-library-chevron");
   chevron.setAttribute("aria-hidden", "true"); toggle.appendChild(chevron);
-  toggle.appendChild(createElement(doc, "span", "", copy.title));
-  const contextLabel = createElement(doc, "small", "ch-quick-dock-context");
-  toggle.appendChild(contextLabel); header.appendChild(toggle);
+  toggle.appendChild(createElement(doc, "span", "ch-quick-dock-title", copy.title));
+  header.appendChild(toggle);
+  // Collapsed is not hidden: the favorite shortcuts sit beside the title, one click away.
+  if (options.accessory) {
+    options.accessory.className += " ch-quick-dock-accessory";
+    header.appendChild(options.accessory);
+  }
+  if (options.openAccessory) {
+    options.openAccessory.className += " ch-quick-dock-open-accessory";
+    header.appendChild(options.openAccessory);
+  }
+  // Title · favorite shortcuts · pin. No selection counter: a disabled tile says why on hover.
+  // The whole header strip toggles; its buttons keep their own action.
+  header.addEventListener("click", event => {
+    if ((event as Event).target === header) toggle.click();
+  });
   const pin = button(doc, { label: "", onClick: () => {
     pinned = !pinned; manual = null; options.onPinChange(pinned); reconcile();
+    pin.setAttribute("data-pop", "false"); pin.getBoundingClientRect?.(); pin.setAttribute("data-pop", "true");
   } });
   pin.id = "quick-dock-pin";
   pin.className = "ch-button ch-quick-dock-pin";
@@ -136,8 +159,6 @@ export function createQuickDock(doc: Document, options: QuickDockOptions): Quick
     pin.setAttribute("aria-label", label); pin.title = label;
     pin.setAttribute("aria-pressed", String(pinned));
     element.setAttribute("data-mode", pinned ? "pinned" : manual === null ? "automatic" : "manual");
-    contextLabel.textContent = context.hasComp ? context.selectionCount ? copy.selected(context.selectionCount) : copy.empty : copy.noComp;
-    contextLabel.title = pinned ? copy.pinned : manual === null ? copy.automatic : copy.manual;
   }
   body.addEventListener("mouseenter", () => { pointerInside = true; });
   body.addEventListener("mouseleave", () => { pointerInside = false; reconcile(); });

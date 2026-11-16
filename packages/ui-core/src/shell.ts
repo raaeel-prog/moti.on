@@ -409,7 +409,7 @@ export function numberField(doc: Document, options: NumberFieldOptions): HTMLEle
     validate();
     options.onInput?.(next);
   }
-  const stepValue = (event: KeyboardEvent | PointerEvent): number => options.step * (event.shiftKey ? 10 : event.altKey && options.step < 1 ? 0.1 : 1);
+  const stepValue = (event: KeyboardEvent | PointerEvent): number => options.step * (event.shiftKey ? 10 : (event.altKey || event.ctrlKey || event.metaKey) && options.step < 1 ? 0.1 : 1);
   function keyAdjust(event: KeyboardEvent): void {
     if (options.disabled) return;
     if (event.key === "Enter") { event.preventDefault(); commit(); return; }
@@ -427,14 +427,14 @@ export function numberField(doc: Document, options: NumberFieldOptions): HTMLEle
   // CEP supports native event dispatch; UXP keeps its established control path
   // until the runtime exposes the same capability.
   if(typeof doc.createEvent==="function"&&typeof input.dispatchEvent==="function"&&input.ownerDocument){
-    attachScrubbableNumber(input,{helpText:english?"Drag the number · Shift: fine · Alt/Option: fast · Click to type":"Arraste o número · Shift: precisão · Alt/Option: rápido · Clique para digitar"});
+    attachScrubbableNumber(input,{helpText:english?"Drag the number · Shift: 10× · Ctrl/Alt: fine · Click to type":"Arraste o número · Shift: 10× · Ctrl/Alt: precisão · Clique para digitar"});
   }else input.addEventListener("keydown", event => keyAdjust(event as KeyboardEvent));
   const handle = createElement(doc, "button", "ch-number-scrub", "↔") as HTMLButtonElement;
   handle.type = "button";
   handle.disabled = options.disabled === true;
   handle.setAttribute("data-focus-key", `${options.id}-scrub`);
   handle.setAttribute("aria-label", english ? `Adjust ${options.label}` : `Ajustar ${options.label}`);
-  handle.title = english ? "Drag to adjust · Shift: 10× · Option/Alt: fine" : "Arraste para ajustar · Shift: 10× · Option/Alt: precisão";
+  handle.title = english ? "Drag to adjust · Shift: 10× · Ctrl/Alt: fine" : "Arraste para ajustar · Shift: 10× · Ctrl/Alt: precisão";
   handle.setAttribute("data-motion", "button-press");
   handle.addEventListener("keydown", event => keyAdjust(event as KeyboardEvent));
   let drag: { x: number; value: number; pointer: number; draft: string } | null = null;
@@ -1040,7 +1040,7 @@ export function createShell(options: ShellOptions): Shell {
       node.className = isActive ? "ch-nav__item is-active" : "ch-nav__item";
       if (node.getAttribute("role") === "tab") {
         node.setAttribute("aria-selected", isActive ? "true" : "false");
-        const fallback = libraryLayout && id === "home" && activeId !== "tools" && !views.some(view => view.id === activeId && (view.primary || ["home", "presets"].includes(view.id)));
+        const fallback = libraryLayout && id === "home" && (activeId !== "tools" || views.find(view => view.id === activeId)?.utilityOnly) && !views.some(view => view.id === activeId && (view.primary || ["home", "presets"].includes(view.id)));
         node.setAttribute("tabindex", isActive || fallback ? "0" : "-1");
       } else node.setAttribute("aria-pressed", String(isActive));
     }

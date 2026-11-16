@@ -27,7 +27,11 @@ import ts from "typescript";
 
 /** AE's ExtendScript evaluates unparenthesized nested ?: left-to-right.
  * Measured in AE 26.5: true ? 1 : false ? 2 : 3 returns 2, unlike ECMAScript.
- * Preserve the standard source semantics by grouping nested AST branches.
+ * It also gives && and || the same precedence, left to right: measured in
+ * AE 26.5, 1 || 1 && 0 returns 0 and a || f() && (c || d) is false for a = -160,
+ * so `x || y && z` silently ran as `(x || y) && z`.
+ * Preserve the standard source semantics by grouping nested AST branches and
+ * every && that is an operand of ||.
  * This does not touch comments, strings or expressions evaluated by AE's JS engine.
  */
 export function groupConditionalBranches(source, fileName = "host.jsx") {
@@ -36,14 +40,19 @@ export function groupConditionalBranches(source, fileName = "host.jsx") {
   function insert(at, character) {
     insertions.set(at, (insertions.get(at) ?? "") + character);
   }
+  function group(node) {
+    insert(node.getStart(ast), "(");
+    insert(node.end, ")");
+  }
+  const isAnd = node => ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken;
   function walk(node) {
     if (ts.isConditionalExpression(node)) {
       for (const branch of [node.condition, node.whenTrue, node.whenFalse]) {
-        if (ts.isConditionalExpression(branch)) {
-          insert(branch.getStart(ast), "(");
-          insert(branch.end, ")");
-        }
+        if (ts.isConditionalExpression(branch)) group(branch);
       }
+    }
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
+      for (const operand of [node.left, node.right]) if (isAnd(operand)) group(operand);
     }
     ts.forEachChild(node, walk);
   }
@@ -78,6 +87,7 @@ export const HOST_SOURCE_ORDER = [
   "../generated/control-presets.jsx",
   "json.jsx",
   "../generated/motion-library.jsx",
+  "../generated/camera-library.jsx",
   "errors.jsx",
   "preflight.jsx",
   "undo.jsx",
@@ -93,13 +103,22 @@ export const HOST_SOURCE_ORDER = [
   "quick-effects.jsx",
   "menu-command.jsx",
   "rig-meta.jsx",
+  "camera/camera-rig.jsx",
   "signature-effects.jsx",
+  "look-effects.jsx",
   "commands/preset-camera-transition.jsx",
+  "../generated/emulsion-manifest.jsx",
+  "../../../../packs/emulsion-v2/runtime.jsx",
+  "commands/emulsion-transition.jsx",
+  "marker-window.jsx",
   "commands/preset-library.jsx",
   "commands/preset-phases.jsx",
   "commands/preset-colors.jsx",
   "commands/preset-timing.jsx",
   "commands/personal-preset-library.jsx",
+  "commands/elements-insert.jsx",
+  "commands/sound-insert.jsx",
+  "commands/stock-import.jsx",
   "commands/context-read.jsx",
   "commands/tool-controls.jsx",
   "commands/capability-probe.jsx",
@@ -132,6 +151,7 @@ export const HOST_SOURCE_ORDER = [
   "commands/keys-ease.jsx",
   "commands/keys-reverse.jsx",
   "commands/keys-reverse-values.jsx",
+  "commands/keys-ease-transfer.jsx",
   "commands/keys-send-to-edge.jsx",
   "commands/style-neon.jsx",
   "commands/keys-clone.jsx",
@@ -148,6 +168,8 @@ export const HOST_SOURCE_ORDER = [
   "commands/shape-break.jsx",
   "commands/rig-effector.jsx",
   "commands/camera-transition.jsx",
+  "commands/camera-shots.jsx",
+  "commands/camera-choreography.jsx",
   "commands/three-d-cylinder.jsx",
   "commands/three-d-cube.jsx",
   "commands/three-d-orbit.jsx",

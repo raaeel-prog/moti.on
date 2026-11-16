@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
-import { themeDeclarations, resolveColorToken } from '../packages/ui-tokens/scripts/check-contrast.mjs';
+import { themeDeclarations, resolveColorToken, afterEffectsDeclarations } from '../packages/ui-tokens/scripts/check-contrast.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const start = '/* @generated tokens:start */';
@@ -27,6 +27,12 @@ export async function syncThemeTokens() {
   if (!current.startsWith(start) || !current.includes(end)) throw new Error('Theme token markers are missing; refusing to replace component CSS.');
   const theme = `${start}\n${css.trimEnd()}\n${end}${current.slice(current.indexOf(end) + end.length)}`;
   const outputs = [[themePath, theme], [path.join(root, 'shared/crosshost.tokens.css'), css], [path.join(root, 'shared/crosshost.tokens.json'), renderTokenMirror(css)]];
+  const aeCss = await readFile(path.join(root, 'packages/ui-tokens/src/after-effects.css'), 'utf8');
+  const aeThemes = Object.fromEntries(['dark','light'].map(theme => [theme,Object.fromEntries([...afterEffectsDeclarations(css,aeCss,theme)].map(([name,raw]) => {
+    let value=raw;try{value=resolveColorToken(afterEffectsDeclarations(css,aeCss,theme),name);}catch{/* Composite token. */}
+    return [name,{$value:value,$type:/^#[0-9A-F]{6}$/i.test(value)?'color':'string'}];
+  }))]));
+  outputs.push([path.join(root,'shared/after-effects.tokens.json'),JSON.stringify({meta:{canonicalSource:'packages/ui-tokens/src/after-effects.css'},themes:aeThemes},null,2)+'\n']);
   for (const [filename, next] of outputs) {
     const previous = await readFile(filename, 'utf8').catch(() => '');
     if (previous !== next) await writeFile(filename, next, 'utf8');

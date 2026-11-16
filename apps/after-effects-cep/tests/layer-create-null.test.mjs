@@ -117,6 +117,7 @@ class FakeCompItem {
     this.aoCriarNull = null;
     this.layers = {
       addNull: () => {
+        for(const layer of this.camadas)layer.selected=false;
         const nulo = new FakeLayer(this, "Null 1");
         nulo.nullLayer = true;
         // O After Effects insere no topo e seleciona a camada nova — medido.
@@ -368,7 +369,7 @@ test("parentear sem seleção falha em vez de criar um null solto", async () => 
 
 test("uma falha no meio remove o null", async () => {
   const { scope, comp } = await fixture();
-  empilha(comp, "A");
+  const [original]=empilha(comp, "A");
   comp.aoCriarNull = (nulo) => {
     nulo.transform.posicao.recusaFonte = true;
   };
@@ -377,6 +378,19 @@ test("uma falha no meio remove o null", async () => {
 
   assert.equal(resposta.ok, false);
   assert.equal(nullDe(comp), null, "o null não pode sobreviver ao rollback");
+  assert.equal(original.selected,true,'failure must restore selection cleared by native addNull');
+});
+
+for(const preserveWorldTransform of [true,false])test(`parenting failure restores previous parents (${preserveWorldTransform})`,async()=>{
+  const {scope,comp}=await fixture();
+  const [parent]=empilha(comp,'Parent');parent.selected=false;
+  const [first,second]=empilha(comp,'First','Second');first.parent=parent;
+  const mode=preserveWorldTransform?'parent':'setParentWithJump';
+  if(mode==='parent')Object.defineProperty(second,'parent',{get:()=>null,set:()=>{throw Error('second parenting failed');}});
+  else second.setParentWithJump=()=>{throw Error('second parenting failed');};
+  const response=criar(scope,{parentSelected:true,preserveWorldTransform});
+  assert.equal(response.ok,false);assert.equal(first.parent,parent);assert.equal(nullDe(comp),null);
+  assert.equal(first.selected,true);assert.equal(second.selected,true);assert.equal(parent.selected,false);
 });
 
 test("argumentos fora do contrato são recusados", async () => {

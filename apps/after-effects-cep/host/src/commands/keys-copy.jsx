@@ -377,11 +377,23 @@
       var mapeamento = mapEntries(board.entries, comp.selectedProperties, /** @type {string} */ (args.mappingMode));
       var ancora = anchorTime(comp, args, board);
 
+      /** @type {MotionPropertySnapshot[]} */
       var snapshotsAnteriores = [];
+      /** @type {MotionPropertySnapshot[]} */
+      var destinos = [];
+      /** @type {Array<{property: Property, expression: string, enabled: boolean}>} */
+      var expressionsBefore = [];
       var pastedProperties = 0;
       var pastedKeys = 0;
       var i;
       var j;
+      for (i = 0; i < mapeamento.pares.length; i += 1) {
+        var plannedPair = mapeamento.pares[i];
+        if (!plannedPair) throw new Error("Plano de colagem incompleto.");
+        snapshotsAnteriores.push(MotionKeyframes.captureProperty(plannedPair.property));
+        destinos.push(MotionKeyframes.captureProperty(plannedPair.property));
+        if (args.includeExpressions === true && plannedPair.property.canSetExpression === true) expressionsBefore.push({property: plannedPair.property, expression: plannedPair.property.expression, enabled: plannedPair.property.expressionEnabled === true});
+      }
 
       try {
         for (i = 0; i < mapeamento.pares.length; i += 1) {
@@ -393,10 +405,8 @@
 
           // O anterior fica guardado inteiro: e o unico jeito de desfazer uma
           // colagem que falhe no meio sem depender do Undo do host.
-          var anterior = MotionKeyframes.captureProperty(property);
-          snapshotsAnteriores.push(anterior);
-
-          var destino = MotionKeyframes.captureProperty(property);
+          var destino = destinos[i];
+          if (!destino) throw new Error("Snapshot de colagem incompleto.");
           var deslocamento = ancora === null ? 0 : ancora - board.firstKeyTime;
 
           for (j = 0; j < keysOrigem.length; j += 1) {
@@ -453,6 +463,7 @@
 
           pastedProperties += 1;
         }
+        MotionKeyframes.restoreSelections(destinos);
       } catch (pasteError) {
         var rollbackFailed = false;
         for (i = snapshotsAnteriores.length - 1; i >= 0; i -= 1) {
@@ -463,6 +474,10 @@
             rollbackFailed = true;
           }
         }
+        for (i = expressionsBefore.length - 1; i >= 0; i -= 1) {
+          try { var previousExpression = expressionsBefore[i]; if (previousExpression) { previousExpression.property.expression = previousExpression.expression; previousExpression.property.expressionEnabled = previousExpression.enabled; } } catch (expressionError) { rollbackFailed = true; }
+        }
+        try { MotionKeyframes.restoreSelections(snapshotsAnteriores); } catch (selectionError) { rollbackFailed = true; }
         if (rollbackFailed) {
           var rollbackError = /** @type {Error & {motionCode?: string}} */ (
             new Error("A colagem falhou e o estado anterior nao pode ser restaurado.")

@@ -1,0 +1,84 @@
+/* Canonical AE workstation palette, native fallback 2026-10-22; design-system scale 2026-11-12
+ * (three text levels, own hover/active steps, family tones for icon hover).
+ * Loaded only by the AE build. Root scope keeps compatibility aliases resolved
+ * in the same scope as their semantic values. The explicit light theme stays available. */
+:root[data-host="after-effects"]:not([data-theme="light"]) {
+  --bg-host: #323232;
+  --surface-deep: #262626;
+  --surface-raised: #3a3a3a;
+  --bg-elevated: #262626;
+  --surface-hover: #424242;
+  --surface-active: #4c4c4c;
+  --surface-section: #323232;
+  --border-subtle: #474747;
+  --border-muted: #474747;
+  --border-control: #b0b0b0;
+  --line-hairline: #474747;
+  --line-2: #666666;
+  --line-strong: #b0b0b0;
+  --overlay-surface: #3a3a3a;
+  --text-primary: #e2e2e2;
+  --text-secondary: #c6c6c6;
+  --text-muted: #c6c6c6;
+  --text-tertiary: #a4a4a4;
+  --text-off: #7e7e7e;
+  --txt-1: #e2e2e2;
+  --txt-2: #c6c6c6;
+  --txt-3: #c6c6c6;
+  --bg-0: #262626;
+  --bg-1: #323232;
+  --bg-2: #3a3a3a;
+  --bg-3: #262626;
+  --bg-4: #3a3a3a;
+  --accent: #e2e2e2;
+  --accent-hover: #e2e2e2;
+  --accent-press: #e2e2e2;
+  --accent-on: #262626;
+  --accent-wash: rgba(221,221,221,.08);
+  --action-text: #a2c7ff;
+  --action-text-hover: #c4dcff;
+  --action-text-press: #a2c7ff;
+  --value-editable: #a2c7ff;
+  --value-editable-hover: #c4dcff;
+  --ok: #a5dfb9;
+  --warn: #f6d590;
+  --danger: #ffb9ae;
+  --info: #b4daff;
+  --icon-keyframes: #e2e2e2;
+  --icon-layers: #e2e2e2;
+  --icon-animation: #e2e2e2;
+  --icon-spatial: #e2e2e2;
+  --icon-shapes: #e2e2e2;
+  --icon-effects: #e2e2e2;
+  --icon-project: #e2e2e2;
+  --fam-keyframes: #b4c7f1;
+  --fam-layers: #b7cfbd;
+  --fam-animation: #d7bae7;
+  --fam-spatial: #91cad3;
+  --fam-shapes: #d7c58b;
+  --fam-effects: #dea6aa;
+  --fam-project: #b8bccc;
+  --focus-ring: 2px solid var(--action-text);
+  --ch-border-focus: var(--action-text);
+  --e2: 0 4px 16px rgba(0,0,0,.24);
+}
+
+/* AE motion (2026-10-23), both themes. Read by apps/after-effects-cep/client/src/motion/catalog.ts,
+ * which must stay equal to these literals. Springs overshoot only on elements up to 32 px;
+ * larger surfaces glide or use the sheet curve. Reduced motion is handled by motion.css. */
+:root[data-host="after-effects"] {
+  --dur-spring: 420ms;
+  --dur-glide: 450ms;
+  --dur-sheet: 380ms;
+  --dur-sheet-out: 220ms;
+  --dur-swap: 320ms;
+  --dur-scroll-max: 420ms;
+  --dur-spring-max: 480ms;
+  --stagger-step: 22ms;
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --ease-glide: cubic-bezier(.2, .8, .2, 1);
+  --ease-sheet: cubic-bezier(.32, 1.12, .5, 1);
+  --delay-tip: 450ms;
+  --delay-tip-warm: 60ms;
+  --tip-warm-window: 600ms;
+}

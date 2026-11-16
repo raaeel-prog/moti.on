@@ -19,11 +19,15 @@ function fixture(delay=0){
   return {client,target,phase,writes,states,get value(){return value;}};
 }
 test('latest-only numeric gestures cap updates at ten per second and flush the exact release value',async()=>{
-  const f=fixture(45);f.client.start(f.target,f.phase,'intensity',100);
+  const f=fixture(45);f.client.start(f.target,f.phase,'intensity',100);const started=Date.now();
   for(let i=0;i<20;i++){f.client.update(110+i);await wait(10);}
+  // Windows rounds timers up to ~15.6 ms, so the loop's real length varies: the
+  // contract is at most one update per 100 ms of the drag, not a fixed count.
+  const elapsed=Date.now()-started;
   await f.client.finish(false,147.3);
   assert.equal(f.writes[0].operation,'begin');assert.equal(f.writes.at(-1).operation,'commit');assert.equal(f.value,147.3);
-  assert.ok(f.writes.filter(d=>d.operation==='update').length<=2);assert.deepEqual(f.states,[[true],[false]]);
+  const updates=f.writes.filter(d=>d.operation==='update').length;
+  assert.ok(updates<=Math.floor(elapsed/100)+1,`${updates} updates in ${elapsed} ms`);assert.ok(updates<20,'updates are coalesced');assert.deepEqual(f.states,[[true],[false]]);
   assert.ok(f.writes.every((d,i)=>i===0||d.sequence>f.writes[i-1].sequence));
 });
 test('cancel before begin acknowledgement restores the initial value without a late commit',async()=>{

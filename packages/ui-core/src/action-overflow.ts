@@ -1,5 +1,6 @@
 import { element } from "./component-dom.js";
 import { createIcon } from "./icons.js";
+import { attachMenuGlide } from "./menu-glide.js";
 
 /**
  * Keeps a footer action bar on one row.
@@ -79,14 +80,29 @@ export function attachActionOverflow(doc: Document, bar: HTMLElement, options: A
       bar.removeAttribute("data-overflowing");
       return;
     }
+    const focus = doc.activeElement;
+    const opened = Boolean(menu);
+    const before = overflowed();
+    const focusedAction = focus ? actions().find(node => buttonOf(node) === focus) : undefined;
     for (const node of actions()) setOverflow(node, false);
     setMoreVisible(false);
-    if (!overflowing()) { bar.removeAttribute("data-overflowing"); return; }
-    setMoreVisible(true);
-    const secondary = actions().filter(node => !isPrimary(node));
-    for (let index = secondary.length - 1; index >= 0 && overflowing(); index -= 1) setOverflow(secondary[index]!, true);
-    bar.setAttribute("data-overflowing", "true");
-    if (!overflowed().length) setMoreVisible(false);
+    if (overflowing()) {
+      setMoreVisible(true);
+      const secondary = actions().filter(node => !node.hidden && !isPrimary(node));
+      for (let index = secondary.length - 1; index >= 0 && overflowing(); index -= 1) setOverflow(secondary[index]!, true);
+    }
+    const next = overflowed();
+    if (next.length) bar.setAttribute("data-overflowing", "true");
+    else { bar.removeAttribute("data-overflowing"); setMoreVisible(false); }
+    if (opened && (next.length !== before.length || next.some((node, index) => node !== before[index]))) {
+      closeMenu(Boolean(next.length));
+      if (!next.length && before[0]) buttonOf(before[0])?.focus();
+    } else if (menu) positionMenu(menu, next.length);
+    else if (focusedAction && next.includes(focusedAction)) more.focus();
+    else if (focus === more) {
+      if (next.length) more.focus();
+      else if (before[0]) buttonOf(before[0])?.focus();
+    }
   }
   function schedule(): void {
     if (disposed) return;
@@ -109,8 +125,22 @@ export function attachActionOverflow(doc: Document, bar: HTMLElement, options: A
     if (menu?.contains(target) || more.contains(target)) return;
     closeMenu();
   }
+  function positionMenu(popup: HTMLElement, count: number): void {
+    const rect = more.getBoundingClientRect();
+    const width = Math.min(220, Math.max(0, doc.documentElement.clientWidth - 16));
+    const height = browser?.innerHeight ?? 640;
+    const availableAbove = rect.top - 12, availableBelow = height - rect.bottom - 12;
+    const above = availableAbove >= Math.min(160, count * 32 + 8) || availableAbove >= availableBelow;
+    popup.style.width = `${width}px`;
+    popup.style.left = `${Math.max(8, Math.min(rect.left + rect.width - width, doc.documentElement.clientWidth - width - 8))}px`;
+    popup.style.top = above ? "" : `${rect.bottom + 4}px`;
+    popup.style.bottom = above ? `${height - rect.top + 4}px` : "";
+    popup.style.maxHeight = `${Math.max(0, above ? availableAbove : availableBelow)}px`;
+    popup.setAttribute("data-side", above ? "above" : "below");
+  }
   function openMenu(): void {
-    if (menu || disposed) return;
+    const hiddenActions = overflowed();
+    if (menu || disposed || !hiddenActions.length) return;
     openMenus.get(doc)?.();
     menu = element(doc, "div", "ch-action-menu");
     menu.setAttribute("role", "menu");
@@ -118,7 +148,7 @@ export function attachActionOverflow(doc: Document, bar: HTMLElement, options: A
     menu.setAttribute("data-motion", "surface-morph");
     menu.setAttribute("data-open", "false");
     const items: HTMLButtonElement[] = [];
-    for (const action of overflowed()) {
+    for (const action of hiddenActions) {
       const original = buttonOf(action);
       if (!original) continue;
       const item = element(doc, "button", "ch-action-menu__item", labelOf(action)) as HTMLButtonElement;
@@ -134,28 +164,18 @@ export function attachActionOverflow(doc: Document, bar: HTMLElement, options: A
       });
       item.addEventListener("keydown", event => {
         const key = (event as KeyboardEvent).key, position = items.indexOf(item);
-        if (key === "Escape") { event.preventDefault(); closeMenu(true); }
+        if (key === "Escape") { event.preventDefault(); event.stopPropagation?.(); closeMenu(true); }
         else if (key === "ArrowDown" || key === "ArrowUp") {
           event.preventDefault();
           items[(position + (key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
-        } else if (key === "Tab") closeMenu();
+        } else if (key === "Tab") closeMenu(true);
       });
       items.push(item);
       menu.appendChild(item);
     }
     doc.body.appendChild(menu);
-    const rect = more.getBoundingClientRect();
-    const width = Math.min(220, Math.max(160, doc.documentElement.clientWidth - 16));
-    const height = browser?.innerHeight ?? 640;
-    menu.style.width = `${width}px`;
-    menu.style.left = `${Math.max(8, Math.min(rect.left + rect.width - width, doc.documentElement.clientWidth - width - 8))}px`;
-    // Footers sit at the bottom: the menu opens upward unless there is no room.
-    const above = rect.top - 8 >= Math.min(160, items.length * 32 + 8);
-    menu.style.top = ""; menu.style.bottom = "";
-    if (above) menu.style.bottom = `${height - rect.top + 4}px`;
-    else menu.style.top = `${rect.bottom + 4}px`;
-    menu.style.maxHeight = `${Math.max(32, above ? rect.top - 12 : height - rect.bottom - 12)}px`;
-    menu.setAttribute("data-side", above ? "above" : "below");
+    if (typeof menu.insertBefore === "function") attachMenuGlide(menu, () => items);
+    positionMenu(menu, items.length);
     more.setAttribute("aria-expanded", "true");
     menu.getBoundingClientRect();
     menu.setAttribute("data-open", "true");
@@ -173,7 +193,7 @@ export function attachActionOverflow(doc: Document, bar: HTMLElement, options: A
   const resize = Observer ? new Observer(() => schedule()) : undefined;
   resize?.observe(bar);
   const onWindowResize = (): void => schedule();
-  if (!resize) browser?.addEventListener?.("resize", onWindowResize);
+  browser?.addEventListener?.("resize", onWindowResize);
   schedule();
 
   return {

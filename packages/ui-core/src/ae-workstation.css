@@ -1,0 +1,486 @@
+/* AE-only composition. Color values belong to ui-tokens/src/after-effects.css. */
+[data-host="after-effects"] .ch-shell { font-variant-numeric:tabular-nums; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-context { display:none; }
+/* Icon tiles keep execution separate from adjustment. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-grid { display:grid; grid-template-columns:repeat(auto-fill,56px); grid-auto-rows:max-content; gap:8px; padding:4px 12px 12px; align-content:start; }
+[data-host="after-effects"] .ch-tool-group-title { grid-column:1/-1; margin:12px 0 0; font-size:11px; line-height:16px; font-weight:600; color:var(--text-secondary); }
+[data-host="after-effects"] .ch-tool-group-title:first-child { margin-top:4px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile { position:relative; width:56px; height:56px; margin:0; padding:0; border:0; background:transparent; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile>.ch-button:first-child { display:flex; align-items:center; justify-content:center; width:56px; height:56px; min-height:56px; padding:0; border:0; border-radius:4px; background:var(--surface-raised); box-shadow:none; transform:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile>.ch-button:first-child:hover { background:var(--surface-active); }
+[data-host="after-effects"] .ch-tool-tile>.ch-button:first-child>.ch-icon { width:26px; height:26px; }
+[data-host="after-effects"] .ch-tool-name { display:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile>.ch-quick-options { display:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile>.ch-tool-adjust { position:absolute; top:-2px; right:-2px; display:flex; align-items:center; justify-content:center; width:24px; height:24px; min-height:24px; padding:4px; border:0; border-radius:3px; background:var(--bg-elevated); opacity:0; color:var(--text-primary); }
+[data-host="after-effects"] .ch-tool-tile:hover>.ch-tool-adjust,
+[data-host="after-effects"] .ch-tool-tile:focus-within>.ch-tool-adjust { opacity:1; }
+[data-host="after-effects"] .ch-tool-adjust>.ch-icon { width:14px; height:14px; }
+[data-host="after-effects"] .ch-tool-tile .ch-tile-feedback { inset:0; }
+[data-host="after-effects"] .ch-tool-tile [data-motion] { animation-duration:var(--dur-1); }
+[data-host="after-effects"][data-density="compact"] .ch-shell[data-layout="library"] .ch-tool-grid { grid-template-columns:repeat(auto-fill,44px); }
+[data-host="after-effects"][data-density="compact"] .ch-shell[data-layout="library"] .ch-tool-tile,
+[data-host="after-effects"][data-density="compact"] .ch-shell[data-layout="library"] .ch-tool-tile>.ch-button:first-child { width:44px; height:44px; min-height:44px; }
+[data-host="after-effects"] .ch-context-body { display:flex; flex:1; min-width:0; min-height:0; overflow:hidden; }
+[data-host="after-effects"] .ch-context-workspace { display:flex; flex-direction:column; flex:1; height:100%; min-height:0; min-width:0; overflow:hidden; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-context-library { display:flex; flex:0 0 auto; min-height:0; min-width:0; }
+[data-host="after-effects"] .ch-context-library .ch-quick-library { height:auto; min-height:0; }
+[data-host="after-effects"] .ch-context-inspector { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; overflow:hidden; }
+[data-host="after-effects"] .ch-context-heading { display:flex; align-items:center; gap:8px; flex:0 0 auto; padding:8px 12px; }
+[data-host="after-effects"] .ch-context-heading>strong { flex:1; font-size:13px; font-weight:600; min-width:0; }
+[data-host="after-effects"] .ch-context-heading>.ch-button { min-height:28px; padding:4px 0 4px 8px; border:0; background:transparent; color:var(--action-text); font-size:11px; }
+[data-host="after-effects"] .ch-context-content { flex:1; min-height:0; min-width:0; overflow:auto; padding:0 12px 12px; }
+[data-host="after-effects"] .ch-context-actions { flex:0 0 auto; min-width:0; padding:8px 12px; background:var(--bg-host); }
+[data-host="after-effects"] .ch-context-actions:empty { display:none; }
+[data-host="after-effects"] .ch-context-content .ch-field { min-width:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto auto; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery>.ch-preset-toolbar-approved { grid-column:1/-1; grid-row:1; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery>.ch-preset-scroll { grid-column:1; grid-row:2; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery>.ch-preset-applybar { grid-column:1; grid-row:3; position:static; width:auto; max-width:none; padding:4px 0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-settings-body { padding:8px 0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-stage .ch-preset-grid { gap:8px; padding-bottom:4px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-card { border-color:transparent; border-radius:2px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-card[data-selected="true"] { border-color:var(--action-text); background:transparent; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-apply { font-weight:400; padding-left:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-toolbar-approved { flex-wrap:wrap; justify-content:flex-start; gap:4px; }
+[data-host="after-effects"] .ch-preset-toolbar-scope { display:flex; gap:0; margin-left:auto; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-toolbar-scope>.ch-button { min-width:28px; height:28px; min-height:28px; padding:4px 6px; border:0; background:transparent; font-size:11px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-toolbar-scope [aria-pressed="true"] { color:var(--action-text); text-decoration:underline; text-underline-offset:4px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-filter-trigger { flex:1 1 auto; max-width:none; background:transparent; border:0; justify-content:flex-start; padding-left:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-settings-panel[hidden] { display:none; }
+/* F4 sliding inspector (motion upgrade, 2026-10-23): below 720 px the adjustments slide
+ * over the library, which stays on screen (Quick dock included) under a scrim; from
+ * 720 px they are the 300 px column beside it. inspector-sheet.ts owns the behaviour. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-context-library { flex:1; overflow:hidden; }
+[data-host="after-effects"] .ch-context-library .ch-quick-library { height:100%; }
+@media (max-width:719.98px) {
+  [data-host="after-effects"] .ch-context-workspace { position:relative; }
+  [data-host="after-effects"] .ch-context-scrim { position:absolute; top:0; right:0; bottom:0; left:0; z-index:20; background:rgba(0,0,0,.42); }
+  [data-host="after-effects"] .ch-context-inspector { position:absolute; top:0; right:0; bottom:0; z-index:21; width:max(280px, min(360px, calc(100% - 48px))); max-width:100%; box-sizing:border-box; background:var(--bg-host); border-left:1px solid var(--border-muted); box-shadow:var(--e2); }
+}
+@media (min-width:720px) {
+  [data-host="after-effects"] .ch-context-workspace { flex-direction:row; }
+  [data-host="after-effects"] .ch-context-scrim { display:none; }
+  [data-host="after-effects"] .ch-context-library .ch-quick-dock { display:none !important; }
+  [data-host="after-effects"] .ch-context-inspector { flex:0 0 300px; width:300px; border-left:1px solid var(--border-muted); box-sizing:border-box; }
+}
+@media (max-height:419px) {
+  [data-host="after-effects"] .ch-context-heading { padding-top:4px; padding-bottom:4px; }
+}
+
+/* Persistent Browse/Edit navigation; the wide library is supplemental. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs { justify-content:flex-start; min-height:28px; padding:0 12px; border:0; gap:16px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs [hidden] { display:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs>.ch-button { flex:0 1 auto; min-height:28px; padding:0; border:0; border-bottom:2px solid transparent; border-radius:0; background:transparent; color:var(--text-secondary); font-size:12px; }
+[data-host="after-effects"] .ch-preset-workspace-content[hidden] { display:none !important; }
+[data-host="after-effects"] .ch-preset-workspace[data-workspace-view="edit"]>.ch-preset-workspace-browser { display:none; }
+@media (min-width:720px) {
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-workspace[data-workspace-view="edit"] { display:grid; grid-template-columns:minmax(0,1fr) 300px; grid-template-rows:auto minmax(0,1fr); }
+  [data-host="after-effects"] .ch-preset-workspace[data-workspace-view="edit"]>.ch-preset-tabs { grid-column:1/-1; }
+  [data-host="after-effects"] .ch-preset-workspace[data-workspace-view="edit"]>.ch-preset-workspace-browser { display:flex; grid-column:1; grid-row:2; }
+  [data-host="after-effects"] .ch-preset-workspace[data-workspace-view="edit"]>.ch-preset-workspace-content:not(.ch-preset-workspace-browser) { grid-column:2; grid-row:2; border-left:1px solid var(--border-muted); }
+  [data-host="after-effects"] .ch-preset-workspace[data-workspace-view="edit"] .ch-preset-settings-trigger { display:none; }
+}
+
+/* Tool controls use the same compact parameter composition as preset Edit. */
+[data-host="after-effects"] .ch-tool-editor .ch-tool-section { margin:0 0 12px; padding:0; border:0; background:transparent; }
+[data-host="after-effects"] .ch-tool-editor .ch-section-title { margin:12px 0 4px; padding:0; border:0; background:transparent; font-size:12px; }
+[data-host="after-effects"] .ch-tool-editor .ch-field { margin:0; padding:4px 0; min-width:0; }
+[data-host="after-effects"] .ch-tool-number-field>.ch-field__label { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
+[data-host="after-effects"] .ch-tool-number-field>.ch-field__control { display:block; width:100%; }
+[data-host="after-effects"] .ch-tool-number-field .ch-number-disclosure__header { min-height:28px; }
+[data-host="after-effects"] .ch-tool-number-field .ch-field__unit { flex:0 0 auto; font-size:11px; color:var(--text-secondary); }
+[data-host="after-effects"] .ch-tool-editor .ch-field__description { margin:4px 0 0; font-size:11px; line-height:16px; }
+[data-host="after-effects"] .ch-tool-editor .ch-field__control>.ch-number-scrub { display:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs [aria-selected="true"] { color:var(--action-text); border-bottom-color:var(--action-text); background:transparent; }
+
+/* Card-attached preset menus: overlay the library, preserving its geometry. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery>.ch-preset-applybar { position:absolute; z-index:10; bottom:4px; left:50%; right:auto; width:252px; max-width:calc(100% - 16px); transform:translateX(-50%); background:var(--bg-elevated); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery>.ch-preset-settings-panel { position:fixed; z-index:140; margin:0; padding:0; border:0; border-radius:0; box-shadow:none; background:var(--surface-raised); overflow:auto; overscroll-behavior:contain; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-card[data-attached] { z-index:141; border-color:transparent; background:var(--surface-raised); border-radius:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-settings-body { flex:0 0 auto; padding:4px; overflow:visible; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-settings-header { position:static; display:block; height:0; overflow:hidden; }
+[data-host="after-effects"] .ch-preset-settings-header:focus-within { height:24px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-adjustments>:first-child { padding-right:0; }
+[data-host="after-effects"] .ch-preset-directions { display:flex; flex-direction:column; gap:0; min-width:0; }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"]>.ch-button[data-direction="preset"],
+[data-host="after-effects"] .ch-preset-settings-panel[data-direction-view="list"] .ch-preset-characters { display:none; }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-grid { display:flex; flex-direction:column; gap:1px; }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-tile { display:flex; flex-direction:row; align-items:center; justify-content:flex-start; gap:6px; width:100%; min-height:24px; padding:3px 5px; border:0; border-radius:0; background:var(--bg-host); text-align:left; font-size:11px; line-height:18px; }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-tile>svg,
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-tile>.ch-preset-tile-media { display:none; }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-tile::before { content:""; flex:0 0 10px; width:10px; height:10px; box-sizing:border-box; border:1px solid currentColor; background:linear-gradient(135deg,transparent 45%,currentColor 46%,currentColor 54%,transparent 55%); opacity:.65; }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-tile>span { display:block; }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-tile:hover,
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-tile:focus-visible { background:var(--surface-hover); color:var(--text-primary); }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-tile[aria-pressed="true"] { background:var(--surface-active); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-directions-toggle { display:block; width:100%; min-height:24px; margin:4px 0 0; padding:3px 5px; border:0; border-radius:0; background:transparent; color:var(--action-text); text-align:left; font-size:11px; }
+[data-host="after-effects"] .ch-preset-directions[data-view="previews"] { gap:4px; }
+
+/* Preset workstation: persistent collection tree, resizable catalogue, fixed footer. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-workspace-content[data-browse="true"] { padding:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery { display:grid; grid-template-columns:var(--preset-sidebar-width,228px) 8px minmax(144px,1fr); grid-template-rows:minmax(0,1fr) auto; gap:0; background:var(--bg-host); }
+[data-host="after-effects"][data-theme="dark"] .ch-preset-gallery { --bg-host:#323232; --bg-base:#323232; --bg-elevated:#262626; --surface-raised:#535353; --surface-hover:#535353; --surface-active:#5c5c5c; --ch-surface-raised:#535353; }
+[data-host="after-effects"] .ch-preset-sidebar { grid-column:1; grid-row:1; display:flex; flex-direction:column; min-width:0; min-height:0; padding:4px 0 0 4px; overflow:hidden; box-sizing:border-box; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar>.ch-preset-toolbar-approved { display:flex; flex:0 0 auto; flex-wrap:nowrap; min-height:24px; gap:4px; margin:0 0 8px; padding:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar .ch-preset-search { display:flex; flex:1; min-width:0; min-height:24px; }
+[data-host="after-effects"] .ch-preset-sidebar .ch-preset-search>.ch-field__label { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
+[data-host="after-effects"] .ch-preset-sidebar .ch-preset-search { order:-1; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-narrow-tree="true"] .ch-preset-sidebar>.ch-preset-toolbar-approved { flex-wrap:wrap; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-narrow-tree="true"] .ch-preset-sidebar .ch-preset-search { flex:0 0 100%; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar .ch-preset-search input { width:100%; min-width:0; height:24px; min-height:24px; padding:2px 6px; border:1px solid var(--border-muted); border-radius:0; background:var(--bg-elevated); box-sizing:border-box; }
+[data-host="after-effects"] .ch-preset-sidebar .ch-preset-toolbar-scope { flex:0 0 auto; margin:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar .ch-preset-toolbar-scope>.ch-button { width:24px; min-width:24px; padding:2px; font-size:0; }
+[data-host="after-effects"] .ch-preset-sidebar [data-scope="favorites"]::before { content:"★"; font-size:12px; }
+[data-host="after-effects"] .ch-preset-sidebar [data-scope="recent"]::before { content:"◷"; font-size:14px; }
+[data-host="after-effects"] .ch-preset-sidebar .ch-preset-filter-menu { position:static; display:block; flex:1; width:auto; min-width:0; max-width:none; min-height:0; max-height:none; overflow:auto; margin:0; padding:0; border:0; border-radius:0; box-shadow:none; background:transparent; opacity:1; transform:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar .ch-preset-categories { width:auto; min-width:0; max-width:none; padding:0; overflow:visible; }
+[data-host="after-effects"] .ch-preset-sidebar .ch-folder-row { min-height:24px; }
+[data-host="after-effects"] .ch-preset-sidebar .ch-folder-select { min-width:0; min-height:24px; font-size:12px; }
+[data-host="after-effects"] .ch-preset-sidebar .ch-folder-name { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+[data-host="after-effects"] .ch-preset-splitter { grid-column:2; grid-row:1; position:relative; min-height:0; cursor:col-resize; touch-action:none; border-inline:1px solid var(--border-muted); }
+[data-host="after-effects"] .ch-preset-splitter::after { content:"⋮"; position:absolute; top:50%; left:0; width:100%; color:var(--text-secondary); text-align:center; }
+[data-host="after-effects"] .ch-preset-splitter:focus-visible { outline:var(--focus-ring); outline-offset:-2px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery>.ch-preset-scroll { grid-column:3; grid-row:1; min-width:0; padding:4px 4px 0 0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-grid { gap:8px; padding:0 0 4px; scroll-padding-bottom:4px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card { border:0; border-radius:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-preview { display:block; width:100%; height:auto; min-height:0; aspect-ratio:16/9; margin:0; padding:0; border:0; border-radius:0; background:#000; }
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-preview>svg { width:100%; height:100%; background:#000; }
+/* Text renders and their posters share the black of the drawn previews. */
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-preview { background:#000; }
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-preview>.ch-preset-media { background:#000; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-preview:disabled { opacity:1; color:var(--text-primary); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card .ch-preset-apply { display:block; -webkit-line-clamp:1; height:24px; min-height:24px; max-height:24px; padding:3px 4px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; line-height:18px; font-size:11px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card .ch-preset-actions>.ch-preset-favorite { position:static; flex:0 0 20px; width:20px; height:24px; min-height:24px; padding:3px; opacity:1; pointer-events:auto; background:transparent; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer { grid-column:1/-1; grid-row:2; display:grid; grid-template-columns:max-content 88px minmax(0,1fr); align-items:center; gap:8px; min-width:0; padding:4px; border-top:1px solid var(--border-muted); background:var(--bg-host); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-applybar { position:static; display:flex; width:auto; min-width:0; max-width:none; margin:0; padding:0; border:0; transform:none; background:transparent; box-shadow:none; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-phase-actions { width:220px; max-width:100%; margin:0; flex:1; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-preview-controls { display:flex; width:88px; min-width:88px; max-width:88px; height:24px; min-height:24px; max-height:24px; margin:0; padding:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-size { display:flex; align-items:center; flex:0 0 88px; width:88px; min-width:88px; max-width:88px; height:24px; min-height:24px; max-height:24px; margin:0; padding:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-size>span { display:none; }
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"] { flex:0 0 88px; width:88px; min-width:88px; max-width:88px; height:24px; margin:0; padding:0; border:0; background:transparent; -webkit-appearance:none; cursor:pointer; }
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]::-webkit-slider-runnable-track { height:2px; border-radius:1px; background:var(--line-strong); }
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:8px; height:10px; margin-top:-4px; border:1px solid var(--action-text); border-radius:2px; background:var(--action-text); }
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]:focus-visible { outline:var(--focus-ring); outline-offset:1px; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-applybar { justify-self:end; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-button { margin:0; }
+[data-host="after-effects"] .ch-preset-library-actions { display:flex; align-items:center; min-width:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions>.ch-button { min-height:24px; padding:2px 6px; border:1px solid var(--border-muted); border-radius:2px; background:var(--bg-elevated); font-size:11px; }
+[data-host="after-effects"] .ch-preset-library-actions-menu { position:absolute; z-index:150; bottom:36px; left:4px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; width:400px; max-width:calc(100% - 8px); max-height:calc(100% - 44px); overflow:auto; box-sizing:border-box; padding:8px; border:1px solid var(--action-text); background:var(--bg-host); }
+[data-host="after-effects"] .ch-preset-library-actions-menu[hidden] { display:none; }
+[data-host="after-effects"] .ch-preset-actions-column { display:flex; flex-direction:column; gap:4px; min-width:0; padding:8px; border:1px solid var(--border-muted); border-radius:3px; background:var(--bg-elevated); }
+[data-host="after-effects"] .ch-preset-actions-column>strong { margin-bottom:8px; font-size:13px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-actions-column>.ch-button { width:100%; min-width:0; min-height:24px; padding:3px 0; border:0; background:transparent; text-align:left; white-space:normal; font-size:11px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-actions-column>.ch-preset-paste-tile { flex:1; min-height:72px; padding:8px; background:var(--surface-raised); text-align:center; }
+[data-host="after-effects"] .ch-preset-actions-status { grid-column:1/-1; margin:0; font-size:12px; }
+[data-host="after-effects"] .ch-preset-actions-unavailable { font-size:11px; color:var(--text-secondary); }
+@media (max-width:439px) {
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer { grid-template-columns:max-content 88px minmax(0,1fr); gap:4px 8px; }
+  [data-host="after-effects"] .ch-preset-reference-footer .ch-preset-applybar { grid-column:1/-1; justify-self:end; }
+  [data-host="after-effects"] .ch-preset-library-actions-menu { bottom:64px; max-height:calc(100% - 72px); }
+}
+
+/* Moti.on details: blue selection, directional glyphs and restrained unfolding. */
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-actions { transition:background-color var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out); }
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-card[data-selected="true"]>.ch-preset-actions { box-shadow:inset 2px 0 var(--action-text); }
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-card[data-selected="true"] .ch-preset-settings-trigger { color:var(--action-text); }
+[data-host="after-effects"] .ch-preset-sidebar .ch-folder-row[data-selected="true"] { box-shadow:inset 2px 0 var(--action-text); }
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-splitter { transition:background-color var(--dur-2) var(--ease-out); }
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-splitter:hover,
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-splitter:focus-visible { background:var(--surface-hover); }
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-splitter:hover::after,
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-splitter:focus-visible::after { color:var(--action-text); }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-tile::before { content:"↑"; flex-basis:12px; width:12px; height:18px; border:0; background:none; opacity:1; font:14px/18px Arial,sans-serif; text-align:center; }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] [data-direction="left"]::before { content:"→"; }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] [data-direction="right"]::before { content:"←"; }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] [data-direction="top"]::before { content:"↓"; }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-tile { transition:background-color var(--dur-2) var(--ease-out),color var(--dur-2) var(--ease-out); }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-tile[aria-pressed="true"] { box-shadow:inset 2px 0 var(--action-text); }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-tile[aria-pressed="true"]::before { color:var(--action-text); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-settings-panel[data-attached][data-motion~="surface-morph"] { transition:opacity var(--dur-popover-out) var(--ease-in),transform var(--dur-popover-out) var(--ease-in); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-settings-panel[data-attached][data-open="true"][data-motion~="surface-morph"] { transform:none; transition:opacity var(--dur-3) var(--ease-out),transform var(--dur-3) var(--ease-out); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-settings-panel[data-attached="below"][data-motion~="surface-morph"]:not([data-open="true"]) { transform:translateY(-4px) scaleY(.98); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-settings-panel[data-attached="above"][data-motion~="surface-morph"]:not([data-open="true"]) { transform:translateY(4px) scaleY(.98); }
+
+/* Preset workstation. Original components, informed by the installed Composer
+   browser/edit hierarchy. All colors follow the user's Adobe theme. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-workspace[data-workspace-view="edit"] { display:flex; flex-direction:column; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-workspace[data-workspace-view="edit"]>.ch-preset-workspace-content { border-left:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs { gap:4px; padding:0 8px; border-bottom:1px solid var(--border-muted); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs>.ch-button { min-height:32px; padding:0 12px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs>.ch-button:hover { background:var(--surface-hover); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs [aria-selected="true"] { font-weight:600; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery { --surface-hover:var(--surface-raised); }
+[data-host="after-effects"] .ch-preset-sidebar { padding:8px 4px 0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar .ch-preset-search input { border-radius:4px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar .ch-folder-row { min-height:26px; border-radius:3px; }
+[data-host="after-effects"] .ch-preset-sidebar .ch-folder-row:hover { background:var(--surface-hover); }
+[data-host="after-effects"] .ch-preset-sidebar .ch-folder-row[data-selected="true"] { background:var(--surface-active); box-shadow:inset 2px 0 var(--action-text); }
+[data-host="after-effects"] .ch-preset-sidebar .ch-folder-row[data-selected="true"] .ch-folder-name { color:var(--action-text); font-weight:600; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery>.ch-preset-scroll { padding:0 6px 0 2px; }
+[data-host="after-effects"] .ch-preset-browser-heading { display:flex; flex:0 0 auto; align-items:center; flex-wrap:wrap; gap:4px 8px; min-height:32px; padding:4px 0; box-sizing:border-box; }
+[data-host="after-effects"] .ch-preset-breadcrumb { display:flex; align-items:center; gap:3px; flex:1 1 60px; min-width:0; overflow:hidden; }
+[data-host="after-effects"] .ch-preset-breadcrumb>.ch-button { flex:0 1 auto; min-width:0; min-height:24px; margin:0; padding:2px 3px; border:0; border-radius:3px; background:transparent; font-size:11px; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
+[data-host="after-effects"] .ch-preset-breadcrumb>.ch-button:hover { background:var(--surface-hover); }
+[data-host="after-effects"] .ch-preset-breadcrumb>[aria-current="page"] { color:var(--text-primary); font-weight:600; }
+[data-host="after-effects"] .ch-preset-path-separator { color:var(--text-secondary); font-size:12px; }
+[data-host="after-effects"] .ch-preset-result-count { flex:0 0 auto; color:var(--text-secondary); font-size:10px; font-variant-numeric:tabular-nums; }
+[data-host="after-effects"] .ch-preset-clear-filters { min-height:24px; padding:2px 4px; border:0; background:transparent; color:var(--action-text); font-size:11px; }
+[data-host="after-effects"] .ch-preset-clear-filters[hidden] { display:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-grid { gap:8px; padding:0 0 6px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card { border:1px solid transparent; border-radius:4px; background:var(--bg-elevated); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-selected="true"] { border-color:var(--action-text); background:var(--surface-active); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card .ch-preset-actions { min-height:34px; padding-right:4px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card .ch-preset-apply { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; height:auto; min-height:34px; max-height:34px; padding:4px 6px; white-space:normal; line-height:13px; overflow-wrap:anywhere; }
+[data-host="after-effects"] .ch-preset-card[data-selected="true"] .ch-preset-apply { color:var(--action-text); }
+/* Hover. Driven by data-hover (set from script, steady through CEP's re-fired
+   pointer events) and drawn around the card only: nothing covers the preview,
+   and nothing moves or scales it (a transform on a card holding a video made
+   CEF drop the preview layer). Once the pointer rests on a card its edge
+   lights up and a soft glow fades in around it. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card { transition:border-color 260ms ease, box-shadow 320ms ease; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-hover="true"] { border-color:rgba(255,255,255,.26); box-shadow:0 0 0 1px rgba(255,255,255,.05), 0 0 16px 1px rgba(255,255,255,.11); transition-delay:60ms; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-selected="true"][data-hover="true"] { border-color:var(--action-text); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-hover="true"] .ch-preset-apply { color:var(--text-primary); }
+[data-host="after-effects"][data-reduced-motion="true"] .ch-preset-gallery .ch-preset-card { transition:none; }
+}
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer { row-gap:6px; padding:6px; }
+[data-host="after-effects"] .ch-preset-selection-summary { grid-column:1/-1; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:2px 12px; min-width:0; font-size:11px; line-height:16px; }
+[data-host="after-effects"] .ch-preset-selected-name { flex:1 1 120px; min-width:0; font-weight:600; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+[data-host="after-effects"] .ch-preset-selection-status { flex:0 1 auto; min-width:0; color:var(--text-secondary); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]::-webkit-slider-thumb { width:12px; height:12px; margin-top:-5px; border:2px solid var(--action-text); border-radius:50%; background:var(--bg-elevated); }
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]:hover::-webkit-slider-thumb,
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]:active::-webkit-slider-thumb { border-width:4px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-settings-header { display:flex; align-items:center; min-height:28px; padding:4px 8px; gap:8px; border-bottom:1px solid var(--border-muted); font-size:11px; }
+[data-host="after-effects"] .ch-preset-settings-header>span { flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+[data-host="after-effects"] .ch-preset-settings-header>.ch-button { width:24px; min-height:24px; padding:0; border:0; background:transparent; }
+[data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-phase-layer { padding:8px 0; border-bottom:1px solid var(--border-muted); font-size:12px; }
+[data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-phase-instance { border:0; border-bottom:1px solid var(--border-muted); border-radius:0; margin:0 0 8px; padding:0 0 8px; background:transparent; }
+[data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-phase-heading { padding:6px 0; min-height:28px; box-sizing:border-box; color:var(--text-primary); }
+[data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-phase-actions { justify-content:flex-end; flex-wrap:wrap; gap:4px 12px; padding:0 0 6px; }
+[data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-phase-link { min-height:24px; font-size:11px; }
+[data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-number-disclosure__header { min-height:28px; }
+[data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-number-disclosure__panel { padding:4px 0 8px; }
+@media (max-width:439px) {
+  [data-host="after-effects"] .ch-preset-selection-summary { flex-direction:column; align-items:flex-start; gap:0; }
+  [data-host="after-effects"] .ch-preset-selected-name { flex:0 1 auto; max-width:100%; }
+  [data-host="after-effects"] .ch-preset-selection-status { max-width:100%; }
+}
+@media (max-height:419px) {
+  [data-host="after-effects"] .ch-preset-selection-summary { flex-direction:row; }
+  [data-host="after-effects"] .ch-preset-selection-status { display:none; }
+}
+
+/* F2 interface icons (motion upgrade, 2026-10-23). AE views draw ui-icons.ts SVGs on one
+ * 16 px grid; shared components keep their text glyph in the DOM (Premiere) and the AE
+ * stylesheet paints the same icon over it with a mask. */
+[data-host="after-effects"] .ch-ui-icon { display:block; flex:none; width:16px; height:16px; margin:auto; pointer-events:none; }
+[data-host="after-effects"] button[data-icon] { display:inline-flex; align-items:center; justify-content:center; }
+[data-host="after-effects"] .ch-folder-toggle .ch-ui-icon,[data-host="after-effects"] .ch-folder-more .ch-ui-icon { width:14px; height:14px; }
+[data-host="after-effects"] .ch-folder-palette [data-color] .ch-ui-icon { width:12px; height:12px; }
+[data-host="after-effects"] .ch-select-trigger__chevron,[data-host="after-effects"] .ch-toast__dismiss,[data-host="after-effects"] .ch-number-scrub { font-size:0; }
+[data-host="after-effects"] .ch-select-trigger__chevron::before,[data-host="after-effects"] .ch-toast__dismiss::before,[data-host="after-effects"] .ch-number-scrub::before { content:""; display:block; flex:none; width:14px; height:14px; margin:auto; background:currentColor; -webkit-mask:var(--ch-ui-mask) center / 14px 14px no-repeat; }
+[data-host="after-effects"] .ch-select-trigger__chevron::before { width:12px; height:12px; -webkit-mask-size:12px 12px; }
+[data-host="after-effects"] .ch-select-trigger__chevron { --ch-ui-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5'/%3E%3C/svg%3E"); }
+[data-host="after-effects"] .ch-toast__dismiss { --ch-ui-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M4.75 4.75l6.5 6.5M11.25 4.75l-6.5 6.5'/%3E%3C/svg%3E"); }
+[data-host="after-effects"] .ch-number-scrub { --ch-ui-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.75 8h10.5M5 5.5 2.5 8 5 10.5M11 5.5l2.5 2.5-2.5 2.5'/%3E%3C/svg%3E"); }
+
+/* F5 command palette (command-palette.ts): one dialog above the panel, Ctrl/Cmd+K or the
+ * nav search button. Centred with margins, not a transform: the entry animation owns it. */
+[data-host="after-effects"] .ch-palette-scrim { position:fixed; top:0; right:0; bottom:0; left:0; z-index:1600; background:rgba(0,0,0,.42); }
+[data-host="after-effects"] .ch-palette { position:fixed; z-index:1601; top:max(8px, min(12vh, 72px)); left:50%; display:flex; flex-direction:column; box-sizing:border-box; width:min(440px, calc(100vw - 16px)); max-height:min(460px, calc(100vh - max(8px, min(12vh, 72px)) - 8px)); margin-left:calc(min(440px, calc(100vw - 16px)) / -2); overflow:hidden; border:1px solid var(--border-subtle); border-radius:var(--radius-medium); background:var(--bg-elevated); box-shadow:var(--e2); color:var(--text-primary); }
+[data-host="after-effects"] .ch-palette[hidden],[data-host="after-effects"] .ch-palette-scrim[hidden] { display:none; }
+[data-host="after-effects"] .ch-palette__field { flex:none; padding:8px; border-bottom:1px solid var(--border-muted); }
+[data-host="after-effects"] .ch-palette__input { box-sizing:border-box; width:100%; height:32px; padding:0 10px; border:1px solid var(--border-subtle); border-radius:var(--radius-input); background:var(--bg-host); color:var(--text-primary); font:inherit; font-size:13px; }
+[data-host="after-effects"] .ch-palette__input:focus { outline:var(--focus-ring); outline-offset:1px; }
+[data-host="after-effects"] .ch-palette__list { position:relative; flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:4px; }
+[data-host="after-effects"] .ch-palette__group { padding:8px 8px 4px; color:var(--text-secondary); font-size:11px; font-weight:500; }
+[data-host="after-effects"] .ch-palette__option { position:relative; z-index:1; display:flex; align-items:center; gap:8px; min-height:32px; padding:5px 8px; border-radius:var(--radius-input); cursor:default; }
+[data-host="after-effects"] .ch-palette__text { display:flex; flex:1; flex-direction:column; min-width:0; }
+[data-host="after-effects"] .ch-palette__title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+[data-host="after-effects"] .ch-palette__detail,[data-host="after-effects"] .ch-palette__reason { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-secondary); font-size:11px; }
+[data-host="after-effects"] .ch-palette__option[aria-disabled="true"] .ch-palette__title { color:var(--text-secondary); }
+[data-host="after-effects"] .ch-palette__glide { position:absolute; top:0; left:4px; right:4px; z-index:0; border-radius:var(--radius-input); background:var(--surface-hover); pointer-events:none; }
+[data-host="after-effects"] .ch-palette__glide[data-visible="false"] { opacity:0; }
+[data-host="after-effects"] .ch-palette__status { margin:0; padding:8px 12px; color:var(--text-secondary); font-size:12px; }
+[data-host="after-effects"] .ch-palette__status:empty { display:none; }
+[data-host="after-effects"] .ch-palette__hints { flex:none; margin:0; padding:6px 12px; border-top:1px solid var(--border-muted); color:var(--text-secondary); font-size:11px; }
+[data-host="after-effects"] .ch-nav__search svg { width:16px; height:16px; }
+/* Compact docks: the palette footer hints go; the nav search stays (icon nav, below). */
+@media (max-width:339px) {
+  [data-host="after-effects"] .ch-palette__hints { display:none; }
+}
+
+/* Compact refinement (2026-10-24, user review at 280–320 px).
+ * Navigation: one rule for every main view — icons while the names do not all fit,
+ * names from 440 px. No mix of words and icons; the view title below names the screen
+ * and every icon keeps its tooltip and accessible name. The command search shows at
+ * every width now that the icons leave room for it. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] { width: 32px; min-width: 32px; height: 28px; min-height: 28px; padding: 0; justify-content: center; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] > svg { display: block; width: 16px; height: 16px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] > .ch-nav__label { display: none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__utilities > .ch-nav__search { display: inline-flex; }
+@media (min-width: 440px) {
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] { width: auto; max-width: none; padding: 0 10px; font-size: 12px; font-weight: 500; }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] > svg { display: none; }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] > .ch-nav__label { display: inline; overflow: visible; }
+}
+
+/* Home toolbar: each menu takes its own width (the compact shell stretched both to an
+ * equal share and cut "Todas" to "T…"). Below 360 px the collection menu keeps its icon
+ * and drops the word (its accessible name and tooltip carry it). */
+[data-host="after-effects"] .ch-library-refined .ch-library-filters > .ch-library-select { flex: 0 0 auto; }
+/* No search field any more (the nav search opens the command palette): the category menu
+ * is the row's title at the left — "Todas as ferramentas ▾" — and the collection sits at the
+ * right, so the old heading row is gone. */
+[data-host="after-effects"] .ch-library-refined .ch-library-filters { position: static; width: 100%; max-width: none; justify-content: space-between; gap: 8px; }
+[data-host="after-effects"] .ch-library-refined .ch-library-filters > #library-category-select { flex: 0 1 auto; min-width: 0; color: var(--text-primary); font-size: 12px; font-weight: 600; }
+@media (max-width: 359.98px) {
+  [data-host="after-effects"] .ch-library-refined #library-collection > svg { display: block; width: 14px; height: 14px; }
+  [data-host="after-effects"] .ch-library-refined #library-collection > span:not(.ch-library-chevron) { display: none; }
+}
+
+/* Suavização (compact review 2026-10-24). One accent — the curve in the AE editable
+ * blue — on neutral greys, thinner strokes, and nothing printed over the plot: the
+ * value/speed toggle moved to the header (it covered the (1, 1) end) and the gesture
+ * help is read by screen readers only. The action buttons and the X1–Y2 row lose
+ * their outlines so the graph stays the one shape that matters. */
+[data-host="after-effects"] .ch-curve { --curve-path: var(--value-editable); --curve-handle: var(--text-primary); --curve-ring: var(--value-editable); --curve-axis: var(--border-subtle); --curve-ghost: var(--text-secondary); --curve-faint: var(--text-secondary); }
+[data-host="after-effects"] .ch-curve__value { stroke-width: 2; }
+[data-host="after-effects"] .ch-curve__value--faint { stroke-width: 1.25; }
+[data-host="after-effects"] .ch-curve__axis { stroke-width: 1; }
+[data-host="after-effects"] .ch-curve__grid { opacity: .7; }
+[data-host="after-effects"] .ch-curve__stem { stroke: var(--text-secondary); opacity: .5; }
+[data-host="after-effects"] .ch-curve__peak { fill: var(--text-secondary); }
+[data-host="after-effects"] .ch-curve__readout { fill: var(--text-primary); stroke: var(--surface-deep); stroke-width: .3em; stroke-linejoin: round; paint-order: stroke fill; font-variant-numeric: tabular-nums; pointer-events: none; }
+[data-host="after-effects"] .ch-curve__header-tools { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+[data-host="after-effects"] .ch-curve__header-tools + .ch-curve__header-end { margin-left: 4px; }
+[data-host="after-effects"] .ch-curve__header-tools .ch-curve__overlay,
+[data-host="after-effects"] .ch-shell .ch-ease-live { position: static; flex: none; width: 28px; min-width: 28px; height: 28px; min-height: 28px; margin: 0; padding: 0; display: inline-grid; place-items: center; border: 0; border-radius: var(--radius-input); background: transparent; box-shadow: none; color: var(--text-secondary); }
+[data-host="after-effects"] .ch-curve__header-tools .ch-curve__overlay:hover,
+[data-host="after-effects"] .ch-shell .ch-ease-live:hover { background: var(--surface-hover); color: var(--text-primary); }
+[data-host="after-effects"] .ch-curve__header-tools .ch-curve__overlay[aria-pressed="true"],
+[data-host="after-effects"] .ch-shell .ch-ease-live[aria-pressed="true"] { color: var(--value-editable); background: var(--accent-wash); }
+[data-host="after-effects"] .ch-ease-live svg { width: 16px; height: 16px; }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-action { border-color: transparent; background: var(--surface-deep); box-shadow: none; }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-action:hover:not(:disabled) { border-color: var(--border-subtle); background: var(--surface-raised); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-values { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 6px 0 4px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-values label { position: relative; display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: flex-start; gap: 4px; min-width: 0; height: 28px; padding: 0 0 0 7px; border-radius: var(--radius-input); background: var(--surface-deep); color: var(--text-secondary); font-size: 10px; cursor: text; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-values label:focus-within { box-shadow: inset 0 0 0 1px var(--border-control); }
+[data-host="after-effects"] .ch-ease-coordinate-label { flex: none; letter-spacing: .02em; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-values input { flex: 1 1 auto; width: 0; min-width: 0; height: 28px; padding: 0 6px 0 0; border: 0; background: transparent; box-shadow: none; color: var(--value-editable); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-values input:hover,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-values input:focus { background: transparent; border-color: transparent; outline: none; }
+[data-host="after-effects"] .ch-ease-values .ch-field__error { position: absolute; top: calc(100% + 2px); left: 0; z-index: 2; white-space: nowrap; }
+/* A focused dot shows a round halo (its transparent hit stroke tinted), not a square outline. */
+[data-host="after-effects"] .ch-curve__handle:focus-visible,
+[data-host="after-effects"] .ch-curve__point:focus-visible,
+[data-host="after-effects"] .ch-curve__marker:focus-visible { outline: none; stroke: rgba(179, 212, 255, .3); }
+/* Entrada · Saída · Converter Hold: box then label on one line each, wrapping as whole
+ * options — not three columns with the label broken over three lines above its box. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-sides { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 16px; margin: 8px 0 0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-sides > .ch-field { flex: 0 0 auto; display: flex; flex-direction: row-reverse; flex-wrap: nowrap; justify-content: flex-end; align-items: center; gap: 6px; min-height: 28px; margin: 0; }
+[data-host="after-effects"] .ch-ease-sides .ch-field__label { flex: 0 0 auto; margin: 0; color: var(--text-secondary); font-size: 12px; white-space: nowrap; cursor: pointer; }
+[data-host="after-effects"] .ch-ease-sides .ch-field__control { flex: none; display: flex; }
+
+/* Presets in narrow docks (2026-10-24, compact review). Below 360 px the tree beside the
+ * cards cut its names and left one thin card column: it folds into a folder picker that
+ * takes the breadcrumb's place above the cards (preset-folder-picker.ts sets
+ * data-folder-picker) and opens the same tree as a sheet over them; the cards take the
+ * full width. From 360 px nothing here applies: sidebar, splitter and widths as approved. */
+[data-host="after-effects"] .ch-preset-browser-heading > .ch-preset-folder-picker { display:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-folder-picker="true"] { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-folder-picker="true"] > .ch-preset-sidebar { grid-column:1; grid-row:1; overflow:visible; padding:8px 6px 0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-folder-picker="true"] > .ch-preset-splitter { display:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-folder-picker="true"] > .ch-preset-scroll { grid-column:1; grid-row:2; padding:0 6px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-folder-picker="true"] > .ch-preset-reference-footer { grid-row:3; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-folder-picker="true"] .ch-preset-sidebar > .ch-preset-toolbar-approved { flex-wrap:nowrap; margin:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-folder-picker="true"] .ch-preset-sidebar .ch-preset-search { flex:1 1 auto; }
+[data-host="after-effects"] .ch-preset-gallery[data-folder-picker="true"] .ch-preset-breadcrumb { display:none; }
+/* The picker: the folder in full, its parent dimmed and the first to give way. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-folder-picker="true"] .ch-preset-browser-heading > .ch-preset-folder-picker { display:flex; align-items:center; justify-content:flex-start; gap:5px; flex:1 1 0; min-width:0; height:28px; min-height:28px; margin:0; padding:0 6px; border:0; border-radius:var(--radius-input); background:transparent; box-shadow:none; color:var(--text-primary); font-size:12px; font-weight:400; text-align:left; white-space:nowrap; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-folder-picker:hover,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-folder-picker[aria-expanded="true"] { background:var(--surface-hover); }
+[data-host="after-effects"] .ch-preset-folder-picker:focus-visible { outline:var(--focus-ring); outline-offset:-1px; }
+[data-host="after-effects"] .ch-preset-folder-picker > .ch-folder-icon { margin-right:2px; }
+[data-host="after-effects"] .ch-preset-folder-picker__parent { flex:0 99 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; color:var(--text-secondary); }
+[data-host="after-effects"] .ch-preset-folder-picker__separator { flex:none; color:var(--text-secondary); }
+[data-host="after-effects"] .ch-preset-folder-picker__parent[hidden],
+[data-host="after-effects"] .ch-preset-folder-picker__separator[hidden] { display:none; }
+[data-host="after-effects"] .ch-preset-folder-picker__name { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; font-weight:600; }
+[data-host="after-effects"] .ch-preset-folder-picker__chevron { display:flex; flex:none; color:var(--text-secondary); transition:transform var(--dur-2) var(--ease-out); }
+[data-host="after-effects"] .ch-preset-folder-picker__chevron > .ch-ui-icon { width:12px; height:12px; }
+[data-host="after-effects"] .ch-preset-folder-picker[aria-expanded="true"] > .ch-preset-folder-picker__chevron { transform:rotate(180deg); }
+[data-host="after-effects"][data-reduced-motion="true"] .ch-preset-folder-picker__chevron { transition:none; }
+@media (prefers-reduced-motion: reduce) {
+  [data-host="after-effects"] .ch-preset-folder-picker__chevron { transition:none; }
+}
+/* The sheet: the same tree over the cards, from the picker down to the footer. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-folder-picker="true"] .ch-preset-sidebar .ch-preset-filter-menu { position:absolute; z-index:30; left:6px; right:6px; flex:none; width:auto; max-width:none; padding:4px; overflow:auto; overscroll-behavior:contain; border:1px solid var(--border-subtle); border-radius:var(--radius-popover); background:var(--bg-elevated); box-shadow:var(--e2); opacity:0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-folder-picker="true"] .ch-preset-sidebar .ch-preset-filter-menu[data-open="true"] { opacity:1; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-folder-picker="true"] .ch-preset-sidebar .ch-preset-filter-menu[hidden] { display:none; }
+
+/* Suavização, second pass (compact review 2026-10-24): less scrolling, one notice.
+ * Keyframe operations are one toolbar — a well split into Duplicar · Inverter · Espelhar,
+ * with pictograms that act out their operation (ae-motion.css) and short names from 480 px.
+ * The curve's name shares the row with the mode menu; the plot shrinks on short panels;
+ * the curve library is one row that slides like the quick dock strip. */
+[data-host="after-effects"] .ch-ease-actions { max-width: none; margin: 0 0 12px; }
+[data-host="after-effects"] .ch-ease-actions__primary { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line-hairline); border-radius: 8px; background: var(--bg-3); }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-action-control { position: relative; display: block; flex: 1 1 0; min-width: 0; }
+[data-host="after-effects"] .ch-ease-actions [data-group="duplicate"] + [data-group="reverse"],
+[data-host="after-effects"] .ch-ease-actions [data-group="reverse"] + [data-group="mirror"],
+[data-host="after-effects"] .ch-ease-actions [data-group="transfer"] + [data-group="align"] { margin-left: 5px; }
+[data-host="after-effects"] .ch-ease-actions [data-group="duplicate"] + [data-group="reverse"]::before,
+[data-host="after-effects"] .ch-ease-actions [data-group="reverse"] + [data-group="mirror"]::before,
+[data-host="after-effects"] .ch-ease-actions [data-group="transfer"] + [data-group="align"]::before { content: ""; position: absolute; top: 8px; bottom: 8px; left: -4px; width: 1px; background: var(--line-hairline); }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-action { width: 100%; height: 34px; min-height: 34px; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 0; border-radius: 6px; background: transparent; box-shadow: none; color: var(--text-secondary); }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-action:hover:not([aria-disabled="true"]) { border-color: transparent; background: var(--bg-2); color: var(--text-primary); }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-action[aria-disabled="true"] { opacity: .45; }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-action svg.ch-ease-action__icon { width: 30px; max-width: 100%; height: 20px; overflow: visible; }
+[data-host="after-effects"] .ch-ease-action__source { fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; opacity: .85; }
+[data-host="after-effects"] .ch-ease-action__result { fill: currentColor; stroke: none; }
+[data-host="after-effects"] .ch-ease-action__guide { fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
+[data-host="after-effects"] .ch-ease-action__guide--dashed { stroke-dasharray: 1.6 1.6; }
+[data-host="after-effects"] .ch-ease-action__head { fill: currentColor; stroke: none; opacity: .7; }
+[data-host="after-effects"] .ch-ease-action__label { display: none; font-size: 10px; line-height: 1; white-space: nowrap; }
+@media (min-width: 480px) {
+  [data-host="after-effects"] .ch-ease-actions .ch-ease-action { height: 46px; min-height: 46px; }
+  [data-host="after-effects"] .ch-ease-action__label { display: block; }
+}
+[data-host="after-effects"] .ch-curve__header .ch-ease-curve-name { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-primary); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+[data-host="after-effects"] .ch-curve:not([data-mode="bezier"]) .ch-ease-curve-name,
+[data-host="after-effects"] .ch-ease-editor[data-compact] .ch-ease-curve-name { display: none; }
+/* On short panels the graph shrinks to keep the rest in view; header, graph and X1–Y2 share
+ * that width and stay left-aligned with the rest of the view. */
+[data-host="after-effects"] .ch-ease-editor .ch-curve,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-editor .ch-ease-values { box-sizing: border-box; width: min(100%, max(220px, calc(100vh - 290px))); max-width: 560px; }
+[data-host="after-effects"] .ch-ease-editor .ch-curve { gap: 6px; }
+@media (max-width: 339.98px) {
+  [data-host="after-effects"] .ch-ease-editor .ch-curve__mode-text { display: none; }
+}
+[data-host="after-effects"] .ch-ease-library { margin-top: 12px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-library-header { display: flex; align-items: center; gap: 2px; min-height: 28px; margin: 0 0 4px; }
+[data-host="after-effects"] .ch-ease-library-header .ch-ease-section-title { flex: 1 1 auto; margin: 0; color: var(--text-primary); font-size: 12px; font-weight: 600; }
+[data-host="after-effects"] .ch-shell .ch-ease-library-tool { flex: none; width: 28px; min-width: 28px; height: 28px; min-height: 28px; margin: 0; padding: 0; display: inline-grid; place-items: center; border: 0; border-radius: var(--radius-input); background: transparent; box-shadow: none; color: var(--text-secondary); }
+[data-host="after-effects"] .ch-shell .ch-ease-library-tool:hover { background: var(--surface-hover); color: var(--text-primary); }
+[data-host="after-effects"] .ch-shell .ch-ease-library-tool[aria-pressed="true"],
+[data-host="after-effects"] .ch-shell .ch-ease-library-tool[aria-expanded="true"] { background: var(--accent-wash); color: var(--value-editable); }
+[data-host="after-effects"] .ch-ease-strip { position: relative; }
+[data-host="after-effects"] .ch-ease-strip .ch-ease-grid { display: grid; grid-auto-flow: column; grid-auto-columns: 76px; grid-template-columns: none; grid-template-rows: auto; gap: 4px; max-height: none; margin: -2px; padding: 2px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--qa-fade-start), #000 calc(100% - var(--qa-fade-end)), transparent 100%);
+  transition: --qa-fade-start .25s var(--ease-glide), --qa-fade-end .25s var(--ease-glide); }
+[data-host="after-effects"] .ch-ease-strip .ch-ease-grid::-webkit-scrollbar { display: none; width: 0; height: 0; }
+[data-host="after-effects"] .ch-ease-strip[data-overflow-start="true"] .ch-ease-grid { --qa-fade-start: 24px; }
+[data-host="after-effects"] .ch-ease-strip[data-overflow-end="true"] .ch-ease-grid { --qa-fade-end: 24px; }
+[data-host="after-effects"] .ch-ease-strip .ch-ease-preset { height: 66px; padding: 4px 2px; border-radius: 6px; background: var(--surface-deep); }
+[data-host="after-effects"] .ch-ease-strip .ch-ease-preset svg { height: 40px; }
+[data-host="after-effects"] .ch-ease-strip .ch-ease-delete { top: 22px; }
+[data-host="after-effects"] .ch-ease-strip .ch-ease-grid > .ch-hint { grid-column: 1 / -1; margin: 8px 0; white-space: nowrap; }
+/* Wide docks put the library beside the graph: there it wraps into a grid again. */
+@media (min-width: 600px) {
+  [data-host="after-effects"] .ch-ease-strip .ch-ease-grid { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); overflow: visible; -webkit-mask-image: none; }
+}
+/* Why Apply is unavailable: one line of text by the action bar, not another box. */
+[data-host="after-effects"] .ch-tool-editor > .ch-alert--warning { margin: 10px 0 0; padding: 2px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--text-secondary); }
+[data-host="after-effects"] .ch-tool-editor > .ch-alert--warning .ch-alert__icon { color: var(--warn); }

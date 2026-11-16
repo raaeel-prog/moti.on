@@ -43,6 +43,8 @@ async function fixture({ fps = 30, height = 1080, text = false } = {}) {
       return vm.runInNewContext(this.expression, {
         time, inPoint: layer.inPoint, outPoint: layer.outPoint, value: this.value, thisComp: comp,
         textIndex: unitIndex + 1, textTotal: unitCount, transform: {scale: layer.transform.property('ADBE Scale').valueAtTime(time, true)},
+        // As AE reads it: the source string with its style, and the live Anchor Point Grouping.
+        text: {sourceText: Object.assign(new String(layer.sourceText ?? 'Moti.on text'), {style: {fontSize: 100}}), moreOption: {anchorPointGrouping: layer.text?.property?.('ADBE Text More Options')?.property?.('ADBE Text Anchor Point Option')?.value ?? 1}},
         effect: name => index => layer.effects.property(name).property(index).value
       });
     }
@@ -79,21 +81,23 @@ async function fixture({ fps = 30, height = 1080, text = false } = {}) {
   }
   class Layer {
     constructor(isText) {
-      Object.assign(this, {id: nextId++, name: 'User artwork', comment: 'Keep this comment', inPoint: 0, outPoint: 4, hasVideo: true, nullLayer: false, threeDLayer: false, locked: false, selected: true});
+      Object.assign(this, {id: nextId++, name: 'User artwork', comment: 'Keep this comment', inPoint: 0, outPoint: 4, hasVideo: true, nullLayer: false, threeDLayer: false, locked: false, selected: true, motionBlur: false});
       this.effects = new Group('ADBE Effect Parade', this);
       this.transform = new Group('ADBE Transform Group', this, {'ADBE Anchor Point': [50,50,0], 'ADBE Position': [300,200,0], 'ADBE Scale': [100,100,100], 'ADBE Rotate X': 0, 'ADBE Rotate Y': 0, 'ADBE Rotate Z': 0, 'ADBE Opacity': 100});
-      if (isText) { this.sourceText = 'Editable words\rSecond line'; this.text = new Group('ADBE Text Properties', this); this.text.children.push(new Group('ADBE Text Animators', this.text)); }
+      if (isText) { this.sourceText = 'Editable words\rSecond line'; this.text = new Group('ADBE Text Properties', this); this.text.children.push(new Group('ADBE Text Animators', this.text)); { const layer = this; this.text.children.push({name: 'ADBE Text Document', matchName: 'ADBE Text Document', parentProperty: this.text, numProperties: 0, get value() { return {text: String(layer.sourceText), fontSize: 100}; }}); } this.threeDPerChar = false; }
     }
     get numProperties() { return this.text ? 3 : 2; }
     property(name) { const all = [this.effects, this.transform, this.text]; return typeof name === 'number' ? all[name - 1] : all.find(p => p?.matchName === name); }
     sourceRectAtTime() { return {left: 0, top: 0, width: 100, height: 100}; }
   }
   class CompItem {
-    constructor() { Object.assign(this, {id: 100, height, time: .2, frameDuration: 1 / fps, layers: []}); }
+    constructor() { Object.assign(this, {id: 100, height, time: .2, frameDuration: 1 / fps, layers: [], motionBlur: false}); }
     get selectedLayers() { return this.layers.filter(l => l.selected); }
+    get numLayers() { return this.layers.length; }
+    layer(index) { return this.layers[index - 1]; }
   }
-  const comp = new CompItem(), layer = new Layer(text); comp.layers.push(layer);
-  const scope = await loadHostModules(['src/json.jsx', 'src/registry.jsx']);
+  const comp = new CompItem(), layer = new Layer(text); comp.layers.push(layer); layer.containingComp = comp;
+  const scope = await loadHostModules(['src/json.jsx', 'src/registry.jsx', 'src/marker-window.jsx']);
   scope.MotionLibraryCore = contracts; scope.MotionLibraryCatalog = contracts.MOTION_LIBRARY_PRESETS;
   const globals = {
     app: {project: {activeItem: comp}}, CompItem, CameraLayer: class {}, LightLayer: class {}, KeyframeInterpolationType: {LINEAR: 1},
@@ -122,7 +126,7 @@ function close(actual,expected,label='sample') {
 }
 
 test('all premium recipes create evaluable expressions with finite endpoints and preserve source text',async()=>{
-  assert.equal(premium.length,41);
+  assert.equal(premium.length,49);
   for(const p of premium){
     const f=await fixture({text:p.category.startsWith('text-')});const args=f.args(p.id,{phase:'both'});
     f.run('apply',args);const expressions=allExpressions(f.layer);assert.ok(expressions.length,p.id);
@@ -156,9 +160,11 @@ test('host text vector selectors evaluate the same authored choreography as shar
       const u=contracts.libraryStudioTiming(time,0,4,args.durationFrames/30,args.phase,idx,7,args.staggerFrames/30,args.overlap);
       const w=2-contracts.libraryEase(u[0],p.easing,args.elasticity)-contracts.libraryEase(u[1],p.easing,args.elasticity);
       const expected=contracts.libraryChoreography(Math.max(0,Math.min(1,...u)),w,...p.position,p.choreography.path,p.choreography.distribution??'uniform',rawIndex,args.seed,p.choreography.turns??1,args.direction);
-      close(selector(f,'Movimento').valueAtTime(time,false,rawIndex,7),expected.slice(0,3).map(n=>n*100/1080),id);
-      if(selector(f,'Escala'))close(selector(f,'Escala').valueAtTime(time,false,rawIndex,7),[expected[4]*100,expected[5]*100,w*100]);
-      if(selector(f,'Rotação'))close(selector(f,'Rotação').valueAtTime(time,false,rawIndex,7),expected[3]*100);
+      // Travel is em of the live font (100 px here): pose x em, carried by the 20000 px vector.
+      close(selector(f,'Movimento').valueAtTime(time,false,rawIndex,7),expected.slice(0,3).map(n=>n*100/contracts.libraryTextReference(p.text.unit)*100/20000),id);
+      // Scale and turn selectors return a quarter: their values are four times the recipe (TEXT_RANGE).
+      if(selector(f,'Escala'))close(selector(f,'Escala').valueAtTime(time,false,rawIndex,7),[expected[4]*100/4,expected[5]*100/4,w*100/4]);
+      if(selector(f,'Rotação'))close(selector(f,'Rotação').valueAtTime(time,false,rawIndex,7),expected[3]*100/4);
     }
   }
 });

@@ -64,4 +64,8 @@ foreach ($Name in $Plugins) {
   }
   Write-Host "Instalado: $Target"
 }
+# Rodizio: guarda so os 3 backups mais recentes dos binarios nativos.
+Get-ChildItem -Directory $BackupRoot -Filter "native-*" -ErrorAction SilentlyContinue |
+  Sort-Object Name -Descending | Select-Object -Skip 3 |
+  ForEach-Object { Remove-Item -Recurse -Force $_.FullName }
 Write-Host "Reinicie o After Effects para carregar os novos binários."

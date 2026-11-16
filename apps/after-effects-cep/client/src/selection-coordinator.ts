@@ -7,8 +7,11 @@ export interface SelectionReader {
 export function createSelectionCoordinator(options: {
   document: Document;
   window: Window;
-  read(): Promise<void>;
+  /** The light context read; resolves true when the selection changed. */
+  read(): Promise<boolean | void>;
   blocked(): boolean;
+  /** Skips periodic reads only. A refresh (focus, an operation finishing) still reads. */
+  paused?(): boolean;
   interval?: number;
   schedule?: (callback: () => void, delay: number) => unknown;
   cancel?: (handle: unknown) => void;
@@ -28,9 +31,19 @@ export function createSelectionCoordinator(options: {
   async function tick(): Promise<void> {
     if (!allowed()) return;
     if (running) { requested = true; return; }
-    if (options.blocked()) { next(); return; }
+    if (options.blocked() || (!requested && options.paused?.())) { next(); return; }
+    const prompted = requested;
     running = true; requested = false;
-    try { await (editor()?.read() ?? options.read()); }
+    try {
+      const reader = editor();
+      // Unprompted ticks follow the selection with the light context read; the
+      // editor reads again only when it changed. Its read touches the layer's
+      // text document, and running it while text was typed in the viewer
+      // broke AE's text editing (deletes ignored, text typed ahead).
+      if (!reader) await options.read();
+      else if (prompted) await reader.read();
+      else if (await options.read() === true) await reader.read();
+    }
     catch { /* Each reader owns its error state; periodic recovery remains active. */ }
     finally { running = false; if (!disposed) next(requested ? 0 : undefined); }
   }

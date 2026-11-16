@@ -4,3 +4,7 @@ project_id = "motion-account"
 [functions.motion-account]
 # The function validates the caller's session itself (works with publishable keys).
 verify_jwt = false
+
+[functions.motion-assets]
+# Same model as motion-account: the function validates the session and the license itself.
+verify_jwt = false

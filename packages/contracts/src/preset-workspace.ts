@@ -41,31 +41,36 @@ export interface PresetColorInspection {
 }
 export interface PresetColorAdjustArgs {target:PresetColorTarget; key:string; hex:string}
 
+/** Entrance, exit, or the continuous effect stacked with them (phases v3). */
+export type PresetPhaseRole = "in" | "out" | "effect";
+
 export interface PresetPhaseInspection {
-  phase: "in" | "out";
+  phase: PresetPhaseRole;
   presetId: string;
   instance: string;
   options: MotionLibraryOptions;
   markerTime: number | null;
+  /** Effect only: the window length, read from its marker duration. */
+  markerDuration?: number | null;
   controls: {key: keyof MotionLibraryOptions; name: string; type: "number"; min: number; max: number; unit: string}[];
 }
 
 export interface PresetPhaseAdjustArgs {
   target: PresetTarget;
-  phase: "in" | "out";
+  phase: PresetPhaseRole;
   presetId: string;
   options: MotionLibraryOptions;
 }
 
 export interface PresetPhaseActionArgs {
   target: PresetTarget;
-  phase: "in" | "out";
+  phase: PresetPhaseRole;
   action: "remove" | "reset";
 }
 
 export interface PresetPhaseTimingArgs {
   target: PresetTarget;
-  phase: "in" | "out";
+  phase: PresetPhaseRole;
   frames: number;
 }
 

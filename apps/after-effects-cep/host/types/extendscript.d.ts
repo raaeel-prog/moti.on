@@ -55,6 +55,7 @@ declare const BlendingMode: {
 };
 
 declare class Item {
+  parentFolder: FolderItem;
   readonly id: number;
   readonly name: string;
 }
@@ -62,6 +63,12 @@ declare class Item {
 declare class FootageItem extends Item {
   /** Camadas que usam este item. Vazio = material nao usado no projeto. */
   readonly usedIn: CompItem[];
+  remove(): void;
+}
+
+/** Pasta do painel Projeto (`ae.elements.insert` guarda as pre-comps nela). */
+declare class FolderItem extends Item {
+  readonly numItems: number;
   remove(): void;
 }
 
@@ -84,6 +91,7 @@ declare class CompItem extends Item {
 }
 
 declare class ItemCollection {
+  addFolder(name: string): FolderItem;
   addComp(
     name: string,
     width: number,
@@ -147,7 +155,8 @@ declare class Layer {
    * transform do pai a levar. Medido em docs/research/after-effects-parenting.md
    * — o nome engana, o "jump" e o que ela causa, nao o que evita.
    */
-  setParentWithJump(layer: Layer): void;
+  /** Omit the parent to remove parenting without changing local transforms. */
+  setParentWithJump(layer?: Layer): void;
   /**
    * Retangulo da fonte no espaco da camada. `top` costuma ser negativo em
    * texto, porque a origem fica na baseline.

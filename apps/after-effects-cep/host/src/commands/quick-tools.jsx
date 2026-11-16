@@ -567,6 +567,108 @@
     result.message = result.changedItems + ' shape layer(s) com stroke tracejado.';
   }
 
+  /** Selected keyframe times of one layer, from every selected keyframed property.
+   * @param {any} layer @returns {number[]} */
+  function selectedKeyTimes(layer) {
+    var times = [], props = layer.selectedProperties || [];
+    for (var i = 0; i < props.length; i++) {
+      var prop = props[i];
+      if (!prop || typeof prop.keyTime !== 'function' || !prop.selectedKeys) continue;
+      for (var k = 0; k < prop.selectedKeys.length; k++) times.push(prop.keyTime(prop.selectedKeys[k]));
+    }
+    return times;
+  }
+
+  /** Brazu's "Cut In Keyframes", per layer: each layer keeps the span of its own
+   * selected keys, last key frame included. A layer with fewer than two is skipped.
+   * @param {any} comp @param {any} layers @param {any} result @returns {any} */
+  function trimToKeys(comp, layers, result) {
+    var frame = Math.max(0.001, comp.frameDuration), touched = [];
+    try {
+      for (var i = 0; i < layers.length; i++) {
+        var layer = layers[i], times = selectedKeyTimes(layer);
+        if (times.length < 2) { result.warnings.push(layer.name + ': selecione pelo menos 2 keyframes.'); result.skippedItems++; continue; }
+        var start = Math.min.apply(null, times), end = Math.max.apply(null, times) + frame;
+        if (end - start <= frame) { result.warnings.push(layer.name + ': os keyframes selecionados estao no mesmo frame.'); result.skippedItems++; continue; }
+        touched.push({layer: layer, inPoint: layer.inPoint, outPoint: layer.outPoint});
+        // AE rejects an In point past the current Out point, so widen first.
+        if (start >= layer.outPoint) { layer.outPoint = end; layer.inPoint = start; }
+        else { layer.inPoint = start; layer.outPoint = end; }
+        result.changedItems++;
+      }
+    } catch (error) {
+      var rollbackFailed = false;
+      for (var j = touched.length - 1; j >= 0; j--) {
+        try {
+          var previous = touched[j];
+          if (!previous) continue;
+          var target = previous.layer;
+          // Only what really changed is written back; AE may refuse a no-op write.
+          if (previous.inPoint >= target.outPoint) { if (target.outPoint !== previous.outPoint) target.outPoint = previous.outPoint; if (target.inPoint !== previous.inPoint) target.inPoint = previous.inPoint; }
+          else { if (target.inPoint !== previous.inPoint) target.inPoint = previous.inPoint; if (target.outPoint !== previous.outPoint) target.outPoint = previous.outPoint; }
+        } catch (restoreError) { rollbackFailed = true; }
+      }
+      var failed = /** @type {Error & {motionCode?: string}} */ (new Error('Aparar falhou: ' + String(error)));
+      failed.motionCode = rollbackFailed ? MotionContracts.ERROR.ROLLBACK_FAILED : MotionContracts.ERROR.HOST_OPERATION_FAILED;
+      throw failed;
+    }
+    result.message = result.changedItems + ' layer(s) aparada(s) aos keyframes.';
+  }
+
+  /** A string literal for expression source.
+   * @param {string} value @returns {string} */
+  function quoted(value) {
+    return '"' + String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r/g, '\\r').replace(/\n/g, '\\n') + '"';
+  }
+
+  /** Puppet pins of a layer as {effect, mesh, pin} names.
+   * @param {any} layer @returns {{effect: string, mesh: string, pin: string}[]} */
+  function puppetPins(layer) {
+    var pins = [], parade = layer.property && layer.property('ADBE Effect Parade');
+    for (var e = 1; parade && e <= parade.numProperties; e++) {
+      var effect = parade.property(e);
+      if (!effect || effect.matchName !== 'ADBE FreePin3') continue;
+      try {
+        var meshes = effect.property('arap').property('Mesh');
+        for (var m = 1; m <= meshes.numProperties; m++) {
+          var mesh = meshes.property(m), deform = mesh.property('Deform');
+          for (var p = 1; deform && p <= deform.numProperties; p++) pins.push({effect: effect.name, mesh: mesh.name, pin: deform.property(p).name});
+        }
+      } catch (unreadable) { /* A Puppet without a mesh yet has no pins to follow. */ }
+    }
+    return pins;
+  }
+
+  /** Brazu's "Pin to Null": one null per Puppet pin, following it live.
+   * @param {any} comp @param {any} layers @param {any} result @returns {any} */
+  function pinsToNulls(comp, layers, result) {
+    var created = [];
+    try {
+      for (var i = 0; i < layers.length; i++) {
+        var layer = layers[i], pins = puppetPins(layer);
+        if (!pins.length) { result.warnings.push(layer.name + ': nenhum pino do Puppet.'); result.skippedItems++; continue; }
+        for (var k = 0; k < pins.length; k++) {
+          var pin = pins[k];
+          if (!pin) continue;
+          var nul = comp.layers.addNull();
+          created.push(nul);
+          nul.name = pin.pin + ' · ' + layer.name;
+          nul.moveBefore(layer);
+          nul.transform.property('ADBE Position').expression = 'var L=thisComp.layer(' + quoted(layer.name) + ');\nL.toComp(L.effect(' + quoted(pin.effect) + ').arap.mesh(' + quoted(pin.mesh) + ').deform(' + quoted(pin.pin) + ').position);';
+          result.createdItems++;
+        }
+        result.changedItems++;
+      }
+    } catch (error) {
+      var rollbackFailed = false;
+      for (var j = created.length - 1; j >= 0; j--) { try { created[j].remove(); } catch (removeError) { rollbackFailed = true; } }
+      var failed = /** @type {Error & {motionCode?: string}} */ (new Error('Pinos em nulls falhou: ' + String(error)));
+      failed.motionCode = rollbackFailed ? MotionContracts.ERROR.ROLLBACK_FAILED : MotionContracts.ERROR.HOST_OPERATION_FAILED;
+      throw failed;
+    }
+    result.message = result.createdItems + ' null(s) seguindo os pinos do Puppet.';
+  }
+
   /** @param {any} action @returns {any} */
   function needsSelection(action) {
     if (action === 'save-frame') return false;
@@ -584,6 +686,8 @@
       'fit': true,
       'mirror': true,
       'dash-stroke': true,
+      'trim-to-keys': true,
+      'pin-to-null': true,
       'create-adjustment': true,
       'create-solid': true,
       'create-shape': true,
@@ -607,6 +711,8 @@
     else if (action === 'fit') fitLayers(comp, layers, result);
     else if (action === 'mirror') mirrorLayers(layers, result);
     else if (action === 'dash-stroke') dashStrokeLayers(layers, result);
+    else if (action === 'trim-to-keys') trimToKeys(comp, layers, result);
+    else if (action === 'pin-to-null') pinsToNulls(comp, layers, result);
     else if (action.indexOf('create-') === 0) createLayer(comp, action, result);
     else if (action.indexOf('effect-') === 0) addEffectToLayers(layers, action, result);
   }
@@ -637,11 +743,19 @@
     var layers = comp.selectedLayers;
     if (needsSelection(action) && !layers.length) return failure(MotionContracts.ERROR.NO_SELECTION, 'Selecione uma ou mais camadas.');
     if (!needsSelection(action)) return null;
+    if (action === 'trim-to-keys') {
+      var anyKeys = false;
+      for (var t = 0; t < layers.length; t++) if (selectedKeyTimes(layers[t]).length >= 2) anyKeys = true;
+      if (!anyKeys) return failure(MotionContracts.ERROR.NO_SELECTION, 'Selecione pelo menos 2 keyframes na camada.');
+    }
     for (var i = 0; i < layers.length; i++) {
       var layer = /** @type {any} */ (layers[i]);
       if (layer.locked) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, 'Desbloqueie as camadas selecionadas.');
       if (action === 'freeze' && (!layer.canSetTimeRemapEnabled || layer.timeRemapEnabled)) {
         return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, 'Congelar requer video ou precomp sem remapeamento de tempo existente.');
+      }
+      if (action === 'pin-to-null' && !puppetPins(layer).length) {
+        return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, 'Selecione camadas com pinos do Puppet.');
       }
       if (action === 'dash-stroke' && !layer.property('ADBE Root Vectors Group')) {
         return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, 'Selecione apenas camadas de forma para aplicar tracejado.');

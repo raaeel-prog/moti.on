@@ -1,0 +1,215 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import { fileURLToPath } from 'node:url';
+import { setImmediate } from 'node:timers/promises';
+import { createFakeDocument } from '../../../packages/ui-core/tests/fake-dom.mjs';
+
+const built = await build({ entryPoints: [fileURLToPath(new URL('../client/src/quick-actions.ts', import.meta.url))], bundle: true, platform: 'node', format: 'esm', write: false });
+const { createQuickActions } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+
+function find(node, predicate) {
+  if (predicate(node)) return node;
+  for (const child of node.children) { const hit = find(child, predicate); if (hit) return hit; }
+  return null;
+}
+function fixture(t, overrides = {}) {
+  const doc = createFakeDocument();
+  const scope = doc.createElement('section');
+  const calls = { actions: [], favorites: [], recents: [], notices: [], denied: [], anchor: [] };
+  const quick = createQuickActions(doc, {
+    locale: 'pt-BR', busy: false, hasComp: true, selectionCount: 1, keyScope: scope,
+    onAction: action => { calls.actions.push(action); return overrides.result?.(action); },
+    onFavoritesChange: favorites => calls.favorites.push([...favorites]),
+    onRecentsChange: recents => calls.recents.push([...recents]),
+    onNotice: message => calls.notices.push(message),
+    onDenied: (action, reason) => calls.denied.push([action, reason]),
+    onAnchorKey: index => calls.anchor.push(index),
+    ...overrides.options
+  });
+  scope.appendChild(quick.toolbar); scope.appendChild(quick.element); scope.appendChild(quick.footer);
+  t.after(() => quick.dispose());
+  const byId = id => find(scope, node => node.id === id) ?? find(quick.rail, node => node.id === id);
+  const slot = action => byId(`library-quick-${action}`).parentNode;
+  const visible = () => quick.element.children.filter(node => node.className === 'ch-quick-slot' && !node.hidden).map(node => node.children[0].id.replace('library-quick-', ''));
+  const key = (k, init = {}) => scope.emit('keydown', { key: k, target: scope, ...init });
+  return { doc, scope, quick, calls, byId, slot, visible, key };
+}
+
+test('rail starts with the three primary shortcuts and follows favorites', t => {
+  const f = fixture(t);
+  assert.deepEqual(f.quick.rail.children.map(slot => slot.children[0].id), ['quick-rail-precompose', 'quick-rail-center', 'quick-rail-save-frame']);
+  const event = f.slot('effect-blur').emit('contextmenu');
+  assert.equal(event.defaultPrevented, true);
+  assert.deepEqual(f.calls.favorites.at(-1), ['precompose', 'center', 'save-frame', 'effect-blur']);
+  assert.equal(f.slot('effect-blur').getAttribute('data-favorite'), 'true');
+  assert.equal(f.quick.rail.children.length, 4);
+  assert.match(f.calls.notices.at(-1), /BLUR fixado/);
+  f.byId('library-quick-center').keydown('F10', { shiftKey: true });
+  assert.deepEqual(f.calls.favorites.at(-1), ['precompose', 'save-frame', 'effect-blur']);
+  assert.equal(f.slot('center').getAttribute('data-favorite'), 'false');
+});
+
+test('saved favorites replace the defaults, and an empty list hides the rail', t => {
+  const f = fixture(t, { options: { favorites: [] } });
+  assert.equal(f.quick.rail.hidden, true);
+  f.byId('quick-tab-favorites').click();
+  assert.deepEqual(f.visible(), []);
+  const empty = find(f.quick.element, node => node.className === 'ch-quick-actions__empty');
+  assert.equal(empty.hidden, false);
+  assert.match(empty.textContent, /botão direito/);
+});
+
+test('category tabs filter the grid and re-map the QWERTY hints', t => {
+  const f = fixture(t);
+  f.byId('quick-tab-effects').click();
+  assert.deepEqual(f.visible(), ['effect-hue', 'effect-fill', 'effect-tint', 'effect-blur', 'effect-lumetri', 'effect-curves']);
+  assert.equal(f.byId('quick-tab-effects').getAttribute('aria-pressed'), 'true');
+  assert.equal(f.byId('library-quick-effect-hue').getAttribute('aria-keyshortcuts'), 'Q');
+  f.key('w');
+  assert.deepEqual(f.calls.actions, ['effect-fill']);
+  f.byId('quick-tab-all').click();
+  assert.equal(f.visible().length, 18);
+  assert.equal(f.byId('library-quick-precompose').getAttribute('aria-keyshortcuts'), 'Q');
+});
+
+test('two rows of nine mirror QWERTYUIO / ASDFGHJKL, and there is no search field', t => {
+  const f = fixture(t);
+  assert.equal(f.byId('quick-actions-search'), null);
+  assert.equal(f.byId('library-quick-create-shape').getAttribute('aria-keyshortcuts'), 'O', 'ninth tile closes the first row');
+  assert.equal(f.byId('library-quick-create-null').getAttribute('aria-keyshortcuts'), 'A', 'tenth tile opens the second row');
+  assert.equal(f.byId('library-quick-effect-curves').getAttribute('aria-keyshortcuts'), 'L');
+  f.key('l');
+  assert.deepEqual(f.calls.actions, ['effect-curves']);
+});
+
+test('keyboard: digits move the anchor, Alt reveals hints, modifiers and text fields pass through', t => {
+  const f = fixture(t);
+  const field = f.doc.createElement('INPUT');
+  f.scope.emit('keydown', { key: 'q', target: field });
+  f.key('7'); f.key('3'); f.key('5');
+  assert.deepEqual(f.calls.anchor, [0, 8, 4]);
+  f.key('Alt');
+  assert.equal(f.quick.element.getAttribute('data-show-keys'), 'true');
+  f.scope.emit('keyup', { key: 'Alt' });
+  assert.equal(f.quick.element.getAttribute('data-show-keys'), 'false');
+  f.byId('quick-actions-keys').click();
+  f.scope.emit('keyup', { key: 'Alt' });
+  assert.equal(f.quick.element.getAttribute('data-show-keys'), 'true', 'the toggle latches the hints');
+  f.key('q', { ctrlKey: true }); f.key('q', { shiftKey: true });
+  assert.deepEqual(f.calls.actions, []);
+});
+
+test('a shortcut for an unavailable action explains itself instead of running', t => {
+  const f = fixture(t, { options: { selectionCount: 0 } });
+  f.key('w');
+  assert.deepEqual(f.calls.actions, []);
+  assert.deepEqual(f.calls.denied, [['center', 'Selecione uma camada.']]);
+  assert.equal(f.byId('library-quick-center').getAttribute('data-denied'), 'true');
+  f.key('u');
+  assert.deepEqual(f.calls.actions, ['create-adjustment'], 'create actions need no selection');
+});
+
+test('recents keep the four latest confirmed actions and skip refused ones', async t => {
+  const f = fixture(t, { result: action => Promise.resolve(action !== 'fit') });
+  for (const action of ['center', 'fit', 'mirror', 'freeze', 'create-null', 'center']) f.byId(`library-quick-${action}`).click();
+  await setImmediate();
+  assert.deepEqual(f.calls.recents.at(-1), ['center', 'create-null', 'freeze', 'mirror']);
+  const chips = find(f.quick.footer, node => node.className === 'ch-quick-recents__list').children;
+  assert.deepEqual(chips.map(slot => slot.children[0].id), ['quick-recent-center', 'quick-recent-create-null', 'quick-recent-freeze', 'quick-recent-mirror']);
+  assert.ok(!f.calls.recents.some(list => list.includes('fit')));
+  chips[2].children[0].click();
+  assert.equal(f.calls.actions.at(-1), 'freeze');
+});
+
+test('saved recents render immediately and follow availability updates', t => {
+  const f = fixture(t, { options: { recents: ['effect-blur', 'not-an-action'] } });
+  const chip = f.byId('quick-recent-effect-blur') ?? find(f.quick.footer, node => node.id === 'quick-recent-effect-blur');
+  assert.ok(chip);
+  f.quick.update({ locale: 'pt-BR', busy: false, hasComp: true, selectionCount: 0 });
+  assert.equal(chip.disabled, true);
+  assert.match(chip.title, /Selecione uma camada/);
+});
+
+function anchorFixture(t, context = {}) {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const doc = createFakeDocument();
+  const grid = doc.createElement('div');
+  const names = ['Superior esquerdo', 'Superior centro', 'Superior direito', 'Meio esquerdo', 'Centro', 'Meio direito', 'Inferior esquerdo', 'Inferior centro', 'Inferior direito'];
+  const cells = names.map(name => {
+    const cell = doc.createElement('button');
+    cell.setAttribute('aria-label', name);
+    // Like the real owner: applying a point disables every cell synchronously, before later listeners.
+    cell.addEventListener('click', () => { for (const other of cells) other.disabled = true; });
+    grid.appendChild(cell);
+    return cell;
+  });
+  const quick = createQuickActions(doc, { locale: 'pt-BR', busy: false, hasComp: true, selectionCount: 1, anchor: grid, onAction: () => {}, ...context });
+  t.after(() => quick.dispose());
+  const frame = quick.anchorPanel.children[0];
+  const label = quick.anchorPanel.children[1];
+  return { quick, grid, cells, frame, label };
+}
+
+test('the anchor puck follows the applied point even though the owner disables the cells first', t => {
+  const { cells, frame, label } = anchorFixture(t);
+  assert.equal(frame.getAttribute('data-point'), '4', 'starts at the centre');
+  assert.equal(label.children[0].textContent, 'Centro');
+  cells[2].click();
+  assert.equal(frame.getAttribute('data-point'), '2');
+  assert.equal(label.children[0].textContent, 'Superior direito');
+  const ping = frame.children.find(node => node.className === 'ch-quick-anchorpad__ping');
+  assert.ok(ping, 'a ring fires at the destination');
+  t.mock.timers.tick(800);
+  assert.equal(frame.children.some(node => node.className === 'ch-quick-anchorpad__ping'), false, 'and is removed afterwards');
+});
+
+test('the anchor frame greys out without a selection but not while a command runs', t => {
+  const { quick, frame } = anchorFixture(t);
+  assert.equal(frame.getAttribute('data-disabled'), 'false');
+  quick.update({ locale: 'pt-BR', busy: true, hasComp: true, selectionCount: 1 });
+  assert.equal(frame.getAttribute('data-disabled'), 'false');
+  quick.update({ locale: 'pt-BR', busy: false, hasComp: true, selectionCount: 0 });
+  assert.equal(frame.getAttribute('data-disabled'), 'true');
+  quick.update({ locale: 'pt-BR', busy: false, hasComp: false, selectionCount: 0 });
+  assert.equal(frame.getAttribute('data-disabled'), 'true');
+});
+
+test('tiles cascade in on mount and on each filter change, then the cascade is released', t => {
+  const { quick } = anchorFixture(t);
+  assert.equal(quick.element.getAttribute('data-stagger'), 'true');
+  t.mock.timers.tick(420 + 18 * 22 + 40);
+  assert.equal(quick.element.getAttribute('data-stagger'), 'false', 'showing the dock again must not replay it');
+  find(quick.toolbar, node => node.id === 'quick-tab-effects').click();
+  assert.equal(quick.element.getAttribute('data-stagger'), 'true');
+  t.mock.timers.tick(420 + 6 * 22 + 40);
+  assert.equal(quick.element.getAttribute('data-stagger'), 'false');
+});
+
+test('a running shortcut dims the others; a command from elsewhere keeps the grid as is', t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const doc = createFakeDocument();
+  let finish;
+  const quick = createQuickActions(doc, { locale: 'pt-BR', busy: false, hasComp: true, selectionCount: 1, onAction: () => new Promise(resolve => { finish = resolve; }) });
+  t.after(() => quick.dispose());
+  quick.update({ locale: 'pt-BR', busy: true, hasComp: true, selectionCount: 1 });
+  assert.equal(quick.element.getAttribute('data-busy'), 'external');
+  quick.update({ locale: 'pt-BR', busy: false, hasComp: true, selectionCount: 1 });
+  const blur = find(quick.element, node => node.id === 'library-quick-effect-blur');
+  blur.click();
+  quick.update({ locale: 'pt-BR', busy: true, hasComp: true, selectionCount: 1 });
+  assert.equal(quick.element.getAttribute('data-busy'), 'local');
+  t.mock.timers.tick(150);
+  assert.equal(blur.getAttribute('data-running'), 'true', 'the border ring starts once the command is slow');
+  finish(true);
+});
+
+test('Onyx Vivo CSS stays inside what CEP 12 (Chromium 99) renders', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const css = await readFile(new URL('../../../packages/ui-core/src/ae-quick-actions.css', import.meta.url), 'utf8');
+  const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.doesNotMatch(code, /color-mix\(/, 'color-mix() needs Chromium 111');
+  assert.doesNotMatch(code, /:has\(/, ':has() needs Chromium 105');
+  assert.doesNotMatch(code, /@container/, 'container queries need Chromium 105');
+  assert.doesNotMatch(code, /(^|[;{\s])(scale|translate|rotate)\s*:/m, 'individual transform properties need Chromium 104');
+});

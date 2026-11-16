@@ -1,3 +1,509 @@
+## 2026-11-13 — Banco de mídia: vídeos, imagens e sons gratuitos (Pexels, Pixabay, Unsplash, Freesound)
+
+Pedido do usuário: conectar o plugin a bancos gratuitos de imagem, vídeo e som, com o administrador configurando o acesso e o usuário recebendo pronto.
+
+- **Servidor (`services/supabase/functions/motion-assets`):** BFF com as chaves só nos segredos da função; só contas com licença ativa; limite por conta por minuto (`motion_asset_quota`); cache de busca de 24 h (`motion_asset_cache`, migração `202611130001`). Adaptadores em `_shared/stock-providers.ts` normalizam e validam cada resposta; o detalhe é relido no servidor ao importar e o Unsplash recebe o registro de download. Freesound entrega só CC0 e CC BY (ADR 0008).
+- **Administração:** `services/supabase/scripts/assets-setup.mjs <ref>` aplica a tabela, pede as chaves sem eco e publica a função; `status` e `remover <banco>`. `setup.mjs` também publica `motion-assets`. Guia em `docs/BANCO_DE_MIDIA.md`.
+- **Plugin:** `@motion/asset-sdk` vira pacote com o cliente validado (`createStockClient`); `AccountClient.assets()`; downloader `account/stock-download.cjs` (HTTPS, CDNs permitidas inclusive em redirecionamentos, limite de tamanho, assinatura do arquivo, SHA-256, ficha `.chms-asset.json`); comando `ae.stock.import` (pasta "Moti.on Banco de mídia/<banco>", crédito no comentário, camada no tempo atual, rollback); aba própria **Banco de mídia** logo depois de Presets (faixa VÍDEOS · IMAGENS · EFEITOS SONOROS, linha única "Banco ⌄ │ Buscar" que busca enquanto digita, e sugestões no vazio, conforme a referência aprovada pelo usuário; a primeira versão ficava dentro de Presets e o usuário pediu a aba separada; os nomes das abas do topo agora aparecem a partir de 600 px) com banco, orientação, busca, prévia, crédito, licença, Copiar crédito, Carregar mais e Importar. CSP do painel libera só as CDNs dos bancos para imagem/mídia.
+- **Testes:** `stock-assets-bff`, `stock-download`, `asset-sdk/stock-client`, `stock-import` (host) e `stock-library-ui`; registros de comandos, inventário, §13 e arquivos do build atualizados.
+- Estado: `IMPLEMENTED_NOT_HOST_VERIFIED` (falta publicar a função, cadastrar as chaves e importar no After Effects).
+
+## 2026-11-13 — Gráfico da Suavização da v6 e ícones das coreografias
+
+Pedido do usuário: o gráfico da v6 (protótipo de 11/11, agora em https://claude.ai/artifact/1xWetCgyt2dnMChA5mzkk4) com as funções dele e os sliders de suavização embaixo; os ícones da aba Parallax do estudo.
+
+- **Gráfico (opção `motionCues` de `curve-editor.ts`, só no AE):** velocidade em área atrás da curva com o pico ("pico 4,5×"), faixas sombreadas acima de 100 % e abaixo de 0 % com os rótulos, keyframes e alças em amarelo como no Editor de gráficos, curva azul-clara, leitura sob o cursor ("tempo · valor · velocidade"), influência ao lado da alça arrastada ("Saída 31 % · excesso"), curva tracejada da biblioteca ao passar o mouse (`setPreview`) e régua de um traço por quadro com play e "24 q · 0,80 s" no fps da composição (`setCueTiming`). Botão no cabeçalho liga e desliga a área de velocidade (`setSpeedArea`). Sai a espessura do traço por velocidade e o rastro de 12 traços da rodada anterior.
+- **Embaixo do gráfico:** Influência com Easy Ease em um clique (33 · 50 · 66 · 75 · 100), Saída e Entrada com valor e controle deslizante sempre abertos na mesma linha, cubic-bezier com botão de copiar; depois Aplicar em e Avançado (X1…Y2, Converter Hold e o trecho da prévia). Gráfico e controles sempre em coluna, gráfico até 440 px.
+- **Parallax:** cada cartão de coreografia ganha o ícone do estudo (três planos sobre preto, em perspectiva) que faz o movimento daquela coreografia no hover (revelação, tour, sequência, zooms, travelling, órbita, mergulho); com movimento reduzido fica parado. A rota pelas camadas reais continua em Ajustes. Shots individuais mantêm a prévia projetada.
+- **Testes:** novo `curve-motion-cues.test.mjs`; `ease-editor-ui` (Easy Ease, cubic-bezier) e `camera-panel` (ícone de cena) ganharam casos.
+- Estado: `IMPLEMENTED_NOT_HOST_VERIFIED`.
+
+## 2026-11-12 — Design system do painel, segunda rodada: o que faltava do estudo
+
+Revisão tela a tela contra o painel ao vivo do estudo (prints do artifact em 280/360/480/720 lado a lado com o preview do plugin).
+
+- **Menu de contexto das ferramentas (bug):** o botão direito abria o menu no canto do painel, porque ele se ancorava no botão "⋯" oculto. Agora abre no ponteiro, em cima da ferramenta, e vira para dentro perto das bordas. Itens do estudo: Aplicar (ferramentas de ação direta) · Ajustes… com o atalho à direita · separador · ☆ Favoritar. Linhas de 24 px, coluna de ícone de 14 px, atalho apagado.
+- **Ladrilho:** o "⋯" (três pontos) volta ao canto superior direito no hover e abre os ajustes; Alt+clique também abre os ajustes; estrela amarela de 8 px nas favoritas.
+- **Barra das Ferramentas:** campo "Buscar ferramenta", seletor de categoria "Todas" e estrela de "Só favoritas" (substituem "Todas as ferramentas" + "Biblioteca"). Um escopo "Recentes" salvo vira "Todas" para não ficar filtro invisível. Linha de estado com o losango azul.
+- **Presets:** barra única no topo (busca, estrela, reproduzir prévias), "Todos os presets" no começo da árvore, pasta em contorno, linhas de 24 px, grupos de topo em negrito, selecionada com filete azul, grupos recolhidos na primeira abertura (`gallery.treeSeeded`), árvore de 150 px com pega pontilhada, cartões elevados com nome numa linha, miniatura padrão de 128 px, rodapé em duas linhas (preset escolhido; Ações · tamanho com quadradinhos · Entrada/Saída/Ambos). Abaixo de 360 px continua o seletor de pasta (a pasta vira menu, como no estudo).
+- **Suavização:** sem título; ações de keyframe em grupos compactos (só ícone abaixo de 480 px); gráfico num cartão de até 340 px com nome, "Bézier ⌄" e ao vivo; **influência em %** (Saída e Entrada) no lugar de X1…Y2; "Aplicar em" Entrada · Saída · Ambos; **Avançado** recolhido com X1…Y2 e Converter keyframes Hold; biblioteca "Curvas N" com filtro Todas/Favoritas/In/Out/In-Out; gráfico e controles lado a lado a partir de 400 px, curvas em grade de 480 a 719 px e **coluna fixa de 300 px** a partir de 720 px.
+- **Parallax:** sem título; os ajustes ficam na própria tela: dobra "▸ Ajustes 10 s · 100 %" abaixo dos cartões até 719 px e **coluna fixa "Ajustes da coreografia"** a partir de 720 px (antes era uma tela separada atrás de um botão). Seletores Câmera/Parallax e Coreografias/Shots no estilo do estudo, cartões com contorno azul no escolhido. Aba com ícone de câmera.
+- **Acabamentos:** "Atalhos" do dock só com o teclado; aviso de contexto com o "i" do estudo.
+- **Não muda de propósito:** clicar numa ferramenta continua abrindo os ajustes (só o Aplicar dos ajustes altera o After Effects; aplicar direto no clique, como no estudo, exigiria um caminho de execução por ferramenta). Sem linha de seleção ("4 keyframes…") em nenhuma tela, como pedido depois do estudo. Os ajustes do painel continuam numa tela própria, não no menu do estudo.
+- **Testes:** `quick-library.test.mjs` (menu no ponteiro, Alt+clique, barra nova), `home-panel`, `preset-gallery-ui` e `camera-panel` atualizados para o desenho novo.
+- Estado: `IMPLEMENTED_NOT_HOST_VERIFIED`.
+
+## 2026-11-12 — Design system do painel (estudo "Moti.on Design System")
+
+Aplicação do estudo aprovado ao painel real do After Effects. A estrutura do painel continua a mesma; muda a escala e o layout por largura.
+
+- **Cor:** `host-theme.ts` e `after-effects.css` passam a ter três níveis de texto (`--text-secondary`, `--text-tertiary`, `--text-off`), degraus próprios para hover e ativo, azul de valor `#8ab8ff` (clareado só quando o tema do host exige para manter AA) e um tom por família de ferramenta (`--fam-*`).
+- **Nova camada `ae-design-system.css`** (última do tema do AE): três raios (2, 4, 6), nada abaixo de 11 px, abas de 36 px com ícone e nome a partir de 480 px e só ícone abaixo, grade de ferramentas sem sobra (`auto-fill, minmax(48px, 1fr)`, espaço fixo de 8 px), ladrilho rebaixado com ícone neutro que ganha a cor da família e um brilho que segue o cursor no hover.
+- **Ferramentas:** linha de estado com nome e descrição da ferramenta sob o cursor (vazia de seleção em repouso, de propósito), contagem por grupo e coluna **Detalhes** de 300 px no layout amplo (ícone, categoria, descrição, motivo de indisponibilidade, Favoritar e Ajustes…).
+- **Ajustes da ferramenta:** tela inteira com voltar abaixo de 480 px, gaveta de 320 px entre 480 e 719 px, coluna fixa a partir de 720 px. Linha de propriedade com rótulo neutro, valor azul e ↺ só quando o valor saiu do padrão; ação principal à direita no rodapé.
+- **Suavização:** a espessura do traço mostra a velocidade e um rastro de 12 quadros fica sob o gráfico (`motionCues` em `curve-editor.ts`, opt-in; o Premiere não muda).
+- **Fora desta entrega:** ajustes da coreografia como coluna fixa no Parallax amplo, influência em % no lugar de X1…Y2, e a árvore de presets virando menu no compacto (a árvore fica em toda largura, como pedido depois do estudo).
+- Estado: `IMPLEMENTED_NOT_HOST_VERIFIED` — verificado só no preview de navegador (`scripts/panel-layout-audit.mjs`, 280/360/480/720 px), não no After Effects.
+
+## 2026-11-04 — Biblioteca no padrão Animation Composer: 164 Elementos e 29 sons novos, pasta Sons
+
+Mapa de cobertura contra o catálogo do Animation Composer 4.2.6 (503 itens, estudo REA/Ghidra de 2026-10-14) em `C:/dev/preset-study/animation-composer/GAP-MAP-2026-11-04.md`. Tudo é receita própria do Moti.on: nenhum `.mhcitem`, prévia, WAV, nome ou arte do AC foi copiado, e o teste do catálogo recusa qualquer nome igual a um rótulo do catálogo de referência.
+
+- **Elementos: 13 → 177**, em 8 pastas: Formas (28), Traços à mão (23), Tarjas (43), Caixas de texto (32: preenchidas, contornadas, texto com linha), Títulos (14: empurrão, queda, carimbo, holofote, faixas de cinema…), Redes sociais (15, genéricos, sem logotipo de plataforma), Transições de formas (14: íris, cortinas, portas, persianas, losango, estrela, gota, túnel…) e Fundos (8). Montados de moldes com paletas em `elements-titles.ts`, `elements-graphics.ts` e `elements-transitions.ts` (peças comuns em `elements-kit.ts`), no mesmo motor do `ae.elements.insert`; nenhuma mudança no host dos Elementos.
+- **Sons: 6 → 35**, sintetizados no build nas 15 famílias (aproximação, grave, bipe, explosão, estrondo, metal, clique, vidro, rangido, ambiência, estalo, deslize, passagem, batida, transição): `scripts/sfx-library.mjs` sobre as primitivas de `scripts/sfx-dsp.mjs`. Catálogo e nomes em `packages/contracts/src/sounds.ts`; todo Elemento pode usar qualquer som.
+- **Pasta Sons (novo `ae.sound.insert`):** lista por família, clicar toca, Inserir põe uma camada de áudio no tempo atual; opções Tocar ao contrário e Volume (-24 a +6 dB). O footage é importado uma vez por projeto em "Moti.on Elementos/Sons"; rollback completo. Descritor, rótulo de Undo, §13 da spec e inventário de auditoria atualizados.
+- **Testes:** `elements.test.mjs` valida as 177 receitas (trilhas contínuas, janelas, ordem de pintura, nomes únicos e originais) e os 35 WAVs; `elements-insert.test.mjs` monta cada elemento no AE simulado (invisível na entrada e na saída, visível no repouso); novos `sound-insert.test.mjs` (host) e `sound-library-ui.test.mjs` (painel).
+- **Ainda não coberto do AC:** 2D Special Effects (fogo, fumaça, elétrico, energia — pedem motor procedural/partículas), Overlays e Fundos procedurais restantes, Timers & Counters (pedem texto por expressão), parte das Transições 3D. Estado: `IMPLEMENTED_NOT_HOST_VERIFIED`.
+
+## 2026-11-04 — Micro-interações premium e deslizar em toda a interface
+
+- **Redimensionar (arrastar as bordas) em todas as abas:** `attachReflowGlideTree` liga o deslizar automaticamente em todo grupo que se reorganiza (levantamento 452 → 300 px por aba): Ferramentas (grid, dock, faixa rápida), Suavização (ações, cabeçalho da curva, valores, lados, biblioteca), Parallax (grid da câmera), Presets (toolbar, rodapé, Entrada/Saída/Ambos, chips dos Elementos) e a barra do topo. A medida agora é relativa ao contêiner, então grupos aninhados não andam em dobro.
+- **Botões:** afundam para .96 com mola e voltam com leve overshoot (rodapé, aplicar, filtros, menu da pasta, chips, ações de Suavização/Parallax, Navegar/Editar); ícones crescem 8 % no hover e encolhem no press; swatches crescem no hover. Tiles de Ferramentas e a faixa rápida mantêm o press próprio.
+- **Toggles:** "pop" do ícone (e anel nos swatches) quando o usuário *liga* — `motion/micro.ts` põe `data-pop` só no clique; redesenhar a lista nunca dispara.
+- **Sliders:** trilho preenchido até o polegar (`--ch-slider-progress`, a variável que o ch-number-disclosure já usava, agora mantida para todo `input[type=range]`), anel suave no hover, anel maior e polegar 15 % maior ao arrastar, anel azul no foco do teclado.
+- Movimento reduzido (sistema ou toggle interno): sem escala, pop ou anel; cores continuam.
+- **Teste de camadas do tema corrigido (era regressão minha desde 2026-11-03):** `ae-refinement.test.mjs` passa a declarar `ae-composer-browse.css` e `ae-micro.css` e confere que todo seletor delas começa em `[data-host="after-effects"]`. Novo `micro-interactions.test.mjs` (progresso do slider; gerenciador liga/desliga contêineres): PASS.
+- **Suíte completa:** 2949 PASS / 26 FAIL; as 26 são do trabalho não commitado (12 presets Emulsion a mais nas contagens, arquivos do pacote Emulsion no dist, ExtendScript de Smooth/LoopOut/rollback, receitas). **Estado:** `IMPLEMENTED_NOT_HOST_VERIFIED`.
+
+## 2026-11-04 — Seleção dos presets igual à dos Elementos, slider nos Elementos e redimensionar suave
+
+- **Seleção dos cards de preset:** o mesmo comportamento dos cards de Elementos — card cinza (`#262626`) com moldura interna de 4 px, passar o mouse só clareia (`#393939`), selecionado = a borda fina dos Elementos (`--ch-border-focus`). Saíram o glow do hover (`0 0 16px` branco), a borda branca, o fundo `#5c5c5c` e a barra azul de 2 px do selecionado. Transição de 120 ms; sem transição com movimento reduzido.
+- **Bug corrigido — slider de miniaturas não funcionava em Elementos:** o slider só gravava `--preview-size` no grid de presets e o grid de Elementos usava larguras fixas (50/33/25 %). Agora a variável também vai para a raiz da galeria e os Elementos usam a mesma fórmula de colunas dos presets. Medido em 720 px: 4 colunas no mínimo, 1 coluna no máximo (antes: igual nos dois).
+- **Redimensionar sem saltos:** novo `motion/reflow.ts` (`attachReflowGlide`). Ao arrastar o divisor ou mudar a largura do painel, cards de presets e de Elementos que trocam de coluna/linha e as abas/ícones do topo deslizam da posição antiga para a nova (200 ms), em vez de teleportar. Deslocamentos pequenos (acompanhar a largura) não animam; só itens visíveis; até 48 por mudança; nada com movimento reduzido. Teste `reflow-glide.test.mjs` (4 casos): PASS.
+- **Verificação no navegador (Playwright, host simulado):** hover sai ao tirar o mouse; arrastar o divisor anima só os cards que mudam de coluna e nenhuma animação fica presa; sem erros no console. Mesmas duas falhas pré-existentes de antes. **Estado:** `IMPLEMENTED_NOT_HOST_VERIFIED`.
+
+## 2026-11-03 — Menu "…" das pastas e árvore no padrão Animation Composer
+
+- **Menu da pasta (`…`)** virou o popover do Composer (capturas 230405/230419): *Focar pasta* · 8 etiquetas na ordem do Composer (Sem etiqueta primeiro, com a barra diagonal; Vermelho, Amarelo, Verde, Verde-água, Azul, Roxo, Magenta) · *Limpar todas as etiquetas*. As pastas continuam começando sem etiqueta. Ids já salvos preservados (`cyan` = Verde-água, `pink` = Magenta; `orange` antigo continua aparecendo, só não é mais oferecido).
+- **Focar pasta (novo):** a árvore mostra só a pasta escolhida, com o caminho completo e o botão *Mostrar todos os itens*; a cor herdada dos pais é mantida. `PresetNavigation.focusFolder`.
+- **Árvore:** linhas de 24 px com separador, 20 px por nível, raízes em `#0e0e0e`, etiqueta = borda de 3 px + tinta a 10 % (seleção com etiqueta soma branco a 10 %). Cores das etiquetas do tema `spectrum--darkest` do Composer. Camada nova `packages/ui-core/src/ae-composer-browse.css`, só no AE e por último no tema.
+- `PanelPreferences.clearFolderColors()`.
+- **Rodapé numa linha só (capturas `UI-UX/atualizacao`):** *Ações de presets* + slider à esquerda e *Entrada/Saída/Ambos* à direita, 40 px de altura, como o `content-browser__footer` do Composer. Antes, em ~450 px, ele quebrava em três faixas e o slider subia por cima dos botões. O resumo "nome · motivo" saiu do rodapé (o motivo continua no `title`/`aria-describedby` dos botões). Os botões mantêm o tamanho; o slider encolhe (até 40 px) e só some abaixo de 340 px. Slider no padrão do Composer (trilho 2 px, polegar redondo), sem os quadradinhos.
+- **Fundo único:** painel, barra lateral e linhas das pastas em `#1d1d1d` sem frestas (antes as raízes ficavam quase pretas sobre cinza); grid com a moldura `#0e0e0e` e cards `#1d1d1d`, como no Composer. Medido no Playwright em 366, 452 e 720 px: rodapé de 40 px e uma linha em todas.
+- **Testes:** `preset-gallery-ui` (novo caso do menu: ordem das etiquetas, herança, limpar tudo, focar e voltar) e `preset-preferences`: PASS. Falhas pré-existentes do trabalho não commitado, sem relação com esta mudança: *category menu supports arrow, Home/End and fold keys* (espera Signature como 1ª pasta; agora é Emulsion) e *full catalogue allocates artwork…* (474 ≠ 462 cards).
+- **Estado:** `IMPLEMENTED_NOT_HOST_VERIFIED` — conferido no navegador com host simulado; falta abrir no After Effects.
+## 2026-11-01 — Prévias começam juntas, decodificadas fora da thread do painel (padrão Animation Composer)
+
+- **Causa da demora:** (1) os clipes eram decodificados um de cada vez e só tocavam depois de decodificados inteiros; (2) um bug do orçamento de memória descartava o clipe recém-decodificado antes de o card retê-lo, então passando de ~14 cards na tela os demais ficavam só na imagem estática.
+- **Como o AC faz (Ghidra + painel):** o batch player decodifica em Workers (libvpx/WASM), pede o primeiro frame antes do resto e desenha com um relógio; nada disso roda na thread da interface.
+- **No Moti.on agora:** os MP4s são lidos pelo painel (`fetch`, ou o `fs` do Node quando o CEP recusa `file://`) e decodificados em Web Workers com WebCodecs (o CEP do AE 2026 é Chromium 99), com um demuxer MP4 próprio (`demuxMp4`). O card começa no primeiro frame e o resto chega enquanto ele toca; os frames chegam ao painel só um pouco à frente da reprodução (1,1×) e os clipes começam com 20 ms de intervalo, para a tela cheia nunca inundar o painel. Sem WebCodecs, ou se o Worker recusar um clipe, o decodificador `<video>` antigo continua funcionando.
+- Clipe em uso, inclusive o que ainda decodifica, nunca sai do cache.
+- **Medido em Chrome real, 24 cards, CPU normal e limitada a 4×:** primeiro card em 50–75 ms, os 24 em ≈0,5 s (antes: 1,7 s de mediana e 10 cards que nunca começavam); reprodução sem nenhuma travada durante a decodificação (541 frames em 3 s, p95 5,7 ms).
+- Host: IMPLEMENTED_NOT_HOST_VERIFIED.
+
+## 2026-10-31 — Prévias de texto lisas e todas animando; Keyframe Actions na Suavizar
+
+- **Prévias a 30 fps, todas ao mesmo tempo.** Estudo do Animation Composer (Ghidra no `AnimationComposer4.aex` + leitura do painel): o AE renderiza PNGs na taxa da comp (29,97 fps), o `ffmpeg` codifica 320×180 com `-tune fastdecode`, e o painel desenha frames já decodificados num canvas por um relógio, todos os cards de uma vez. No Moti.on: o bake agora guarda todos os frames do clipe (30 fps nos cards, 15 fps nos blocos de Direção, que foram renderizados assim), no tamanho em que o card aparece (160–320 px); uma parede de prévias (`preview-wall.ts`) dá um canvas a cada card de texto visível e um único `requestAnimationFrame` desenha todos. Rolar não para as prévias; só os bakes novos esperam a lista parar. Com a reprodução automática desligada, só o card selecionado anima.
+- Medido em Chrome real com 12 cards: primeiro animando em 155 ms, os 12 em 1,5 s, nenhuma tarefa longa na thread principal durante bake ou reprodução, intervalo de frame constante (p95 = máx.).
+- **Suavizar ganhou o Keyframe Actions do AC** numa segunda fileira (a primeira continua com seis botões): Copiar e colar (Copiar · Colar ease · Colar valor) e Alinhar ao cursor (Início · Fim). A ease colada viaja como múltiplo da velocidade média de cada trecho (`speed × Δt / Δvalor`, por dimensão ou pelo comprimento do vetor), como no AC, então mantém a forma entre propriedades de faixas e durações diferentes; trecho parado usa a ease escalada só pelo tempo; recusa propriedades com menos keyframes selecionados que os copiados e valores de tipo diferente, sem escrever nada. Novos comandos `ae.keys.ease-copy` e `ae.keys.ease-paste`; o alinhamento é `ae.keys.send-to-edge` com `reference: "playhead"` (também em Enviar à borda → "Cursor (alinhar)").
+- Host: IMPLEMENTED_NOT_HOST_VERIFIED.
+
+## 2026-10-31 — Ferramentas do Brazu que faltavam
+
+- Atraso (Delay): novas ordens "Do centro para as pontas" e "Das pontas para o centro" (os modos convexo/côncavo do Brazu). Com número par de camadas, as duas do meio saem juntas.
+- Ações rápidas novas, pela paleta de comandos (a grade de teclas continua com 18): "Aparar aos keyframes selecionados" (Cut In Keyframes do Brazu, mas por camada e mantendo o frame do último keyframe; o Brazu deixava o Undo aberto ao recusar) e "Pinos do Puppet em nulls" (Pin to Null; cada null segue o pino por `toComp` em qualquer tipo de camada, com rollback dos nulls criados).
+- Comparação: Smooth, Fast Edit, inverter/copiar/enviar keyframes, nomes, parent, flip, formas, texto/vetor, câmera, parallax e efeitos do Brazu já existem no Moti.on sem os defeitos encontrados no Brazu (Smooth lendo sempre o controle de Posição, Fast Edit sem Undo e sem limite de altura, transições com 24 fps fixos). Copilot (LLM local) não foi trazido.
+- Host: IMPLEMENTED_NOT_HOST_VERIFIED.
+
+## 2026-10-31 — Prévias: frames decodificados uma vez e tocados por relógio
+
+- As prévias renderizadas (cards e blocos de Direção dos presets de texto) não usam mais um `<video>` tocando ao vivo. Cada clipe é decodificado uma vez (um decodificador oculto avança quadro a quadro e copia cada frame em 320×180, 15 fps) e um `<canvas>` desenha o frame escolhido por um relógio, como o batch player do Animation Composer. Sem seek, buffering ou troca de decodificador na tela, o card não pisca cinza ao trocar de card, ao perder o foco ou quando o CEP libera o decodificador.
+- Cache compartilhado com orçamento de 96 MB: os clipes usados há mais tempo saem primeiro, nunca o que está na tela. Clipe que não decodifica deixa a imagem estática (`data-state="failed"`), nunca uma caixa vazia.
+- Verificado em Chromium real (Chrome headless) com MP4s do projeto: 45 frames em 81 ms (3 s) e 60 frames em 97 ms (4 s), frames distintos e com conteúdo. Testes: `preview-frames` (5) e `preset-preview-player` (6), galeria atualizada. Host: IMPLEMENTED_NOT_HOST_VERIFIED.
+
+## 2026-10-31 — Transições: marcadores com duração (v2)
+
+- Cada fase de uma transição de preset único virou um marcador com duração (uma barra na timeline). A entrada começa no início do marcador e a saída termina no fim dele, então dá para atrasar a entrada ou antecipar a saída dentro da camada, além de arrastar as pontas para mudar a duração.
+- O marcador é a única fonte de timing. O controle Duração não reescala mais marcadores já posicionados e não bloqueia o ajuste de timing; ele só é usado se o marcador for apagado. Mudar a Duração no painel reposiciona os marcadores.
+- Marcadores que ninguém moveu continuam colados na borda da camada ao aparar ou estender (a âncora é guardada no parâmetro `Moti.on.edge`, relativa ao `startTime`). Marcadores arrastados valem literalmente.
+- Deslocar, Alinhar e Escalonar movem a fase inteira; Duração da fase mantém o início da entrada e o fim da saída.
+- Camadas v1 continuam funcionando e migram na próxima aplicação, preservando o timing ajustado à mão (incluindo o marcador In / Out combinado). As fases empilhadas continuam com marcadores pontuais por enquanto; uma camada v2 é convertida ao entrar no modo de fases.
+- Testes: 430 de presets aprovados (novos casos de janela, âncora de borda, migração e ajuste de timing). Host: PASS em teste manual do usuário no After Effects 2026 (Windows), 2026-10-31 — barras In/Out, arrastar início e ponta, estender a camada, Duração sem efeito e camadas antigas.
+
+## 2026-10-31 — Partículas: pré-comp e validação nativa
+
+- Novas partículas em pré-comp com direção editável e controlador interno; a camada externa é reconhecida pelo editor do plugin.
+- Validação sem mouse/teclado: 16 frames nativos e 12 verificações aprovadas, incluindo igualdade de pixels com o rig sem pré-comp, direções, velocidade zero, alfa e reabertura de projeto.
+- Captura de QA substituída por fixture protegida e `aerender` com TIFF/alfa. Evidências em `artifacts/particles-rising-20261031/RENDER_VALIDATION.md`.
+
+## 2026-10-30 — Presets de texto: escala e espaçamento simétricos
+
+- Texto volta a ser editável depois de aplicar um preset: as expressões não leem mais o próprio Texto de origem (o AE reavaliava a cada tecla e a ferramenta de texto parava de apagar e digitava na frente). Tamanho da fonte e disposição das linhas são lidos ao aplicar; se o texto mudar de tamanho depois, a ordem por linha é estimada numa linha só até o preset ser ajustado ou reaplicado. Mudar o tamanho da fonte mantém as distâncias aplicadas até ajustar/reaplicar.
+- Escalas e espaçamentos no lugar (sem lado) agora entram a partir do meio de cada linha (`libraryTextOrder`, centre-out por linha em Caracteres), então os dois lados do texto chegam iguais, no AE e na prévia.
+- A Direção desses presets escolhe onde a varredura começa: Da esquerda / Da direita (Caracteres, Palavras) ou De cima / De baixo (Linhas). O botão original aparece como "Do centro".
+- Prévia e AE usam a mesma regra (teste de paridade 12/12 com a coluna real de cada caractere); `text-direction.test.mjs` cobre a simetria espelhada por coluna.
+- Camadas já aplicadas mantêm a expressão antiga até serem ajustadas/reaplicadas.
+- Cards de texto passam a mostrar só vídeos renderizados no After Effects (309 presets em 30 fps + 731 variantes de direção em 15 fps/3 s); os blocos de Direção tocam o render de cada lado. Sem SVG desenhado para texto. O render roda em 8 processos paralelos (`--shards`).
+
+## 2026-10-27 — Presets de texto: centro visual, direções reais, sem duplicatas
+- **Texto que esticava a partir da borda:** o Tracking do After Effects cresce a partir do alinhamento do parágrafo (medido: texto à esquerda vai de 889 a 2189 px pela direita, com a borda esquerda parada). O espaçamento agora afasta cada letra do centro da própria linha, em qualquer alinhamento, e volta exatamente ao lugar.
+- **Escala e giro no centro visual:** letras, palavras e linhas escalam e giram em torno do próprio centro (ou da origem do preset: base, topo, ponto distante dos arcos). O ponto fica parado durante a animação. Antes o AE usava a linha de base, e o pivô se deslocava com o peso.
+- **Proporções iguais às do card:** deslocamento, desfoque e espaçamento seguem o tamanho da fonte (em). Um título grande e uma legenda mantêm a proporção da prévia. As janelas com máscara começam totalmente escondidas.
+- **Direções que mudam o movimento:** escolher um lado reflete o movimento inteiro (giros, origem, eixo da escala, desfoque e ordem), e esquerda/direita e cima/baixo são espelhos. O seletor aparece em 181 presets de texto (eram 149), e cada lado produz um movimento diferente na prévia e no AE.
+- **Duplicatas aposentadas, não apagadas:** 12 presets que eram outro preset visto de cima ou com outra curva saíram da galeria. Camadas que já os usam continuam editáveis.
+- **23 presets novos:** Impacto, Zíper, Corte inclinado, Varredura de cor, Cambalhota, Pouso elástico, Leque da base, Atração magnética, Elástico lateral, Código que se fecha e a Placa 3D por letra.
+- **Projetos existentes:** nada muda numa camada já animada até o preset ser ajustado ou reaplicado. A partir daí, ela usa o motor novo. Anchor Point, posição e texto da camada nunca são alterados.
+- **Intensidade acima de 100% em texto:** o AE limitava o movimento a 100% (intensidades maiores e antecipações eram cortadas). Agora a Intensidade vai até 300% também no AE, como na prévia.
+- **Validado no After Effects 26.5:** 321 presets de texto, 997 aplicações. Nenhum erro, repouso exato (0 px), Anchor Point e posição intactos, remoção limpa. Alinhamentos esquerda/centro/direita dão o mesmo movimento (0,01 px), as distâncias acompanham a fonte e os quatro lados diferem.
+- **Prévias em vídeo:** 68 cards mantêm o vídeo do AE. Os outros desenham a prévia do motor novo até o próximo render (`node scripts/text-presets-render.mjs --prepare --render`), que não pôde rodar porque a inicialização do AE travou no licenciamento.
+- Detalhes: `docs/implementation/2026-10-27-text-presets-centre-direction.md` e `docs/research/2026-10-27-ae-text-geometry.md`.
+
+## 2026-10-26 — Prévias: sem cinza sob o cursor, tocam sem clique, hover refinado
+- **Card cinza ou piscando sob o cursor:** subir o card e ampliar o vídeo no hover (transform), junto com `contain: paint`, fazia o CEF descartar a camada da prévia, e o fundo cinza do card aparecia. O CEP ainda dispara saída/entrada a cada repintura, então isso alternava a cada quadro. O hover agora não usa transform e vive num atributo `data-hover` controlado por script, que só sai depois de 140 ms fora do card.
+- **Prévias que só tocavam após clicar:** a animação desenhada exigia foco no painel, que no CEP só vem com um clique; os vídeos já tocavam. Agora basta o ponteiro sobre o painel (ou mover sobre ele depois de perder o foco).
+- **Hover com glow:** quando o ponteiro para sobre um card, a borda acende e um halo suave aparece em volta dele (60 ms de espera, 320 ms de fade). Nada cobre nem mexe na prévia; o brilho que seguia o cursor e o reflexo foram removidos porque atrapalhavam a leitura do preset.
+- **Clicar de novo tira a seleção:** um clique simples no card já selecionado remove a seleção depois de 300 ms, o tempo de um possível segundo clique. O duplo clique cancela essa remoção, aplica o preset e mantém o card selecionado.
+- Os ciclos só reiniciam quando a preferência de movimento reduzido muda de fato.
+- IMPLEMENTED_NOT_HOST_VERIFIED: verificado em Chromium headless sem foco no painel e sob a sequência de eventos do CEP.
+
+## 2026-10-26 — Prévias: ciclo completo, hover e clique
+- **Ciclo completo:** um card que chega à tela toca a animação inteira desde o início: entra, segura, sai, some e volta. Um card que só encostou na borda e voltou em menos de 0,9 s continua de onde estava. Fora da tela, ele é rebobinado e espera no primeiro quadro; nos vídeos de texto é o próprio vídeo parado no quadro 0, então começar a tocar não dá salto.
+- **Pisca sob o cursor corrigido:** o CEP dispara sair/entrar no painel a cada repintura do card sob o mouse, e cada vez o vídeo pausava, voltava ao quadro 0 e tocava. Agora sair do painel só pausa depois de 400 ms fora, e os vídeos só pausam se o painel continuar inativo.
+- **Hover com resposta física:** o card sobe 2 px, a borda clareia, ganha sombra e a prévia se aproxima levemente; ao pressionar, ele assenta. Só transform e sombra, sem reflow; desligado com movimento reduzido.
+- **Clique só seleciona; duplo clique aplica:** o popover de direção e efeito abre apenas pelo botão de ajustes do card. Antes, o duplo clique não aplicava presets de transição; agora aplica com os ajustes do card e compartilha a trava dos botões Entrada/Saída/Ambos.
+- **Fundo preto garantido** em toda prévia, em qualquer layout do painel.
+- IMPLEMENTED_NOT_HOST_VERIFIED: verificado em Chromium headless, simulando a sequência de eventos do CEP.
+
+## 2026-10-26 — Continuação da auditoria de falhas parciais
+- Falhas de comandos restauram a seleção anterior das camadas após o rollback. Corrigidos os cenários nativos de Criar Nulo e Caixa de Texto que removiam o objeto parcial, mas apagavam a seleção.
+- Criar Nulo restaura os pais anteriores das camadas já vinculadas se uma vinculação posterior falhar, nos modos com e sem preservação do enquadramento.
+- Integração com hashes reconhece também as fontes importadas do principal e preserva alterações concorrentes posteriores.
+- Continuação da varredura de comandos no AE e das rotas responsivas em host simulado; os recibos identificam a versão e o cenário testado.
+
+## 2026-10-26 — Prévias de presets: fundo preto, sem piscar, mais leves
+- **Fundo preto em todos os cards:** as 298 prévias de texto renderizadas no AE tinham fundo cinza (#212121) e as desenhadas eram pretas. Vídeos e posters foram reconvertidos para preto com um ajuste linear de níveis, que equivale ao texto branco composto sobre preto, antialiasing incluído. O render no AE e a comparação seguem no cinza e os hashes continuam válidos. `scripts/text-presets-render.mjs` já aplica o ajuste nos próximos renders.
+- **Sem piscar ao passar o mouse:** sair e voltar ao painel (tooltip, folha de ajustes, foco do AE) fazia toda prévia voltar ao primeiro quadro, que é vazio. Agora ela retoma do quadro em que parou.
+- **Sem piscar na rolagem:** cada card que cruzava a borda da lista recomeçava do zero e alternava entre o quadro parado e o quadro vazio. Agora todos seguem um relógio compartilhado, e quem sai da tela só congela.
+- **Vídeo só aparece com quadro pronto:** o poster fica até o vídeo ter um quadro decodificado.
+- **Mais leve:** vídeos reencodados sem B-frames nem CABAC, com keyframe a cada segundo. A região de filtro do cenário de câmera caiu de 300% para 120%. As prévias isolam layout e pintura. Continuam animando só os cards visíveis, a 30 fps.
+- IMPLEMENTED_NOT_HOST_VERIFIED: medido em Chromium headless; ganho de quadro no CEP do After Effects ainda não medido.
+
+## 2026-10-25 — Auditoria de controles e falhas parciais
+- Seleção de keys restaurada globalmente ao inverter valores, colar ou atrasar propriedades; reconstruir uma propriedade no AE pode limpar a seleção das demais.
+- Colar com expressões restaura texto e estado de ativação das expressões se uma propriedade posterior falhar.
+- Falhas de comandos removem apenas fontes novas sem uso e pastas novas vazias, dentro do mesmo Undo; falha nessa limpeza informa restauração incompleta.
+- Gradientes mantêm mudanças de controles como rascunho até Aplicar. Receitas continuam reconhecidas após a leitura numérica Float32 do efeito nativo.
+- Teclas de navegação de controles CEP são reservadas enquanto o controle está focado, impedindo que Enter do seletor seja interpretado pelo AE.
+- Diferença residual do Neon diagnosticada em controle independente de TextDocument: precisão de cor nativa de 2^-20; nenhuma alteração de cor do produto foi feita para mascarar o desvio.
+- Evidência de cada cenário e limites de cobertura ficam nos recibos de auditoria; a liberação profissional continua condicionada às verificações pendentes.
+
+## 2026-10-25 — Coreografias de câmera mais inteligentes e dinâmicas
+- **Abertura lá de trás de verdade:** a câmera entra **Z +2500 px** na cena, junto do fundo, e volta em linha reta à posição original. As camadas vão aparecendo conforme ela passa.
+  - A profundidade é editável no painel (campo Profundidade, nas coreografias que abrem lá de trás).
+  - Se nessa profundidade uma camada ficaria colada na lente, a câmera passa dela (ou para antes) e avisa quanto entrou.
+  - A lente abre para o fundo não passar de 2,2× e volta ao normal no recuo.
+- **Foco inteligente:**
+  - na abertura, o foco fica no que aparece (o fundo);
+  - no recuo, vai para cada camada que surge;
+  - em cada visita, o rack começa junto com o movimento e chega antes da câmera, em 0,3 s.
+  - O foco lê a posição atual de cada camada por um Layer Control. Título e data que entram animados continuam nítidos, e o vínculo sobrevive a renomear e reordenar.
+- **Câmera que não para:**
+  - os zooms chegam com um pequeno impacto (passam 5–7% do enquadramento e assentam);
+  - em cada camada a câmera continua avançando devagar;
+  - os movimentos entre camadas ficaram mais curtos;
+  - roll alternado nas imagens.
+- **Nova coreografia "Zooms rápidos"** (8 s): de canto a canto, um zoom com estalo em cada destaque. Nova ordem **"De canto a canto"**; **"Da coreografia"** é a nova ordem padrão.
+- **Correções da auditoria:**
+  - intensidade acima de 100% fazia a câmera passar do enquadramento (a 200%, até atrás do fundo); agora acima de 100% só a respiração cresce;
+  - remover a coreografia deixava a profundidade de campo ligada; agora foco, abertura e desfoque voltam como estavam;
+  - a cena era lida no tempo atual, então um título que entra com escala 0 ficava de fora; agora ela é lida no meio da coreografia;
+  - o "Travelling entre camadas" ficava atrás de todas as camadas; agora entra nelas, com o protagonista em até 55% do quadro e outra camada atravessando;
+  - o Mergulho ficou com 6 s e ~1,5 s de fundo depois da cortina (eram ~2,5 s de fundo vazio);
+  - texto não ganha roll.
+- **Verificado no After Effects 26.5 (Windows), 25/10:**
+  - coreografias 7/7, num flyer com entradas reais (título escalando de 0, data subindo);
+  - foco igual ao núcleo em ≤ 0,02 px;
+  - motor 14/14;
+  - folhas de contato revisadas;
+  - painel instalado.
+  - Painel aberto dentro do AE e macOS: não conferidos.
+
+## 2026-10-24 — Auditoria e polimento das ferramentas do AE
+- Parallax: timeline superior à frente, ordenação inversa/por área, compensação de posição e escala fora do centro, reaplicação sem duplicar e rig separado dos movimentos. Prévia dos planos e das quatro receitas de movimento.
+- Suavização: lados independentes, preservação de Hold e caminhos espaciais, velocidade de cores em unidades nativas RGBA; tratamento de sessões e keys geradas.
+- Gradientes: Aurora animada de seis segundos em novas aplicações, seis receitas originais e prévia de aparência completa; instâncias existentes e ABI preservados.
+- Partículas: clássico preservado, mais Poeira, Bokeh, Neve, Faíscas e Campo 3D; quatro fluxos editáveis, controles e remoção gerenciada. Receitas calibradas com renders do AE, usando partículas suaves em vez de esferas sombreadas.
+- Padrões de abertura e Redefinir centralizados; abrir ajustes não aplica na composição. Guardas para callbacks antigos e inclusão dos estilos de preview no build.
+- Clean: verificação por ID após remover footage, sem comparar a referência invalidada pelo AE. Remoção real, Undo, Redo e reabertura confirmados.
+- Neon: limiar de brilho ajustado para revelar o halo também em fontes escuras; proteção de animação existente e rollback de falha parcial conferidos no AE.
+- Cubo e Cilindro: padrões proporcionais ao menor lado da composição; enquadramento conferido em composições horizontais, verticais e quadradas.
+- Biblioteca compacta: migra consultas de busca antigas para evitar um filtro invisível após a remoção do campo local de busca.
+- Matriz por ferramenta, recibos e limites da validação em `docs/implementation/2026-10-24-tools-audit-native.md`.
+
+## 2026-10-24 — Refino compacto do painel do AE
+- Ações rápidas: a âncora fica sempre à esquerda e não se move; duas linhas de blocos quadrados suaves (44 px, cantos de 7 px) na altura exata da âncora; sem barra de rolagem — a roda do mouse e setas no hover deslizam a faixa, e as pontas esmaecem.
+- Removidos o badge de camadas selecionadas, os pontos de categoria e o brilho que seguia o cursor; o motivo de um bloco indisponível continua na dica.
+- Navegação só com ícones abaixo de 440 px e só com nomes acima; barra da Home sem rótulos cortados.
+- Suavização: botão de velocidade no cabeçalho (cobria o ponto 1,1), alças que grudam em 0 e 1, Ctrl para grade de 0,05, Alt + setas em 0,001, coordenadas durante o arraste, curva num só acento e "ao vivo" como ícone.
+- Parallax: controles segmentados, aviso sem moldura, título duplicado removido e prévias mais baixas.
+- Segunda rodada: Home sem o "Buscar" (a busca da navegação já abre as ferramentas) e com a categoria como título da linha; botões de keyframe numa barra só, em três famílias, com pictogramas que encenam a operação no hover; Suavização com o nome da curva na linha do Bézier, gráfico que encolhe em painel baixo, biblioteca de curvas numa fileira deslizante e um aviso só perto do Aplicar.
+- Detalhes e checklist em `docs/implementation/2026-10-24-compact-refinement.md`: `IMPLEMENTED_NOT_HOST_VERIFIED`.
+
+## 2026-10-24 — Movimento do AE, fases F6 a F9
+- Suavização: presets deslizam a curva até o novo formato, alças crescem no hover e assentam com mola, estrela com pop e nome da curva que troca deslizando.
+- Presets: divisória com captura do ponteiro, mola ao soltar e duplo clique para voltar à largura padrão; sublinhado deslizante entre Navegar e Editar; pastas que revelam as filhas em cascata; rolagem do próprio painel não fecha mais as configurações do preset.
+- Chips com anel de seleção deslizante (Câmera/Parallax), cards de câmera que sobem no hover, checkbox com pop, paradas do gradiente que entram com mola e encolhem ao sair, seções de Ajustes e Conta que sobem ao abrir a tela.
+- Todas as dicas do painel com a mesma entrada; matriz de telas × larguras e medição de tarefas longas no harness; paleta corrigida em 280×280.
+- Harness de navegador F9: 69 verificações (todas as fases, matriz, movimento reduzido, desempenho). Detalhes em `docs/implementation/2026-10-24-motion-f6-f9.md`: `IMPLEMENTED_NOT_HOST_VERIFIED`.
+
+## 2026-10-23 — Movimento do AE, fases F1 a F5
+- Navegação: pílula com mola, cada tela entra pelo lado da sua aba e as teclas 1–5 trocam de tela (fora de campos; o teclado numérico continua com a âncora).
+- Avisos: entram com mola, a pilha desliza quando um chega ou sai e a região sobe junto com o dock em vez de saltar.
+- Dicas ricas em todo controle com título: nome, atalho, detalhe e motivo quando desabilitado; aparecem rápido ao passar para o vizinho.
+- Ícones de interface desenhados (estrela, ✕, chevrons, ⋯, ✓) no lugar de glifos de texto; botões afundam no clique e voltam com mola.
+- Números arrastáveis no padrão do After Effects: Shift ×10, Ctrl/Alt ×0,1 (antes Shift era fino nos campos de preset).
+- Início: cascata com mola incluindo títulos de grupo, tiles que sobem no hover, menus que nascem do botão com destaque deslizante e rolagem suave ao navegar pelo teclado.
+- Ajustes da ferramenta em folha deslizante sobre a biblioteca abaixo de 720 px (coluna de 300 px acima), com saída animada e sem refazer a biblioteca.
+- Paleta de comandos (Ctrl/Cmd+K ou botão de busca): telas, ferramentas, ações rápidas e ajustes, com recentes, Enter aplica e Shift+Enter abre os ajustes.
+- Premiere inalterado. Detalhes, desvios e checklist em `docs/implementation/2026-10-23-motion-f1-f5.md`: `IMPLEMENTED_NOT_HOST_VERIFIED`.
+
+## 2026-10-23 — Movimento do AE, fase F0 (base)
+- Fundação do movimento do painel inteiro: tokens de mola/deslize/folha só do AE, catálogo AE (IDs 36–46), helpers (tween, mola física, deslize de altura, cascata, rolagem suave, troca de texto, FLIP, pausa de tabulação) e a camada `ae-motion.css`.
+- Anel de foco do teclado assenta no controle; demais telas sem mudança visual nesta fase.
+- Corrigido: a prévia da Câmera ignorava o "reduzir movimento" interno do painel.
+- Sonda de movimento em Sistema para confirmar no AE o Chromium, as teclas Ctrl+K/1–5 e o tipo de rolagem da roda.
+- Guardas: Chromium 99 em todas as camadas AE, catálogo AE igual aos tokens, helpers com relógio manual e fingerprint do Premiere (inalterado).
+- Plano e checklist em `docs/implementation/2026-10-23-motion-f0.md`: `IMPLEMENTED_NOT_HOST_VERIFIED`.
+
+## 2026-10-23 — Ações rápidas (Onyx Vivo)
+- Grid em 2 linhas de 9, na altura exata da âncora; em painéis estreitos as linhas rolam para o lado (também pela roda do mouse). A busca foi removida a pedido.
+- Filtro por categoria (Tudo · Camada · Criar e exportar · Efeitos · Favoritos) com ícones e cor da família.
+- Favoritos por botão direito ou Shift+F10, com estrela; o rail do cabeçalho recolhido mostra até 4 favoritos.
+- Recentes no rodapé (últimas 4 ações confirmadas); favoritos e recentes ficam salvos nas preferências.
+- Teclado espelhado no grid (QWERTYUIO/ASDFGHJKL), âncora pelo teclado numérico 1–9, dicas com Alt ou pelo botão de atalhos; os atalhos só valem com o foco dentro do dock.
+- Spotlight que segue o cursor na cor da categoria, chip de contexto com ponto vivo, ✓ e ponto de aplicado nos atalhos, recusa que balança e explica.
+- Visual alinhado ao protótipo aprovado (`quick-actions-premium.html`): botões de 48 px com ícone sobre a sigla e ponto de categoria (Camada azul, Criar roxo, Efeitos âmbar), âncora em quadro com mira, ponto azul com mola e nome da posição, chip em pílula e "Atalhos" no rodapé.
+- Movimento refinado quadro a quadro contra a gravação do protótipo:
+  - recolher/abrir com deslize de 450 ms e conteúdo subindo e esmaecendo (antes a altura saltava);
+  - favoritos entram um a um ao lado do título;
+  - cascata dos botões ao abrir e a cada troca de aba;
+  - anel girando na borda enquanto o comando roda e ✓ verde ao terminar;
+  - estrela com faíscas ao favoritar.
+- Âncora corrigida: o ponto azul desliza com mola até o ponto aplicado, com anel no destino, linhas-guia e nome da posição. Antes ficava preso no centro porque o clique desabilitava as células antes da animação. Centros alinhados em 15/45/75 px, sem desvio nas 9 posições.
+- CSS compatível com o Chromium 99 do CEP 12: sem `color-mix()`, `:has()` ou `scale:` separado (por isso pontos, tracejado e linhas-guia sumiam no After Effects). Um teste impede a volta desses recursos.
+- Layout verificado em navegador (fixture, sem After Effects) a 280, 360, 480 e 720 px, sem estouro horizontal: `IMPLEMENTED_NOT_HOST_VERIFIED`.
+
+## 2026-10-23 — Presets: estudo REA e workstation de biblioteca
+- Browse/Edit separados em todas as larguras, preservando seleção, posição e rascunhos.
+- Caminho clicável da coleção, contagem real, limpeza de filtros e navegação na grade por teclado.
+- Seleção identificada no rodapé, cards com nomes em duas linhas, sliders circulares e editor compacto.
+- Proteção para que refresh de contexto não habilite aplicar sem preset selecionado.
+- Estudo do Composer instalado, implementação original e evidências em `docs/implementation/2026-10-22-composer-presets.md`.
+
+## 2026-10-22 — Biblioteca de presets e interação por clique
+- Direção, seleção e abertura das configurações agora mudam exclusivamente por clique; hover não troca prévias nem menus.
+- Busca e pastas fixas à esquerda, divisória redimensionável, miniaturas com autoplay e rodapé conforme a nova referência.
+- Ações de presets em Copiar/Remover/Colar, reutilizando inspeção e comandos existentes com proteção contra seleção substituída.
+- Slider de miniaturas fixo em 88 px em todas as larguras, alinhado às ações; setas de direção, destaque azul e abertura/fechamento suaves refinados.
+- Evidências e integração em `docs/implementation/2026-10-22-preset-library-video.md`.
+
+## 2026-10-22 — Popovers dos presets
+- Ajustes ancorados ao card, na mesma largura, com lista compacta de direções e "Ver todas".
+- Hover antecipa a direção na miniatura, sem aplicar nem alterar o rascunho; clique confirma a escolha local.
+- Passagem entre card e menu, foco de teclado, Escape, painel baixo e movimento reduzido verificados no navegador.
+- Evidências e limites em `docs/implementation/2026-10-22-preset-card-popovers.md`.
+
+## 2026-10-22 — Quadradinhos, tema nativo e Editar
+- Restaurados quadradinhos por categoria, com ajustes separados e menu por Shift+F10.
+- Tema acompanha o After Effects, mantendo Claro/Escuro como escolhas manuais.
+- Abas Navegar/Editar restauradas; aplicação confirmada abre Editar, inclusive Entrada/Saída e .ffx.
+- Controles das ferramentas padronizados com números precisos, sliders expansíveis e reset local.
+- Detalhes de validação e integração em `docs/implementation/2026-10-22-ae-native-controls.md`.
+
+## 2026-10-22 — Interface do After Effects
+- Nova paleta neutra específica do AE, com azul discreto; aparência do Premiere preservada.
+- Ferramentas com nomes visíveis, agrupamento por função e acesso direto aos ajustes.
+- Inspetor contextual de 300 px no painel largo, campos roláveis e ações sempre acessíveis.
+- Presets com filtros próximos à busca e ajuste da camada no contexto, sem a dupla de abas Navegar/Editar.
+- Corrigidos foco de retorno, semântica dos botões contextuais e formato do foco herdado do tema Adobe.
+- Verificação e instalação local documentadas em `docs/implementation/2026-10-22-ae-workstation.md`.
+
+## 2026-10-19 — Coreografias de câmera que leem a cena
+- **Coreografias** na aba Parallax → Câmera, o modo padrão. Cada coreografia lê as camadas 3D da composição (os planos do Parallax, ou as camadas 3D de um rig próprio, ou só as selecionadas) e monta uma sequência inteira:
+  - **Revelação em profundidade** (10 s): começa lá dentro, com as camadas da frente atrás da câmera, recua atravessando-as enquanto elas aparecem, dá zoom no protagonista e volta ao layout.
+  - **Tour pelas camadas** (16 s): visita cada camada, do fundo para a frente (ou da frente para o fundo, ou em ordem de leitura), com zoom, órbita leve e o foco passando de uma para outra.
+  - **Sequência completa** (20 s): abertura lá de trás, revelação, tour pelos destaques e fechamento no layout.
+  - **Travelling entre camadas** e **Órbita do protagonista**.
+  - **Mergulho na cena**: avança no protagonista, atravessa a camada dele como uma cortina e termina limpo no fundo. Serve de saída ou de transição.
+- O planejador escolhe a distância de cada enquadramento:
+  - nenhuma camada tapa a que está sendo visitada;
+  - o texto fica inteiro no quadro, dentro da área segura;
+  - nada é ampliado além do que a imagem aguenta;
+  - a câmera nunca para encostada numa camada.
+- **Enquadramento de operador:** uma camada perto da borda do design (um título no alto, a data embaixo) não é centralizada à força, porque isso mostraria a borda do fundo e o motor daria zoom para cobri-la. A câmera desliza o ponto de mira para o centro até o fundo cobrir sozinho; se ainda faltar, a órbita diminui e, por último, a câmera recua.
+- **Corrigido no AE antes de publicar** (20/10):
+  - o close no título e na data cortava o texto dos lados;
+  - um logo pequeno no canto ficava 3,5× maior;
+  - o Mergulho terminava com meio protagonista num fundo vazio;
+  - no Mergulho, o protagonista encolhia antes de a câmera avançar.
+- **Foco automático:** o foco vai para cada camada visitada um pouco antes da câmera chegar (rack focus), com profundidade de campo ligada.
+- **Opções:** motion blur na composição e nas camadas (devolvido ao remover) e uma respiração orgânica por cima.
+- Cada passo é um shot vivo com seu marcador: arrastar o marcador muda o tempo do passo. A coreografia aparece como uma linha na lista, com intensidade única e "Remover coreografia". Bake e salvar/reabrir funcionam como nos outros shots.
+- Os cards mostram a prévia da coreografia com as camadas da própria composição.
+- Motor: shots do tipo "visita" (pose absoluta encadeada no tempo), foco que acompanha as visitas, comando `ae.camera.choreography.apply` e remoção por coreografia (`groupId`). O custo das expressões caiu para ~20 ms por quadro.
+  - A lente de uma visita se mistura em escala linear, então uma lente que abre para segurar o fundo acompanha a aproximação da câmera.
+- **Verificado no After Effects 26.5 (Windows), 20/10:**
+  - `scripts/verify-camera-choreography.jsx` passou 6/6, com as seis coreografias sobre um flyer com Parallax;
+  - sem erro de expressão, 13–19 ms por quadro;
+  - foco igual ao do núcleo nos 25 passos (0 px);
+  - folhas de contato revisadas.
+  - O motor (`verify-camera-engine.jsx`) passou 14/14 de novo com o núcleo final.
+  - Painel dentro do AE e macOS: não conferidos.
+
+## 2026-10-19 — Motor de câmera e aba Parallax
+- **Nova aba Parallax** no topo, ao lado de Suavização, com dois segmentos: **Parallax** (o editor que ficava em Ferramentas) e **Câmera**.
+- **Shots de câmera vivos** para motion flyers, funcionando com o Parallax do Moti.on ou num rig próprio sobre uma cena 3D:
+  - 11 receitas por intenção (Destacar, Revelar, Atravessar, Impactar, Respirar):
+    - Hero Push, Depth Slide e Float Loop;
+    - Reveal Pull, Pedestal Reveal, Arc Hero, Punch In, Whip Reframe, Dolly Zoom, Beat Hit e Controlled Handheld.
+  - 6 eixos, lente e dolly zoom, impacto com ultrapassagem e acomodação, loop sem emenda com semente, e auto foco no alvo escolhido (Layer Control) pela profundidade axial, com suavização.
+  - Controles nativos no null de controle (`Moti.on Câmera · …`). Cada shot é um marcador arrastável. Bake grava keys por quadro e desliga o motor.
+  - Cards com prévia de três planos desenhada pela mesma matemática das expressões, além de ajuste fino de intensidade, tempo, X/Y/Z, pan/tilt/roll e curva.
+- **Parallax:**
+  - modos de profundidade (linear, mais espaço na frente, por área) e fundo atrás do plano focal, com aviso de ampliação;
+  - o Remove só olha as expressões do próprio rig e aparece como ação destrutiva;
+  - rótulos de Undo próprios para ajustar, mover e remover;
+  - `pluginVersion` gravado;
+  - frequência do wiggle consistente (0–100).
+- Os 12 movimentos do rascunho do estudo saíram das tabelas fixas: viraram receitas do motor. Os 11 movimentos clássicos continuam.
+- Decisão em [ADR 0007](docs/adr/0007-motor-de-camera.md). Estudo v2 em `docs/research/2026-10-18-estudo-camera-v2.md`, estudo clean-room do Brazu em `docs/research/2026-10-18-brazu-parallax-rea.md`, e detalhes em `docs/implementation/2026-10-18-camera-engine.md`.
+- **Verificado no After Effects 26.5 (Windows):** `scripts/verify-camera-engine.jsx` passou 14/14, com projeção igual ao núcleo (0 px), Bake de 0,0006 px, marcador arrastado, foco, cobertura do fundo, motion blur e salvar/reabrir. O painel aberto dentro do AE e o macOS ainda não foram conferidos.
+- **Correções vindas do AE:**
+  - o host gerado usava uma sintaxe que o ExtendScript recusa (`{ roll }`), e o AE não carregava nenhum comando. O build passou a evitá-la, e um teste faz o parse ES3 do host montado;
+  - com pan, a borda do fundo aparecia (~12 px). A cobertura agora projeta os quatro cantos do fundo.
+
+## 2026-10-18 — Cursor estável no painel (Windows)
+- **Correção:** no Windows, o cursor piscava e o painel parecia estar sempre carregando. Acontecia sobre números arrastáveis, sliders e presets do popover. Cada leitura do After Effects em segundo plano (`evalScript`, a cada 400–700 ms) fazia o AE redefinir o cursor.
+- Com o ponteiro sobre o painel, as leituras periódicas param: barra rápida, seleção e Gradiente. O painel lê uma vez quando o ponteiro entra, ao ganhar foco e depois de cada operação. Fora do painel nada muda, e a barra rápida continua seguindo a seleção de keyframes.
+- A barra rápida aberta se atualiza na hora ao marcar ou desmarcar um favorito, sem ler o AE.
+- Detalhes em `docs/WINDOWS.md` ("Cursor piscando no painel"); testes em `apps/after-effects-cep/tests/pointer-presence.test.mjs`.
+- Verificado no After Effects 26.5 no Windows: cursor estável sobre números, sliders e presets do popover.
+- **⚙ Direção:** o clique na miniatura que estava animando se perdia. A cada quadro o desenho embaixo do mouse era recriado, e o CEF descarta o clique quando o alvo some. O desenho não recebe mais o clique.
+- **⚙ Direção:** os presets que também andam na diagonal agora mostram só 4 direções em 2×2, abaixo de Original, como os outros. Saiu o ponto no meio da grade 3×3, que era o botão Original. As diagonais continuam na aba Editar.
+
+## 2026-10-18 — Controles AE mais consistentes
+- Checkbox nativo compacto, azul ao marcar, com label clicável e foco visível. Corrigida a dimensão de Motion blur herdada do campo numérico.
+- Sliders mostram o trecho preenchido, diferenciam hover/arraste/validação e mantêm a expansão após aplicar. Valores mistos não recebem um valor absoluto inventado; Restaurar fica inativo quando já está no padrão.
+- Ajustes automáticos preservam o foco para continuar usando as setas. Digitar e clicar em Restaurar ou num checkbox não perde o clique; edições de Entrada e Saída são confirmadas em sequência, com inspeção atualizada e proteção contra troca da fase.
+- Percentuais fracionários de Sobreposição/Elasticidade são preservados. A formatação curta do número não altera outros parâmetros no host.
+- Configurações com títulos, labels, descrições, seletores e ações locais mais alinhados. Preferências, tiles de Ferramentas, botões flutuantes e card–popover preservados; aparência isolada ao AE.
+- Estudo e evidências: `docs/research/2026-10-18-ui-controls-followup.md` e `docs/implementation/2026-10-18-ui-controls.md`.
+
+## 2026-10-18 — Prévias de texto fiéis ao After Effects e correções no ⚙
+- A prévia de texto usa uma palavra só ("MOTION") nos presets de letra, duas palavras ("MOTION PRESETS") nos de palavra e duas linhas nos de linha. O card desenhado e o vídeo renderizado no AE mostram a mesma palavra, fonte, tamanho e posição.
+- A prévia desenhada foi recalibrada contra o render do AE, quadro a quadro, pela nova ferramenta `scripts/text-presets-compare.mjs`:
+  - **Tempo:** o render de referência passa a 30 fps, a mesma base dos presets. Antes ele ficava a 24 fps, e o AE parecia 25% mais lento que o card.
+  - **Pivô:** a letra se desloca pelo pivô e gira em torno do ponto de repouso, como no AE. O Arco de chegada saía invertido no card.
+  - **Entreletra:** cada letra se abre pela largura real da fonte. A abertura dentro da palavra não encolhe junto com a escala.
+  - **3D:** perspectiva da câmera padrão de 50 mm, em relação ao centro da composição, e giros na ordem do AE (Z, Y, X).
+- **Correção no ⚙:** ao escolher direção ou caráter, o card ficava vazio. Havia duas causas:
+  - o card e as miniaturas de direção usavam os mesmos IDs de filtro;
+  - cada clique ou entrada do cursor no painel reiniciava o relógio da prévia no primeiro quadro, transparente.
+
+  Agora o card toca o preset escolhido. As miniaturas de direção enquadram o texto, para que dê para ler.
+- **Correção no AE:** a entreletra do After Effects é medida em pixels, não pelo tamanho da fonte. O Moti.on passa a escalá-la pela altura da composição, como as outras distâncias. Em 1080p nada muda; em outros tamanhos a entreletra deixa de ficar exagerada ou fraca.
+- **Correção no AE (todos os módulos do host):** o ExtendScript do After Effects 26.5 avalia `&&` e `||` com a mesma precedência, da esquerda para a direita. Medido no AE: `1 || 1 && 0` dá `0`. Assim, `x || y && z` rodava como `(x || y) && z`.
+  - 26 condições em 8 módulos eram avaliadas diferente do código escrito: biblioteca de presets, transição de câmera, gradiente, órbita 3D e as ferramentas de texto (troca de estilo, morph de variável e de palavra, pulso vertical).
+  - No caso dos presets, as coreografias (Espiral de letras, Constelação de letras, Dispersão que se reúne e outras) não giravam as letras no AE.
+  - O build agora agrupa todo `&&` dentro de `||`, como já fazia com ternários aninhados, e um teste confere o host montado.
+- **Correção no AE:** os presets antigos de palavra e de linha que escalam ou giram passam a girar a palavra ou a linha inteira, como o card mostra. Antes, o AE girava cada letra. O pedido de agrupamento cede a um preset que exija outro e não muda a camada quando um animador seu depende do agrupamento atual.
+- 8 presets de texto novos: Queda com quique, Espiral de letras, Placa que desce 3D, Esticar e assentar e o loop Batida tipográfica. São 185 próprios no total.
+
+## 2026-10-18 — Ordem de saída e direções diagonais (GAP-10, GAP-11)
+- **Saída: Espelhada / Na mesma ordem** na aba Editar, para presets de texto em Saída ou Ambos.
+  - Espelhada é o padrão e o comportamento de sempre: quem entrou por último sai primeiro, como no Animation Composer.
+  - Na mesma ordem faz quem entrou primeiro sair primeiro, como no BadFX.
+  - Presets já aplicados não mudam: sem a opção, a expressão é a mesma de antes.
+- **Diagonais** (de cima à esquerda, de cima à direita, de baixo à esquerda, de baixo à direita) em presets com deslocamento.
+  - Na aba Editar, entram no dropdown Direção.
+  - No ⚙ do card, as direções viram uma bússola 3×3 com Original no centro.
+  - Revelações e pivôs de borda continuam com quatro lados, e o host recusa diagonal nesses presets.
+- O layout do painel mudou só onde foi aprovado: o seletor Saída na aba Editar e a bússola no ⚙.
+- `npm run check` 2.524/2.524 PASS. After Effects real: IMPLEMENTED_NOT_HOST_VERIFIED. Detalhes em `docs/implementation/2026-10-16-text-presets-parity.md`.
+
+## 2026-10-16 — Presets de texto: paridade com Animation Composer e BadFX
+- 177 presets de texto próprios (157 transições, 20 loops, 26 com 3D real) nas pastas Caracteres, Palavras e Linhas: opacidade, posição, rotação, escala, entreletra, janela, máquina de escrever, decodificação, combinações e loops. Os comportamentos foram medidos quadro a quadro nas prévias públicas dos dois plug-ins com o REA. Nenhum arquivo, expressão ou nome deles entra no Moti.on ([estudo](docs/research/2026-10-16-text-presets-behavior.md)).
+- Novos comportamentos medidos:
+  - arco de chegada, broto com rebote, crescer da base e do topo, convergência, virada completa 3D;
+  - faísca em escala, espaço com rebote, varredura de código, bloco único;
+  - tremor em degraus e dispersão periódica.
+- Texto 3D por caractere e pivô por letra, palavra ou linha. O Moti.on liga esses recursos enquanto um preset precisa deles e devolve os valores originais ao remover. Isso também vale empilhado com Entrada, Saída e Efeito.
+- **Correção:** 23 presets de texto antigos (como Desdobramento de prancheta e Perspectiva forçada) tinham profundidade ou giro em X/Y que o After Effects descartava. A miniatura mostrava um movimento e o AE fazia outro. Agora o AE faz o mesmo que o card. Nenhum preset foi excluído e os IDs são os mesmos.
+- **Correção:** Decodificação segue Velocidade e Variação. Os loops desfocam nas duas metades da onda.
+- Cards de texto com prévia renderizada no After Effects (MP4 no hover ou quando o card está selecionado). Ao mudar direção ou caráter no ⚙, o card volta à prévia desenhada. O layout fica o mesmo.
+- `npm run check` 2.511/2.511 PASS. After Effects 26.5x89/Windows, projeto isolado: as 290 receitas de texto (113 antigas e 177 novas) aplicadas sem erro de expressão, com texto editável e renderizadas. Painel instalado: NOT RUN. Detalhes em `docs/implementation/2026-10-16-text-presets-parity.md`.
+
+## 2026-10-16 — Controles AE e aplicação direta de presets
+- Entrada, Saída e Ambos aplicam a fase diretamente; seleção e duplo clique no card não aplicam transições. A galeria permanece aberta e bloqueia ativações repetidas enquanto aguarda o resultado real.
+- Botões flutuantes sobre a grade, de 24 px, fonte de 11 px, entrada suave e sombra discreta. Inspector vazio oculto e ações sem faixa, fundo ou borda. Popover integrado ao card e quadrados de Ferramentas preservados.
+- Valores numéricos aceitam clique e arraste, digitação e sliders expansíveis. No editor de fases, soltar aplica uma vez; Escape cancela. Digitação confirma em Enter/saída do campo. Restaurar é individual. O botão Aplicar ajustes saiu desse editor.
+- Porcentagens vindas do AE são formatadas sem caudas de precisão Float32, sem tornar uma leitura limpa em ajuste pendente.
+- Filtro de texto organizado em unidade e famílias das receitas próprias; busca, favoritos, IDs e preferências preservados. Aparência nova isolada ao AE.
+- Evidências e limites: `docs/implementation/2026-10-16-ui-refinement.md`; estudo dos controles de referência: `docs/research/2026-10-15-ui-controls-ac-badfx.md`.
+
+## 2026-10-15 — Galeria de Presets mais limpa
+- Clicar num preset acende o card (borda branca); clicar de novo desmarca e recolhe a caixa de baixo.
+- A caixa de baixo ficou só com Entrada, Saída e Ambos e o botão Aplicar. Nome, selos, notas, duração e o texto de seleção saíram; o motivo de um Aplicar bloqueado aparece no próprio botão.
+- O ajuste do card (⚙) mostra só as direções, em quadros com a prévia animada, e o caráter (Suave, Recuo, Ricochete, Quique), sem rolagem. Duração, intensidade, curva, motion blur, texto e ordem ficam na aba Editar, depois de aplicar.
+- Elementos: a animação roda dentro da própria miniatura, no hover e no card escolhido. A prévia grande embaixo saiu; clicar de novo desmarca e esconde os ajustes.
+- Leitura breve do BadFX e do Animation Composer (estrutura e comportamento): nos dois, o card é a prévia e o painel é mínimo; os parâmetros vivem no AE.
+- Miniaturas sem quadro vazio: o repouso procura o primeiro instante em que o preset aparece (texto com atraso, Piscar, cortes de câmera, saídas). Medido no navegador: nenhum card vazio nas categorias.
+- O ajuste sai do próprio card como uma peça só: mesma largura e borda, sem fresta, e desdobra a partir da junção com a mola leve de abertura (só transform e opacidade).
+- Popover sem barra de título e sem rolagem: o X fica na primeira linha, ele abre do lado onde cabe e, sem espaço, as quatro direções ficam numa linha só.
+- `npm run check` 2.471/2.471 PASS. Seis testes de campos que saíram da galeria foram aposentados; a aba Editar já os cobre.
+
+## 2026-10-15 — Elementos animados com som próprio
+- Nova pasta **Elementos** na galeria de Presets (`ae.elements.insert`), com Formas, Tarjas e Títulos: 13 receitas próprias que entram na composição como pré-comp no tempo atual.
+  - Formas: Explosão de linhas, Anel expansivo, Brilho, Confirmação, Seta desenhada, Sublinhado à mão e Círculo de marcação.
+  - Tarjas: Barra clássica, Linha minimalista e Etiqueta. Títulos: Título pop, Título em ascensão e Título com moldura.
+- Textos e cores ficam nas Propriedades essenciais; cópias da camada aceitam textos diferentes. Caixas e linhas acompanham o tamanho do texto.
+- A Saída acompanha a duração da pré-comp: tudo é expressão sobre a mesma curva da prévia do painel, sem keyframe para mover.
+- Seis sons sintetizados pelo próprio Moti.on no build (passagem, impacto, estalo, subida, clique, sino), importados uma vez por projeto. Nada de terceiros ([ADR 0006](docs/adr/0006-elementos-procedurais-e-sons-gerados.md)).
+- `npm run check` 2.475/2.475 PASS. After Effects 26.5x89/Windows por script: 3/3 PASS. A primeira rodada achou a caixa da tarja cobrindo o nome (ordem das camadas invertida), corrigido e confirmado.
+
+## 2026-10-14 — Revelações, Looks e paletas de gradiente
+- Nova coleção **Revelações** (6): Cortina, Relógio, Persiana, Blocos, Grade em losango e Varredura diagonal. Efeitos de transição nativos descobrem a camada no ritmo da curva, sem fade; Cortina, Persiana e Varredura seguem a Direção.
+- Nova coleção **Looks** (8): Fita VHS, Tubo CRT, Grão de película, Retícula de pontos, Pontilhado, Traço a lápis, Quadro a quadro e Sépia antiga. Só efeitos nativos e Cycore; a Intensidade mistura o look e ele também entra e sai com rampas quando empilhado com Entrada/Saída.
+- Gradiente: 96 **paletas de cor** (12 famílias × 8 harmonias) que trocam só as cores e preservam forma, luz e textura.
+- Inventário real dos efeitos do AE 26.5 (`scripts/inspect-native-effects.jsx`) antes de escrever as receitas. Ele achou `CS Vignette`/`CS LineSweep` e a granulação que começa em modo de prévia.
+- After Effects 26.5x89/Windows por script: 8 looks e 6 revelações PASS. A primeira rodada achou os lados verticais invertidos e a Grade que só completa em 100; os dois foram corrigidos e confirmados na segunda.
+
+## 2026-10-14 — Catálogo de motion: auditoria, melhorias e presets novos
+- Auditoria do catálogo pela própria prévia (velocidade de pico, quase-duplicatas, curvas fixas), agora transformada em regras de teste.
+- Melhorias nos presets antigos:
+  - Expansão com impacto, Virada com impacto, Deslizamento glitch e Órbita agressiva trocam o quique fixo pelo Quique ajustado à curva antiga, com Altura, Quiques e Perda ao vivo.
+  - A Panorâmica cinematográfica passa a deslizar na horizontal com cauda longa; antes subia na vertical, quase igual à Chegada em arco.
+  - 24 transições rápidas vêm com motion blur ligado por padrão.
+- Presets novos na coleção Impulso: Dobradiça (gira pela borda escolhida), Pêndulo contínuo (balança em torno do centro da transição), Batida (pulso de coração) e Giro de moeda (giro 3D contínuo).
+- Correção no host: em loops, o centro da transição e a borda giram exatamente pelo mesmo ângulo da rotação.
+- Teste de gestos nativos estável no Windows: mede o limite de 10 atualizações por segundo pelo tempo decorrido.
+- `npm run check` 2.440/2.440 PASS. After Effects 26.5x89/Windows por script: 7/7 PASS. Painel instalado: NOT RUN.
+
+## 2026-10-14 — Motion blur ao aplicar, curvas clássicas e todas as direções
+- Opção "Motion blur" ao aplicar e ajustar: liga o motion blur da camada e, se preciso, o da composição. Remover desliga só o que o Moti.on ligou; nas fases, a camada usa motion blur enquanto alguma fase pedir.
+- Seis famílias clássicas de curva (Senoidal, Quadrática, Quártica, Quíntica, Exponencial, Circular), cada uma com Out, In e In-Out. A Aceleração aparece ao lado da curva, sem aumentar a lista.
+- Ajuste do card: chips de caráter (Suave, Recuo, Ricochete, Quique) e a grade 2×2 "Todas as direções", com cada direção desenhada pela prévia. A curva "Ultrapassagem" passa a se chamar "Recuo".
+- `npm run check` 2.431/2.431 PASS. UI Chromium 280/360/720 PASS. After Effects 26.5x89/Windows por script: 5/5 PASS. Painel instalado: NOT RUN.
+
+## 2026-10-14 — Efeito empilhado com Entrada e Saída (fases v3)
+- Um loop ou look (Rotação contínua, Piscar, balanços…) agora convive com Entrada e Saída na mesma camada, como no fluxo do Animation Composer. Antes o painel exigia remover o efeito. Ver ADR 0005.
+- O Efeito ganha o marcador `Moti.on Efeito` com duração: arrastar o marcador ou a duração no After Effects reprograma a janela ao vivo. As bordas entram e saem com rampas suaves, e a rotação contínua desacelera até parar.
+- Aplicar Entrada/Saída numa camada com um loop antigo o migra para o slot de Efeito. Raízes v2 continuam funcionando e passam a v3 na próxima edição.
+- Editor de fases: linha "Efeito" com Intensidade, Velocidade e deslocamento da janela.
+- Correção: o arraste ao vivo não é mais oferecido em campos que o bridge nativo recusava (Ricochete/Quique).
+- `npm run check` 2.417/2.417 PASS. UI Chromium 280/360/480/720 PASS. After Effects 26.5x89/Windows por script: 6/6 cenários PASS. Undo nativo e painel instalado: NOT RUN.
+
+## 2026-10-12 — Coleção Impulso: assentamento físico, saída do quadro e centro da transição
+- Engenharia reversa do Animation Composer 4 e do BadFX com o REA, limitada a técnica e comportamento: nada decriptado ou copiado. Ver `docs/research/2026-10-12-ac4-badfx-rea.md`.
+- Novas curvas Ricochete (`settle-wave`) e Quique (`settle-hop`). Os três controles viram sliders ao vivo, e na saída a curva vira antecipação. Disponíveis no seletor de suavização de qualquer transição.
+- Transições que saem do quadro de verdade: distância medida na composição (inclusive através de parents 2D) e editável em "Distância (px)".
+- Centro da transição: Point Control arrastável no Monitor; a camada gira em torno dele sem mudar o Anchor Point.
+- Coleção Impulso com 16 receitas próprias (10 2D, 4 3D, 2 efeitos contínuos: rotação em °/s e piscar), pasta própria na galeria logo após Signature.
+- Correção: o schema de comandos não aceitava as curvas `velvet`, `drift` e `snap` ao ajustar um preset.
+- Correção: no motor JavaScript do AE, `effect(...)(1)` é um objeto Property, e as curvas testavam `typeof`. Os controles agora são lidos com `Number(...)`. Isso também faz o slider de Elasticidade das curvas spring funcionar de verdade no AE, onde antes era ignorado. O harness de testes passa a imitar esse comportamento.
+- Revisão de código: escala travada acima de 100% de Intensidade, geometria animada protegida, parent com escala zero recusado antes de mutar, rollback e Reset coerentes e script de Undo restrito a projeto vazio.
+- `npm run check` 2.405/2.405 PASS (o teste do cofre de credenciais do Windows falhou uma vez rodando em paralelo e passa isolado). UI Chromium 280/360/480/720 PASS. After Effects 26.5x89/Windows por script: 21/21 cenários PASS no build final; Undo nativo PASS no build anterior à revisão (no final, o script recusou o projeto aberto, que não estava vazio). Painel instalado: NOT RUN.
+
 ## 2026-10-11 — Windows: Gradient na GPU (CUDA e DirectX 12)
 - CUDA (NVIDIA): GradientCuda.cu sobre o mesmo GradientMath.inc, PTX embutido e carregado pela API de driver (nvcuda.dll dinâmico; sem NVIDIA o plug-in segue na CPU). Verificado no After Effects 26.5 com RTX 3080: rastreio gpu=1, quadro idêntico ao da CPU (máx. 1/255). Corrigido: o setup recusava o CUDA porque o dispositivo 0 chega como ponteiro nulo.
 - DirectX 12: pronto e com paridade (RTX 3080 e WARP), mas este AE só oferece CUDA/Software para efeitos.

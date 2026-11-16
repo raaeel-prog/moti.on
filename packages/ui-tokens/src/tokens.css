@@ -31,6 +31,14 @@
   /* AA on the elevated surface. */
   --text-muted: var(--gray-500);
   --accent: var(--white);
+  /* Functional actions: consumed only by the AE refinement layer. */
+  --action-fill: #0969DA;
+  --action-fill-hover: #0A61C9;
+  --action-fill-press: #0757B7;
+  --action-on: #FFFFFF;
+  --action-text: #58A6FF;
+  --action-text-hover: #8BC0FF;
+  --action-text-press: #58A6FF;
 
   /* Tool identity is separate from semantic feedback. */
   --icon-keyframes: #B4C7F1;
@@ -244,6 +252,9 @@
   --txt-3: #5A6268;
 
   --accent: #212529;
+  --action-text: #0863CE;
+  --action-text-hover: #0757B7;
+  --action-text-press: #06499B;
   --accent-hover: #121416;
   --accent-press: #343A40;
   --accent-on: #FFFFFF;

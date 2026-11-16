@@ -67,6 +67,8 @@ export interface AccountClient {
   refresh(): Promise<void>;
   activateDevice(): Promise<void>;
   deactivateDevice(deviceId?: string): Promise<void>;
+  /** Calls the stock media BFF (`motion-assets`). Rejects with a stable code; never discards the session for media errors. */
+  assets(body: Record<string, unknown>): Promise<unknown>;
   /** Returns a fresh expiration check; caller must use this immediately before every creative mutation. */
   canMutate(): boolean;
   enqueue(kind: SyncKind, id: string, value: unknown, deleted?: boolean): Promise<void>;

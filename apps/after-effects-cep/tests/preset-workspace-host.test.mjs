@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {loadHostModules} from './host-harness.mjs';
 
 async function handlers(){
-  const scope=await loadHostModules(['src/json.jsx','src/registry.jsx','src/commands/preset-library.jsx','src/commands/personal-preset-library.jsx'],{
+  const scope=await loadHostModules(['src/json.jsx','src/registry.jsx','src/marker-window.jsx','src/commands/preset-library.jsx','src/commands/personal-preset-library.jsx'],{
     app:{version:'26.5',project:null}, Folder:function(){},
     MotionContracts:{ERROR:{INVALID_PRESET:'INVALID_PRESET'}},
     MotionLibraryCore:{},MotionLibraryCatalog:[]

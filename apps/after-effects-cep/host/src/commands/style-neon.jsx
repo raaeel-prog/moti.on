@@ -50,6 +50,8 @@
     // Palpites da convencao de comunidade. Nao ha fonte primaria para nenhum
     // deles — por isso `parametro()` confere antes de escrever.
     glowRadius: "ADBE Glo2-0003",
+    // Measured in AE 26.5: native threshold is 0..255; default 153 hides dark shapes.
+    glowThreshold: "ADBE Glo2-0002",
     glowIntensity: "ADBE Glo2-0004",
     glowColors: "ADBE Glo2-0007",
     colorA: "ADBE Glo2-0012",
@@ -222,7 +224,7 @@
       }
       var gerenciado = MotionEffects.findManaged(lista, MN.glow, NOME_GERENCIADO);
       if (gerenciado) {
-        var parametros = [MN.glowRadius, MN.glowIntensity, MN.glowColors, MN.colorA, MN.colorB];
+        var parametros = [MN.glowRadius, MN.glowThreshold, MN.glowIntensity, MN.glowColors, MN.colorA, MN.colorB];
         var p;
         for (p = 0; p < parametros.length; p += 1) {
           var prop = parametro(gerenciado, /** @type {string} */ (parametros[p]));
@@ -302,7 +304,7 @@
         var glow = MotionEffects.findManaged(lista, MN.glow, NOME_GERENCIADO);
         if (glow) {
           anteriores.push(
-            MotionEffects.snapshot(glow, [MN.glowRadius, MN.glowIntensity, MN.glowColors, MN.colorA, MN.colorB])
+            MotionEffects.snapshot(glow, [MN.glowRadius, MN.glowThreshold, MN.glowIntensity, MN.glowColors, MN.colorA, MN.colorB])
           );
         } else {
           glow = MotionEffects.add(lista, MN.glow, NOME_GERENCIADO);
@@ -310,17 +312,18 @@
         }
 
         var raio = parametro(glow, MN.glowRadius);
+        var limite = parametro(glow, MN.glowThreshold);
         var intensidade = parametro(glow, MN.glowIntensity);
         var modoDeCor = parametro(glow, MN.glowColors);
         var corA = parametro(glow, MN.colorA);
         var corB = parametro(glow, MN.colorB);
-        if (!raio || !intensidade || !modoDeCor || !corA || !corB) {
+        if (!raio || !intensidade || !modoDeCor || !corA || !corB || !limite) {
           // Nao lancar com codigo proprio: o dispatcher descarta a mensagem da
           // excecao e colapsa todo motionCode que nao seja ROLLBACK_FAILED em
           // HOST_OPERATION_FAILED. O que ele PRESERVA numa falha sao os
           // `warnings` do proprio comando — entao o nome do parametro que
           // faltou viaja por ali, e o rollback normal acontece antes.
-          var faltando = !raio ? MN.glowRadius : !intensidade ? MN.glowIntensity : !modoDeCor ? MN.glowColors : !corA ? MN.colorA : MN.colorB;
+          var faltando = !raio ? MN.glowRadius : !intensidade ? MN.glowIntensity : !modoDeCor ? MN.glowColors : !corA ? MN.colorA : !corB ? MN.colorB : MN.glowThreshold;
           var erroComAviso = /** @type {Error & {neonAviso?: unknown}} */ (
             new Error("Parametro de Glow ausente: " + faltando)
           );
@@ -334,6 +337,7 @@
           };
           throw erroComAviso;
         }
+        MotionEffects.setStatic(limite, 0);
         MotionEffects.setStatic(raio, /** @type {number} */ (args.glowRadius));
         MotionEffects.setStatic(intensidade, /** @type {number} */ (args.intensity));
 

@@ -1,0 +1,34 @@
+/* Local AE settings composition. Native fields keep their existing callbacks,
+ * focus handling and preference keys. Checkbox appearance lives in ae-refinement.
+ */
+[data-host="after-effects"] .ch-settings { max-width:560px; min-width:0; gap:0; font-size:12px; }
+[data-host="after-effects"] .ch-settings .ch-settings-section { margin:0; padding:0 0 12px; }
+[data-host="after-effects"] .ch-settings .ch-settings-section + .ch-settings-section { padding-top:12px; }
+[data-host="after-effects"] .ch-settings .ch-settings-section > .ch-section-title { margin:0 0 8px; color:var(--text-primary); font-size:12px; font-weight:var(--weight-strong); line-height:18px; }
+[data-host="after-effects"] .ch-settings .ch-field { gap:4px 8px; margin-bottom:8px; min-height:28px; font-size:12px; }
+[data-host="after-effects"] .ch-settings .ch-field__label { flex:1 1 112px; min-width:0; padding:0; line-height:18px; }
+[data-host="after-effects"] .ch-settings .ch-field__control { flex:0 1 156px; min-width:0; max-width:100%; }
+[data-host="after-effects"] .ch-settings .ch-select-trigger,
+[data-host="after-effects"] .ch-settings .ch-select { box-sizing:border-box; width:100%; min-width:0; max-width:100%; min-height:26px; font-size:12px; }
+[data-host="after-effects"] .ch-settings .ch-select-trigger { padding:3px 6px; }
+[data-host="after-effects"] .ch-settings .ch-select-trigger:hover:not(:disabled) { background:var(--surface-hover); color:var(--action-text-hover); }
+[data-host="after-effects"] .ch-settings .ch-field--number .ch-field__control { flex:0 0 auto; }
+[data-host="after-effects"] .ch-settings .ch-field__description,
+[data-host="after-effects"] .ch-settings .ch-hint { margin:0 0 8px; color:var(--text-secondary); font-size:11px; line-height:16px; overflow-wrap:break-word; }
+[data-host="after-effects"] .ch-settings .ch-field__description { margin:0; padding:0; }
+/* The input and its associated label stay native; the whole label is a target. */
+[data-host="after-effects"] .ch-settings .ch-field--checkbox { gap:0 4px; }
+[data-host="after-effects"] .ch-settings .ch-field--checkbox .ch-field__control { order:-1; flex:0 0 24px; width:24px; min-height:24px; justify-content:center; }
+[data-host="after-effects"] .ch-settings .ch-field--checkbox .ch-field__label { flex:1 1 calc(100% - 28px); min-height:24px; cursor:pointer; }
+[data-host="after-effects"] .ch-settings .ch-field--checkbox .ch-field__description { box-sizing:border-box; padding-left:28px; }
+[data-host="after-effects"] .ch-settings .ch-settings-actions { display:flex; flex-wrap:wrap; gap:4px 8px; }
+[data-host="after-effects"] .ch-settings .ch-settings-local-action { display:flex; flex:0 1 auto; max-width:100%; }
+[data-host="after-effects"] .ch-settings .ch-settings-local-action .ch-action-button { justify-content:flex-start; min-height:26px; padding:3px 6px; text-align:left; font-size:11px; font-weight:var(--weight-regular); }
+[data-host="after-effects"] .ch-settings .ch-settings-help-actions { display:flex; flex-direction:column; gap:2px; }
+[data-host="after-effects"] .ch-settings .ch-settings-help-action .ch-action-button { justify-content:space-between; min-height:28px; padding:4px 6px; font-size:12px; font-weight:var(--weight-regular); text-align:left; }
+[data-host="after-effects"] .ch-settings .ch-settings-help-action .ch-action-button::after { content:"›"; flex:0 0 auto; margin-left:8px; color:var(--text-secondary); }
+[data-host="after-effects"] .ch-settings .ch-settings-status { margin:8px 0 0; }
+[data-host="after-effects"] .ch-settings .ch-settings-status:empty { margin:0; }
+@media (max-width: 339px) {
+  [data-host="after-effects"] .ch-settings .ch-field--select .ch-field__control { flex-basis: 100%; }
+}

@@ -39,7 +39,7 @@
 (function () {
   var ARGUMENTOS = { edge: true, reference: true };
   var BORDAS = { start: true, end: true };
-  var REFERENCIAS = { comp: true, layer: true, workArea: true };
+  var REFERENCIAS = { comp: true, layer: true, workArea: true, playhead: true };
 
   // O mesmo piso que keyframe-operations.jsx usa para considerar dois tempos
   // distintos. Repetido aqui porque aquele modulo nao o exporta, e um valor
@@ -101,7 +101,7 @@
     ) {
       return failure(
         MotionContracts.ERROR.INVALID_PRESET,
-        "reference precisa ser 'comp', 'layer' ou 'workArea'.",
+        "reference precisa ser 'comp', 'layer', 'workArea' ou 'playhead'.",
         { field: "reference" }
       );
     }
@@ -141,6 +141,8 @@
    */
   function instanteDeDestino(comp, property, edge, reference) {
     if (reference === "comp") return edge === "start" ? 0 : comp.duration;
+    // Align First/Last (Animation Composer): the first or last selected key lands on the playhead.
+    if (reference === "playhead") return comp.time;
     if (reference === "workArea") {
       return edge === "start" ? comp.workAreaStart : comp.workAreaStart + comp.workAreaDuration;
     }

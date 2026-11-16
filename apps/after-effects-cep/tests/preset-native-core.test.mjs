@@ -30,6 +30,8 @@ async function fixture({ installed = true, parameterCount = 5, fps = 30, height 
       return vm.runInNewContext(this.expression, {
         time, inPoint: layer.inPoint, outPoint: layer.outPoint, value: this.value, thisComp: comp,
         textIndex: 1, textTotal: 7,
+        // As AE reads it: the source string with its style, and the live Anchor Point Grouping.
+        text: {sourceText: Object.assign(new String(layer.sourceText ?? 'Moti.on text'), {style: {fontSize: 100}}), moreOption: {anchorPointGrouping: layer.text?.property?.('ADBE Text More Options')?.property?.('ADBE Text Anchor Point Option')?.value ?? 1}},
         effect: name => index => layer.effects.property(name).property(index).value
       });
     }
@@ -78,7 +80,7 @@ async function fixture({ installed = true, parameterCount = 5, fps = 30, height 
     get selectedLayers() { return this.layers.filter(l => l.selected); }
   }
   const comp = new CompItem(), layer = new Layer(text); comp.layers.push(layer);
-  const scope = await loadHostModules(['src/json.jsx', 'src/registry.jsx']);
+  const scope = await loadHostModules(['src/json.jsx', 'src/registry.jsx', 'src/marker-window.jsx']);
   scope.MotionLibraryCore = contracts; scope.MotionLibraryCatalog = contracts.MOTION_LIBRARY_PRESETS;
   const globals = {
     app: {project: {activeItem: comp}}, CompItem, CameraLayer: class {}, LightLayer: class {}, KeyframeInterpolationType: {LINEAR: 1},

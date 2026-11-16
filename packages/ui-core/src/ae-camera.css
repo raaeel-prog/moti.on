@@ -1,0 +1,57 @@
+/* Parallax tab: Câmera section (ADR 0007). Shared Onyx tokens only; compact
+ * 28 px rows, two card columns under 340 px, intents wrap instead of scrolling,
+ * no horizontal scroll at any dock width.
+ */
+[data-host="after-effects"] .ch-parallax-segments { margin:0 0 12px; }
+[data-host="after-effects"] .ch-camera-panel { display:flex; flex-direction:column; gap:12px; min-width:0; font-size:12px; }
+[data-host="after-effects"] .ch-camera-status { margin:0; color:var(--text-secondary); font-size:11px; line-height:16px; overflow-wrap:break-word; }
+/* A notice is a line of text, not another box (compact review 2026-10-24). */
+[data-host="after-effects"] .ch-camera-status--warning { padding:0; color:var(--text-primary); }
+[data-host="after-effects"] .ch-camera-section { min-width:0; }
+[data-host="after-effects"] .ch-camera-section > .ch-section-title { margin:0 0 8px; color:var(--text-primary); font-size:12px; font-weight:var(--weight-strong); line-height:18px; }
+[data-host="after-effects"] .ch-camera-intents { flex-wrap:wrap; row-gap:4px; margin:0 0 8px; overflow-x:visible; }
+[data-host="after-effects"] .ch-camera-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(112px, 1fr)); gap:8px; margin:0 0 12px; }
+[data-host="after-effects"] .ch-camera-card { display:flex; flex-direction:column; gap:4px; min-width:0; padding:4px; color:var(--text-secondary); text-align:left; background:var(--ch-surface-raised); border:1px solid transparent; border-radius:6px; font:inherit; cursor:pointer; }
+[data-host="after-effects"] .ch-camera-card:hover { color:var(--text-primary); background:var(--ch-surface-hover); }
+[data-host="after-effects"] .ch-camera-card[aria-pressed="true"] { color:var(--text-primary); border-color:var(--ch-accent); }
+[data-host="after-effects"] .ch-camera-card:focus-visible,
+[data-host="after-effects"] .ch-camera-shot:focus-visible { outline:2px solid var(--ch-accent); outline-offset:1px; }
+[data-host="after-effects"] .ch-camera-card__preview { display:block; width:100%; height:auto; aspect-ratio:16 / 9; border-radius:4px; background:var(--bg-host, #121212); }
+[data-host="after-effects"] .ch-camera-card__name { overflow:hidden; font-size:11px; font-weight:500; line-height:14px; text-overflow:ellipsis; white-space:nowrap; }
+[data-host="after-effects"] .ch-camera-card__meta { color:var(--text-secondary); font-size:10px; line-height:12px; }
+[data-host="after-effects"] .ch-camera-shots { display:flex; flex-direction:column; gap:4px; margin:0 0 8px; }
+[data-host="after-effects"] .ch-camera-shot { min-height:28px; padding:4px 8px; overflow:hidden; color:var(--text-secondary); font:inherit; font-size:11px; text-align:left; text-overflow:ellipsis; white-space:nowrap; background:var(--ch-surface-raised); border:1px solid transparent; border-radius:4px; cursor:pointer; }
+[data-host="after-effects"] .ch-camera-shot[aria-selected="true"] { color:var(--text-primary); border-color:var(--ch-accent); }
+[data-host="after-effects"] .ch-camera-modes { flex-wrap:wrap; row-gap:4px; margin:0; overflow-x:visible; }
+[data-host="after-effects"] .ch-camera-choreos .ch-camera-grid { grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); }
+/* Landscape like the composition: the whole frame shows and two cards fit a 280 px dock. */
+[data-host="after-effects"] .ch-camera-card__preview--choreo { aspect-ratio:16 / 10; }
+[data-host="after-effects"] .ch-camera-plane--background { fill:var(--ch-surface-hover); }
+[data-host="after-effects"] .ch-camera-plane--subject { fill:var(--text-secondary); }
+[data-host="after-effects"] .ch-camera-plane--text { fill:var(--text-primary); }
+[data-host="after-effects"] .ch-camera-route { color:var(--text-primary); }
+[data-host="after-effects"] .ch-camera-shot--group { font-weight:var(--weight-strong); }
+[data-host="after-effects"] .ch-camera-fine > summary { margin:0 0 8px; color:var(--text-primary); font-size:12px; cursor:pointer; }
+[data-host="after-effects"] .ch-camera-panel .ch-field { gap:4px 8px; margin-bottom:8px; min-height:28px; }
+@media (max-width: 339px) {
+  [data-host="after-effects"] .ch-camera-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+}
+
+/* Segmented controls: Câmera | Parallax and Coreografias | Shots individuais are one
+ * piece each — a well with the choice raised inside it, the raise gliding between them
+ * (chip-glide.ts) — instead of two separate outlined boxes. */
+[data-host="after-effects"] .ch-parallax-segments,
+[data-host="after-effects"] .ch-camera-modes { display:flex; flex-wrap:nowrap; gap:0; width:max-content; max-width:100%; padding:2px; box-sizing:border-box; overflow:visible; border:1px solid var(--line-hairline, var(--ch-border-subtle)); border-radius:8px; background:var(--bg-3, var(--ch-surface-canvas)); }
+[data-host="after-effects"] .ch-parallax-segments > .ch-chip,
+[data-host="after-effects"] .ch-camera-modes > .ch-chip { position:relative; z-index:2; flex:0 1 auto; min-width:0; height:24px; min-height:24px; padding:0 12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; border:0; border-radius:6px; background:transparent; box-shadow:none; color:var(--text-secondary); font-size:12px; }
+[data-host="after-effects"] .ch-parallax-segments > .ch-chip:hover,
+[data-host="after-effects"] .ch-camera-modes > .ch-chip:hover { background:transparent; color:var(--text-primary); }
+[data-host="after-effects"] .ch-parallax-segments > .ch-chip[aria-selected="true"],
+[data-host="after-effects"] .ch-camera-modes > .ch-chip[aria-pressed="true"] { color:var(--text-primary); background:var(--bg-2, var(--ch-surface-raised)); }
+[data-host="after-effects"] .ch-parallax-segments[data-glide="true"] > .ch-chip[aria-selected="true"],
+[data-host="after-effects"] .ch-camera-modes[data-glide="true"] > .ch-chip[aria-pressed="true"] { background:transparent; }
+[data-host="after-effects"] .ch-parallax-segments .ch-chip-glide,
+[data-host="after-effects"] .ch-camera-modes .ch-chip-glide { border:0; border-radius:6px; background:var(--bg-2, var(--ch-surface-raised)); box-shadow:inset 0 1px 0 rgba(255, 255, 255, .07), 0 1px 3px rgba(0, 0, 0, .4); }
+/* "Coreografias" is already the chosen segment right above: no second title. */
+[data-host="after-effects"] .ch-camera-choreos > .ch-section-title { display:none; }
+[data-host="after-effects"] .ch-camera-choreos > .ch-camera-status:first-of-type { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; margin:0 0 8px; }

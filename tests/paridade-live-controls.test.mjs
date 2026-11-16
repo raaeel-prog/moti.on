@@ -49,6 +49,7 @@ const FONTE_DO_HOST = new Map([
   ["ae.keys.reverse", "apps/after-effects-cep/host/src/commands/keys-reverse.jsx"],
   ["ae.keys.reverse-values", "apps/after-effects-cep/host/src/commands/keys-reverse-values.jsx"],
   ["ae.keys.send-to-edge", "apps/after-effects-cep/host/src/commands/keys-send-to-edge.jsx"]
+  ,...[['ae.text.word-reveal','text-word-reveal'],['ae.text.variable-morph','text-variable-morph'],['ae.text.style-swap','text-style-swap'],['ae.text.vertical-pulse','text-vertical-pulse'],['ae.keys.delay','keys-delay'],['ae.keys.clone','keys-clone'],['ae.animate.jump','animate-jump'],['ae.keys.paste','keys-copy'],['ae.shape.library','shape-library'],['ae.camera.transition','camera-transition'],['ae.animate.parallax.quick','animate-parallax-quick'],['ae.3d.look-at','three-d-look-at'],['ae.3d.orbit','three-d-orbit'],['ae.vector.ai-to-vector','ai-to-vector'],['ae.vector.text-to-vector','text-to-vector']].map(([id,file])=>[id,`apps/after-effects-cep/host/src/commands/${file}.jsx`])
 ]);
 
 async function fonteDoHost(caminho) {

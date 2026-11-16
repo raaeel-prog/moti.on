@@ -11,6 +11,7 @@
 (function (global) {
   global.MotionContracts = {
     PROTOCOL_VERSION: 1,
+    PLUGIN_VERSION: "0.2.0",
 
     ERROR: {
       NO_ACTIVE_PROJECT: "NO_ACTIVE_PROJECT",

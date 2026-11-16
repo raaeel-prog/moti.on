@@ -82,6 +82,9 @@
       }
       chosen.push(item);
     }
+    if (!app.project.items || typeof app.project.items.addFolder !== "function") {
+      return failure(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "O host nao oferece preparacao reversivel para Clean.");
+    }
     stagedRemoval = { project: app.project, token: args.scanToken, items: chosen };
     return null;
   }
@@ -104,26 +107,55 @@
     var plan = stagedRemoval;
     stagedRemoval = null;
     if (!plan || !lastScan || project !== plan.project || lastScan.token !== plan.token) throw new Error("A previa do Clean expirou.");
-    var removed = [];
+    var removed = [], originals = /** @type {any[]} */ ([]), quarantineId = null;
     try {
+      // Validate every target before moving or deleting anything. Moving unused
+      // owned sources is reversible; a single native folder deletion commits them.
       for (var j = 0; j < plan.items.length; j++) {
         var target = plan.items[j], targetId = itemId(target);
         if (!target || targetId === null || findById(project, targetId) !== target || !isUnusedFootage(target) || !isManaged(target)) {
           throw new Error("Um item mudou durante a remocao. A operacao foi interrompida.");
         }
-        target.remove();
-        if (findById(project, targetId) === target) throw new Error("O item permaneceu no projeto apos remove().");
-        removed.push(targetId);
+        originals.push({id: targetId, parent: target.parentFolder});
+      }
+      var quarantine = project.items.addFolder("Moti.on Clean transaction");
+      quarantineId = itemId(quarantine);
+      if (quarantineId === null) throw new Error("A pasta temporaria nao tem identidade persistente.");
+      for (j = 0; j < originals.length; j++) {
+        var original = originals[j], current = findById(project, original.id);
+        if (!current || !isUnusedFootage(current) || !isManaged(current)) throw new Error("Um item mudou durante a preparacao do Clean.");
+        current.parentFolder = quarantine;
+      }
+      if (quarantine.numItems !== originals.length) throw new Error("A pasta temporaria contem itens inesperados.");
+      quarantine.remove();
+      // Removed AE wrappers are invalid. Verify only persistent IDs afterwards.
+      if (findById(project, quarantineId) !== null) throw new Error("A pasta temporaria permaneceu no projeto.");
+      for (j = 0; j < originals.length; j++) {
+        if (findById(project, originals[j].id) !== null) throw new Error("Um item permaneceu no projeto apos remove().");
+        removed.push(originals[j].id);
       }
       lastScan = null;
       return { changed: removed.length > 0, warnings: [], data: { removedCount: removed.length, removedItemIds: removed } };
     } catch (error) {
       lastScan = null;
+      var rollbackFailed = false;
+      removed = [];
+      for (var r = 0; r < originals.length; r++) {
+        var previous = originals[r], survivor = findById(project, previous.id);
+        if (!survivor) { removed.push(previous.id); rollbackFailed = true; continue; }
+        try { if (survivor.parentFolder !== previous.parent) survivor.parentFolder = previous.parent; }
+        catch (restoreError) { rollbackFailed = true; }
+      }
+      var temporary = quarantineId === null ? null : findById(project, quarantineId);
+      // Never delete a staging folder that still contains any surviving source.
+      if (temporary && temporary.numItems === 0) {
+        try { temporary.remove(); } catch (folderError) { rollbackFailed = true; }
+      } else if (temporary) rollbackFailed = true;
       throw MotionErrors.error(
         "hostError.removedPartially",
         "Clean falhou depois de remover " + removed.length + " item(ns): " + String(error),
         { count: removed.length },
-        MotionContracts.ERROR.HOST_OPERATION_FAILED
+        rollbackFailed ? MotionContracts.ERROR.ROLLBACK_FAILED : MotionContracts.ERROR.HOST_OPERATION_FAILED
       );
     }
   }

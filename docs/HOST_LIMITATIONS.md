@@ -708,6 +708,77 @@ Não estender evidências históricas abaixo a esse novo layout.
 
 56 receitas próprias validadas no AE 26.5x89/macOS. Miniaturas de efeitos e 3D são ilustrativas. Um preset gerenciado por camada; conflitos de expressão são recusados. Bake somente em motion de até 1.800 frames, sem keys prévios nas propriedades controladas. Texto continua editável pelos animadores. A máscara da cortina é capturada na aplicação. Windows e versões anteriores ainda não foram verificados. Consulte `docs/implementation/2026-09-14-animation-composer/entrega-e-validacao.md`.
 
+## Revelações, Looks e paletas — outubro de 2026
+
+`IMPLEMENTED_HOST_PARTIALLY_VERIFIED`. Os 8 looks e as 6 revelações passaram no AE 26.5x89/Windows. A cobertura nas bordas foi confirmada, e o lado escolhido também, nos quatro sentidos da Cortina e da Varredura (`scripts/verify-reveals-looks.jsx`, 3/3).
+
+**Limites:**
+- A prévia da galeria ilustra revelações e looks; não é cópia pixel a pixel dos efeitos.
+- Painel instalado, macOS e UI em Chromium nesta leva: NOT RUN.
+
+Consulte `docs/implementation/2026-10-14-reveals-looks-palettes.md`.
+
+## Elementos — outubro de 2026
+
+`IMPLEMENTED_HOST_PARTIALLY_VERIFIED`. No AE 26.5x89/Windows (`scripts/verify-elements.jsx`, 3/3): os 13 elementos entram e saem invisíveis e aparecem no repouso, sem erro de expressão; a caixa da tarja segue o texto substituído na camada pai; o som é importado uma vez. Também há um AE simulado com as expressões avaliadas (`apps/after-effects-cep/tests/elements-insert.test.mjs`).
+
+**Limites:**
+- Textos usam Arial; sem Arial (com `app.fonts`, AE 24+), ficam na fonte padrão com aviso.
+- A largura do texto na prévia do painel é estimada.
+- Não há "ajustar" de um elemento já inserido: edita-se a pré-comp ou as Propriedades essenciais.
+- macOS, painel instalado e UI em Chromium: NOT RUN.
+
+Consulte `docs/implementation/2026-10-15-elements.md` e o [ADR 0006](adr/0006-elementos-procedurais-e-sons-gerados.md).
+
+## Catálogo de motion: melhorias e presets novos — outubro de 2026
+
+`IMPLEMENTED_HOST_PARTIALLY_VERIFIED`. Os quatro presets novos (Dobradiça, Pêndulo contínuo, Batida, Giro de moeda) e as melhorias nos antigos passaram no check, na suíte de qualidade do catálogo e em 7/7 cenários de `scripts/verify-catalog-upgrade.jsx` no AE 26.5x89/Windows.
+
+**Limites:**
+- Camadas que já têm Expansão com impacto, Virada com impacto, Deslizamento glitch, Órbita agressiva ou Panorâmica cinematográfica mantêm a animação antiga até o próximo Ajustar ou Restaurar.
+- O motion blur por padrão vale para quem aplica a partir de agora; desmarque no ajuste para evitar o custo de render.
+- Painel instalado e macOS: NOT RUN.
+
+Consulte `docs/implementation/2026-10-14-motion-catalog-upgrade.md`.
+
+## Motion blur ao aplicar e curvas clássicas — outubro de 2026
+
+`IMPLEMENTED_HOST_PARTIALLY_VERIFIED`. A opção `motionBlur`, as 18 curvas clássicas e a grade de direções passaram no check (2.431 testes), na paridade prévia × host e em 5/5 cenários de `scripts/verify-motion-blur-easing.jsx` no AE 26.5x89/Windows.
+
+**Limites:**
+- O switch de motion blur da composição fica ligado se outra camada o usava quando o Moti.on o ligou e essa camada sai depois: a posse não passa de uma camada para outra.
+- Converter em keyframes mantém o motion blur ligado e encerra a posse do Moti.on.
+- A grade de direções só aparece no ajuste do card da galeria. O editor de fases e o clássico continuam com o seletor de direção.
+- Painel instalado e macOS: NOT RUN.
+
+Consulte `docs/implementation/2026-10-14-motion-blur-curves-directions.md`.
+
+## Efeito empilhado (fases v3) — outubro de 2026
+
+`IMPLEMENTED_HOST_PARTIALLY_VERIFIED`. Entrada, Saída e um loop/look convivem na mesma camada, com o Efeito cronometrado por um marcador com duração (ADR 0005). Passou no check (2.417 testes), na UI em Chromium e em 6/6 cenários de `scripts/verify-stacked-effects.jsx` no AE 26.5x89/Windows. Undo nativo do empilhamento, painel instalado e macOS: NOT RUN.
+
+**Limites:**
+- O arraste ao vivo do painel não vale no slot de efeito nem nos campos de Ricochete/Quique: o bridge nativo (`plugin/gesture`) aceita só Entrada/Saída e seis parâmetros. Digitar e aplicar funciona.
+- Converter em keyframes segue indisponível para camadas com fases. Um loop aplicado sozinho continua v1 e conversível.
+- A rotação contínua mantém o último ângulo depois da janela, em vez de voltar a zero.
+- Versões anteriores do painel não reconhecem a tag v3 e tratam a camada como sem preset.
+
+Consulte `docs/implementation/2026-10-14-stacked-effects.md`.
+
+## Coleção Impulso — outubro de 2026
+
+`IMPLEMENTED_HOST_PARTIALLY_VERIFIED`. As 16 receitas, as curvas Ricochete/Quique, a medição fora do quadro e o centro da transição passaram no check (2.405 testes), na paridade prévia × host e no harness ExtendScript. No AE 26.5x89/Windows, por script, passaram 21/21 cenários no build final. O Undo nativo em chamada separada passou no build anterior à revisão.
+
+**Limites:**
+- A medição fora do quadro só vale para hierarquia 2D; 3D é recusado.
+- O centro da transição em 3D exige Orientation e rotações X/Y zeradas.
+- Em "Ambos", Entrada e Saída têm cada uma seu Centro e sua Distância.
+- O Bake não cobre fases (limitação anterior).
+- Interação pelo painel instalado, macOS e outras versões do AE: NOT RUN.
+- A correção `Number(effect(...)(1))` também reativa o slider de Elasticidade das curvas spring, que antes o AE ignorava.
+
+Consulte `docs/implementation/2026-10-12-motion-momentum.md`.
+
 ## Revisão de ferramentas — 21/09/2026
 
 O build de revisão abriu o painel Moti.on conectado no After Effects 26.5.0.89, macOS 27.2 arm64, em projeto vazio. Ao acionar o botão nativo “Criar uma nova composição”, o After Effects encerrou antes da execução de qualquer comando Moti.on. O relatório `~/Library/Logs/DiagnosticReports/After Effects-2026-09-21-210830.ips` aponta a thread em `BEE_MakeUniqueName` → `CProject::DoNewComp` → `CPanoProjItem::OnboardingNewComp`. Isso caracteriza o ponto da falha, não sua causa: não há evidência suficiente para responsabilizar ou inocentar a extensão. O aplicativo reabriu, e criar composição pelo menu Composição funcionou duas vezes.

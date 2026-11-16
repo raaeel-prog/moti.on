@@ -25,6 +25,22 @@
 .ch-select-menu[data-side="above"] { transform-origin:bottom left; }
 .ch-select-menu__option { display:block; flex:0 0 auto; width:100%; min-height:28px; padding:5px 8px; border:0; border-radius:3px; background:transparent; color:inherit; font:inherit; font-size:12px; text-align:left; white-space:normal; cursor:pointer; }
 .ch-select-menu__option[aria-selected="true"] { background:var(--accent-wash); }
+/* Sliding highlight (menu-glide.ts): it replaces the per-row hover/selected backgrounds. */
+.ch-menu-glide { position:absolute; top:0; left:4px; right:4px; z-index:0; border-radius:var(--radius-input, 3px); background:var(--surface-hover, var(--ch-surface-hover)); pointer-events:none; transition:transform 160ms ease-out, height 160ms ease-out; }
+.ch-select-menu[data-glide="true"] > .ch-select-menu__option,
+.ch-curve__menu[data-glide="true"] > .ch-curve__option,
+.ch-action-menu[data-glide="true"] > .ch-action-menu__item { position:relative; z-index:1; background:transparent; outline:0; }
+.ch-menu-glide:not([data-ready="true"]) { transition:none; }
+.ch-select-menu:not([data-glide="true"]) > .ch-menu-glide,
+.ch-curve__menu:not([data-glide="true"]) > .ch-menu-glide,
+.ch-action-menu:not([data-glide="true"]) > .ch-menu-glide,
+.ch-preset-categories:not([data-glide="true"]) > .ch-menu-glide { opacity:0; }
+/* Folder tree of the preset library: rows are full width and the accent bar travels with the highlight. */
+.ch-preset-categories { position:relative; }
+.ch-preset-categories > .ch-menu-glide { left:0; right:0; border-radius:3px; box-shadow:inset 2px 0 var(--action-text, var(--accent)); }
+.ch-preset-categories[data-glide="true"] > .ch-folder-row { position:relative; z-index:1; }
+[data-host] .ch-preset-categories[data-glide="true"] > .ch-folder-row,
+[data-host] .ch-preset-categories[data-glide="true"] > .ch-folder-row[data-selected="true"] { background:transparent !important; box-shadow:none !important; }
 .ch-select-menu__option[aria-selected="true"]::after { content:" ✓"; }
 .ch-select-menu__option:hover,.ch-select-menu__option:focus { background:var(--accent-wash); outline:1px solid var(--ch-text-secondary); outline-offset:-1px; }
 .ch-field--search { position:relative; }

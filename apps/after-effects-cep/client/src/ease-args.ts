@@ -17,16 +17,18 @@ export interface EaseDraft {
   applyIn: boolean;
   applyOut: boolean;
   live: boolean;
+  /** Existing drafts omit this; Hold conversion always requires a new explicit choice. */
+  convertHold?: boolean;
 }
 
 export const DEFAULT_EASE: EaseDraft = {
   mode: "bezier", direction: "out", view: "value",
-  x1: 0.25, y1: 0.1, x2: 0.25, y2: 1.0,
+  x1: 0.22, y1: 1, x2: 0.36, y2: 1,
   points: [],
   back: { overshoot: DEFAULT_BACK_OVERSHOOT },
   elastic: { in: { ...DEFAULT_ELASTIC }, out: { ...DEFAULT_ELASTIC }, inCurve: null, outCurve: null },
   bounce: { in: { ...DEFAULT_BOUNCE }, out: { ...DEFAULT_BOUNCE }, inCurve: null, outCurve: null },
-  applyIn: true, applyOut: true, live: false
+  applyIn: true, applyOut: true, live: false, convertHold: false
 };
 
 const round = (value: number): number => Math.round(value * 10000) / 10000;
@@ -61,7 +63,14 @@ export interface EaseSessionSegment {
   layerIndex: number;
   t0: number;
   t1: number;
-  generated: { time: number; value: number | number[] }[];
+  generated: { time: number; value: number | number[]; fingerprint?: string }[];
+  spatial?: EaseSessionSpatial;
+}
+
+export interface EaseSessionSpatial {
+  outTangent: number[]; inTangent: number[];
+  outAuto: boolean; inAuto: boolean; outContinuous: boolean; inContinuous: boolean;
+  firstFingerprint: string; lastFingerprint: string;
 }
 
 /**
@@ -77,7 +86,12 @@ export function validEaseSession(value: unknown): value is EaseSession {
   if (typeof s.signature !== "string" || !Array.isArray(s.segments) || s.segments.length > 200) return false;
   return s.segments.every(seg => seg && typeof seg === "object" && typeof seg.propertyId === "string"
     && Number.isFinite(seg.layerIndex) && Number.isFinite(seg.t0) && Number.isFinite(seg.t1) && seg.t1 > seg.t0
-    && Array.isArray(seg.generated) && seg.generated.every(g => g && Number.isFinite(g.time)
+    && (!seg.spatial || (Array.isArray(seg.spatial.outTangent) && Array.isArray(seg.spatial.inTangent)
+      && seg.spatial.outTangent.length >= 2 && seg.spatial.outTangent.length <= 3 && seg.spatial.inTangent.length === seg.spatial.outTangent.length
+      && [...seg.spatial.outTangent, ...seg.spatial.inTangent].every(Number.isFinite)
+      && ['outAuto','inAuto','outContinuous','inContinuous'].every(key => typeof seg.spatial?.[key as 'outAuto'] === 'boolean')
+      && typeof seg.spatial.firstFingerprint === 'string' && typeof seg.spatial.lastFingerprint === 'string'))
+    && Array.isArray(seg.generated) && seg.generated.every(g => g && Number.isFinite(g.time) && (g.fingerprint === undefined || typeof g.fingerprint === 'string')
       && (typeof g.value === "number" ? Number.isFinite(g.value) : Array.isArray(g.value) && g.value.length <= 4 && g.value.every(Number.isFinite))));
 }
 
@@ -87,7 +101,8 @@ export interface EaseCommandExtras { expectedSelection?: string | null; session?
 export function easeCommandArgs(draft: EaseDraft, extras: EaseCommandExtras = {}): Record<string, unknown> {
   const args = modeArgs(draft);
   if (typeof extras.expectedSelection === "string") args.expectedSelection = extras.expectedSelection;
-  if (extras.session && validEaseSession(extras.session)) args.session = { signature: extras.session.signature, segments: extras.session.segments.map(seg => ({ ...seg, generated: seg.generated.map(g => ({ time: g.time, value: Array.isArray(g.value) ? [...g.value] : g.value })) })) };
+  if (extras.session && validEaseSession(extras.session)) args.session = { signature: extras.session.signature, segments: extras.session.segments.map(seg => ({ ...seg, ...(seg.spatial ? { spatial: { ...seg.spatial, outTangent: [...seg.spatial.outTangent], inTangent: [...seg.spatial.inTangent] } } : {}), generated: seg.generated.map(g => ({ ...g, value: Array.isArray(g.value) ? [...g.value] : g.value })) })) };
+  if (draft.convertHold === true) args.convertHold = true;
   return args;
 }
 

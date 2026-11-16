@@ -449,6 +449,17 @@ declare const MotionLiveControls: {
   }): { targetKind: MotionLiveControlTargetKind; warnings: MotionLiveControlWarning[] };
 };
 
+/** camera/camera-rig.jsx: rig do motor de camera (ADR 0007), consumido por commands/camera-shots.jsx. */
+interface MotionCameraRigModule {
+  readonly TAG: string;
+  readonly MAX_SHOTS: number;
+  isManaged(source: unknown, rigId: string): boolean;
+  isAnyManaged(source: unknown): boolean;
+  /** The other helpers are consumed only by commands/camera-shots.jsx. */
+  readonly [helper: string]: unknown;
+}
+declare const MotionCameraRig: MotionCameraRigModule;
+
 /** Bloco de metadata de rig no comentario da camada, compartilhado pelos rigs. */
 declare const MotionRigMeta: {
   write(comentario: unknown, bloco: string): string;
@@ -478,6 +489,8 @@ declare const MotionKeyframes: {
   isSupportedProperty(property: Property): boolean;
   captureProperty(property: Property): MotionPropertySnapshot;
   restoreProperty(snapshot: MotionPropertySnapshot, overrideTimes: number[] | null): void;
+  restoreSelections(snapshots: MotionPropertySnapshot[]): void;
+  spatialSegmentLength(property: Property, firstIndex: number, lastIndex: number): number;
   removeIndicesDescending(property: Property, indices: number[]): void;
   curveToEase(
     curva: { x1: number; y1: number; x2: number; y2: number },

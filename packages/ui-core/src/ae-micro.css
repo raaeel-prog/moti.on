@@ -1,0 +1,97 @@
+/*
+ * Micro-interações "premium" do AE (2026-11-04). Por último no tema do AE.
+ * Só transform/opacity/box-shadow/cores animam (nada de layout). Curvas e tempos
+ * vêm dos tokens de ui-tokens/src/after-effects.css (--ease-spring, --dur-spring…).
+ * Tiles de Ferramentas e páginas da faixa rápida já têm press próprio: ficam fora.
+ * Chromium 99 (CEP 12): :is() ok; sem :has(), color-mix() ou @container.
+ */
+
+/* ---------- Botões: afundam com mola, voltam com leve overshoot ---------- */
+[data-host="after-effects"] .ch-shell :is(
+  .ch-preset-library-actions > .ch-button,
+  .ch-preset-phase-actions .ch-action-button,
+  .ch-preset-filters .ch-button,
+  .ch-preset-toolbar-action,
+  .ch-preset-card .ch-preset-settings-trigger,
+  .ch-preset-card .ch-preset-favorite,
+  .ch-preset-clear-filters,
+  .ch-folder-swatch,
+  .ch-folder-menu-item,
+  .ch-folder-focus-back,
+  .ch-elements-chip,
+  .ch-elements-card,
+  .ch-ease-actions .ch-button,
+  .ch-camera-grid .ch-button,
+  .ch-quick-toolbar .ch-button,
+  .ch-preset-tabs [role="tab"]
+) {
+  transition: background-color var(--dur-1, 120ms) var(--ease-std, ease), color var(--dur-1, 120ms) var(--ease-std, ease),
+    border-color var(--dur-1, 120ms) var(--ease-std, ease), box-shadow var(--dur-1, 120ms) var(--ease-std, ease),
+    transform var(--dur-spring, 420ms) var(--ease-spring, cubic-bezier(.34, 1.56, .64, 1));
+}
+[data-host="after-effects"] .ch-shell :is(
+  .ch-preset-library-actions > .ch-button,
+  .ch-preset-phase-actions .ch-action-button,
+  .ch-preset-filters .ch-button,
+  .ch-preset-toolbar-action,
+  .ch-preset-clear-filters,
+  .ch-folder-menu-item,
+  .ch-folder-focus-back,
+  .ch-elements-chip,
+  .ch-ease-actions .ch-button,
+  .ch-camera-grid .ch-button,
+  .ch-quick-toolbar .ch-button,
+  .ch-preset-tabs [role="tab"]
+):active:not(:disabled):not([aria-disabled="true"]) {
+  transform: scale(.96); transition-duration: var(--dur-press, 90ms); transition-timing-function: var(--ease-out, ease-out);
+}
+/* Cards e swatches afundam menos (são grandes / redondos). */
+[data-host="after-effects"] .ch-shell .ch-elements-card:active:not(:disabled) { transform: scale(.985); transition-duration: var(--dur-press, 90ms); }
+[data-host="after-effects"] .ch-shell .ch-folder-swatch:hover:not([aria-checked="true"]) { transform: scale(1.15); }
+[data-host="after-effects"] .ch-shell .ch-folder-swatch:active { transform: scale(.9); transition-duration: var(--dur-press, 90ms); }
+
+/* ---------- Ícones: crescem 8 % no hover, encolhem no press ---------- */
+[data-host="after-effects"] .ch-shell button .ch-ui-icon { transition: transform var(--dur-spring, 420ms) var(--ease-spring, cubic-bezier(.34, 1.56, .64, 1)); }
+[data-host="after-effects"] .ch-shell button:hover:not(:disabled):not([aria-disabled="true"]) > .ch-ui-icon { transform: scale(1.08); }
+[data-host="after-effects"] .ch-shell button:active:not(:disabled):not([aria-disabled="true"]) > .ch-ui-icon { transform: scale(.9); transition-duration: var(--dur-press, 90ms); }
+/* Tiles de Ferramentas: o tile já sobe 2 px; o ícone não soma escala. */
+[data-host="after-effects"] .ch-shell .ch-tool-tile button > .ch-ui-icon,
+[data-host="after-effects"] .ch-shell .ch-tool-tile button:hover > .ch-ui-icon { transform: none; }
+
+/* ---------- Pop de toggle ao ligar (data-pop vem de motion/micro.ts, só no clique) ---------- */
+@keyframes ch-micro-pop { 0% { transform: scale(1); } 40% { transform: scale(1.22); } 100% { transform: scale(1); } }
+@keyframes ch-micro-ring { from { box-shadow: 0 0 0 0 rgba(255, 255, 255, .28); } to { box-shadow: 0 0 0 7px rgba(255, 255, 255, 0); } }
+[data-host="after-effects"] .ch-shell [data-pop="true"] > .ch-ui-icon,
+[data-host="after-effects"] .ch-shell [data-pop="true"] > svg { animation: ch-micro-pop var(--dur-spring, 420ms) var(--ease-spring, cubic-bezier(.34, 1.56, .64, 1)); }
+[data-host="after-effects"] .ch-shell .ch-folder-swatch[data-pop="true"] { animation: ch-micro-ring 360ms ease-out; }
+
+/* ---------- Sliders: trilho preenchido, anel no hover, polegar cresce ao arrastar ----------
+   --ch-slider-progress vem de motion/micro.ts (o ch-number-disclosure já o usava). */
+[data-host="after-effects"] .ch-shell input[type="range"]::-webkit-slider-thumb {
+  transition: box-shadow 160ms var(--ease-std, ease), transform var(--dur-spring, 420ms) var(--ease-spring, cubic-bezier(.34, 1.56, .64, 1)),
+    border-width 120ms var(--ease-std, ease), background-color 120ms var(--ease-std, ease);
+}
+[data-host="after-effects"] .ch-shell input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(255, 255, 255, .08); }
+[data-host="after-effects"] .ch-shell input[type="range"]:active:not(:disabled)::-webkit-slider-thumb { box-shadow: 0 0 0 6px rgba(255, 255, 255, .12); transform: scale(1.15); }
+[data-host="after-effects"] .ch-shell input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px #1d1d1d, 0 0 0 4px var(--control-primary-focus, #1d80f5); }
+/* Slider de miniaturas (rodapé dos Presets): trilho preenchido até o polegar. */
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #d0d0d0 0, #d0d0d0 var(--ch-slider-progress, 50%), #6a6a6a var(--ch-slider-progress, 50%), #6a6a6a 100%);
+}
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]:focus { outline: none; }
+
+/* ---------- Abas de topo e Navegar/Editar: o texto acende suave ---------- */
+[data-host="after-effects"] .ch-shell .ch-nav__item .ch-nav__label { transition: opacity 160ms var(--ease-std, ease), color 160ms var(--ease-std, ease); }
+
+/* Movimento reduzido (sistema ou o toggle interno, que grava data-reduced-motion na raiz):
+   só o que esta camada adiciona — escala, pop e anel. Cores continuam mudando. */
+@media (prefers-reduced-motion: reduce) {
+  [data-host="after-effects"] .ch-shell button,
+  [data-host="after-effects"] .ch-shell button .ch-ui-icon,
+  [data-host="after-effects"] .ch-shell input[type="range"]::-webkit-slider-thumb { transform: none !important; }
+  [data-host="after-effects"] .ch-shell [data-pop="true"],
+  [data-host="after-effects"] .ch-shell [data-pop="true"] > * { animation: none !important; }
+}
+[data-host="after-effects"][data-reduced-motion="true"] .ch-shell button:active,
+[data-host="after-effects"][data-reduced-motion="true"] .ch-shell button .ch-ui-icon,
+[data-host="after-effects"][data-reduced-motion="true"] .ch-shell input[type="range"]::-webkit-slider-thumb { transform: none !important; }

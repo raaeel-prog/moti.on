@@ -1,5 +1,6 @@
 /* eslint-disable no-var -- libraryRequiredEffects is serialized verbatim into the ES3 Adobe host. */
 import type { MotionLibraryPreset } from "./motion-library.js";
+import { libraryTextBase, libraryTextThreeD } from "./motion-library-math.js";
 
 /**
  * O que um preset da biblioteca exige da camada e da instalação.
@@ -11,9 +12,11 @@ import type { MotionLibraryPreset } from "./motion-library.js";
  * preset pede. Por ir ao ExtendScript por `toString()`, a função não pode ler
  * nada de fora dela: sem `const`, sem closure, sem helpers.
  */
-export function libraryRequiredEffects(p: { effect: string; collection?: string | undefined }): string[] {
+export function libraryRequiredEffects(p: { effect: string; collection?: string | undefined; pivot?: string | undefined }): string[] {
   var e = p.effect;
   var r = ["ADBE Slider Control"];
+  // A distant transition center is a live point the user drags in the viewer.
+  if (p.pivot === "offset") r.push("ADBE Point Control");
   if (e.indexOf("camera-") === 0) r.push("ADBE Gaussian Blur 2");
   if (e === "camera-dark" || e === "camera-light") r.push("ADBE Tint");
   if (e === "camera-distort" || e === "camera-shake") r.push("ADBE Turbulent Displace");
@@ -26,6 +29,22 @@ export function libraryRequiredEffects(p: { effect: string; collection?: string 
   if (e === "turbulent") r.push("ADBE Turbulent Displace");
   if (e === "extrude" || e.indexOf("shadow") === 0) r.push("ADBE Drop Shadow");
   if (e === "shadow-stripes") { r.push("ADBE Venetian Blinds"); r.push("CC Composite"); }
+  // Reveals and looks: same table as host/src/look-effects.jsx (STACKS); the
+  // test tests/preset-requirements.test.mjs keeps them equal.
+  var stacks: Record<string, string[]> = {
+    "reveal-linear": ["ADBE Linear Wipe"], "reveal-radial": ["ADBE Radial Wipe"], "reveal-blinds": ["ADBE Venetian Blinds"],
+    "reveal-blocks": ["ADBE Block Dissolve"], "reveal-grid": ["CC Grid Wipe"], "reveal-sweep": ["CS LineSweep"],
+    "look-vhs": ["ADBE Noise", "ADBE Box Blur2", "ADBE Turbulent Displace", "ADBE HUE SATURATION", "ADBE Venetian Blinds"],
+    "look-crt": ["ADBE Venetian Blinds", "ADBE Bulge", "ADBE Glo2", "CS Vignette"],
+    "look-film": ["VISINF Grain Implant", "ADBE Exposure2", "CS Vignette", "ADBE Photo Filter"],
+    "look-halftone": ["CC Ball Action"],
+    "look-dither": ["ADBE Noise", "ADBE Posterize"],
+    "look-sketch": ["ADBE Find Edges", "ADBE Black&White", "ADBE Easy Levels2"],
+    "look-stopmotion": ["ADBE Posterize Time", "ADBE Turbulent Displace"],
+    "look-vintage": ["CC Toner", "VISINF Grain Implant", "CS Vignette", "ADBE Easy Levels2"]
+  };
+  var stack = Object.prototype.hasOwnProperty.call(stacks, e) ? stacks[e] : null;
+  if (stack) for (var s = 0; s < stack.length; s++) r.push(stack[s] as string);
   if (p.collection === "signature") {
     // Mesma tabela de host/src/signature-effects.jsx (LOOKS); o teste
     // tests/preset-requirements.test.mjs cobra a igualdade.
@@ -48,6 +67,37 @@ export function libraryRequiredEffects(p: { effect: string; collection?: string 
   return r;
 }
 
+/** Reveal directions choose the side a wipe uncovers first. A text motion takes
+ * a direction whenever it has a side: travel, an off-centre origin or an X/Y turn
+ * (libraryTextBase). A text transition in place over several units takes the side
+ * its sweep starts from (libraryTextSweeps). */
+export function libraryUsesDirection(p: Pick<MotionLibraryPreset, "position" | "pivot" | "effect"> & Partial<Pick<MotionLibraryPreset, "category" | "rotation" | "scale" | "text" | "mode">>): boolean {
+  if (p.category && p.category.indexOf("text-") === 0 && p.rotation && p.scale && p.text) return libraryTextBase({position: p.position, rotation: p.rotation, scale: p.scale, text: p.text}) !== "" || libraryTextSweeps(p).length > 0;
+  return Boolean(p.position[0] || p.position[1]) || p.pivot === "edge" || p.effect === "reveal-linear" || p.effect === "reveal-blinds" || p.effect === "reveal-sweep";
+}
+
+/** The sides a text transition in place can sweep from (libraryTextOrder):
+ * left and right across characters and words, top and bottom down lines.
+ * Empty for a motion with its own side, a whole-text motion or a loop. */
+export function libraryTextSweeps(p: Pick<MotionLibraryPreset, "position"> & Partial<Pick<MotionLibraryPreset, "category" | "rotation" | "scale" | "text" | "mode">>): string[] {
+  if (!p.category || p.category.indexOf("text-") !== 0 || p.mode !== "transition" || !p.rotation || !p.scale || !p.text || p.text.unit === "all") return [];
+  if (libraryTextBase({position: p.position, rotation: p.rotation, scale: p.scale, text: p.text}) !== "") return [];
+  return p.text.unit === "lines" ? ["top", "bottom"] : ["left", "right"];
+}
+
+/** Whether a direction applies to a recipe: a sweep in place offers only its sides. */
+export function libraryDirectionAllowed(p: Pick<MotionLibraryPreset, "position"> & Partial<Pick<MotionLibraryPreset, "category" | "rotation" | "scale" | "text" | "mode">>, direction: string): boolean {
+  var sides = libraryTextSweeps(p);
+  return direction === "preset" || !sides.length || sides.indexOf(direction) >= 0;
+}
+
+/** Diagonal directions rotate a travel vector toward a corner. Reveals keep the
+ * four sides of their wipe angle, and edge pivots hinge on one side. */
+export function libraryUsesDiagonals(p: Pick<MotionLibraryPreset, "position" | "pivot" | "effect">): boolean {
+  // ES3: the host runs this verbatim in ExtendScript.
+  return !!(p.position[0] || p.position[1]) && p.pivot !== "edge" && p.effect.indexOf("reveal-") !== 0;
+}
+
 /** Efeito do plugin nativo Moti.on Core usado pelos presets de motion. */
 export const MOTION_CORE_PRESET_EFFECT = "CHMS Motion Core";
 
@@ -65,6 +115,8 @@ export interface MotionLibraryRequirements {
 }
 
 export function motionLibraryRequirements(p: MotionLibraryPreset): MotionLibraryRequirements {
+  if (p.filmSpec) return { layer: "composition", motionCore: false, cycore: false, threeD: false,
+    effects: ["ADBE Slider Control", "ADBE Layer Control", "ADBE Exposure2", "ADBE Invert", "ADBE Turbulent Displace", "ADBE Gaussian Blur 2", "ADBE Noise"] };
   if (p.cameraSpec) {
     return {
       layer: "composition",
@@ -78,8 +130,9 @@ export function motionLibraryRequirements(p: MotionLibraryPreset): MotionLibrary
   return {
     layer: p.category.startsWith("text-") ? "text" : "visual",
     motionCore: effects.includes(MOTION_CORE_PRESET_EFFECT),
-    cycore: effects.some((name) => name.startsWith("CC ")),
-    threeD: p.category === "motion-3d",
+    // Cycore ships some effects under a "CS " match name (CC Vignette, CC Line Sweep).
+    cycore: effects.some((name) => name.startsWith("CC ") || name.startsWith("CS ")),
+    threeD: p.category === "motion-3d" || (p.category.startsWith("text-") && libraryTextThreeD(p)),
     effects
   };
 }

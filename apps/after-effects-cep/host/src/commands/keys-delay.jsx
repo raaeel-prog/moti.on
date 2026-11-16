@@ -90,7 +90,9 @@
       args.order !== "selection" &&
       args.order !== "name" &&
       args.order !== "distance" &&
-      args.order !== "random"
+      args.order !== "random" &&
+      args.order !== "center-out" &&
+      args.order !== "edges-in"
     ) {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Ordem de Delay invalida.", {
         field: "order"
@@ -177,9 +179,10 @@
       });
       seededShuffle(targets, /** @type {number} */ (args.randomSeed));
     } else if (args.order !== "selection") {
+      // center-out/edges-in walk the timeline order; their step comes from stepFor.
       targets.sort(function (a, b) {
         var comparison;
-        if (args.order === "timeline") comparison = a.timelineIndex - b.timelineIndex;
+        if (args.order === "timeline" || args.order === "center-out" || args.order === "edges-in") comparison = a.timelineIndex - b.timelineIndex;
         else if (args.order === "name") {
           var an = String(a.name).toLowerCase();
           var bn = String(b.name).toLowerCase();
@@ -189,6 +192,16 @@
       });
     }
     if (args.reverse === true) targets.reverse();
+  }
+
+  /** Step multiplier of the i-th of n targets. center-out starts the middle
+   * first and reaches the edges last; edges-in is its mirror. With an even
+   * count the two middle targets share a step.
+   * @param {number} i @param {number} n @param {unknown} order @returns {number} */
+  function stepFor(i, n, order) {
+    if (order !== "center-out" && order !== "edges-in") return i;
+    var distance = Math.floor(Math.abs(i - (n - 1) / 2));
+    return order === "center-out" ? distance : Math.floor((n - 1) / 2) - distance;
   }
 
   /**
@@ -365,7 +378,7 @@
     for (i = 0; i < targets.length; i += 1) {
       var target = targets[i];
       if (!target) throw new Error("Plano de Delay incompleto.");
-      var offsetFrames = delayFrames * i;
+      var offsetFrames = delayFrames * stepFor(i, targets.length, args.order);
       var offsetSeconds = offsetFrames * comp.frameDuration;
       target.ordinal = i;
       target.offsetFrames = offsetFrames;
@@ -453,8 +466,14 @@
       if (prepared.error) throw new Error("Delay ficou invalido depois do preflight.");
       var touchedLayers = /** @type {Array<{layer: Layer, beforeStart: number}>} */ ([]);
       var touchedProperties = /** @type {MotionPropertySnapshot[]} */ ([]);
+      var propertySnapshots = /** @type {MotionPropertySnapshot[]} */ ([]);
       var changed = 0;
       var i;
+      if (args.shiftMode === "keyframes") for (i = 0; i < prepared.targets.length; i += 1) {
+        var plannedTarget = prepared.targets[i];
+        if (!plannedTarget || !plannedTarget.property) throw new Error("Plano de Delay incompleto.");
+        propertySnapshots.push(MotionKeyframes.captureProperty(plannedTarget.property));
+      }
       try {
         for (i = 0; i < prepared.targets.length; i += 1) {
           var target = prepared.targets[i];
@@ -470,7 +489,8 @@
             target.layer.startTime = target.afterStart;
           } else {
             if (!target.property) throw new Error("Propriedade ausente no plano de Delay.");
-            var snapshot = MotionKeyframes.captureProperty(target.property);
+            var snapshot = propertySnapshots[i];
+            if (!snapshot) throw new Error("Snapshot de Delay incompleto.");
             var keys = snapshot.keys;
             var times = [];
             var j;
@@ -484,6 +504,7 @@
           }
           changed += 1;
         }
+        if (args.shiftMode === "keyframes") MotionKeyframes.restoreSelections(propertySnapshots);
       } catch (applyError) {
         var rollbackFailed = false;
         if (args.shiftMode === "layerStart") {
@@ -517,6 +538,7 @@
             }
           }
         }
+        if (args.shiftMode === "keyframes") try { MotionKeyframes.restoreSelections(propertySnapshots); } catch (selectionError) { rollbackFailed = true; }
         if (rollbackFailed) {
           var rollbackError = /** @type {Error & {motionCode?: string}} */ (
             new Error("Rollback de Delay falhou.")

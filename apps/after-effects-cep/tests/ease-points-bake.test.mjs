@@ -53,15 +53,16 @@ test("points: applyIn/applyOut desligados preservam a ponta correspondente", asy
   assert.equal(r.data.appliedCount, 2);
 });
 
-test("points: 2D nao espacial interpola cada componente e espacial zera tangentes", async () => {
+test("points: 2D interpola cada componente e espacial subdivide a trajetoria sem mudar sua forma", async () => {
   const escala = new FakeProperty({ name: "Scale", valueType: PropertyValueType.TwoD, eases: 2, keys: [[0, [100, 50]], [1, [200, 150]]] });
   const posicao = new FakeProperty({ name: "Position", valueType: PropertyValueType.TwoD_SPATIAL, eases: 1, keys: [[0, [0, 0]], [1, [300, 400]]] });
   const r = await dispatch([escala, posicao], { ...CURVA, points: [{ x: 0.5, y: 0.5, inX: 0.4, inY: 0.4, outX: 0.6, outY: 0.6 }] });
   assert.equal(r.ok, true, JSON.stringify(r.error));
   assert.deepEqual(escala.keys[1].value, [150, 100]);
   assert.deepEqual(posicao.keys[1].value, [150, 200]);
-  assert.deepEqual(posicao.chamadas.find((c) => c.tipo === "tangente"), { tipo: "tangente", index: 2, a: [0, 0], b: [0, 0] });
-  assert.deepEqual(posicao.chamadas.find((c) => c.tipo === "autoBezier"), { tipo: "autoBezier", index: 2, v: false });
+  assert.ok(Math.abs(posicao.keys[1].spatialIn[0] + 50) < 1e-9);
+  assert.ok(Math.abs(posicao.keys[1].spatialOut[1] - 200/3) < 1e-9);
+  assert.equal(posicao.keys[1].spatialAuto, false);
   assert.deepEqual(posicao.chamadas.find((c) => c.tipo === "roving"), { tipo: "roving", index: 2, v: false });
   assert.equal(escala.chamadas.some((c) => c.tipo === "tangente"), false, "propriedade nao espacial nao recebe tangente");
   // x=0.5 de 1 s sao 12,5 quadros: o host ajusta para o quadro 13 (0,52 s), e
@@ -71,7 +72,7 @@ test("points: 2D nao espacial interpola cada componente e espacial zera tangente
   const { segments } = normalizeCurveSegments(CURVA, [{ x: 0.5, y: 0.5, inX: 0.4, inY: 0.4, outX: 0.6, outY: 0.6 }]);
   const primeiro = posicao.chamadas.find((c) => c.tipo === "ease" && c.index === 1);
   assert.equal(primeiro.outEase.length, 1);
-  assert.equal(primeiro.outEase[0].speed, curveToTemporalEase(segments[0], 13 * FD, 250).outPoint.speed);
+  assert.ok(Math.abs(primeiro.outEase[0].speed - curveToTemporalEase(segments[0], 13 * FD, 250).outPoint.speed) < 1e-9);
   assert.equal(r.data.appliedCount, 6);
 });
 
@@ -158,8 +159,11 @@ test("bake: inOut com metades bezier em escalar, 2D e espacial", async () => {
     assert.ok(Math.abs(posicao.keys[n].value[2] - e * 10) <= 1e-9);
   }
   const tangentes = posicao.chamadas.filter((c) => c.tipo === "tangente");
-  assert.equal(tangentes.length, 9);
-  assert.deepEqual(tangentes[0].a, [0, 0, 0]);
+  assert.equal(tangentes.length, 20, "cada subsegmento preserva as duas alcas geometricas");
+  for (const key of posicao.keys) {
+    assert.ok(Math.abs(key.value[0] * 10 - key.value[2] * 300) < 1e-8, "o caminho reto continua colinear");
+    assert.equal(key.spatialAuto, false);
+  }
   assert.equal(posicao.chamadas.filter((c) => c.tipo === "roving").length, 9);
   assert.equal(escala.chamadas.filter((c) => c.tipo === "tangente").length, 0);
 });

@@ -1,3 +1,6 @@
+import {createHostTheme, type ThemeHost} from "./host-theme.js";
+import {createCepKeyboard, type CepKeyboardHost} from "./cep-keyboard.js";
+import {standardToolNumbers} from "./tool-number-fields.js";
 /**
  * Raiz de composição do painel do After Effects.
  *
@@ -24,16 +27,25 @@ import { renderTextEffect, resetTextEffect, textEffectArgs, validTextEffect, hyd
 import { renderVerticalPulse, resetVerticalPulse, validVerticalPulse, verticalPulseAction, verticalPulseArgs,
   hydrateVerticalPulse, isVerticalPulseReadData, markVerticalPulseReadFailed, verticalPulseActionLabel,
   verticalPulseReadDisabledReason, verticalPulseRevision } from "./vertical-pulse.js";
-import { WORD_REVEAL_DEFAULTS, PROXIMITY_MORPH_DEFAULTS, STYLE_SWAP_DEFAULTS, pulsePresetArgs, isMotionLibraryOptions, type MotionLibraryOptions } from "@motion/contracts";
+import { pulsePresetArgs, isMotionLibraryOptions, motionLibraryRequirements, type MotionLibraryOptions } from "@motion/contracts";
 import { createAeSystemView } from "./views/system-view.js";
+import { createMotionProbe } from "./views/motion-probe.js";
 import { createAccountView } from "./views/account-view.js";
-import { authorizeCreativeOperation, accountCanMutate } from "./account.js";
+import { createStockLibrary } from "./stock-library.js";
+import type { StockMediaType } from "@motion/asset-sdk";
+import { authorizeCreativeOperation, accountCanMutate, copyText, downloadStock, loadStockClient, openExternal } from "./account.js";
 import { createAeSettingsView } from "./views/settings-view.js";
 import { groupToolSections } from "./views/tool-sections.js";
 import { createSelectionCoordinator, type SelectionReader } from "./selection-coordinator.js";
 import { renderManagedTools } from "./managed-tools-editor.js";
 import { focusedPoll } from "./focused-poll.js";
+import { trackPointerPresence, type PointerPresence } from "./pointer-presence.js";
+import { createCameraPanel } from "./camera-panel.js";
+import {createParallaxRigPreview,type ParallaxMovePreview} from './parallax-rig-preview.js';
 import { createGradientEditor } from "./gradient-editor.js";
+import { createParticlesEditor } from "./particles-editor.js";
+import { ParticleEditSession, isParticleReadData, type ParticleReadData } from "./particle-edit-session.js";
+import { type ParticleSettings } from "@motion/contracts";
 import { DEFAULT_EASE, cloneEaseDraft, easeNeedsPair, type EaseDraft } from "./ease-args.js";
 import { EASE_PRESETS, readEaseAutoOpen, readEaseLibrary, readEaseLive, writeEaseAutoOpen, writeEaseLive, type EaseCurve } from "./ease-library.js";
 import { createEaseController, type EaseApplyOutcome, type EaseController } from "./ease-controller.js";
@@ -54,6 +66,7 @@ import {
   colorField,
   configureColorPickers,
   isColorPickerOpen, hasColorDraft,
+  createIcon,
   attachActionOverflow,
   createI18n,
   createDiagnosticsView,
@@ -61,7 +74,6 @@ import {
   hint,
   notice,
   normalizeHexColor,
-  numberField,
   propertyRow,
   sectionTitle,
   selectField,
@@ -72,7 +84,6 @@ import {
   type Shell,
   type ShellView,
   createFeedbackController,
-  createAlert,
   type FeedbackController
 } from "@motion/ui-core";
 
@@ -87,7 +98,7 @@ function reportHostWarnings(warnings: CommandResponse["warnings"]): void {
   if (text) globalFeedback?.reportWarning(text);
 }
 let feedbackReady = false;
-import { getDescriptor, getQuickProfile } from "@motion/command-registry";
+import { getToolStarterDraft } from "@motion/command-registry";
 import {
   createBrowserReducedMotionController,
   type ReducedMotionController
@@ -95,29 +106,51 @@ import {
 
 import { createAeHostAdapter } from "./host-adapter.js";
 import { createQuickLibrary, type LibraryState, type LibraryItem, type TileFeedback } from "./quick-library.js";
-import { createQuickActions, updateQuickActions, quickActionName, type QuickAction } from "./quick-actions.js";
+import { createQuickActions, isQuickAction, quickActionName, quickActionReason, QUICK_ALL_ACTIONS, type QuickAction } from "./quick-actions.js";
+import { aeMotionMs, attachMicroInteractions, attachReflowGlide, attachReflowGlideTree, browserMotionEnv, frameDriver, playStagger, scrollIntoViewSmooth } from "./motion/index.js";
+import { attachNavIndicator, attachNavShortcuts, attachToastMotion, FEEDBACK_BASE_LIFT, setFeedbackLift, viewDirection } from "./shell-motion.js";
+import { createRichTooltip } from "./rich-tooltip.js";
+import { attachInspectorSheet } from "./inspector-sheet.js";
+import { attachChipGlides } from "./chip-glide.js";
+import { createCommandPalette, isPaletteKey, type CommandPalette } from "./command-palette.js";
+import type { PaletteEntry, PaletteTarget } from "./command-palette-model.js";
 import { createQuickDock } from "./quick-dock.js";
 import { hostFailureMessage, hostWarningMessage } from "./host-feedback.js";
 import { createEaseEditor } from "./ease-editor.js";
 import { createEaseActions, type EaseAction } from "./ease-actions.js";
-import { DEFAULT_ORBIT, ORBIT_PRESETS, deriveOrbitPreset, selectOrbitPreset, type OrbitDraft, type OrbitTargetMode } from "./orbit-presets.js";
-import { presetArgs, defaultLibraryOptions, GALLERY_PRESETS, type PresetNavigation } from "./preset-gallery.js";
+import { DEFAULT_ORBIT, ORBIT_PRESETS, selectOrbitPreset, type OrbitDraft, type OrbitTargetMode } from "./orbit-presets.js";
+import { presetArgs, defaultLibraryOptions, GALLERY_PRESETS, requirementReason, type PresetNavigation } from "./preset-gallery.js";
 
-const panelPreferences = createPanelPreferences(document.documentElement, browserPreferenceStorage(window));
+let hostTheme: ReturnType<typeof createHostTheme> | undefined;
+const toolNumbers = standardToolNumbers;
+const numberField = toolNumbers.field;
+const panelPreferences = createPanelPreferences(document.documentElement, browserPreferenceStorage(window), {hostTheme:true,onThemeChange:()=>hostTheme?.refresh()});
 let panelHostLocale: string | undefined;
 const libraryNavigation: LibraryState = { category: panelPreferences.snapshot().category, scope: "all", query: "", scroll: 0 };
 let disposeView: (() => void) | null = null;
+/** View on screen before the current render: tells shell-motion where the next one enters from. */
+let lastRenderedView: string | null = null;
+/** The view rendered before the current one (home after the inspector stays quiet). */
+let previousRenderedView: string | null = null;
 let refreshLibrary: (() => void) | null = null;
 /** Tile feedback of the mounted tool library (A6.4); null outside the library view. */
 let quickTileFeedback: ((id: string, state: TileFeedback) => void) | null = null;
 let selectionCoordinator: ReturnType<typeof createSelectionCoordinator> | null = null;
 const selectionReaders = new Set<SelectionReader>();
+/**
+ * Periodic host reads pause while the pointer is over the panel: on Windows
+ * each `evalScript` resets the cursor (see `pointer-presence.ts`).
+ */
+let pointerPresence: PointerPresence | null = null;
+const pointerInPanel = (): boolean => pointerPresence?.inside() ?? false;
 let refreshToolContext: (() => void) | null = null;
 let refreshPresetContext: (() => void) | null = null;
 let orbitAdvancedOpen = false;
 import { createPresetWorkspace, type PresetWorkspaceCache } from "./preset-workspace.js";
 const presetWorkspaceCache: PresetWorkspaceCache = {};
 const presetNavigation: PresetNavigation = restorePresetNavigation();
+let revealPresetInWorkspace: ((id: string) => void) | undefined;
+let pendingPaletteReveal: string | undefined;
 
 /**
  * Reabre a galeria onde o usuário parou: categoria, filtro, busca, preset
@@ -133,7 +166,7 @@ function restorePresetNavigation(): PresetNavigation {
   const category = saved.gallery.category.startsWith("personal") ? "all" : saved.gallery.category;
   const known = GALLERY_PRESETS.some(preset => preset.id === saved.gallery.presetId);
   return {
-    category, scope: saved.gallery.scope, query: saved.gallery.query, scroll: 0, drafts,
+    category, scope: saved.gallery.scope, query: saved.gallery.query, scroll: 0, drafts, ...(saved.gallery.sidebarWidth!==undefined?{sidebarWidth:saved.gallery.sidebarWidth}:{}),
     ...(known ? { selectedId: saved.gallery.presetId } : {})
   };
 }
@@ -147,7 +180,7 @@ function rememberPresetNavigation(): void {
   }
   panelPreferences.setGallery({
     category: presetNavigation.category.startsWith("personal") ? "all" : presetNavigation.category,
-    scope: presetNavigation.scope, query: presetNavigation.query, presetId: presetNavigation.selectedId ?? ""
+    scope: presetNavigation.scope, query: presetNavigation.query, presetId: presetNavigation.selectedId ?? "", ...(presetNavigation.sidebarWidth!==undefined?{sidebarWidth:presetNavigation.sidebarWidth}:{})
   });
   panelPreferences.setDrafts(changed);
 }
@@ -213,12 +246,7 @@ interface LoopOutResultData {
 /** Mesma forma do LoopOut: os dois comandos reportam o lote da mesma maneira. */
 type SmoothResultData = LoopOutResultData;
 
-const DEFAULT_LOOP_OUT: LoopOutDraft = {
-  type: "cycle",
-  range: "all",
-  numKeyframes: 1,
-  duration: 1
-};
+const DEFAULT_LOOP_OUT: LoopOutDraft = getToolStarterDraft<LoopOutDraft>("loopOut");
 
 type SmoothReference = "current" | "fixed";
 
@@ -243,13 +271,7 @@ interface WiggleDraft {
  * 0.5), e semente 0 e o offset padrao — ou seja, o estado inicial nao altera o
  * comportamento nativo da expressao.
  */
-const DEFAULT_WIGGLE: WiggleDraft = {
-  frequency: 2,
-  amplitude: 30,
-  octaves: 1,
-  amplitudeMultiplier: 0.5,
-  seed: 0
-};
+const DEFAULT_WIGGLE: WiggleDraft = getToolStarterDraft<WiggleDraft>("wiggle");
 
 interface FlickerDraft {
   rate: number;
@@ -263,12 +285,7 @@ interface FlickerDraft {
  * o valor da propriedade, entao 0 apaga no quadro sorteado e 1 mantem o valor
  * original — a faixa padrao e a piscada classica de opacidade.
  */
-const DEFAULT_FLICKER: FlickerDraft = {
-  rate: 12,
-  minFactor: 0,
-  maxFactor: 1,
-  seed: 0
-};
+const DEFAULT_FLICKER: FlickerDraft = getToolStarterDraft<FlickerDraft>("flicker");
 
 interface LayerSummary {
   index: number;
@@ -295,13 +312,7 @@ interface ParentDraft {
  * timeline: reparentar sem mexer na aparência. Chegar com ele desligado faria as
  * camadas saltarem no primeiro clique de quem não leu o campo.
  */
-const DEFAULT_PARENT: ParentDraft = {
-  targetLayerIndex: 0,
-  targetLayerName: "",
-  preserveWorldTransform: true,
-  unparent: false,
-  chainMode: "target"
-};
+const DEFAULT_PARENT: ParentDraft = getToolStarterDraft<ParentDraft>("parent");
 
 type AnchorGridPoint =
   | "topLeft"
@@ -340,15 +351,7 @@ interface AnchorDraft {
  * Centro com aparência preservada: é o alinhamento que se pede na maior parte
  * das vezes, e é o único que não move nada ao ser aplicado sem pensar.
  */
-const DEFAULT_ANCHOR: AnchorDraft = {
-  gridPoint: "center",
-  mode: "normal",
-  timeMode: "currentTime",
-  fixedTime: 0,
-  includeExtents: false,
-  preserveVisualPosition: true,
-  randomSeed: 0
-};
+const DEFAULT_ANCHOR: AnchorDraft = getToolStarterDraft<AnchorDraft>("anchor");
 
 type CutRangeMode =
   | "beforeCti"
@@ -372,14 +375,9 @@ interface CutKeysDraft {
  * canônicos — ele recusa valores fora do modo em vez de ignorá-los em silêncio,
  * e o painel precisa mandar exatamente zero quando o modo não os usa.
  */
-const DEFAULT_CUT_KEYS: CutKeysDraft = {
-  rangeMode: "afterCti",
-  startTime: 0,
-  endTime: 0,
-  includeBoundary: false
-};
+const DEFAULT_CUT_KEYS: CutKeysDraft = getToolStarterDraft<CutKeysDraft>("cutKeys");
 
-type DelayOrder = "timeline" | "selection" | "name" | "distance" | "random";
+type DelayOrder = "timeline" | "selection" | "name" | "distance" | "random" | "center-out" | "edges-in";
 
 interface DelayDraft {
   delayFrames: number;
@@ -392,15 +390,7 @@ interface DelayDraft {
 }
 
 /** Dois quadros por passo na ordem do timeline: a cascata clássica. */
-const DEFAULT_DELAY: DelayDraft = {
-  delayFrames: 2,
-  order: "timeline",
-  reverse: false,
-  randomSeed: 0,
-  originX: 0,
-  originY: 0,
-  shiftMode: "layerStart"
-};
+const DEFAULT_DELAY: DelayDraft = getToolStarterDraft<DelayDraft>("delay");
 
 type LayerScope = "selected" | "composition";
 
@@ -423,17 +413,7 @@ interface RenameDraft {
  * inteira: o escopo mais amplo precisa ser uma escolha, não o que já está
  * marcado quando a pessoa chega.
  */
-const DEFAULT_RENAME: RenameDraft = {
-  scope: "selected",
-  prefix: "",
-  suffix: "",
-  find: "",
-  replace: "",
-  regex: false,
-  counterStart: 1,
-  padding: 0,
-  sourceName: false
-};
+const DEFAULT_RENAME: RenameDraft = getToolStarterDraft<RenameDraft>("rename");
 
 interface ReverseOrderDraft {
   scope: LayerScope;
@@ -443,12 +423,7 @@ interface ReverseOrderDraft {
 }
 
 /** Preservar relações é o padrão; mexer no tempo exige pedido explícito (§7). */
-const DEFAULT_REVERSE_ORDER: ReverseOrderDraft = {
-  scope: "selected",
-  preserveTrackMattes: true,
-  preserveParents: true,
-  reverseTimingToo: false
-};
+const DEFAULT_REVERSE_ORDER: ReverseOrderDraft = getToolStarterDraft<ReverseOrderDraft>("reverseOrder");
 
 interface FlipDraft {
   axis: "horizontal" | "vertical";
@@ -463,12 +438,7 @@ interface FlipDraft {
  * Legibilidade preservada nasce ligada porque texto invertido raramente é o
  * pedido — e quem quiser o efeito desliga um campo.
  */
-const DEFAULT_FLIP: FlipDraft = {
-  axis: "horizontal",
-  pivot: "anchor",
-  groupMode: "each",
-  preserveTextReadability: true
-};
+const DEFAULT_FLIP: FlipDraft = getToolStarterDraft<FlipDraft>("flip");
 
 type NullPlacement = "compCenter" | "averageAnchor" | "selectionBounds";
 
@@ -487,14 +457,7 @@ interface CreateNullDraft {
  * por isso é o padrão: abrir a ferramenta e clicar em Aplicar produz algo útil
  * mesmo com nada selecionado.
  */
-const DEFAULT_CREATE_NULL: CreateNullDraft = {
-  placement: "compCenter",
-  dimension: "2d",
-  parentSelected: false,
-  preserveWorldTransform: true,
-  size: 100,
-  label: 0
-};
+const DEFAULT_CREATE_NULL: CreateNullDraft = getToolStarterDraft<CreateNullDraft>("createNull");
 
 interface TextBoxDraft {
   paddingX: number;
@@ -510,25 +473,14 @@ interface TextBoxDraft {
  * opaco. Preto e a escolha que funciona sobre qualquer material sem virar
  * decisao de design — quem quiser cor troca num campo.
  */
-const DEFAULT_TEXT_BOX: TextBoxDraft = {
-  paddingX: 24,
-  paddingY: 14,
-  roundness: 8,
-  fillColor: "#000000",
-  fillOpacity: 100
-};
+const DEFAULT_TEXT_BOX: TextBoxDraft = getToolStarterDraft<TextBoxDraft>("textBox");
 
 /**
  * Padroes do `smooth()` do After Effects: janela de 0,2 s e 5 amostras. Sao os
  * valores que a documentacao da Adobe usa quando os argumentos sao omitidos, e
  * comecar longe deles faria o resultado surpreender quem ja conhece a expressao.
  */
-const DEFAULT_SMOOTH: SmoothDraft = {
-  widthSeconds: 0.2,
-  samples: 5,
-  reference: "current",
-  referenceTime: 0
-};
+const DEFAULT_SMOOTH: SmoothDraft = getToolStarterDraft<SmoothDraft>("smooth");
 
 
 
@@ -544,14 +496,7 @@ interface TimeControllerDraft {
   freezeFrame: number;
 }
 
-const DEFAULT_TIME_CONTROLLER: TimeControllerDraft = {
-  applyTo: "layer",
-  speedPercent: 100,
-  offsetFrames: 0,
-  reverse: false,
-  freeze: false,
-  freezeFrame: 0
-};
+const DEFAULT_TIME_CONTROLLER: TimeControllerDraft = getToolStarterDraft<TimeControllerDraft>("timeController");
 
 
 type ReverseKeysDraft = Record<string, never>;
@@ -577,16 +522,10 @@ interface NeonDraft {
 }
 // Branco no núcleo e ciano no brilho: é o neon de referência, e deixa o efeito
 // visível já na primeira aplicação sem o usuário abrir dois seletores de cor.
-const DEFAULT_NEON: NeonDraft = {
-  coreColor: "#ffffff",
-  glowColor: "#33ccff",
-  strokeWidth: 4,
-  glowRadius: 40,
-  intensity: 2
-};
+const DEFAULT_NEON: NeonDraft = getToolStarterDraft<NeonDraft>("neon");
 
 type SendToEdgeEdge = "start" | "end";
-type SendToEdgeReference = "comp" | "layer" | "workArea";
+type SendToEdgeReference = "comp" | "layer" | "workArea" | "playhead";
 interface SendToEdgeDraft {
   edge: SendToEdgeEdge;
   reference: SendToEdgeReference;
@@ -594,12 +533,12 @@ interface SendToEdgeDraft {
 // "comp" e o padrao porque e a unica referencia que existe em toda composicao:
 // work area pode cobrir a comp inteira e camada exige que a selecao pertenca a
 // uma so — nenhuma das duas e um ponto de partida seguro.
-const DEFAULT_SEND_TO_EDGE: SendToEdgeDraft = { edge: "start", reference: "comp" };
+const DEFAULT_SEND_TO_EDGE: SendToEdgeDraft = getToolStarterDraft<SendToEdgeDraft>("sendToEdge");
 
 type CloneKeysMode = "repeat" | "mirror";
 type CloneKeysDestination = "after" | "cti" | "comp-end" | "layer-end" | "work-area-end";
 interface CloneKeysDraft { mode: CloneKeysMode; destination: CloneKeysDestination; }
-const DEFAULT_CLONE_KEYS: CloneKeysDraft = { mode: "repeat", destination: "after" };
+const DEFAULT_CLONE_KEYS: CloneKeysDraft = getToolStarterDraft<CloneKeysDraft>("cloneKeys");
 
 type AnimateKineticDirection = "in" | "out" | "both";
 type AnimateKineticSplit = "none" | "chars" | "words" | "lines";
@@ -619,17 +558,7 @@ interface AnimateKineticDraft {
   staggerFrames: number;
   splitMode: AnimateKineticSplit;
 }
-const DEFAULT_ANIMATE_KINETIC: AnimateKineticDraft = {
-  direction: "in",
-  durationFrames: 15,
-  overshoot: 1.2,
-  rotation: 0,
-  scale: 100,
-  opacity: 100,
-  staggerFrames: 0,
-  // O host aceita "none" | "chars" | "words" | "lines"; estava "word".
-  splitMode: "none"
-};
+const DEFAULT_ANIMATE_KINETIC: AnimateKineticDraft = getToolStarterDraft<AnimateKineticDraft>("animateKinetic");
 
 type InertialStartMode = "everyKey" | "lastKey";
 
@@ -641,13 +570,7 @@ interface InertialDraft {
   startMode: InertialStartMode;
 }
 
-const DEFAULT_INERTIAL: InertialDraft = {
-  amplitude: 100,
-  frequency: 2,
-  decay: 4,
-  maxDurationFrames: 30,
-  startMode: "lastKey"
-};
+const DEFAULT_INERTIAL: InertialDraft = getToolStarterDraft<InertialDraft>("inertial");
 
 type JumpDirection = "up" | "down" | "left" | "right";
 
@@ -660,14 +583,7 @@ interface JumpDraft {
   staggerFrames: number;
 }
 
-const DEFAULT_JUMP: JumpDraft = {
-  height: 300,
-  durationFrames: 20,
-  direction: "up",
-  squashStretch: 12,
-  anticipationFrames: 4,
-  staggerFrames: 0
-};
+const DEFAULT_JUMP: JumpDraft = getToolStarterDraft<JumpDraft>("jump");
 
 type LookAtAxis = "+z" | "-z" | "+x" | "-x" | "+y" | "-y";
 
@@ -678,12 +594,7 @@ interface LookAtDraft {
   constrainAxes: { x: boolean; y: boolean; z: boolean };
 }
 
-const DEFAULT_LOOK_AT: LookAtDraft = {
-  targetLayerName: "",
-  forwardAxis: "+z",
-  offsetOrientation: [0, 0, 0],
-  constrainAxes: { x: false, y: false, z: false }
-};
+const DEFAULT_LOOK_AT: LookAtDraft = getToolStarterDraft<LookAtDraft>("lookAt");
 
 type EchoOperator =
   | "add"
@@ -703,14 +614,7 @@ interface EchoDraft {
   animate: boolean;
 }
 
-const DEFAULT_ECHO: EchoDraft = {
-  echoTime: -0.05,
-  numberOfEchoes: 6,
-  startingIntensity: 0.9,
-  decay: 0.7,
-  operator: "screen",
-  animate: false
-};
+const DEFAULT_ECHO: EchoDraft = getToolStarterDraft<EchoDraft>("echo");
 
 type FastEditOperation =
   | "trimToWorkArea"
@@ -739,11 +643,7 @@ interface BreakShapeDraft {
   namingMode: BreakShapeNaming;
 }
 
-const DEFAULT_BREAK_SHAPE: BreakShapeDraft = {
-  keepOriginal: true,
-  preserveAppearance: true,
-  namingMode: "groupName"
-};
+const DEFAULT_BREAK_SHAPE: BreakShapeDraft = getToolStarterDraft<BreakShapeDraft>("breakShape");
 
 type EffectorFalloff = "linear" | "smoothstep" | "bezier";
 
@@ -757,15 +657,7 @@ interface EffectorDraft {
   opacityAmount: number;
 }
 
-const DEFAULT_EFFECTOR: EffectorDraft = {
-  radius: 400,
-  falloffCurve: "smoothstep",
-  curve: { x1: 0.33, y1: 0, x2: 0.67, y2: 1 },
-  positionAmount: 200,
-  scaleAmount: 0,
-  rotationAmount: 0,
-  opacityAmount: 0
-};
+const DEFAULT_EFFECTOR: EffectorDraft = getToolStarterDraft<EffectorDraft>("effector");
 
 /** Os onze presets do CHMS-024, na ordem em que o painel os lista. */
 const CAMERA_TRANSITION_PRESETS = [
@@ -791,14 +683,7 @@ interface CameraTransitionDraft {
   curve: { x1: number; y1: number; x2: number; y2: number };
 }
 
-const DEFAULT_CAMERA_TRANSITION: CameraTransitionDraft = {
-  preset: "pushIn",
-  durationFrames: 24,
-  amount: 400,
-  // Ease in-out simétrico: o começo e o fim suaves, que é o que um movimento de
-  // câmera pede por padrão.
-  curve: { x1: 0.33, y1: 0, x2: 0.67, y2: 1 }
-};
+const DEFAULT_CAMERA_TRANSITION: CameraTransitionDraft = getToolStarterDraft<CameraTransitionDraft>("cameraTransition");
 
 type CylinderFaceMode = "inward" | "outward" | "none";
 
@@ -812,15 +697,7 @@ interface CylinderDraft {
   createCamera: boolean;
 }
 
-const DEFAULT_CYLINDER: CylinderDraft = {
-  radius: 500,
-  height: 0,
-  count: 8,
-  faceMode: "outward",
-  startAngle: 0,
-  arcDegrees: 360,
-  createCamera: true
-};
+const DEFAULT_CYLINDER: CylinderDraft = getToolStarterDraft<CylinderDraft>("cylinder");
 
 type CubeSourceMode = "sixLayers" | "duplicateOne";
 
@@ -831,12 +708,7 @@ interface CubeDraft {
   createCamera: boolean;
 }
 
-const DEFAULT_CUBE: CubeDraft = {
-  size: 400,
-  sourceMode: "duplicateOne",
-  faceFit: true,
-  createCamera: true
-};
+const DEFAULT_CUBE: CubeDraft = getToolStarterDraft<CubeDraft>("cube");
 
 type WaveMode = "transform" | "effect";
 type WaveDirection = "horizontal" | "vertical";
@@ -852,16 +724,7 @@ interface WaveDraft {
   bake: boolean;
 }
 
-const DEFAULT_WAVE: WaveDraft = {
-  mode: "transform",
-  amplitude: 40,
-  frequency: 50,
-  speed: 1,
-  direction: "vertical",
-  phase: 0,
-  falloff: 0,
-  bake: false
-};
+const DEFAULT_WAVE: WaveDraft = getToolStarterDraft<WaveDraft>("wave");
 
 type TileMode = "effect" | "grid";
 
@@ -875,15 +738,7 @@ interface TileDraft {
   spacing: number;
 }
 
-const DEFAULT_TILE: TileDraft = {
-  mode: "effect",
-  outputWidth: 200,
-  outputHeight: 200,
-  mirrorEdges: true,
-  gridRows: 3,
-  gridColumns: 3,
-  spacing: 200
-};
+const DEFAULT_TILE: TileDraft = getToolStarterDraft<TileDraft>("tile");
 
 type GlitchMode = "continuous" | "oneShot";
 
@@ -897,17 +752,16 @@ interface GlitchDraft {
   durationFrames: number;
 }
 
-const DEFAULT_GLITCH: GlitchDraft = {
-  mode: "continuous",
-  intensity: 0.6,
-  frequency: 12,
-  rgbSplit: 15,
-  displacement: 40,
-  seed: 1,
-  durationFrames: 12
-};
+const DEFAULT_GLITCH: GlitchDraft = getToolStarterDraft<GlitchDraft>("glitch");
 
-type ParallaxFullOperation = "create" | "adjust" | "remove" | "subtle" | "truck" | "vertical" | "dolly" | "autoFocus" | "zoom" | "wiggle" | "bake";
+const PARALLAX_MOVE_OPS = [
+  "subtle",
+  "truck",
+  "vertical",
+  "dolly"
+] as const;
+
+type ParallaxFullOperation = "create" | "adjust" | "remove" | (typeof PARALLAX_MOVE_OPS)[number] | "autoFocus" | "zoom" | "wiggle" | "bake";
 
 interface ParallaxFullDraft {
   operation: ParallaxFullOperation;
@@ -922,18 +776,7 @@ interface ParallaxFullDraft {
   stepFrames: number;
 }
 
-const DEFAULT_PARALLAX_FULL: ParallaxFullDraft = {
-  operation: "create",
-  targetLayerName: "",
-  focusOffset: 0,
-  enableDepthOfField: true,
-  zoomLevel: 2000,
-  zoomDurationFrames: 30,
-  frequency: 2,
-  amplitude: 50,
-  seed: 12345,
-  stepFrames: 1
-};
+const DEFAULT_PARALLAX_FULL: ParallaxFullDraft = getToolStarterDraft<ParallaxFullDraft>("parallaxFull");
 
 type ParallaxOrderMode = "selection" | "timeline";
 
@@ -944,26 +787,16 @@ interface ParallaxDraft {
   createCamera: boolean;
   preserveFraming: boolean;
   controllerName: string;
+  /** linear | front | area: how the planes share the depth. */
+  depthMode: "linear" | "front" | "area";
+  /** Background behind the focal plane, as a fraction of the camera zoom (0–0.5). */
+  backgroundDepth: number;
+  reverseOrder: boolean;
 }
 
-const DEFAULT_PARALLAX: ParallaxDraft = {
-  depthStep: 0,
-  strength: 1,
-  orderMode: "selection",
-  createCamera: true,
-  preserveFraming: true,
-  controllerName: "Parallax"
-};
+const DEFAULT_PARALLAX: ParallaxDraft = getToolStarterDraft<ParallaxDraft>("parallax");
 
-const DEFAULT_FAST_EDIT: FastEditDraft = {
-  operation: "trimToWorkArea",
-  duration: 10,
-  frameRate: 25,
-  width: 1920,
-  height: 1080,
-  precomposeName: "Precomp",
-  moveAllAttributes: true
-};
+const DEFAULT_FAST_EDIT: FastEditDraft = getToolStarterDraft<FastEditDraft>("fastEdit");
 
 type ShapeType =
   | "circle"
@@ -985,17 +818,7 @@ interface ShapeLibraryDraft {
   points: number;
 }
 
-const DEFAULT_SHAPE_LIBRARY: ShapeLibraryDraft = {
-  shapeType: "rectangle",
-  size: 200,
-  // RGB normalizado, que e o que o After Effects usa. Cinza claro para a forma
-  // aparecer contra o fundo escuro de uma composicao recem-criada.
-  fillColor: [0.85, 0.85, 0.85],
-  strokeColor: [0, 0, 0],
-  strokeWidth: 0,
-  roundness: 20,
-  points: 5
-};
+const DEFAULT_SHAPE_LIBRARY: ShapeLibraryDraft = getToolStarterDraft<ShapeLibraryDraft>("shapeLibrary");
 
 type TrimPathScope = "layer" | "group";
 
@@ -1009,15 +832,7 @@ interface TrimPathDraft {
   reverse: boolean;
 }
 
-const DEFAULT_TRIM_PATH: TrimPathDraft = {
-  scope: "layer",
-  start: 0,
-  end: 100,
-  offset: 0,
-  animate: true,
-  durationFrames: 24,
-  reverse: false
-};
+const DEFAULT_TRIM_PATH: TrimPathDraft = getToolStarterDraft<TrimPathDraft>("trimPath");
 
 type PasteTimeMode = "cti" | "layerIn" | "original";
 type PasteMappingMode = "matchName" | "order";
@@ -1030,13 +845,7 @@ interface CopyKeysDraft {
   includeTangents: boolean;
 }
 
-const DEFAULT_COPY_KEYS: CopyKeysDraft = {
-  pasteTime: "cti",
-  mappingMode: "matchName",
-  relativeTiming: true,
-  includeExpressions: false,
-  includeTangents: true
-};
+const DEFAULT_COPY_KEYS: CopyKeysDraft = getToolStarterDraft<CopyKeysDraft>("pasteKeys");
 
 type TimeMarkerLoopType = "cycle" | "pingpong";
 
@@ -1047,31 +856,26 @@ interface TimeMarkerLoopDraft {
   autoCreateMarkers: boolean;
   clampToLayer: boolean;
 }
-const DEFAULT_TIME_MARKER_LOOP: TimeMarkerLoopDraft = {
-  inMarkerName: "in",
-  outMarkerName: "out",
-  loopType: "cycle",
-  autoCreateMarkers: false,
-  clampToLayer: true
-};
+const DEFAULT_TIME_MARKER_LOOP: TimeMarkerLoopDraft = getToolStarterDraft<TimeMarkerLoopDraft>("timeMarkerLoop");
 
 
 
 interface AiToVectorDraft { keepOriginal: boolean; }
-const DEFAULT_AI_TO_VECTOR: AiToVectorDraft = { keepOriginal: true };
+const DEFAULT_AI_TO_VECTOR: AiToVectorDraft = getToolStarterDraft<AiToVectorDraft>("aiToVector");
 
 interface TextToVectorDraft { keepOriginal: boolean; }
-const DEFAULT_TEXT_TO_VECTOR: TextToVectorDraft = { keepOriginal: true };
+const DEFAULT_TEXT_TO_VECTOR: TextToVectorDraft = getToolStarterDraft<TextToVectorDraft>("textToVector");
 
-interface ParticlesDraft { birthRate: number; longevity: number; velocity: number; }
-const DEFAULT_PARTICLES: ParticlesDraft = { birthRate: 2, longevity: 1, velocity: 1 };
+type ParticlesDraft = ParticleSettings;
+const DEFAULT_PARTICLES: ParticlesDraft = getToolStarterDraft<ParticlesDraft>("particles");
+const particleEditSession = new ParticleEditSession(DEFAULT_PARTICLES);
 
 interface TextureDraft { blendMode: string; opacity: number; }
-const DEFAULT_TEXTURE: TextureDraft = { blendMode: "overlay", opacity: 100 };
+const DEFAULT_TEXTURE: TextureDraft = getToolStarterDraft<TextureDraft>("texture");
 
 interface CleanFinding { id: number | null; name: string; origin: "managed" | "external"; risk: "low" | "high"; }
 interface CleanDraft { scanToken: string | null; findings: CleanFinding[]; selectedItemIds: number[]; }
-const DEFAULT_CLEAN: CleanDraft = { scanToken: null, findings: [], selectedItemIds: [] };
+const DEFAULT_CLEAN: CleanDraft = getToolStarterDraft<CleanDraft>("clean");
 type MessageKey = Parameters<I18n["t"]>[0];
 type ToolId =
   | "loopOut"
@@ -1284,7 +1088,7 @@ const TOOLS: readonly ToolDefinition[] = [
     render: (regions, i18n) => renderTextEffect("wordReveal", regions, i18n, state.busy),
     disabledReason: (i18n) => textEffectsDisabledReason("wordReveal", "ae.text.word-reveal", i18n),
     apply: (shell, i18n, logger, client) => applyTextEffect("wordReveal", "ae.text.word-reveal", shell, i18n, logger, client),
-    reset: () => resetTextEffect("wordReveal"),
+    reset: () => resetTextEffect("wordReveal",state.context ? quickContextFromState(state.context) : undefined),
     load: refreshWordRevealControls,
     loadLabelKey: "wordReveal.readControls"
   },
@@ -1297,7 +1101,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: (i18n) => textEffectsDisabledReason("variableMorph", "ae.text.variable-morph", i18n),
     apply: (shell, i18n, logger, client) => applyTextEffect("variableMorph", "ae.text.variable-morph", shell, i18n, logger, client),
     load: refreshVariableMorphControls,
-    reset: () => resetTextEffect("variableMorph")
+    reset: () => resetTextEffect("variableMorph",state.context ? quickContextFromState(state.context) : undefined)
   },
   {
     id: "styleSwap",
@@ -1307,7 +1111,7 @@ const TOOLS: readonly ToolDefinition[] = [
     render: (regions, i18n) => renderTextEffect("styleSwap", regions, i18n, state.busy),
     disabledReason: (i18n) => textEffectsDisabledReason("styleSwap", "ae.text.style-swap", i18n),
     apply: (shell, i18n, logger, client) => applyTextEffect("styleSwap", "ae.text.style-swap", shell, i18n, logger, client),
-    reset: () => resetTextEffect("styleSwap")
+    reset: () => resetTextEffect("styleSwap",state.context ? quickContextFromState(state.context) : undefined)
   },
   {
     id: "verticalPulse",
@@ -1330,7 +1134,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: loopOutDisabledReason,
     apply: applyLoopOut,
     reset: () => {
-      state.loopOut = { ...DEFAULT_LOOP_OUT };
+      state.loopOut = getToolStarterDraft<typeof state.loopOut>("loopOut", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1342,7 +1146,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: smoothDisabledReason,
     apply: applySmooth,
     reset: () => {
-      state.smooth = { ...DEFAULT_SMOOTH };
+      state.smooth = getToolStarterDraft<typeof state.smooth>("smooth", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1354,7 +1158,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: wiggleDisabledReason,
     apply: applyWiggle,
     reset: () => {
-      state.wiggle = { ...DEFAULT_WIGGLE };
+      state.wiggle = getToolStarterDraft<typeof state.wiggle>("wiggle", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1366,7 +1170,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: flickerDisabledReason,
     apply: applyFlicker,
     reset: () => {
-      state.flicker = { ...DEFAULT_FLICKER };
+      state.flicker = getToolStarterDraft<typeof state.flicker>("flicker", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1379,7 +1183,7 @@ const TOOLS: readonly ToolDefinition[] = [
     apply: applyRename,
     load: refreshRenamePreview,
     reset: () => {
-      state.rename = { ...DEFAULT_RENAME };
+      state.rename = getToolStarterDraft<typeof state.rename>("rename", state.context ? quickContextFromState(state.context) : undefined);
       state.renamePreview = null;
       state.previewError = null;
     }
@@ -1394,7 +1198,7 @@ const TOOLS: readonly ToolDefinition[] = [
     apply: applyReverseOrder,
     load: refreshReversePreview,
     reset: () => {
-      state.reverseOrder = { ...DEFAULT_REVERSE_ORDER };
+      state.reverseOrder = getToolStarterDraft<typeof state.reverseOrder>("reverseOrder", state.context ? quickContextFromState(state.context) : undefined);
       state.reversePreview = null;
       state.previewError = null;
     }
@@ -1409,7 +1213,7 @@ const TOOLS: readonly ToolDefinition[] = [
     apply: applyAnchor,
     load: refreshAnchorPreview,
     reset: () => {
-      state.anchor = { ...DEFAULT_ANCHOR };
+      state.anchor = getToolStarterDraft<typeof state.anchor>("anchor", state.context ? quickContextFromState(state.context) : undefined);
       state.anchorPreview = null;
       state.previewError = null;
     }
@@ -1424,7 +1228,7 @@ const TOOLS: readonly ToolDefinition[] = [
     apply: applyCutKeys,
     load: refreshCutKeysPreview,
     reset: () => {
-      state.cutKeys = { ...DEFAULT_CUT_KEYS };
+      state.cutKeys = getToolStarterDraft<typeof state.cutKeys>("cutKeys", state.context ? quickContextFromState(state.context) : undefined);
       state.cutKeysPreview = null;
       state.previewError = null;
     }
@@ -1439,7 +1243,7 @@ const TOOLS: readonly ToolDefinition[] = [
     apply: applyDelay,
     load: refreshDelayPreview,
     reset: () => {
-      state.delay = { ...DEFAULT_DELAY };
+      state.delay = getToolStarterDraft<typeof state.delay>("delay", state.context ? quickContextFromState(state.context) : undefined);
       state.delayPreview = null;
       state.previewError = null;
     }
@@ -1453,7 +1257,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: flipDisabledReason,
     apply: applyFlip,
     reset: () => {
-      state.flip = { ...DEFAULT_FLIP };
+      state.flip = getToolStarterDraft<typeof state.flip>("flip", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1465,7 +1269,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: createNullDisabledReason,
     apply: applyCreateNull,
     reset: () => {
-      state.createNull = { ...DEFAULT_CREATE_NULL };
+      state.createNull = getToolStarterDraft<typeof state.createNull>("createNull", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1479,7 +1283,7 @@ const TOOLS: readonly ToolDefinition[] = [
     load: loadLayers,
     loadLabelKey: "action.refreshLayers",
     reset: () => {
-      state.parent = { ...DEFAULT_PARENT };
+      state.parent = getToolStarterDraft<typeof state.parent>("parent", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1491,7 +1295,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: textBoxDisabledReason,
     apply: applyTextBox,
     reset: () => {
-      state.textBox = { ...DEFAULT_TEXT_BOX };
+      state.textBox = getToolStarterDraft<typeof state.textBox>("textBox", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1517,7 +1321,7 @@ const TOOLS: readonly ToolDefinition[] = [
     render: renderAiToVector,
     disabledReason: aiToVectorDisabledReason,
     apply: applyAiToVector,
-    reset: () => { state.aiToVector = { ...DEFAULT_AI_TO_VECTOR }; }
+    reset: () => { state.aiToVector = getToolStarterDraft<typeof state.aiToVector>("aiToVector", state.context ? quickContextFromState(state.context) : undefined); }
   },
   {
     id: "textToVector",
@@ -1527,7 +1331,7 @@ const TOOLS: readonly ToolDefinition[] = [
     render: renderTextToVector,
     disabledReason: textToVectorDisabledReason,
     apply: applyTextToVector,
-    reset: () => { state.textToVector = { ...DEFAULT_TEXT_TO_VECTOR }; }
+    reset: () => { state.textToVector = getToolStarterDraft<typeof state.textToVector>("textToVector", state.context ? quickContextFromState(state.context) : undefined); }
   },
   {
     id: "particles",
@@ -1537,7 +1341,7 @@ const TOOLS: readonly ToolDefinition[] = [
     render: renderParticles,
     disabledReason: particlesDisabledReason,
     apply: applyParticles,
-    reset: () => { state.particles = { ...DEFAULT_PARTICLES }; }
+    reset: () => { state.particles = getToolStarterDraft<typeof state.particles>("particles", state.context ? quickContextFromState(state.context) : undefined); particleEditSession.reset(state.particles); }
   },
   {
     id: "texture",
@@ -1547,7 +1351,7 @@ const TOOLS: readonly ToolDefinition[] = [
     render: renderTexture,
     disabledReason: textureDisabledReason,
     apply: applyTexture,
-    reset: () => { state.texture = { ...DEFAULT_TEXTURE }; }
+    reset: () => { state.texture = getToolStarterDraft<typeof state.texture>("texture", state.context ? quickContextFromState(state.context) : undefined); }
   },
   {
     id: "clean",
@@ -1587,7 +1391,7 @@ const TOOLS: readonly ToolDefinition[] = [
     render: renderSendToEdge,
     disabledReason: sendToEdgeDisabledReason,
     apply: applySendToEdge,
-    reset: () => { state.sendToEdge = { ...DEFAULT_SEND_TO_EDGE }; }
+    reset: () => { state.sendToEdge = getToolStarterDraft<typeof state.sendToEdge>("sendToEdge", state.context ? quickContextFromState(state.context) : undefined); }
   },
   {
     id: "neon",
@@ -1597,7 +1401,7 @@ const TOOLS: readonly ToolDefinition[] = [
     render: renderNeon,
     disabledReason: neonDisabledReason,
     apply: applyNeon,
-    reset: () => { state.neon = { ...DEFAULT_NEON }; }
+    reset: () => { state.neon = getToolStarterDraft<typeof state.neon>("neon", state.context ? quickContextFromState(state.context) : undefined); }
   },
   {
     id: "beat",
@@ -1617,7 +1421,7 @@ const TOOLS: readonly ToolDefinition[] = [
     render: renderCloneKeys,
     disabledReason: cloneKeysDisabledReason,
     apply: applyCloneKeys,
-    reset: () => { state.cloneKeys = { ...DEFAULT_CLONE_KEYS }; }
+    reset: () => { state.cloneKeys = getToolStarterDraft<typeof state.cloneKeys>("cloneKeys", state.context ? quickContextFromState(state.context) : undefined); }
   },
   {
     id: "timeController",
@@ -1627,7 +1431,7 @@ const TOOLS: readonly ToolDefinition[] = [
     render: renderTimeController,
     disabledReason: timeControllerDisabledReason,
     apply: applyTimeController,
-    reset: () => { state.timeController = { ...DEFAULT_TIME_CONTROLLER }; }
+    reset: () => { state.timeController = getToolStarterDraft<typeof state.timeController>("timeController", state.context ? quickContextFromState(state.context) : undefined); }
   },
   {
     id: "animateKinetic",
@@ -1637,7 +1441,7 @@ const TOOLS: readonly ToolDefinition[] = [
     render: renderAnimateKinetic,
     disabledReason: animateKineticDisabledReason,
     apply: applyAnimateKinetic,
-    reset: () => { state.animateKinetic = { ...DEFAULT_ANIMATE_KINETIC }; }
+    reset: () => { state.animateKinetic = getToolStarterDraft<typeof state.animateKinetic>("animateKinetic", state.context ? quickContextFromState(state.context) : undefined); }
   },
   {
     id: "inertial",
@@ -1648,7 +1452,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: inertialDisabledReason,
     apply: applyInertial,
     reset: () => {
-      state.inertial = { ...DEFAULT_INERTIAL };
+      state.inertial = getToolStarterDraft<typeof state.inertial>("inertial", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1660,7 +1464,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: jumpDisabledReason,
     apply: applyJump,
     reset: () => {
-      state.jump = { ...DEFAULT_JUMP };
+      state.jump = getToolStarterDraft<typeof state.jump>("jump", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1712,7 +1516,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: orbitDisabledReason,
     apply: applyOrbit,
     reset: () => {
-      state.orbit = { ...DEFAULT_ORBIT };
+      state.orbit = getToolStarterDraft<OrbitDraft>("orbit",state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1724,7 +1528,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: breakShapeDisabledReason,
     apply: applyBreakShape,
     reset: () => {
-      state.breakShape = { ...DEFAULT_BREAK_SHAPE };
+      state.breakShape = getToolStarterDraft<typeof state.breakShape>("breakShape", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1736,7 +1540,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: effectorDisabledReason,
     apply: applyEffector,
     reset: () => {
-      state.effector = { ...DEFAULT_EFFECTOR };
+      state.effector = getToolStarterDraft<typeof state.effector>("effector", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1748,7 +1552,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: cameraTransitionDisabledReason,
     apply: applyCameraTransition,
     reset: () => {
-      state.cameraTransition = { ...DEFAULT_CAMERA_TRANSITION };
+      state.cameraTransition = getToolStarterDraft<typeof state.cameraTransition>("cameraTransition", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1760,7 +1564,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: cylinderDisabledReason,
     apply: applyCylinder,
     reset: () => {
-      state.cylinder = { ...DEFAULT_CYLINDER };
+      state.cylinder = getToolStarterDraft<typeof state.cylinder>("cylinder", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1772,7 +1576,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: cubeDisabledReason,
     apply: applyCube,
     reset: () => {
-      state.cube = { ...DEFAULT_CUBE };
+      state.cube = getToolStarterDraft<typeof state.cube>("cube", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1792,7 +1596,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: waveDisabledReason,
     apply: applyWave,
     reset: () => {
-      state.wave = { ...DEFAULT_WAVE };
+      state.wave = getToolStarterDraft<typeof state.wave>("wave", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1804,7 +1608,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: tileDisabledReason,
     apply: applyTile,
     reset: () => {
-      state.tile = { ...DEFAULT_TILE };
+      state.tile = getToolStarterDraft<typeof state.tile>("tile", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1816,7 +1620,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: glitchDisabledReason,
     apply: applyGlitch,
     reset: () => {
-      state.glitch = { ...DEFAULT_GLITCH };
+      state.glitch = getToolStarterDraft<typeof state.glitch>("glitch", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1828,7 +1632,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: echoDisabledReason,
     apply: applyEcho,
     reset: () => {
-      state.echo = { ...DEFAULT_ECHO };
+      state.echo = getToolStarterDraft<typeof state.echo>("echo", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1840,8 +1644,8 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: parallaxFullDisabledReason,
     apply: applyParallaxFull,
     reset: () => {
-      state.parallax = { ...DEFAULT_PARALLAX };
-      state.parallaxFull = { ...DEFAULT_PARALLAX_FULL };
+      state.parallax = getToolStarterDraft<typeof state.parallax>("parallax", state.context ? quickContextFromState(state.context) : undefined);
+      state.parallaxFull = getToolStarterDraft<typeof state.parallaxFull>("parallaxFull", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1857,7 +1661,7 @@ const TOOLS: readonly ToolDefinition[] = [
     // nunca era pedida, e o painel mostrava o campo sempre vazio.
     load: refreshFastEditSummary,
     reset: () => {
-      state.fastEdit = { ...DEFAULT_FAST_EDIT };
+      state.fastEdit = getToolStarterDraft<typeof state.fastEdit>("fastEdit", state.context ? quickContextFromState(state.context) : undefined);
       state.fastEditSummary = null;
     }
   },
@@ -1870,7 +1674,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: shapeLibraryDisabledReason,
     apply: applyShapeLibrary,
     reset: () => {
-      state.shapeLibrary = { ...DEFAULT_SHAPE_LIBRARY };
+      state.shapeLibrary = getToolStarterDraft<typeof state.shapeLibrary>("shapeLibrary", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1882,7 +1686,7 @@ const TOOLS: readonly ToolDefinition[] = [
     disabledReason: trimPathDisabledReason,
     apply: applyTrimPath,
     reset: () => {
-      state.trimPath = { ...DEFAULT_TRIM_PATH };
+      state.trimPath = getToolStarterDraft<typeof state.trimPath>("trimPath", state.context ? quickContextFromState(state.context) : undefined);
     }
   },
   {
@@ -1893,7 +1697,7 @@ const TOOLS: readonly ToolDefinition[] = [
     render: renderTimeMarkerLoop,
     disabledReason: timeMarkerLoopDisabledReason,
     apply: applyTimeMarkerLoop,
-    reset: () => { state.timeMarkerLoop = { ...DEFAULT_TIME_MARKER_LOOP }; }
+    reset: () => { state.timeMarkerLoop = getToolStarterDraft<typeof state.timeMarkerLoop>("timeMarkerLoop", state.context ? quickContextFromState(state.context) : undefined); }
   },
 ];
 
@@ -1901,8 +1705,12 @@ const VIEWS: ShellView[] = [
   // Entrada de busca, favoritos e ferramentas recentes; Quick preserva a view.
   { id: "home", labelKey: "library.browse", titleKey: "view.home.title" },
   { id: "ease", primary: true, labelKey: "tool.ease.name", titleKey: "tool.ease.name" },
+  // Parallax e camera (ADR 0007): aba propria ao lado de Suavizacao, a pedido do usuario.
+  { id: "parallax", primary: true, labelKey: "nav.parallax", titleKey: "view.parallax.title" },
   { id: "presets", labelKey: "library.presets", titleKey: "library.presets" },
-  { id: "tools", labelKey: "library.edit", titleKey: "view.tools.title" },
+  // Banco de mídia (ADR 0008): aba própria ao lado de Presets, a pedido do usuário (2026-11-13).
+  { id: "stock", primary: true, labelKey: "nav.stock", titleKey: "view.stock.title" },
+  { id: "tools", utilityOnly: true, labelKey: "library.edit", titleKey: "view.tools.title" },
   { id: "context", utilityOnly: true, labelKey: "nav.context", titleKey: "view.context.title" },
   { id: "system", utilityOnly: true, labelKey: "nav.system", titleKey: "view.system.title" },
   { id: "diagnostics", utilityOnly: true, labelKey: "nav.diagnostics", titleKey: "view.diagnostics.title" },
@@ -1964,6 +1772,9 @@ const state: {
   fastEdit: FastEditDraft;
   parallax: ParallaxDraft;
   parallaxFull: ParallaxFullDraft;
+  /** Which half of the Parallax tab is open. */
+  parallaxSegment: "parallax" | "camera";
+  stockType: StockMediaType;
   breakShape: BreakShapeDraft;
   effector: EffectorDraft;
   cameraTransition: CameraTransitionDraft;
@@ -2035,6 +1846,8 @@ const state: {
   fastEdit: { ...DEFAULT_FAST_EDIT },
   parallax: { ...DEFAULT_PARALLAX },
   parallaxFull: { ...DEFAULT_PARALLAX_FULL },
+  parallaxSegment: "camera",
+  stockType: "video",
   breakShape: { ...DEFAULT_BREAK_SHAPE },
   effector: { ...DEFAULT_EFFECTOR },
   cameraTransition: { ...DEFAULT_CAMERA_TRANSITION },
@@ -2081,31 +1894,13 @@ function start(): void {
     return locale === "host" ? undefined : locale;
   }, authorizeCreativeOperation);
 
-  if (adapter) {
-    // "pt_BR", com underscore — formato medido no After Effects 26.3, não
-    // suposto. `normalizeLocale` cuida da conversão.
-    panelHostLocale = adapter.uiLocale();
-    logger.setHost("after-effects");
+  if (adapter) { panelHostLocale = adapter.uiLocale(); logger.setHost("after-effects"); }
+  let themeHost: (ThemeHost & CepKeyboardHost) | undefined;
+  try { const Constructor = (window as unknown as {CSInterface?: new()=>ThemeHost & CepKeyboardHost}).CSInterface; if(Constructor) themeHost = new Constructor(); } catch { /* Screenshot fallback remains available. */ }
+  hostTheme = createHostTheme(document.documentElement, themeHost, () => panelPreferences.snapshot().theme);
+  const cepKeyboard = createCepKeyboard(document,window,themeHost,window.navigator?.platform??'');
+  window.addEventListener('unload',()=>cepKeyboard.dispose(),{once:true});
 
-    // Moti.on Theme Sync: Inject native highlight color and typography
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const csInterface = new (window as any).CSInterface();
-      const applyTheme = () => {
-        const env = csInterface.getHostEnvironment();
-        if (env && env.appSkinInfo) {
-          const rgb = env.appSkinInfo.systemHighlightColor;
-          if (rgb) {
-            const highlightHex = `#${Math.round(rgb.red).toString(16).padStart(2, '0')}${Math.round(rgb.green).toString(16).padStart(2, '0')}${Math.round(rgb.blue).toString(16).padStart(2, '0')}`;
-            document.documentElement.style.setProperty('--focus-ring', highlightHex);
-          }
-          document.documentElement.style.setProperty('--ch-font-family', '"Adobe Clean", sans-serif');
-        }
-      };
-      applyTheme();
-      csInterface.addEventListener("com.adobe.csxs.events.ThemeColorChanged", applyTheme);
-    } catch { /* Ignored */ }
-  }
 
   const preferredLocale = panelPreferences.snapshot().locale;
   i18n.setLocale(preferredLocale === "host" ? panelHostLocale : preferredLocale);
@@ -2115,6 +1910,7 @@ function start(): void {
   // regras de português quando o After Effects está em en-US.
   document.documentElement.lang = i18n.locale();
   document.documentElement.setAttribute("data-runtime", "cep");
+  document.documentElement.setAttribute("data-host", "after-effects");
 
   const initialView = panelPreferences.snapshot().lastView;
   const shell = createShell({
@@ -2149,12 +1945,38 @@ function start(): void {
       : { region: "Notifications", dismiss: "Dismiss", queued: n => `${n} queued notifications`, success: "Complete", error: "Error", warning: "Warning", info: "Information" }
   });
   mount.appendChild(globalFeedback.element);
-  window.addEventListener("unload", () => { rememberPresetNavigation(); disposeView?.(); globalFeedback?.dispose(); });
+  const motionEnv = browserMotionEnv(window, document.documentElement);
+  const stopToastMotion = attachToastMotion(globalFeedback.element, motionEnv);
+  window.addEventListener("unload", () => { rememberPresetNavigation(); disposeView?.(); toolNumbers.dispose(); hostTheme?.dispose(); globalFeedback?.dispose(); });
   // Grava a navegação da galeria em segundo plano; só escreve quando mudou.
   const navigationMemory = setInterval(rememberPresetNavigation, 2000);
   window.addEventListener("unload", () => clearInterval(navigationMemory));
 
   shell.observeWidth(window);
+  const stopNavIndicator = attachNavIndicator(shell.element(), motionEnv);
+  // Abas e ícones do topo deslizam quando o painel cruza um breakpoint, em vez de pular.
+  const navBar = shell.element().querySelector<HTMLElement>(".ch-nav");
+  const stopNavGlide = navBar ? attachReflowGlide(motionEnv, navBar, { nodes: () => Array.from(navBar.querySelectorAll<HTMLElement>(".ch-nav__item, .ch-nav__utilities > *")), threshold: 8 }) : () => {};
+  // Os grupos das ferramentas deslizam ao trocar de faixa. O rodapé de Presets
+  // acompanha o resize diretamente para manter os alvos separados do slider.
+  const stopViewGlides = attachReflowGlideTree(motionEnv, shell.element(), [
+    ".ch-tool-grid", ".ch-quick-dock-header", ".ch-quick-rail", ".ch-quick-strip", ".ch-quick-actions",
+    ".ch-ease-actions__primary", ".ch-ease-actions__buttons", ".ch-ease-main", ".ch-curve__header", ".ch-ease-values",
+    ".ch-ease-sides", ".ch-ease-library-header", ".ch-ease-grid", ".ch-camera-grid",
+    ".ch-quick-toolbar", ".ch-elements-categories", ".ch-preset-tabs"
+  ], { threshold: 8 });
+  const stopMicro = attachMicroInteractions(shell.element(), motionEnv);
+  const stopNavShortcuts = attachNavShortcuts(document, { navigate: view => shell.navigate(view), blocked: () => isColorPickerOpen(document) });
+  const mac = /mac/i.test(typeof navigator === "undefined" ? "" : navigator.platform ?? "");
+  const richTooltip = createRichTooltip(document, motionEnv, { root: mount, mac });
+  const palette = createCommandPalette(document, motionEnv, {
+    root: mount, locale: () => i18n.locale(), entries: () => paletteEntries(shell, i18n, logger, adapter),
+    async readContext() { if (adapter && !state.busy) await readPaletteContext(adapter.client, i18n, logger); }
+  });
+  const stopPaletteTrigger = attachPaletteTrigger(shell, palette, i18n, mac);
+  const stopChipGlides = attachChipGlides(mount, motionEnv);
+  const stopTogglePop = attachTogglePop(mount);
+  window.addEventListener("unload", () => { stopToastMotion(); stopNavIndicator(); stopNavGlide(); stopViewGlides(); stopMicro(); stopNavShortcuts(); richTooltip.dispose(); stopPaletteTrigger(); palette.dispose(); stopChipGlides(); stopTogglePop(); });
   logger.info("panel.started", { command: "panel.started" });
 
   if (!adapter) {
@@ -2166,10 +1988,193 @@ function start(): void {
 
   // A partir daqui o painel se mantem sozinho: trocar de composicao ou de
   // selecao na timeline chega aqui sem o usuario apertar nada.
-  const pararWatch = startContextWatch(shell, logger, adapter.client);
+  pointerPresence = trackPointerPresence(document);
+  window.addEventListener("unload", () => { pointerPresence?.dispose(); pointerPresence = null; });
+  const pararWatch = startContextWatch(shell, logger, adapter.client, palette.refresh);
   window.addEventListener("unload", pararWatch);
   const pararSuperficies = startEaseSurfaces(shell, i18n, adapter.client);
   window.addEventListener("unload", pararSuperficies);
+}
+
+/** Tools the library grid leaves out (own view, Quick dock, or reached from another tool). */
+const LIBRARY_HIDDEN_TOOLS: readonly ToolId[] = ["ease", "cloneKeys", "reverseKeys", "reverseValues", "sendToEdge", "anchor", "createNull", "flip"];
+
+const initializedToolDrafts = new Set<ToolId>();
+function openToolEditor(shell: Shell, tool: ToolDefinition): void {
+  // Opening previews the shared premium recipe; only an explicit Apply mutates AE.
+  // Sample context on first opening, then keep the user's draft across remounts.
+  if (!initializedToolDrafts.has(tool.id)) {
+    if (tool.id !== "gradient") tool.reset?.();
+    initializedToolDrafts.add(tool.id);
+  }
+  state.activeTool = tool.id;
+  state.lastError = null;
+  openToolView(shell, tool.id);
+  void tool.load?.();
+}
+
+/** Settings rows the palette can jump to (control id, label key). */
+const PALETTE_SETTINGS: readonly (readonly [string, MessageKey])[] = [
+  ["settings-language", "settings.language.label"], ["settings-reduce-motion", "settings.reduceMotion.label"],
+  ["settings-pin-dock", "settings.pinDock"], ["settings-preview-autoplay", "settings.preview.autoplay"], ["settings-preview-size", "settings.preview.size"]
+];
+const PALETTE_VIEW_KEYS: readonly (readonly [string, string])[] = [["home", "1"], ["ease", "2"], ["parallax", "3"], ["presets", "4"], ["stock", ""], ["settings", "5"], ["system", ""], ["diagnostics", ""]];
+
+async function readPaletteContext(client: Client, i18n: I18n, logger: MotionLogger): Promise<ContextData> {
+  const response = await client.execute<ContextData>("ae.context.read");
+  logger.recordResponse("ae.context.read", response);
+  if (!response.ok || !response.data) throw new Error(i18n.locale() === "pt-BR" ? "Não foi possível ler a seleção." : "Could not read the selection.");
+  state.context = response.data;
+  return response.data;
+}
+
+function revealPalettePreset(shell: Shell, id: string): void {
+  if (state.busy) return;
+  if (revealPresetInWorkspace) { revealPresetInWorkspace(id); return; }
+  pendingPaletteReveal = id;
+  presetNavigation.view = "browse";
+  if (shell.activeView() === "presets") shell.rerender();
+  else shell.navigate("presets");
+}
+
+/** Command palette (F5): everything the panel offers, run through the same paths as its controls. */
+function paletteEntries(shell: Shell, i18n: I18n, logger: MotionLogger, adapter: ReturnType<typeof createAeHostAdapter>): PaletteEntry[] {
+  const pt = i18n.locale() === "pt-BR";
+  const entries: PaletteEntry[] = [];
+  for (const [id, key] of PALETTE_VIEW_KEYS) {
+    const view = VIEWS.find(item => item.id === id);
+    if (!view) continue;
+    entries.push({ id: `view.${id}`, kind: "view", title: i18n.t(view.titleKey), detail: pt ? "Ir para a tela" : "Go to view",
+      keywords: `${id} ${i18n.t(view.labelKey)}`, ...(key ? { shortcut: key } : {}), run: () => shell.navigate(id),
+      suggested: id === "ease" && (state.context?.selectionSelectedKeyCount ?? 0) >= 2 });
+  }
+  if (adapter) {
+    const client = adapter.client;
+    for (const tool of TOOLS) {
+      if (LIBRARY_HIDDEN_TOOLS.includes(tool.id)) continue;
+      const open = (): void => openToolEditor(shell, tool);
+      const how = pt ? "Abrir ajustes" : "Open settings";
+      entries.push({ id: `tool.${tool.id}`, kind: ["gradient", "neon"].includes(tool.id) ? "effect" : "tool", title: i18n.t(tool.nameKey),
+        detail: i18n.t(CATEGORY_NAME_KEY[TOOL_CATEGORY[tool.id]]), hint: how,
+        keywords: `${TOOL_ALIASES[tool.id] ?? ""} ${i18n.t(tool.descriptionKey)}`,
+        reason: state.busy ? state.busyReason : null,
+        run: open,
+        adjust: open });
+    }
+    for (const [action, abbreviation, namePt, nameEn] of QUICK_ALL_ACTIONS) {
+      const effect = action.startsWith("effect-");
+      const reason = (context: ContextData | null): string | null => quickActionReason(action, {
+        busy: state.busy, hasComp: Boolean(context?.isComposition), selectionCount: context?.selectionLayerCount ?? 0
+      }, i18n.locale()) ?? (effect && (context?.selectionLockedLayerCount ?? 0) > 0 ? pt ? "Desbloqueie as camadas selecionadas" : "Unlock the selected layers" : null);
+      entries.push({ id: `quick.${action}`, kind: effect ? "effect" : "quick", title: pt ? namePt : nameEn,
+        hint: effect ? pt ? "Aplicar à seleção" : "Apply to selection" : pt ? "Executar ação" : "Run action",
+        keywords: `${abbreviation} ${namePt} ${nameEn}`, reason: reason(state.context),
+        suggested: action === "create-null" || action === "effect-blur",
+        operation: { type: "apply", async execute() {
+          const context = await readPaletteContext(client, i18n, logger);
+          const blocked = reason(context);
+          if (blocked) return { ok: false, message: blocked };
+          const ok = await applyQuickAction(action, shell, i18n, logger, client);
+          return { ok, message: state.lastError ?? "" };
+        } } });
+    }
+    for (const preset of GALLERY_PRESETS) {
+      const motion = preset.motion;
+      if (motion?.retired) continue;
+      const show = (): void => revealPalettePreset(shell, preset.id);
+      const entry: PaletteEntry = { id: `preset.${preset.id}`, kind: "preset", title: preset.displayName[i18n.locale()] ?? preset.id,
+        keywords: `${preset.tags} ${preset.displayName["pt-BR"]} ${preset.displayName["en-US"]}`, adjust: show, run: show,
+        reason: state.busy ? state.busyReason : null, hint: pt ? "Ver na galeria" : "Show in gallery" };
+      if (motion?.mode === "transition" && preset.applyMode === "layers") {
+        const readTarget = (context: ContextData | null): PaletteTarget => {
+          const count = context?.selectionLayerCount ?? 0;
+          const comp = context?.activeItemName ?? (pt ? "Composição" : "Composition");
+          const label = context?.isComposition ? `${comp} · ${count} ${pt ? count === 1 ? "camada selecionada" : "camadas selecionadas" : count === 1 ? "selected layer" : "selected layers"}` : "";
+          const reason = state.busy ? pt ? "Aguarde a operação atual." : "Wait for the current operation."
+            : !context?.isComposition ? pt ? "Abra uma composição." : "Open a composition."
+            : !count ? pt ? "Selecione uma camada." : "Select a layer."
+            : !context.selectionSignature || context.selectionTruncated ? pt ? "Não foi possível identificar toda a seleção." : "Could not identify the full selection."
+            : requirementReason(motionLibraryRequirements(motion), { selectionCount: count, textLayers: context.selectionTextLayerCount, lockedLayers: context.selectionLockedLayerCount }, pt);
+          return { key: JSON.stringify([context?.projectPath, context?.projectName, context?.activeItemName, context?.selectionSignature, count]), label, reason };
+        };
+        entry.hint = pt ? "Escolher fase" : "Choose phase";
+        entry.reason = readTarget(state.context).reason;
+        entry.operation = {
+          type: "phase", currentTarget: () => readTarget(state.context),
+          readTarget: async () => readTarget(await readPaletteContext(client, i18n, logger)),
+          async execute(phase) {
+            const draft = presetNavigation.drafts?.[preset.id] ?? defaultLibraryOptions(motion, state.context?.compFrameRate ?? undefined);
+            const result = await applyLibraryCommand("phase-apply", { presetId: motion.id, ...draft, phase }, preset.id, shell, i18n, logger, client);
+            if (result.ok && shell.activeView() !== "presets") shell.navigate("presets");
+            return result;
+          }
+        };
+      }
+      entries.push(entry);
+    }
+  }
+  for (const [id, key] of PALETTE_SETTINGS) {
+    entries.push({ id: `setting.${id}`, kind: "setting", title: i18n.t(key), detail: i18n.t("view.settings.title"),
+      run: () => {
+        shell.navigate("settings");
+        // Selects focus their visible trigger (data-focus-key); the id belongs to the hidden native control.
+        const control = document.querySelector<HTMLElement>(`[data-focus-key="${id}"]`) ?? document.getElementById(id);
+        if (!control) return;
+        scrollIntoViewSmooth(browserMotionEnv(window, document.documentElement), control, undefined, 24);
+        control.focus({ preventScroll: true });
+      } });
+  }
+  return entries;
+}
+
+/** A checkbox or radio the user flips pops once on the spring (F8); redraws never replay it. */
+function attachTogglePop(root: HTMLElement): () => void {
+  const onChange = (event: Event): void => {
+    const input = event.target as HTMLInputElement | null;
+    if (!input || input.tagName !== "INPUT" || (input.type !== "checkbox" && input.type !== "radio")) return;
+    input.setAttribute("data-pop", "true");
+    setTimeout(() => input.removeAttribute("data-pop"), aeMotionMs("spring-move") + 40);
+  };
+  root.addEventListener("change", onChange);
+  return () => root.removeEventListener?.("change", onChange);
+}
+
+/** The nav search button and Ctrl/Cmd+K. CEP delivers Ctrl+K to the panel (motion probe, F0). */
+function attachPaletteTrigger(shell: Shell, palette: CommandPalette, i18n: I18n, mac: boolean): () => void {
+  const label = (): string => i18n.locale() === "pt-BR" ? "Buscar comandos" : "Search commands";
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "ch-nav__item ch-nav__search";
+  trigger.id = "nav-command-palette";
+  trigger.setAttribute("aria-haspopup", "dialog");
+  trigger.setAttribute("aria-controls", palette.element.id);
+  trigger.setAttribute("aria-keyshortcuts", mac ? "Meta+K" : "Control+K");
+  trigger.setAttribute("aria-label", label());
+  trigger.title = label();
+  // The language can change in Settings; the name follows before the tip reads it.
+  const relabel = (): void => { trigger.setAttribute("aria-label", label()); if (trigger.hasAttribute("title")) trigger.title = label(); };
+  trigger.addEventListener("mouseenter", relabel);
+  trigger.addEventListener("focus", relabel);
+  trigger.appendChild(createIcon(document, "search"));
+  // In the icon-only nav (narrow docks) the tool browser reads as a grid of tools, not a house.
+  const home = shell.element().querySelector?.('.ch-nav__item[data-view="home"]');
+  const houseIcon = home?.getElementsByTagName?.("svg")[0];
+  if (home && houseIcon) home.replaceChild(createIcon(document, "tools"), houseIcon);
+  // Design system 2026-11: a aba Parallax mostra uma câmera, como no estudo (o desenho do rig fica na ferramenta).
+  const parallaxTab = shell.element().querySelector?.('.ch-nav__item[data-view="parallax"]');
+  const rigIcon = parallaxTab?.getElementsByTagName?.("svg")[0];
+  if (parallaxTab && rigIcon) parallaxTab.replaceChild(createIcon(document, "videoCamera"), rigIcon);
+  const settings = shell.element().querySelector?.('.ch-nav__utilities > .ch-nav__item[data-view="settings"]');
+  if (settings?.parentNode) settings.parentNode.insertBefore(trigger, settings);
+  trigger.addEventListener("click", () => palette.toggle());
+  const onKeydown = (event: Event): void => {
+    const key = event as KeyboardEvent;
+    if (!isPaletteKey(key) || key.defaultPrevented || key.repeat || isColorPickerOpen(document)) return;
+    key.preventDefault();
+    palette.toggle();
+  };
+  document.addEventListener("keydown", onKeydown);
+  return () => { document.removeEventListener?.("keydown", onKeydown); trigger.parentNode?.removeChild(trigger); };
 }
 
 interface Wiring {
@@ -2309,7 +2314,7 @@ async function applyQuickPreset(
       label: i18n.t("feedback.adjust"), dismissOnPress: true,
       onPress: () => {
         state.activeTool = tool.id; state.lastError = null;
-        if (shell.activeView() === "tools") shell.rerender(); else shell.navigate("tools");
+        openToolView(shell, tool.id);
         void tool.load?.();
       }
     }]);
@@ -2363,10 +2368,15 @@ async function applyQuickPreset(
  * verificá-la lendo o próprio código-fonte com expressão regular.
  */
 async function applyLibraryCommand(action: "apply" | "phase-apply" | "remove" | "bake" | "camera-transition", args: Record<string, unknown>, recentId: string,
-  shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
-  if (state.busy) return;
+  shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<{ok:boolean;message:string}> {
   const pt = i18n.locale() === "pt-BR";
-  setBusy(shell, true); state.lastError = null;
+  if (state.busy) return {ok:false,message:pt?"Aguarde a operação atual.":"Wait for the current operation."};
+  // Preserve library state during phase application and failed/no-op outcomes.
+  const retainBrowse = action === "phase-apply" && shell.activeView() === "presets" && presetNavigation.view !== "edit";
+  if (retainBrowse) { state.busy = true; shell.setBusy(true); }
+  else setBusy(shell, true);
+  let openEdit = false;
+  state.lastError = null;
   shell.setStatus(pt ? "Atualizando preset…" : "Updating preset…", "busy");
   try {
     const command = `ae.presets.${action}`;
@@ -2374,25 +2384,33 @@ async function applyLibraryCommand(action: "apply" | "phase-apply" | "remove" | 
     logger.recordResponse(command, response);
     if (!response.ok) {
       state.lastError = response.error?.message || (pt ? "Não foi possível aplicar o preset." : "Unable to apply preset.");
-      shell.setStatus(state.lastError, "error"); return;
+      shell.setStatus(state.lastError, "error"); return {ok:false,message:state.lastError};
     }
     if (recentId) panelPreferences.recordUse(recentId);
     const count = Number((response.data as { appliedCount?: number } | null)?.appliedCount ?? 0);
     // setBusy(false) recreates the workspace; choose Edit before that render so
     // its fresh inspection loads the values actually applied in After Effects.
-    if (count > 0 && (action === "apply" || action === "phase-apply" || action === "camera-transition")) presetNavigation.view = "edit";
+    if (count > 0 && (action === "apply" || action === "phase-apply" || action === "camera-transition")) { presetNavigation.view = "edit"; openEdit = true; }
     // Removing a managed preset returns to the browser context retained before
     // application, including the selected card, filters and scroll position.
     if (count > 0 && action === "remove") presetNavigation.view = "browse";
     const message = action === "camera-transition" && count ? pt ? "Transição pronta. O marcador CUT indica o corte." : "Transition ready. The CUT marker marks the cut." : count ? pt ? action === "remove" ? "Preset removido da seleção." : action === "bake" ? "Animação convertida em keyframes." : "Preset aplicado. Ajuste na aba Editar." : action === "remove" ? "Preset removed." : action === "bake" ? "Animation baked to keyframes." : "Preset applied. Adjust in the Edit tab." : pt ? "Nenhum preset gerenciado na seleção." : "No managed preset in selection.";
     shell.setStatus(message, count ? "ok" : "busy");
     if (response.warnings.length) reportHostWarnings(response.warnings);
-  } catch { shell.setStatus(i18n.t("message.failureWithoutReason"), "error"); }
-  finally { setBusy(shell, false); }
+    return {ok:count>0,message};
+  } catch {
+    state.lastError=i18n.t("message.failureWithoutReason");
+    shell.setStatus(state.lastError, "error");
+    return {ok:false,message:state.lastError};
+  } finally {
+    if (retainBrowse && !openEdit) { state.busy=false;state.busyReason=null;shell.setBusy(false);refreshPresetContext?.();selectionCoordinator?.refresh(); }
+    else setBusy(shell, false);
+  }
 }
 
-async function applyQuickAction(action: QuickAction, shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
-  if (state.busy) return;
+/** Resolves true only when the host confirmed the operation (drives the tile check mark). */
+async function applyQuickAction(action: QuickAction, shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<boolean> {
+  if (state.busy) return false;
   const name = quickActionName(action, i18n.locale());
   state.lastError = null;
   setBusy(shell, true, i18n.t("status.applyingQuick", { tool: name }));
@@ -2401,7 +2419,7 @@ async function applyQuickAction(action: QuickAction, shell: Shell, i18n: I18n, l
     const command = action === "save-frame" ? "ae.quick-tools.save-frame" : "ae.quick-tools.apply";
     const response = await client.execute(command, { action }, { mode: "quick", emitLiveControls: false, preserveSelection: true });
     logger.recordResponse(command, response);
-    if (!response.ok) { reportFailure(shell, i18n, response); return; }
+    if (!response.ok) { reportFailure(shell, i18n, response); return false; }
     const data = response.data as { changedItems: number; unchangedItems: number; outputPath?: string };
     const message = data.outputPath ? `${name}: ${data.outputPath}`
       : i18n.t(data.unchangedItems && !data.changedItems ? "message.quickReused" : "message.quickAppliedOperation", { tool: name });
@@ -2410,14 +2428,133 @@ async function applyQuickAction(action: QuickAction, shell: Shell, i18n: I18n, l
     const current = await client.execute<ContextData>("ae.context.read");
     logger.recordResponse("ae.context.read", current);
     if (current.ok && current.data) state.context = current.data;
+    return true;
   } catch {
     state.lastError = i18n.t("message.failureWithoutReason");
     shell.setStatus(state.lastError, "error");
+    return false;
   } finally { setBusy(shell, false); }
 }
 
+/** Parallax lives in its own tab next to Suavização; every other tool opens in Ferramentas. */
+function openToolView(shell: Shell, toolId: ToolId): void {
+  const view = toolId === "parallax" ? "parallax" : "tools";
+  if (toolId === "parallax") state.parallaxSegment = "parallax";
+  if (shell.activeView() === view) shell.rerender(); else shell.navigate(view);
+}
+
+/** The two halves of the Parallax tab: the depth rig and the camera shots. One task at a time. */
+function parallaxSegments(shell: Shell, i18n: I18n): HTMLElement {
+  const english = i18n.locale().startsWith("en");
+  const group = createElement(document, "div", "ch-chip-group ch-parallax-segments");
+  group.setAttribute("role", "tablist");
+  for (const [id, pt, en] of [["camera", "Câmera", "Camera"], ["parallax", "Parallax", "Parallax"]] as const) {
+    const tab = createElement(document, "button", "ch-chip", english ? en : pt);
+    tab.id = "parallax-segment-" + id;
+    tab.setAttribute("type", "button");
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(state.parallaxSegment === id));
+    tab.setAttribute("data-active", String(state.parallaxSegment === id));
+    tab.addEventListener("click", () => {
+      if (state.busy || state.parallaxSegment === id) return;
+      state.parallaxSegment = id;
+      shell.rerender();
+    });
+    group.appendChild(tab);
+  }
+  return group;
+}
+
+/** VÍDEOS · IMAGENS · EFEITOS SONOROS: a flat tab strip across the top, as in the approved reference. */
+function stockSegments(shell: Shell, i18n: I18n): HTMLElement {
+  const english = i18n.locale().startsWith("en");
+  const group = createElement(document, "div", "ch-stock-tabs");
+  group.setAttribute("role", "tablist");
+  group.setAttribute("aria-label", english ? "Media type" : "Tipo de mídia");
+  for (const [id, pt, en] of [["video", "Vídeos", "Videos"], ["image", "Imagens", "Images"], ["audio", "Efeitos sonoros", "Sound effects"]] as const) {
+    const label = english ? en : pt;
+    const tab = createElement(document, "button", "ch-stock-tab");
+    tab.appendChild(createElement(document, "span", "ch-stock-tab__label", label));
+    if (id === "audio") {
+      const short = createElement(document, "span", "ch-stock-tab__short", english ? "Sounds" : "Sons");
+      short.setAttribute("aria-hidden", "true");
+      tab.appendChild(short);
+    }
+    tab.setAttribute("aria-label", label);
+    tab.id = "stock-segment-" + id;
+    tab.setAttribute("type", "button");
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(state.stockType === id));
+    tab.setAttribute("data-active", String(state.stockType === id));
+    tab.addEventListener("click", () => {
+      if (state.busy || state.stockType === id) return;
+      state.stockType = id;
+      shell.rerender();
+    });
+    group.appendChild(tab);
+  }
+  return group;
+}
+
+/** Banco de mídia tab (`ae.stock.import`, ADR 0008): search the providers enabled on the server and import. */
+function renderStockView(regions: RenderRegions, shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): void {
+  shell.setViewTitle(i18n.t("view.stock.title"));
+  regions.content.classList.add("ch-stock-body");
+  regions.content.appendChild(stockSegments(shell, i18n));
+  const library = createStockLibrary(document, {
+    i18n, type: state.stockType, client: loadStockClient, download: downloadStock,
+    execute: async args => {
+      const response = await client.execute("ae.stock.import", { ...args });
+      logger.recordResponse("ae.stock.import", response);
+      return response;
+    },
+    error: response => response.error ? hostFailureMessage(response.error, i18n) : i18n.t("message.failureWithoutReason"),
+    context: () => ({ isComposition: Boolean(state.context?.isComposition) }),
+    busy: value => setBusy(shell, value),
+    openAccount: () => shell.navigate("settings"),
+    openUrl: openExternal,
+    copy: copyText
+  });
+  regions.content.appendChild(library.element);
+  regions.actions.appendChild(library.actions);
+  refreshToolContext = () => library.refresh();
+  const stopPositioning = keepFeedbackAboveActions(regions.actions);
+  disposeView = () => { library.dispose(); stopPositioning(); refreshToolContext = null; };
+}
+
+/** Câmera half of the Parallax tab (ADR 0007). */
+function renderCameraView(regions: RenderRegions, shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): void {
+  shell.setViewTitle(i18n.t("view.parallax.title"));
+  regions.content.appendChild(parallaxSegments(shell, i18n));
+  const panel = createCameraPanel(document, {
+    i18n,
+    execute: async (command, args, options) => {
+      const response = await client.execute(command, args, options ?? {});
+      logger.recordResponse(command, response);
+      return response;
+    },
+    error: (response) => response.error ? hostFailureMessage(response.error, i18n) : i18n.t("message.failureWithoutReason"),
+    busy: value => { state.busy = value; shell.setBusy(value); },
+    status: (message, tone) => shell.setStatus(message, tone === "error" ? "error" : "ok"),
+    // The root attribute carries system OR internal "reduce motion" (the matchMedia read missed the toggle).
+    ...(typeof window !== "undefined" ? frameDriver(window, document.documentElement) : {})
+  });
+  regions.content.classList.add("ch-camera-body");
+  regions.content.appendChild(panel.element);
+  // Wide docks: the choreography settings are the fixed side column (design system 2026-11).
+  regions.content.appendChild(panel.side);
+  regions.actions.setAttribute("data-tool-footer", "");
+  regions.actions.appendChild(panel.reason);
+  regions.actions.appendChild(panel.actions);
+  const refresh = (): void => { void panel.refresh(); };
+  refreshToolContext = refresh;
+  const stopPositioning = keepFeedbackAboveActions(regions.actions);
+  disposeView = () => { panel.dispose(); stopPositioning(); refreshToolContext = null; regions.actions.removeAttribute("data-tool-footer"); };
+  void panel.refresh();
+}
+
 function renderToolBrowser(
-  regions: RenderRegions, i18n: I18n, shell: Shell, logger: MotionLogger, client: Client
+  regions: RenderRegions, i18n: I18n, shell: Shell, logger: MotionLogger, client: Client, quiet = false
 ): void {
   regions.content.classList.add("ch-browser-body");
   regions.content.parentElement?.setAttribute("data-browser", "true");
@@ -2434,50 +2571,71 @@ function renderToolBrowser(
   });
   grid.id = "library-anchor-grid";
   anchor.appendChild(grid);
-  const edit = (tool: ToolDefinition): void => {
-    state.activeTool = tool.id;
-    state.lastError = null;
-    if (shell.activeView() === "tools") shell.rerender();
-    else shell.navigate("tools");
-    void tool.load?.();
-  };
+  const edit = (tool: ToolDefinition): void => openToolEditor(shell, tool);
   const quickOptions = () => ({ locale: i18n.locale(), busy: state.busy,
     hasComp: Boolean(state.context?.isComposition), selectionCount: state.context?.selectionLayerCount ?? 0 });
+  const quickPreferences = panelPreferences.snapshot();
   const quickActions = createQuickActions(document, {
-    ...quickOptions(), onAction: action => { void applyQuickAction(action, shell, i18n, logger, client); }
+    ...quickOptions(), anchor: grid, keyScope: anchor, quietEntry: quiet,
+    onAction: action => applyQuickAction(action, shell, i18n, logger, client),
+    ...(quickPreferences.quickFavorites ? { favorites: quickPreferences.quickFavorites.filter(isQuickAction) } : {}),
+    recents: quickPreferences.quickRecent.filter(isQuickAction),
+    onFavoritesChange: favorites => panelPreferences.setQuickFavorites(favorites),
+    onRecentsChange: recents => { if (recents[0]) panelPreferences.recordQuickUse(recents[0]); },
+    onNotice: message => shell.setStatus(message, "ok"),
+    onAnchorKey: index => {
+      const cell = Array.from(grid.getElementsByTagName("button"))[index] as HTMLButtonElement | undefined;
+      if (!cell) return;
+      if (cell.disabled) {
+        const english = i18n.locale().startsWith("en");
+        const reason = state.busy ? state.busyReason : !state.context?.isComposition
+          ? (english ? "Open a composition." : "Abra uma composição.")
+          : (english ? "Select a layer to move the anchor." : "Selecione uma camada para mover a âncora.");
+        shell.setStatus(reason ?? "", "error");
+        return;
+      }
+      cell.click();
+    },
+    onDenied: (action, reason) => shell.setStatus(`${quickActionName(action, i18n.locale())}: ${reason}`, "error")
   });
-  anchor.appendChild(quickActions);
+  // Toolbar above, then the anchor (always at the left) beside the tile strip, recents below.
+  anchor.setAttribute("data-layout", "stacked");
+  const quickMain = createElement(document, "div", "ch-quick-anchor__main");
+  quickMain.appendChild(quickActions.anchorPanel ?? grid);
+  quickMain.appendChild(quickActions.strip);
+  anchor.appendChild(quickMain);
+  anchor.appendChild(quickActions.footer);
   const dock = createQuickDock(document, {
     content: anchor, locale: i18n.locale(), pinned: panelPreferences.snapshot().quickDockPinned,
+    accessory: quickActions.rail,
+    openAccessory: quickActions.toolbar,
     onPinChange: pinned => panelPreferences.setQuickDockPinned(pinned),
-    onHeightChange: height => document.documentElement.style.setProperty("--ch-feedback-bottom", `${height + 38}px`)
+    onHeightChange: height => setFeedbackLift(document.documentElement, height + FEEDBACK_BASE_LIFT)
   });
 
   const icons = ["ease", "reverseOrder", "wiggle", "cameraTransition", "shapeLibrary", "neon", "context"];
-  const libraryItems = (): LibraryItem[] => TOOLS.filter(tool => !["ease", "cloneKeys", "reverseKeys", "reverseValues", "sendToEdge", "anchor", "createNull", "flip"].includes(tool.id)).map(tool => {
-      const profile = tool.commandId ? getQuickProfile(tool.commandId) ?? operationQuickProfile(tool.id) : undefined;
-      const quick = Boolean(tool.id !== "beat" && tool.id !== "ease" && profile && !getDescriptor(tool.commandId ?? "")?.destructive);
+  const libraryItems = (): LibraryItem[] => TOOLS.filter(tool => !LIBRARY_HIDDEN_TOOLS.includes(tool.id)).map(tool => {
       return {
         id: tool.id, name: i18n.t(tool.nameKey), description: i18n.t(tool.descriptionKey),
         aliases: TOOL_ALIASES[tool.id] ?? tool.id, category: TOOL_CATEGORY[tool.id],
-        interaction: tool.id === "anchor" ? "direct-control" : quick ? "quick" : "configure",
-        reason: tool.id === "ease" || tool.id === "anchor" ? (state.busy ? state.busyReason : null) : tool.disabledReason(i18n),
+        interaction: tool.id === "anchor" ? "direct-control" : "configure",
+        reason: state.busy ? state.busyReason : null,
         edit: () => edit(tool),
         run: () => {
           if (tool.id === "anchor") { dock.expandAndFocus(); return; }
-          if (profile && tool.commandId) void applyQuickPreset(tool, tool.commandId, profile, shell, i18n, logger, client);
+          edit(tool);
         }
       };
     });
   const library = createQuickLibrary(document, {
-    locale: i18n.locale(), navigation: libraryNavigation, preferences: panelPreferences, anchor: dock.element,
+    locale: i18n.locale(), navigation: libraryNavigation, preferences: panelPreferences, anchor: dock.element, quietEntry: quiet,
     categories: TOOL_CATEGORIES.map((id, index) => ({ id, name: i18n.t(CATEGORY_NAME_KEY[id]), icon: icons[index] ?? "tools" })),
     onNavigate: () => { state.toolQuery = libraryNavigation.query; panelPreferences.setCategory(libraryNavigation.category); },
     items: libraryItems()
   });
   refreshLibrary = () => {
     library.update(libraryItems());
-    updateQuickActions(quickActions, quickOptions());
+    quickActions.update(quickOptions());
     for (const node of grid.querySelectorAll<HTMLButtonElement>("button")) {
       node.disabled = state.busy || !state.context?.isComposition || !state.context.selectionLayerCount;
       node.setAttribute("aria-disabled", String(node.disabled));
@@ -2486,7 +2644,7 @@ function renderToolBrowser(
     shell.refreshChrome();
   };
   quickTileFeedback = library.setFeedback;
-  disposeView = () => { library.dispose(); dock.dispose(); refreshLibrary = null; quickTileFeedback = null; document.documentElement.style.setProperty("--ch-feedback-bottom", "38px"); };
+  disposeView = () => { library.dispose(); quickActions.dispose(); dock.dispose(); refreshLibrary = null; quickTileFeedback = null; setFeedbackLift(document.documentElement); };
   regions.content.appendChild(library.element);
   refreshLibrary();
 
@@ -2506,40 +2664,73 @@ const TOOL_ALIASES: Partial<Record<ToolId, string>> = {
 
 /** Adapt existing editor drafts to commands that perform an immediate operation.
  * Rig generators without a reusable-instance contract stay in their editor. */
-function operationQuickProfile(id: ToolId): Pick<QuickProfile, "derive" | "liveControls"> | undefined {
-  const factories: Partial<Record<ToolId, NonNullable<QuickProfile["derive"]>>> = {
-    wordReveal: context => ({ ...WORD_REVEAL_DEFAULTS,
-      durationFrames: Math.max(4, Math.min(180, Math.round(context.fps * 1.2))),
-      staggerFrames: Math.max(0, Math.min(60, Math.round(context.fps / 6))) }),
-    variableMorph: context => ({ ...PROXIMITY_MORPH_DEFAULTS, radius: Math.max(1, Math.min(5000, 250 * context.compHeight / 1080)) }),
-    verticalPulse: context => ({ ...pulsePresetArgs("impact", context.fps) }),
-    styleSwap: context => ({ ...STYLE_SWAP_DEFAULTS, durationFrames: Math.max(1, Math.min(300, Math.round(context.fps * 0.8))) }),
-    parallax: () => ({ ...DEFAULT_PARALLAX }),
-    ease: () => ({ ...cloneEaseDraft(DEFAULT_EASE), x1: 0.333, y1: 0, x2: 0.667, y2: 1 }),
-    delay: () => delayArgs({ ...DEFAULT_DELAY, shiftMode: "keyframes" }),
-    lookAt: () => ({ ...DEFAULT_LOOK_AT, upAxis: "+y", offsetOrientation: [...DEFAULT_LOOK_AT.offsetOrientation], constrainAxes: { ...DEFAULT_LOOK_AT.constrainAxes } }),
-    orbit: context => ({ ...deriveOrbitPreset(context) }),
-    copyKeys: () => ({}),
-    pasteKeys: () => ({ ...DEFAULT_COPY_KEYS }),
-    cloneKeys: () => ({ ...DEFAULT_CLONE_KEYS }),
-    aiToVector: () => ({ ...DEFAULT_AI_TO_VECTOR }),
-    textToVector: () => ({ ...DEFAULT_TEXT_TO_VECTOR }),
-    jump: context => ({ ...DEFAULT_JUMP, height: 180 * context.compHeight / 1080,
-      durationFrames: Math.max(1, Math.round(context.fps * 0.67)) }),
-    cameraTransition: context => ({ ...DEFAULT_CAMERA_TRANSITION,
-      durationFrames: Math.max(1, Math.round(context.fps)), amount: 400 * context.compWidth / 1920, cameraName: "" }),
-    shapeLibrary: context => ({ ...DEFAULT_SHAPE_LIBRARY,
-      size: 200 * context.compHeight / 1080, position: [context.compWidth / 2, context.compHeight / 2] })
-  };
-  const derive = factories[id];
-  return derive ? { derive, liveControls: [] } : undefined;
-}
 
 function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): void {
+  const previousView = lastRenderedView;
+  // Views enter from the side of their tab; a rerender of the same view stays still. Home ↔ tools
+  // keeps the library in place: only the inspector moves (sliding sheet below 720 px, column above).
+  if (regions.content.getAttribute?.("data-active") === "true") {
+    const inspectorOnly = (previousView === "home" && viewId === "tools") || (previousView === "tools" && viewId === "home");
+    if (inspectorOnly) regions.content.setAttribute("data-active", "false");
+    else regions.content.setAttribute("data-direction", viewDirection(previousView, viewId));
+  }
+  previousRenderedView = previousView;
+  lastRenderedView = viewId;
   disposeView?.();
+  toolNumbers.dispose();
   disposeView = null;
   refreshLibrary = null; refreshToolContext = null; refreshPresetContext = null;
   globalFeedback?.refreshLabels();
+  if (viewId !== "tools" || !state.activeTool || !wiring.adapter) {
+    renderViewContent(viewId, regions, wiring); return;
+  }
+  regions.content.classList.add("ch-context-body");
+  regions.content.parentElement?.setAttribute("data-browser","true");
+  const workspace = createElement(document, "div", "ch-context-workspace");
+  const library = createElement(document, "div", "ch-context-library");
+  const inspector = createElement(document, "aside", "ch-context-inspector");
+  const heading = createElement(document, "div", "ch-context-heading");
+  const title = createElement(document, "strong", ""); title.id = "tool-inspector-title";
+  inspector.setAttribute("aria-labelledby", title.id);
+  heading.appendChild(title);
+  // Assigned below, once the sheet exists; the close button, Esc and the scrim all end here.
+  let closeInspector = (): void => {};
+  const close = button(document, {label:wiring.i18n.locale() === "pt-BR" ? "Fechar ajustes" : "Close adjustments", onClick:() => closeInspector()});
+  close.id = "tool-inspector-close"; heading.appendChild(close);
+  const content = createElement(document, "div", "ch-context-content");
+  const actions = createElement(document, "div", "ch-context-actions");
+  inspector.appendChild(heading); inspector.appendChild(content); inspector.appendChild(actions);
+  workspace.appendChild(library); workspace.appendChild(inspector); regions.content.appendChild(workspace);
+  const sheet = attachInspectorSheet(document, browserMotionEnv(window, document.documentElement), {
+    workspace, library, inspector, swap: previousView === "tools", onDismiss: () => closeInspector()
+  });
+  closeInspector = () => {
+    const id = state.activeTool;
+    sheet.close(() => {
+      regions.shell.navigate("home");
+      document.getElementById(`library-adjust-${id}`)?.focus();
+    });
+  };
+  renderToolBrowser({...regions,content:library},wiring.i18n,regions.shell,wiring.logger,wiring.adapter.client,true);
+  const disposeLibrary = disposeView as (()=>void)|null;
+  const updateLibrary = refreshLibrary;
+  disposeView = null;
+  const contextualShell:Shell = {...regions.shell,setViewTitle:text => {title.textContent=text;}};
+  renderViewContent(viewId,{content,actions,shell:contextualShell},wiring);
+  const disposeEditor = disposeView as (()=>void)|null;
+  refreshLibrary = updateLibrary;
+  const escape = (event:KeyboardEvent):void => {
+    if(event.key === "Escape" && !event.defaultPrevented && !isColorPickerOpen(document) && !content.querySelector('[aria-expanded="true"]')) {
+      event.preventDefault(); close.click();
+    }
+  };
+  inspector.addEventListener("keydown",escape);
+  disposeView = () => {inspector.removeEventListener?.("keydown",escape);sheet.dispose();disposeEditor?.();disposeLibrary?.();};
+  close.focus();
+}
+
+/** Existing editors retain their drafts, validation and command ownership. */
+function renderViewContent(viewId:string, regions:RenderRegions, wiring:Wiring):void {
   const { i18n, logger, adapter, motionPreference } = wiring;
 
   if (viewId === "settings") {
@@ -2575,14 +2766,19 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
   // mantendo o design limpo.
 
   if (viewId === "home") {
-    renderToolBrowser(regions, i18n, shell, logger, client);
+    // Back from the inspector the library was on screen all along: no new entry.
+    renderToolBrowser(regions, i18n, shell, logger, client, previousRenderedView === "tools");
     return;
   }
 
   if (viewId === "presets") {
     regions.content.classList.add("ch-browser-body");
     regions.content.parentElement?.setAttribute("data-browser", "true");
+    const revealId = pendingPaletteReveal;
+    pendingPaletteReveal = undefined;
     const gallery = createPresetWorkspace(document, {
+      revealId,
+      scrollToReveal: Boolean(revealId),
       cache: presetWorkspaceCache,
       canMutate: accountCanMutate,
       watchInspection: (read, enabled) => {
@@ -2601,16 +2797,40 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
       locale: i18n.locale(), preferences: panelPreferences, busy: state.busy, navigation: presetNavigation,
       apply: (preset, settings, mode) => {
         if (preset.category === "camera-transitions" && mode !== "layers") {
-          void applyLibraryCommand("camera-transition", { presetId: preset.motion!.id,
+          return applyLibraryCommand("camera-transition", { presetId: preset.motion!.id,
             durationFrames: settings?.durationFrames ?? preset.params.durationFrames,
-            intensity: settings?.intensity ?? preset.params.intensity }, preset.id, shell, i18n, logger, client); return;
+            intensity: settings?.intensity ?? preset.params.intensity }, preset.id, shell, i18n, logger, client);
         }
-        if (preset.motion) { void applyLibraryCommand(preset.motion.mode==="transition"?"phase-apply":"apply", { presetId: preset.motion.id, ...settings }, preset.id, shell, i18n, logger, client); return; }
+        if (preset.motion) return applyLibraryCommand(preset.motion.mode==="transition"?"phase-apply":"apply", { presetId: preset.motion.id, ...settings }, preset.id, shell, i18n, logger, client);
         const tool = TOOLS.find(item => item.commandId === preset.handler);
         if (tool) void applyQuickPreset(tool, preset.handler, { derive: context => presetArgs(preset, context), liveControls: [] },
           shell, i18n, logger, client, { name: preset.displayName[i18n.locale()] ?? preset.id, recentId: preset.id });
+        return;
       },
       lifecycle: action => { void applyLibraryCommand(action, {}, "", shell, i18n, logger, client); },
+      elements: {
+        execute: async args => {
+          const response = await client.execute("ae.elements.insert", { ...args });
+          logger.recordResponse("ae.elements.insert", response);
+          return response;
+        },
+        error: response => response.error ? hostFailureMessage(response.error, i18n) : i18n.t("elements.invalid"),
+        busy: value => { state.busy = value; shell.setBusy(value); },
+        // The generated WAVs ship next to the panel (scripts/generate-sfx.mjs).
+        play: sound => { try { void new Audio(`../assets/sounds/${sound}.wav`).play().catch(() => undefined); } catch { /* No audio device. */ } },
+        ...(typeof window !== "undefined" && window.requestAnimationFrame
+          ? { frame: (callback: (now: number) => void) => window.requestAnimationFrame(callback), cancelFrame: (handle: number) => window.cancelAnimationFrame(handle) } : {})
+      },
+      sounds: {
+        execute: async args => {
+          const response = await client.execute("ae.sound.insert", { ...args });
+          logger.recordResponse("ae.sound.insert", response);
+          return response;
+        },
+        error: response => response.error ? hostFailureMessage(response.error, i18n) : i18n.t("elements.invalid"),
+        busy: value => { state.busy = value; shell.setBusy(value); },
+        play: sound => { try { void new Audio(`../assets/sounds/${sound}.wav`).play().catch(() => undefined); } catch { /* No audio device. */ } }
+      },
       edit: preset => {
         if (!state.context) return;
         const args = presetArgs(preset, quickContextFromState(state.context));
@@ -2623,9 +2843,10 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
         shell.navigate(preset.category === "ease" ? "ease" : "tools");
       }
     });
-    document.documentElement.style.setProperty("--ch-feedback-bottom", "92px");
+    setFeedbackLift(document.documentElement, 92);
     refreshPresetContext = gallery.updateContext;
-    disposeView = () => { gallery.dispose(); refreshPresetContext = null; document.documentElement.style.setProperty("--ch-feedback-bottom", "38px"); }; regions.content.appendChild(gallery.element); return;
+    revealPresetInWorkspace = gallery.reveal;
+    disposeView = () => { gallery.dispose(); refreshPresetContext = null; revealPresetInWorkspace = undefined; setFeedbackLift(document.documentElement); }; regions.content.appendChild(gallery.element); return;
   }
 
   if (["context", "system", "diagnostics"].includes(viewId)) {
@@ -2654,8 +2875,18 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
     return;
   }
 
-  if (viewId === "tools" || viewId === "ease") {
-    const tool = TOOLS.find((item) => item.id === (viewId === "ease" ? "ease" : state.activeTool));
+  if (viewId === "stock") {
+    renderStockView(regions, shell, i18n, logger, client);
+    return;
+  }
+
+  if (viewId === "parallax" && state.parallaxSegment === "camera") {
+    renderCameraView(regions, shell, i18n, logger, client);
+    return;
+  }
+
+  if (viewId === "tools" || viewId === "ease" || viewId === "parallax") {
+    const tool = TOOLS.find((item) => item.id === (viewId === "ease" ? "ease" : viewId === "parallax" ? "parallax" : state.activeTool));
 
     // Sem ferramenta escolhida: so a grade. A §22 proibe inspector antes da
     // escolha — parametros de quatro ferramentas na mesma tela seriam quatro
@@ -2693,13 +2924,14 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
       const overflow = attachActionOverflow(document, editor.actions, { label: i18n.t("action.moreActions") });
       const refresh = () => { void editor.refresh(); };
       refreshToolContext = refresh;
-      const polling = focusedPoll(document, refresh, CONTEXT_POLL_MS);
+      const polling = focusedPoll(document, refresh, CONTEXT_POLL_MS, undefined, pointerInPanel);
       const stopPositioning = keepFeedbackAboveActions(regions.actions);
       disposeView = () => { editor.dispose(); overflow.dispose(); polling.dispose(); stopPositioning(); refreshToolContext = null; };
       void editor.refresh();
       return;
     }
-    tool.render(regions, i18n);
+    if (viewId === "parallax") regions.content.appendChild(parallaxSegments(shell, i18n));
+    if (tool.id === "particles") renderParticles(regions, i18n, client, logger); else tool.render(regions, i18n);
     groupToolSections(document, regions.content);
     for (const section of Array.from(regions.content.getElementsByTagName("details"))) {
       section.classList.add("ch-tool-disclosure");
@@ -2712,9 +2944,8 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
       ? (i18n.locale() === "pt-BR" ? "A seleção mudou. Atualize a prévia antes de aplicar." : "Selection changed. Refresh the preview before applying.")
       : tool.disabledReason(i18n);
     const disabledReason = currentDisabledReason();
-    const contextNotice = createAlert(document, { tone: "warning", title: disabledReason ?? i18n.t("action.apply") });
-    contextNotice.element.hidden = !disabledReason;
-    regions.content.appendChild(contextNotice.element);
+    const actionStatus = createElement(document, "p", "ch-tool-action-status", disabledReason ?? "");
+    actionStatus.setAttribute("role", "status");
     const disposeEditor = disposeView as (() => void) | null;
     let actionAreaAlive = true;
     const actionBar = createElement(document, "div", "ch-panel-action-bar ch-tool-action-bar");
@@ -2723,13 +2954,13 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
         if (actionAreaAlive && !state.busy) options.onPress();
       } });
       control.element.classList.add("ch-tool-action-control");
-      if (options.variant === "primary") control.element.classList.add("ch-panel-action-bar__primary");
       actionBar.appendChild(control.element);
       return control;
     };
     const removing = tool.id === "verticalPulse" && verticalPulseAction(state.context?.compFrameRate ?? null) === "remove"
       || tool.id === "wordReveal" && textEffectArgs("wordReveal").action === "remove"
-      || tool.id === "variableMorph" && textEffectArgs("variableMorph").action === "remove";
+      || tool.id === "variableMorph" && textEffectArgs("variableMorph").action === "remove"
+      || tool.id === "parallax" && state.parallaxFull.operation === "remove";
     const applyControl = appendAction({
       id: `tool-${tool.id}-apply`,
       label: tool.id === "wordReveal" ? wordRevealActionLabel(i18n) : tool.id === "variableMorph" ? variableMorphActionLabel(i18n)
@@ -2743,14 +2974,14 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
         if (!currentDisabledReason()) void tool.apply(shell, i18n, logger, client);
       }
     });
+    applyControl.element.classList.add("ch-panel-action-bar__primary");
     refreshToolContext = () => {
       if (tool.id === "wordReveal" && editorContext !== contextFingerprint(state.context) && !state.busy) void refreshWordRevealControls();
       if (tool.id === "variableMorph" && editorContext !== contextFingerprint(state.context) && !state.busy) void refreshVariableMorphControls();
       if (tool.id === "verticalPulse" && editorContext !== contextFingerprint(state.context) && !state.busy) void refreshVerticalPulseControls();
       refreshEditorContext?.();
       const reason = currentDisabledReason();
-      contextNotice.element.hidden = !reason;
-      contextNotice.setTitle(reason ?? i18n.t("action.apply"));
+      if (actionStatus.textContent !== (reason ?? "")) actionStatus.textContent = reason ?? "";
       applyControl.setDisabled(Boolean(reason), reason ?? undefined);
       footer.refresh?.();
       shell.refreshChrome();
@@ -2763,17 +2994,20 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
       id: `tool-${tool.id}-refresh`, label: i18n.t(tool.loadLabelKey ?? "action.refreshPreview"), ...busy,
       onPress: () => { void tool.load?.(); }
     });
-    appendAction({
+    if (!["beat", "copyKeys", "reverseKeys", "reverseValues"].includes(tool.id)) appendAction({
       id: `tool-${tool.id}-reset`, label: i18n.t("action.reset"), variant: "tertiary", ...busy,
       onPress: () => { tool.reset(); state.lastError = null; shell.rerender(); }
     });
     // "← Ferramentas" in the header already leaves the editor; a footer Back
     // only pushed the actions onto a second row.
+    actionBar.appendChild(applyControl.element);
+    regions.actions.setAttribute("data-tool-footer", "");
+    regions.actions.appendChild(actionStatus);
     regions.actions.appendChild(actionBar);
     const overflow = attachActionOverflow(document, actionBar, { label: i18n.t("action.moreActions") });
     footer.refresh = overflow.refresh;
     const stopPositioningFeedback = keepFeedbackAboveActions(regions.actions);
-    disposeView = () => { actionAreaAlive = false; disposeEditor?.(); contextNotice.dispose(); overflow.dispose(); stopPositioningFeedback(); };
+    disposeView = () => { actionAreaAlive = false; disposeEditor?.(); overflow.dispose(); stopPositioningFeedback(); regions.actions.removeAttribute("data-tool-footer"); };
     return;
   }
 
@@ -2787,7 +3021,9 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
       onRunCheck: () => void runSystemCheck(shell, i18n, logger, client),
       onVerifyBridge: () => void verifyBridge(shell, i18n, logger, client)
     });
-    mountSupportView(regions, view);
+    const probe = createMotionProbe(document, i18n.locale());
+    view.content.appendChild(probe.element);
+    mountSupportView(regions, { content: view.content, actions: view.actions, dispose: () => { view.dispose(); probe.dispose(); } });
     return;
   }
 
@@ -2912,7 +3148,7 @@ function renderFlicker(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "flicker-rate",
       label: i18n.t("flicker.rate"),
-      value: draft.rate,
+      value: draft.rate, defaultValue: DEFAULT_FLICKER.rate,
       min: 0.1,
       max: 120,
       step: 1,
@@ -2929,7 +3165,7 @@ function renderFlicker(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "flicker-min",
       label: i18n.t("flicker.minFactor"),
-      value: draft.minFactor,
+      value: draft.minFactor, defaultValue: DEFAULT_FLICKER.minFactor,
       min: 0,
       max: 10,
       step: 0.05,
@@ -2945,7 +3181,7 @@ function renderFlicker(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "flicker-max",
       label: i18n.t("flicker.maxFactor"),
-      value: draft.maxFactor,
+      value: draft.maxFactor, defaultValue: DEFAULT_FLICKER.maxFactor,
       min: 0,
       max: 10,
       step: 0.05,
@@ -2962,7 +3198,7 @@ function renderFlicker(regions: RenderRegions, i18n: I18n): void {
       id: "flicker-seed",
       label: i18n.t("flicker.seed"),
       description: i18n.t("flicker.seed.description"),
-      value: draft.seed,
+      value: draft.seed, defaultValue: DEFAULT_FLICKER.seed,
       min: 0,
       max: 100_000,
       step: 1,
@@ -3021,7 +3257,7 @@ function renderWiggle(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wiggle-frequency",
       label: i18n.t("wiggle.frequency"),
-      value: draft.frequency,
+      value: draft.frequency, defaultValue: DEFAULT_WIGGLE.frequency,
       min: 0.01,
       max: 100,
       step: 0.1,
@@ -3038,7 +3274,7 @@ function renderWiggle(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wiggle-amplitude",
       label: i18n.t("wiggle.amplitude"),
-      value: draft.amplitude,
+      value: draft.amplitude, defaultValue: DEFAULT_WIGGLE.amplitude,
       min: 0,
       max: 100_000,
       step: 1,
@@ -3058,7 +3294,7 @@ function renderWiggle(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wiggle-octaves",
       label: i18n.t("wiggle.octaves"),
-      value: draft.octaves,
+      value: draft.octaves, defaultValue: DEFAULT_WIGGLE.octaves,
       min: 1,
       max: 10,
       step: 1,
@@ -3074,7 +3310,7 @@ function renderWiggle(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wiggle-falloff",
       label: i18n.t("wiggle.amplitudeMultiplier"),
-      value: draft.amplitudeMultiplier,
+      value: draft.amplitudeMultiplier, defaultValue: DEFAULT_WIGGLE.amplitudeMultiplier,
       min: 0,
       max: 10,
       step: 0.05,
@@ -3091,7 +3327,7 @@ function renderWiggle(regions: RenderRegions, i18n: I18n): void {
       id: "wiggle-seed",
       label: i18n.t("wiggle.seed"),
       description: i18n.t("wiggle.seed.description"),
-      value: draft.seed,
+      value: draft.seed, defaultValue: DEFAULT_WIGGLE.seed,
       min: 0,
       max: 100_000,
       step: 1,
@@ -3162,7 +3398,7 @@ function renderSmooth(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "smooth-width",
       label: i18n.t("smooth.width"),
-      value: draft.widthSeconds,
+      value: draft.widthSeconds, defaultValue: DEFAULT_SMOOTH.widthSeconds,
       min: 0.001,
       max: 3600,
       step: 0.05,
@@ -3179,7 +3415,7 @@ function renderSmooth(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "smooth-samples",
       label: i18n.t("smooth.samples"),
-      value: draft.samples,
+      value: draft.samples, defaultValue: DEFAULT_SMOOTH.samples,
       min: 1,
       max: 101,
       step: 1,
@@ -3216,7 +3452,7 @@ function renderSmooth(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "smooth-reference-time",
         label: i18n.t("smooth.referenceTime"),
-        value: draft.referenceTime,
+        value: draft.referenceTime, defaultValue: DEFAULT_SMOOTH.referenceTime,
         min: 0,
         max: 10800,
         step: 0.1,
@@ -3296,7 +3532,7 @@ function renderLoopOut(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "motion-loopout-keyframes",
         label: i18n.t("loopOut.numKeyframes"),
-        value: draft.numKeyframes,
+        value: draft.numKeyframes, defaultValue: DEFAULT_LOOP_OUT.numKeyframes,
         min: 1,
         max: 1000,
         step: 1,
@@ -3319,7 +3555,7 @@ function renderLoopOut(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "motion-loopout-duration",
         label: i18n.t("loopOut.duration"),
-        value: draft.duration,
+        value: draft.duration, defaultValue: DEFAULT_LOOP_OUT.duration,
         min: 0.01,
         max: 3600,
         step: 0.01,
@@ -3368,7 +3604,19 @@ function renderSettings(
   const account = createAccountView(document, i18n.locale());
   regions.content.appendChild(account.element);
   regions.content.appendChild(view.element);
-  disposeView = () => { account.dispose(); view.dispose(); };
+  // Arriving at Settings, the account and each section rise in turn; a refresh after a change does not (F8).
+  let stopCascade = (): void => {};
+  if (regions.content.getAttribute?.("data-active") === "true") {
+    const env = browserMotionEnv(window, document.documentElement);
+    regions.content.setAttribute("data-motion", `${regions.content.getAttribute("data-motion") ?? ""} list-stagger`.trim());
+    view.element.setAttribute("data-motion", "list-stagger");
+    const stops = [
+      playStagger(env, regions.content, [account.element]),
+      playStagger(env, view.element, Array.from(view.element.children) as HTMLElement[], { cap: 8 })
+    ];
+    stopCascade = () => stops.forEach(stop => stop());
+  }
+  disposeView = () => { stopCascade(); account.dispose(); view.dispose(); };
 }
 
 function mountSupportView(
@@ -3385,8 +3633,7 @@ function mountSupportView(
 function keepFeedbackAboveActions(actions: HTMLElement): () => void {
   const positionFeedback = (): void => {
     const top = actions.getBoundingClientRect().top;
-    const offset = Math.max(38, document.documentElement.clientHeight - top + 8);
-    document.documentElement.style.setProperty("--ch-feedback-bottom", `${offset}px`);
+    setFeedbackLift(document.documentElement, document.documentElement.clientHeight - top + 8);
   };
   const observer = typeof ResizeObserver === "function" ? new ResizeObserver(positionFeedback) : null;
   observer?.observe(actions);
@@ -3395,7 +3642,7 @@ function keepFeedbackAboveActions(actions: HTMLElement): () => void {
   return () => {
     observer?.disconnect();
     window.removeEventListener("resize", positionFeedback);
-    document.documentElement.style.setProperty("--ch-feedback-bottom", "38px");
+    setFeedbackLift(document.documentElement);
   };
 }
 
@@ -3484,7 +3731,8 @@ function setBusy(shell: Shell, busy: boolean, reason?: string): void {
   state.busy = busy;
   state.busyReason = busy ? reason ?? null : null;
   shell.setBusy(busy);
-  if (refreshLibrary) refreshLibrary();
+  if (shell.activeView() === "stock" && refreshToolContext) refreshToolContext();
+  else if (refreshLibrary && shell.activeView() !== "tools") refreshLibrary();
   else shell.rerender();
 }
 
@@ -3541,30 +3789,37 @@ const CONTEXT_POLL_MS = 700;
  * 3. **Não concorre.** Pula o tique enquanto uma operação está em curso ou
  *    enquanto a leitura anterior não voltou, senão uma fila de leituras se
  *    empilha atrás de um comando lento.
+ * 4. **Não lê com o ponteiro no painel.** No Windows cada `evalScript` faz o AE
+ *    redefinir o cursor; sobre um número arrastável ou um slider ele piscava a
+ *    cada tique. Com o ponteiro aqui a seleção do AE não muda sozinha; uma
+ *    leitura na entrada do ponteiro basta.
  *
  * 700 ms é o meio-termo: rápido o bastante para a troca de seleção parecer
  * instantânea, e folgado o bastante para o custo do `evalScript` sumir no ruído.
  */
-function startContextWatch(shell: Shell, logger: MotionLogger, client: Client): () => void {
+function startContextWatch(shell: Shell, logger: MotionLogger, client: Client, onChange: () => void): () => void {
   let signature = contextFingerprint(state.context);
   const blocked = (): boolean => state.busy || isColorPickerOpen(document) || hasColorDraft(document) || Boolean(document.querySelector("[data-scrub-pressed], [data-scrubbing], [data-gesture-active], .ch-bezier[data-dragging]"));
-  const coordinator = createSelectionCoordinator({ document, window, blocked,
+  const coordinator = createSelectionCoordinator({ document, window, blocked, paused: pointerInPanel,
     read: async () => {
       const response = await client.execute<ContextData>("ae.context.read");
-      if (blocked() || !response.ok || !response.data) return;
+      if (blocked() || !response.ok || !response.data) return false;
       const next = contextFingerprint(response.data); state.context = response.data;
       easeController?.onSelectionSignature(response.data.selectionSignature ?? null);
-      if (next === signature) return;
+      if (next === signature) return false;
       signature = next; logger.setHost("after-effects", response.data.hostVersion ?? undefined);
+      onChange();
       if (refreshLibrary) refreshLibrary();
       else if (refreshToolContext) refreshToolContext();
       else if (refreshPresetContext) refreshPresetContext();
       else if (!document.querySelector(".ch-preset-workspace")) shell.rerender();
+      return true;
     }
   });
   selectionCoordinator = coordinator;
   for (const reader of selectionReaders) coordinator.subscribe(reader);
-  return () => { coordinator.dispose(); selectionCoordinator = null; };
+  const stopEnter = pointerPresence?.onEnter(() => coordinator.refresh());
+  return () => { stopEnter?.(); coordinator.dispose(); selectionCoordinator = null; };
 }
 
 async function refreshContext(
@@ -3909,6 +4164,7 @@ async function refreshRenamePreview(): Promise<void> {
 
   const sequencia = previewSequence + 1;
   previewSequence = sequencia;
+  const requestedContext = contextFingerprint(state.context);
 
   const draft = state.rename;
   const response = await fiacao.client.execute<RenamePreviewData>("ae.layer.rename.preview", {
@@ -3925,7 +4181,7 @@ async function refreshRenamePreview(): Promise<void> {
   });
   fiacao.logger.recordResponse("ae.layer.rename.preview", response);
 
-  if (sequencia !== previewSequence) return;
+  if (sequencia !== previewSequence || requestedContext !== contextFingerprint(state.context) || fiacao !== wiringAtual) return;
 
   state.renamePreview = response.ok && isRenamePreviewData(response.data) ? response.data : null;
   // A prévia recusada é informação, não falha do painel: uma regex perigosa
@@ -3941,6 +4197,7 @@ async function refreshReversePreview(): Promise<void> {
 
   const sequencia = previewSequence + 1;
   previewSequence = sequencia;
+  const requestedContext = contextFingerprint(state.context);
 
   const draft = state.reverseOrder;
   const response = await fiacao.client.execute<ReversePreviewData>(
@@ -3954,7 +4211,7 @@ async function refreshReversePreview(): Promise<void> {
   );
   fiacao.logger.recordResponse("ae.layer.reverse-order.preview", response);
 
-  if (sequencia !== previewSequence) return;
+  if (sequencia !== previewSequence || requestedContext !== contextFingerprint(state.context) || fiacao !== wiringAtual) return;
 
   state.reversePreview = response.ok && isReversePreviewData(response.data) ? response.data : null;
   state.previewError = response.ok ? null : describeFailure(fiacao.i18n, response);
@@ -4040,13 +4297,14 @@ async function refreshAnchorPreview(): Promise<void> {
 
   const sequencia = previewSequence + 1;
   previewSequence = sequencia;
+  const requestedContext = contextFingerprint(state.context);
 
   const response = await fiacao.client.execute<AnchorPreviewData>(
     "ae.anchor.align.preview",
     anchorArgs(state.anchor, true)
   );
   fiacao.logger.recordResponse("ae.anchor.align.preview", response);
-  if (sequencia !== previewSequence) return;
+  if (sequencia !== previewSequence || requestedContext !== contextFingerprint(state.context) || fiacao !== wiringAtual) return;
 
   state.anchorPreview = response.ok && isAnchorPreviewData(response.data) ? response.data : null;
   state.previewError = response.ok ? null : describeFailure(fiacao.i18n, response);
@@ -4109,7 +4367,7 @@ function renderAnchor(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "anchor-seed",
         label: i18n.t("anchor.randomSeed"),
-        value: draft.randomSeed,
+        value: draft.randomSeed, defaultValue: DEFAULT_ANCHOR.randomSeed,
         min: 0,
         max: 2_147_483_647,
         step: 1,
@@ -4146,7 +4404,7 @@ function renderAnchor(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "anchor-fixed-time",
         label: i18n.t("anchor.fixedTime"),
-        value: draft.fixedTime,
+        value: draft.fixedTime, defaultValue: DEFAULT_ANCHOR.fixedTime,
         min: 0,
         max: 10_800,
         step: 0.1,
@@ -4353,13 +4611,14 @@ async function refreshCutKeysPreview(): Promise<void> {
 
   const sequencia = previewSequence + 1;
   previewSequence = sequencia;
+  const requestedContext = contextFingerprint(state.context);
 
   const response = await fiacao.client.execute<CutKeysPreviewData>(
     "ae.keys.cut.preview",
     cutKeysArgs(state.cutKeys, true)
   );
   fiacao.logger.recordResponse("ae.keys.cut.preview", response);
-  if (sequencia !== previewSequence) return;
+  if (sequencia !== previewSequence || requestedContext !== contextFingerprint(state.context) || fiacao !== wiringAtual) return;
 
   state.cutKeysPreview = response.ok && isCutKeysPreviewData(response.data) ? response.data : null;
   state.previewError = response.ok ? null : describeFailure(fiacao.i18n, response);
@@ -4372,13 +4631,14 @@ async function refreshDelayPreview(): Promise<void> {
 
   const sequencia = previewSequence + 1;
   previewSequence = sequencia;
+  const requestedContext = contextFingerprint(state.context);
 
   const response = await fiacao.client.execute<DelayPreviewData>(
     "ae.keys.delay.preview",
     delayArgs(state.delay)
   );
   fiacao.logger.recordResponse("ae.keys.delay.preview", response);
-  if (sequencia !== previewSequence) return;
+  if (sequencia !== previewSequence || requestedContext !== contextFingerprint(state.context) || fiacao !== wiringAtual) return;
 
   state.delayPreview = response.ok && isDelayPreviewData(response.data) ? response.data : null;
   state.previewError = response.ok ? null : describeFailure(fiacao.i18n, response);
@@ -4433,7 +4693,7 @@ function renderCutKeys(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: `cutkeys-${campo}`,
           label: i18n.t(rotulo),
-          value: draft[campo],
+          value: draft[campo], defaultValue: DEFAULT_CUT_KEYS[campo],
           min: -10_800,
           max: 10_800,
           step: 0.1,
@@ -4570,7 +4830,7 @@ function renderDelay(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "delay-frames",
       label: i18n.t("delay.delayFrames"),
-      value: draft.delayFrames,
+      value: draft.delayFrames, defaultValue: DEFAULT_DELAY.delayFrames,
       min: -100_000,
       max: 100_000,
       step: 1,
@@ -4613,7 +4873,9 @@ function renderDelay(regions: RenderRegions, i18n: I18n): void {
         { value: "selection", label: i18n.t("delay.order.selection") },
         { value: "name", label: i18n.t("delay.order.name") },
         { value: "distance", label: i18n.t("delay.order.distance") },
-        { value: "random", label: i18n.t("delay.order.random") }
+        { value: "random", label: i18n.t("delay.order.random") },
+        { value: "center-out", label: i18n.t("delay.order.centerOut") },
+        { value: "edges-in", label: i18n.t("delay.order.edgesIn") }
       ],
       onChange: (value) =>
         confirma(() => {
@@ -4628,7 +4890,7 @@ function renderDelay(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "delay-seed",
         label: i18n.t("delay.randomSeed"),
-        value: draft.randomSeed,
+        value: draft.randomSeed, defaultValue: DEFAULT_DELAY.randomSeed,
         min: 0,
         max: 2_147_483_647,
         step: 1,
@@ -4650,7 +4912,7 @@ function renderDelay(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: `delay-${campo}`,
           label: i18n.t(rotulo),
-          value: draft[campo],
+          value: draft[campo], defaultValue: DEFAULT_DELAY[campo],
           min: -100_000,
           max: 100_000,
           step: 10,
@@ -4823,7 +5085,7 @@ function renderRename(regions: RenderRegions, i18n: I18n): void {
       id: "rename-padding",
       label: i18n.t("rename.padding"),
       description: i18n.t("rename.padding.description"),
-      value: draft.padding,
+      value: draft.padding, defaultValue: DEFAULT_RENAME.padding,
       min: 0,
       max: 8,
       step: 1,
@@ -4841,7 +5103,7 @@ function renderRename(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "rename-counter-start",
         label: i18n.t("rename.counterStart"),
-        value: draft.counterStart,
+        value: draft.counterStart, defaultValue: DEFAULT_RENAME.counterStart,
         min: -9999,
         max: 9999,
         step: 1,
@@ -5387,7 +5649,7 @@ function renderCreateNull(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "createnull-size",
       label: i18n.t("createNull.size"),
-      value: draft.size,
+      value: draft.size, defaultValue: DEFAULT_CREATE_NULL.size,
       min: 1,
       max: 10_000,
       step: 10,
@@ -5405,7 +5667,7 @@ function renderCreateNull(regions: RenderRegions, i18n: I18n): void {
       id: "createnull-label",
       label: i18n.t("createNull.label"),
       description: i18n.t("createNull.label.description"),
-      value: draft.label,
+      value: draft.label, defaultValue: DEFAULT_CREATE_NULL.label,
       min: 0,
       max: 16,
       step: 1,
@@ -5704,7 +5966,7 @@ function renderTextBox(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "textbox-padding-x",
       label: i18n.t("textBox.paddingX"),
-      value: draft.paddingX,
+      value: draft.paddingX, defaultValue: DEFAULT_TEXT_BOX.paddingX,
       min: 0,
       max: 10_000,
       step: 1,
@@ -5722,7 +5984,7 @@ function renderTextBox(regions: RenderRegions, i18n: I18n): void {
       id: "textbox-padding-y",
       label: i18n.t("textBox.paddingY"),
       description: i18n.t("textBox.paddingY.description"),
-      value: draft.paddingY,
+      value: draft.paddingY, defaultValue: DEFAULT_TEXT_BOX.paddingY,
       min: 0,
       max: 10_000,
       step: 1,
@@ -5739,7 +6001,7 @@ function renderTextBox(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "textbox-roundness",
       label: i18n.t("textBox.roundness"),
-      value: draft.roundness,
+      value: draft.roundness, defaultValue: DEFAULT_TEXT_BOX.roundness,
       min: 0,
       max: 10_000,
       step: 1,
@@ -5771,7 +6033,7 @@ function renderTextBox(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "textbox-fill-opacity",
       label: i18n.t("textBox.fillOpacity"),
-      value: draft.fillOpacity,
+      value: draft.fillOpacity, defaultValue: DEFAULT_TEXT_BOX.fillOpacity,
       min: 0,
       max: 100,
       step: 1,
@@ -6216,6 +6478,7 @@ function renderEase(regions: RenderRegions, i18n: I18n): void {
   const controller = ensureEaseController(regions.shell, i18n);
   const editor = createEaseEditor(document, {
     i18n, draft: state.ease, busy: state.busy,
+    ...(state.context?.compFrameRate ? { fps: state.context.compFrameRate } : {}),
     platformMeta: /mac/i.test(typeof navigator === "undefined" ? "" : navigator.platform ?? ""),
     onChange: draft => { state.ease = draft; },
     onCommit: draft => { state.ease = draft; easeSync?.publish(draft, controller.session()); if (state.ease.live) controller.scheduleLive(); },
@@ -6225,17 +6488,36 @@ function renderEase(regions: RenderRegions, i18n: I18n): void {
       regions.shell.setStatus(i18n.t(live ? "ease.liveOn" : "ease.liveOff"), "ok");
       if (!live) controller.cancelPending("live-off");
     },
-    onApply: () => { if (wiringAtual && !easeDisabledReason(i18n)) void controller.apply(); }
+    onApply: () => { if (wiringAtual && !easeDisabledReason(i18n)) void controller.apply(); },
+    onLibraryChange: () => quickBar?.refreshItems()
   });
   easeEditorHandle = editor;
   disposeView = () => { actions.dispose(); editor.dispose(); easeEditorHandle = null; controller.cancelPending("close"); };
   regions.content.appendChild(editor.element);
+  // Design system 2026-11: "Aplicar em" é um seletor de três (Entrada · Saída · Ambos) na linha de propriedade,
+  // e "Converter keyframes Hold" mora em "Avançado". Os dois lados continuam sendo applyIn/applyOut.
+  const main = editor.element.querySelector(".ch-ease-main") ?? editor.element;
   const sides = createElement(document, "div", "ch-ease-sides");
-  sides.appendChild(checkboxField(document, { id: "ease-apply-in", label: i18n.t("ease.applyIn"), checked: state.ease.applyIn,
-    onChange: value => { state.ease.applyIn = value; regions.shell.rerender(); } }));
-  sides.appendChild(checkboxField(document, { id: "ease-apply-out", label: i18n.t("ease.applyOut"), checked: state.ease.applyOut,
-    onChange: value => { state.ease.applyOut = value; regions.shell.rerender(); } }));
-  (editor.element.querySelector(".ch-ease-main") ?? editor.element).appendChild(sides);
+  sides.setAttribute("role", "group");
+  const sidesLabel = createElement(document, "span", "ch-ease-sides__label", i18n.locale().startsWith("en") ? "Apply to" : "Aplicar em");
+  sidesLabel.id = "ease-apply-to-label";
+  sides.setAttribute("aria-labelledby", sidesLabel.id);
+  sides.appendChild(sidesLabel);
+  const segment = createElement(document, "div", "ch-ease-sides__segment");
+  const both = i18n.locale().startsWith("en") ? "Both" : "Ambos";
+  for (const [id, label, applyIn, applyOut] of [["in", i18n.t("ease.applyIn"), true, false], ["out", i18n.t("ease.applyOut"), false, true], ["both", both, true, true]] as const) {
+    const option = button(document, { label, onClick: () => { state.ease.applyIn = applyIn; state.ease.applyOut = applyOut; regions.shell.rerender(); } });
+    option.id = `ease-apply-${id}`;
+    option.classList.add("ch-ease-sides__option");
+    option.setAttribute("aria-pressed", String(state.ease.applyIn === applyIn && state.ease.applyOut === applyOut));
+    segment.appendChild(option);
+  }
+  sides.appendChild(segment);
+  const advanced = main.querySelector(".ch-ease-advanced");
+  main.insertBefore(sides, advanced ?? null);
+  const advancedBody = main.querySelector(".ch-ease-advanced__body") ?? main;
+  advancedBody.appendChild(checkboxField(document, { id: "ease-convert-hold", label: i18n.t("ease.convertHold"), checked: Boolean(state.ease.convertHold),
+    onChange: value => { state.ease.convertHold = value; regions.shell.rerender(); } }));
 }
 
 function easeStorage(): Storage | undefined {
@@ -6361,6 +6643,7 @@ function startEaseSurfaces(shell: Shell, i18n: I18n, client: Client): () => void
     doc: document, files: cepNativeFiles(window, "QuickBar"),
     enabled: () => readEaseAutoOpen(easeStorage()),
     isBusy: () => state.busy,
+    paused: pointerInPanel,
     read: async () => {
       const response = await client.execute<ContextData>("ae.context.read");
       wiringAtual?.logger.recordResponse("ae.context.read", response);
@@ -6408,6 +6691,7 @@ async function applyEaseAction(action: EaseAction, shell: Shell, i18n: I18n, log
     if (!response.ok) {
       if (response.error?.code === "KEYFRAME_CONFLICT") {
         const key = action.command === "ae.keys.reverse" || action.command === "ae.keys.reverse-values" ? "ease.conflict.reverse"
+          : action.command === "ae.keys.send-to-edge" ? "ease.conflict.cursor"
           : action.args.destination === "cti" ? "ease.conflict.cursor"
           : action.args.destination === "layer-start" || action.args.destination === "layer-end" ? "ease.conflict.edge" : "ease.conflict.after";
         state.lastError = i18n.t(key);
@@ -6521,7 +6805,8 @@ function renderSendToEdge(regions: RenderRegions, i18n: I18n): void {
       options: [
         { value: "comp", label: i18n.t("sendToEdge.reference.comp") },
         { value: "layer", label: i18n.t("sendToEdge.reference.layer") },
-        { value: "workArea", label: i18n.t("sendToEdge.reference.workArea") }
+        { value: "workArea", label: i18n.t("sendToEdge.reference.workArea") },
+        { value: "playhead", label: i18n.t("sendToEdge.reference.playhead") }
       ],
       onChange: (value) => {
         draft.reference = value as SendToEdgeReference;
@@ -6635,7 +6920,7 @@ function renderNeon(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "neon-stroke-width",
       label: i18n.t("neon.strokeWidth"),
-      value: draft.strokeWidth,
+      value: draft.strokeWidth, defaultValue: DEFAULT_NEON.strokeWidth,
       // 0 a 1000 e a faixa que a referencia do TextDocument documenta; o host
       // valida a mesma faixa, entao o painel nao inventa um teto mais apertado.
       min: 0,
@@ -6653,7 +6938,7 @@ function renderNeon(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "neon-glow-radius",
       label: i18n.t("neon.glowRadius"),
-      value: draft.glowRadius,
+      value: draft.glowRadius, defaultValue: DEFAULT_NEON.glowRadius,
       min: 0,
       max: 1000,
       step: 1,
@@ -6669,7 +6954,7 @@ function renderNeon(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "neon-intensity",
       label: i18n.t("neon.intensity"),
-      value: draft.intensity,
+      value: draft.intensity, defaultValue: DEFAULT_NEON.intensity,
       min: 0,
       max: 100,
       step: 0.1,
@@ -6792,7 +7077,7 @@ function renderTimeController(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "timeController-speedPercent",
       label: i18n.t("timeController.speedPercent"),
-      value: t.speedPercent,
+      value: t.speedPercent, defaultValue: DEFAULT_TIME_CONTROLLER.speedPercent,
       min: 0,
       max: 1000,
       step: 1,
@@ -6807,7 +7092,7 @@ function renderTimeController(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "timeController-offsetFrames",
       label: i18n.t("timeController.offsetFrames"),
-      value: t.offsetFrames,
+      value: t.offsetFrames, defaultValue: DEFAULT_TIME_CONTROLLER.offsetFrames,
       min: -99999,
       max: 99999,
       step: 1,
@@ -6847,7 +7132,7 @@ function renderTimeController(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "timeController-freezeFrame",
         label: i18n.t("timeController.freezeFrame"),
-        value: t.freezeFrame,
+        value: t.freezeFrame, defaultValue: DEFAULT_TIME_CONTROLLER.freezeFrame,
         min: 0,
         max: 99999,
         step: 1,
@@ -6938,7 +7223,7 @@ function renderAnimateKinetic(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "animateKinetic-" + campo.id,
         label: i18n.t(campo.key),
-        value: t[campo.id],
+        value: t[campo.id], defaultValue: DEFAULT_ANIMATE_KINETIC[campo.id],
         min: campo.min,
         max: campo.max,
         step: campo.step,
@@ -7018,7 +7303,7 @@ function renderInertial(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "inertial-amplitude",
       label: i18n.t("inertial.amplitude"),
-      value: t.amplitude,
+      value: t.amplitude, defaultValue: DEFAULT_INERTIAL.amplitude,
       min: 0,
       max: 1000,
       step: 1,
@@ -7034,7 +7319,7 @@ function renderInertial(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "inertial-frequency",
       label: i18n.t("inertial.frequency"),
-      value: t.frequency,
+      value: t.frequency, defaultValue: DEFAULT_INERTIAL.frequency,
       min: 0,
       max: 60,
       step: 0.1,
@@ -7050,7 +7335,7 @@ function renderInertial(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "inertial-decay",
       label: i18n.t("inertial.decay"),
-      value: t.decay,
+      value: t.decay, defaultValue: DEFAULT_INERTIAL.decay,
       min: 0,
       max: 100,
       step: 0.1,
@@ -7065,7 +7350,7 @@ function renderInertial(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "inertial-maxDurationFrames",
       label: i18n.t("inertial.maxDuration"),
-      value: t.maxDurationFrames,
+      value: t.maxDurationFrames, defaultValue: DEFAULT_INERTIAL.maxDurationFrames,
       min: 1,
       max: 10000,
       step: 1,
@@ -7134,7 +7419,7 @@ function renderJump(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "jump-height",
       label: i18n.t("jump.height"),
-      value: t.height,
+      value: t.height, defaultValue: DEFAULT_JUMP.height,
       min: 1,
       max: 100000,
       step: 1,
@@ -7150,7 +7435,7 @@ function renderJump(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "jump-durationFrames",
       label: i18n.t("jump.durationFrames"),
-      value: t.durationFrames,
+      value: t.durationFrames, defaultValue: DEFAULT_JUMP.durationFrames,
       min: 4,
       max: 10000,
       step: 1,
@@ -7184,7 +7469,7 @@ function renderJump(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "jump-squashStretch",
       label: i18n.t("jump.squashStretch"),
-      value: t.squashStretch,
+      value: t.squashStretch, defaultValue: DEFAULT_JUMP.squashStretch,
       min: 0,
       max: 90,
       step: 1,
@@ -7200,7 +7485,7 @@ function renderJump(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "jump-anticipationFrames",
       label: i18n.t("jump.anticipation"),
-      value: t.anticipationFrames,
+      value: t.anticipationFrames, defaultValue: DEFAULT_JUMP.anticipationFrames,
       min: 0,
       max: Math.max(0, t.durationFrames - 4),
       step: 1,
@@ -7216,7 +7501,7 @@ function renderJump(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "jump-staggerFrames",
       label: i18n.t("jump.stagger"),
-      value: t.staggerFrames,
+      value: t.staggerFrames, defaultValue: DEFAULT_JUMP.staggerFrames,
       min: 0,
       max: 10000,
       step: 1,
@@ -7438,7 +7723,7 @@ function renderLookAt(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: `lookAt-offset-${axis}`,
         label: i18n.t(labelKey),
-        value: t.offsetOrientation[index],
+        value: t.offsetOrientation[index], defaultValue: DEFAULT_LOOK_AT.offsetOrientation[index],
         min: -3600,
         max: 3600,
         step: 1,
@@ -7563,7 +7848,7 @@ function renderOrbit(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: `orbit-${campo.id}`,
         label: i18n.t(campo.key),
-        value: t[campo.id],
+        value: t[campo.id], defaultValue: DEFAULT_ORBIT[campo.id],
         min: campo.min,
         max: campo.max,
         step: campo.step,
@@ -7759,7 +8044,7 @@ function renderEffector(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "effector-radius",
       label: i18n.t("effector.radius"),
-      value: t.radius,
+      value: t.radius, defaultValue: DEFAULT_EFFECTOR.radius,
       min: 1,
       max: 1000000,
       step: 10,
@@ -7817,7 +8102,7 @@ function renderEffector(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "effector-" + campo.id,
         label: i18n.t(campo.key),
-        value: t[campo.id],
+        value: t[campo.id], defaultValue: DEFAULT_EFFECTOR[campo.id],
         min: -100000,
         max: 100000,
         step: 1,
@@ -7896,7 +8181,7 @@ function renderCameraTransition(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "cameraTransition-amount",
       label: i18n.t("cameraTransition.amount"),
-      value: t.amount,
+      value: t.amount, defaultValue: DEFAULT_CAMERA_TRANSITION.amount,
       min: -1000000,
       max: 1000000,
       step: 10,
@@ -7916,7 +8201,7 @@ function renderCameraTransition(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "cameraTransition-durationFrames",
       label: i18n.t("cameraTransition.duration"),
-      value: t.durationFrames,
+      value: t.durationFrames, defaultValue: DEFAULT_CAMERA_TRANSITION.durationFrames,
       min: 1,
       max: 10000,
       step: 1,
@@ -8005,7 +8290,7 @@ function renderCylinder(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "cylinder-" + campo.id,
         label: i18n.t(campo.key),
-        value: t[campo.id],
+        value: t[campo.id], defaultValue: DEFAULT_CYLINDER[campo.id],
         min: campo.min,
         max: campo.max,
         step: campo.step,
@@ -8093,7 +8378,7 @@ function renderCube(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "cube-size",
       label: i18n.t("cube.size"),
-      value: t.size,
+      value: t.size, defaultValue: DEFAULT_CUBE.size,
       min: 1,
       max: 100000,
       step: 10,
@@ -8218,7 +8503,7 @@ function renderWave(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wave-amplitude",
       label: i18n.t("wave.amplitude"),
-      value: t.amplitude,
+      value: t.amplitude, defaultValue: DEFAULT_WAVE.amplitude,
       min: -100000,
       max: 100000,
       step: 1,
@@ -8234,7 +8519,7 @@ function renderWave(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wave-speed",
       label: i18n.t("wave.speed"),
-      value: t.speed,
+      value: t.speed, defaultValue: DEFAULT_WAVE.speed,
       min: -1000,
       max: 1000,
       step: 0.1,
@@ -8253,7 +8538,7 @@ function renderWave(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "wave-frequency",
         label: i18n.t("wave.frequency"),
-        value: t.frequency,
+        value: t.frequency, defaultValue: DEFAULT_WAVE.frequency,
         min: 1,
         max: 1000,
         step: 1,
@@ -8285,7 +8570,7 @@ function renderWave(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wave-phase",
       label: i18n.t("wave.phase"),
-      value: t.phase,
+      value: t.phase, defaultValue: DEFAULT_WAVE.phase,
       min: -36000,
       max: 36000,
       step: 1,
@@ -8301,7 +8586,7 @@ function renderWave(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "wave-falloff",
       label: i18n.t("wave.falloff"),
-      value: t.falloff,
+      value: t.falloff, defaultValue: DEFAULT_WAVE.falloff,
       min: 0,
       max: 1,
       step: 0.05,
@@ -8388,7 +8673,7 @@ function renderTile(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: "tile-" + campo,
           label: i18n.t(chave),
-          value: t[campo],
+          value: t[campo], defaultValue: DEFAULT_TILE[campo],
           min: 1,
           max: 10000,
           step: 10,
@@ -8421,7 +8706,7 @@ function renderTile(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: "tile-" + campo,
           label: i18n.t(chave),
-          value: t[campo],
+          value: t[campo], defaultValue: DEFAULT_TILE[campo],
           min: 1,
           max: maximo,
           step: 1,
@@ -8437,7 +8722,7 @@ function renderTile(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "tile-spacing",
         label: i18n.t("tile.spacing"),
-        value: t.spacing,
+        value: t.spacing, defaultValue: DEFAULT_TILE.spacing,
         min: 0,
         max: 100000,
         step: 10,
@@ -8514,7 +8799,7 @@ function renderGlitch(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "glitch-" + campo,
         label: i18n.t(chave),
-        value: t[campo],
+        value: t[campo], defaultValue: DEFAULT_GLITCH[campo],
         min: minimo,
         max: maximo,
         step: passo,
@@ -8530,7 +8815,7 @@ function renderGlitch(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "glitch-seed",
       label: i18n.t("glitch.seed"),
-      value: t.seed,
+      value: t.seed, defaultValue: DEFAULT_GLITCH.seed,
       min: 0,
       max: 1000000,
       step: 1,
@@ -8547,7 +8832,7 @@ function renderGlitch(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "glitch-durationFrames",
         label: i18n.t("glitch.durationFrames"),
-        value: t.durationFrames,
+        value: t.durationFrames, defaultValue: DEFAULT_GLITCH.durationFrames,
         min: 1,
         max: 10000,
         step: 1,
@@ -8609,7 +8894,7 @@ function renderEcho(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "echo-echoTime",
       label: i18n.t("echo.echoTime"),
-      value: t.echoTime,
+      value: t.echoTime, defaultValue: DEFAULT_ECHO.echoTime,
       min: -10,
       max: 10,
       step: 0.01,
@@ -8625,7 +8910,7 @@ function renderEcho(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "echo-numberOfEchoes",
       label: i18n.t("echo.numberOfEchoes"),
-      value: t.numberOfEchoes,
+      value: t.numberOfEchoes, defaultValue: DEFAULT_ECHO.numberOfEchoes,
       min: 1,
       max: 100,
       step: 1,
@@ -8640,7 +8925,7 @@ function renderEcho(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "echo-startingIntensity",
       label: i18n.t("echo.startingIntensity"),
-      value: t.startingIntensity,
+      value: t.startingIntensity, defaultValue: DEFAULT_ECHO.startingIntensity,
       min: 0,
       max: 1,
       step: 0.05,
@@ -8655,7 +8940,7 @@ function renderEcho(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "echo-decay",
       label: i18n.t("echo.decay"),
-      value: t.decay,
+      value: t.decay, defaultValue: DEFAULT_ECHO.decay,
       min: 0,
       max: 1,
       step: 0.05,
@@ -8742,7 +9027,7 @@ async function executeParallaxFull(
   // existing rig is intentionally reused without changes.
   if (t.operation === "adjust") return { command: "ae.parallax.adjust", response: await client.execute("ae.parallax.adjust", { ...state.parallax }, { mode: "advanced" }) };
   if (t.operation === "remove") return { command: "ae.parallax.remove", response: await client.execute("ae.parallax.remove", {}, { allowDestructive: true }) };
-  if (["subtle", "truck", "vertical", "dolly"].includes(t.operation)) return {
+  if ((PARALLAX_MOVE_OPS as readonly string[]).includes(t.operation)) return {
     command: "ae.parallax.move", response: await client.execute("ae.parallax.move", { preset: t.operation, durationSeconds: 3 })
   };
   if (t.operation === "autoFocus") {
@@ -8803,10 +9088,10 @@ function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
       options: [
         { value: "create", label: i18n.t("parallaxFull.op.create") },
         { value: "adjust", label: i18n.t("parallaxFull.op.adjust") },
-        { value: "subtle", label: i18n.t("parallaxFull.op.subtle") },
-        { value: "truck", label: i18n.t("parallaxFull.op.truck") },
-        { value: "vertical", label: i18n.t("parallaxFull.op.vertical") },
-        { value: "dolly", label: i18n.t("parallaxFull.op.dolly") },
+        ...PARALLAX_MOVE_OPS.map((op) => ({
+          value: op,
+          label: i18n.t(("parallaxFull.op." + op) as MessageKey)
+        })),
         { value: "remove", label: i18n.t("parallaxFull.op.remove") },
         { value: "autoFocus", label: i18n.t("parallaxFull.op.autoFocus") },
         { value: "zoom", label: i18n.t("parallaxFull.op.zoom") },
@@ -8838,7 +9123,7 @@ function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "parallaxFull-focusOffset",
         label: i18n.t("parallaxFull.focusOffset"),
-        value: t.focusOffset,
+        value: t.focusOffset, defaultValue: DEFAULT_PARALLAX_FULL.focusOffset,
         min: -100000,
         max: 100000,
         step: 10,
@@ -8878,7 +9163,7 @@ function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: "parallaxFull-" + campo.id,
           label: i18n.t(campo.key),
-          value: t[campo.id],
+          value: t[campo.id], defaultValue: DEFAULT_PARALLAX_FULL[campo.id],
           min: campo.min,
           max: campo.max,
           step: campo.step,
@@ -8894,7 +9179,7 @@ function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
 
   if (t.operation === "wiggle") {
     for (const campo of [
-      { id: "frequency", key: "parallaxFull.frequency", min: 0, max: 1000, step: 0.1, unit: "parallaxFull.unit.hertz" },
+      { id: "frequency", key: "parallaxFull.frequency", min: 0, max: 100, step: 0.1, unit: "parallaxFull.unit.hertz" },
       { id: "amplitude", key: "parallaxFull.amplitude", min: 0, max: 100000, step: 1, unit: "parallaxFull.unit.px" },
       { id: "seed", key: "parallaxFull.seed", min: 0, max: 1000000, step: 1, unit: null }
     ] as const) {
@@ -8902,7 +9187,7 @@ function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: "parallaxFull-" + campo.id,
           label: i18n.t(campo.key),
-          value: t[campo.id],
+          value: t[campo.id], defaultValue: DEFAULT_PARALLAX_FULL[campo.id],
           min: campo.min,
           max: campo.max,
           step: campo.step,
@@ -8923,7 +9208,7 @@ function renderParallaxFull(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "parallaxFull-stepFrames",
         label: i18n.t("parallaxFull.stepFrames"),
-        value: t.stepFrames,
+        value: t.stepFrames, defaultValue: DEFAULT_PARALLAX_FULL.stepFrames,
         min: 1,
         max: 100,
         step: 1,
@@ -8964,7 +9249,7 @@ async function applyParallaxFull(
 
   if (response.ok) {
     shell.setStatus(i18n.t(state.parallaxFull.operation === "remove" ? "message.parallaxRemoved" :
-      ["subtle", "truck", "vertical", "dolly"].includes(state.parallaxFull.operation) ? "message.parallaxMotionApplied" :
+      (PARALLAX_MOVE_OPS as readonly string[]).includes(state.parallaxFull.operation) ? "message.parallaxMotionApplied" :
       state.parallaxFull.operation === "create" ? "message.parallaxCreated" :
       state.parallaxFull.operation === "adjust" ? "message.parallaxAdjusted" : "message.parallaxFullApplied"), "ok");
   } else {
@@ -8974,6 +9259,10 @@ async function applyParallaxFull(
 }
 
 function renderUnifiedParallax(regions: RenderRegions, i18n: I18n): void {
+  if(['create','adjust',...PARALLAX_MOVE_OPS].includes(state.parallaxFull.operation)){
+    const preview=createParallaxRigPreview(document,{...state.parallax,operation:state.parallaxFull.operation as ParallaxMovePreview,width:state.context?.compWidth??1920,height:state.context?.compHeight??1080},i18n.locale().startsWith('en'));
+    regions.content.appendChild(preview.element);const previous=disposeView;disposeView=()=>{preview.dispose();previous?.();};
+  }
   renderParallaxFull(regions, i18n);
   if (state.parallaxFull.operation === "create" || state.parallaxFull.operation === "adjust") renderParallax(regions, i18n);
 }
@@ -8990,7 +9279,7 @@ function renderParallax(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: `parallax-${campo.id}`,
         label: i18n.t(campo.key),
-        value: t[campo.id],
+        value: t[campo.id], defaultValue: DEFAULT_PARALLAX[campo.id],
         min: campo.min,
         max: campo.max,
         step: campo.step,
@@ -9014,6 +9303,42 @@ function renderParallax(regions: RenderRegions, i18n: I18n): void {
       ],
       onChange: (value) => {
         t.orderMode = value as ParallaxOrderMode;
+        shell.rerender();
+      }
+    })
+  );
+  regions.content.appendChild(
+    selectField(document, {
+      id: "parallax-depthMode",
+      label: i18n.t("parallax.depthMode"),
+      value: t.depthMode,
+      options: [
+        { value: "linear", label: i18n.t("parallax.depthMode.linear") },
+        { value: "front", label: i18n.t("parallax.depthMode.front") },
+        { value: "area", label: i18n.t("parallax.depthMode.area") }
+      ],
+      onChange: (value) => {
+        t.depthMode = value === "front" || value === "area" ? value : "linear";
+        shell.rerender();
+      }
+    })
+  );
+  regions.content.appendChild(checkboxField(document, {
+    id: "parallax-reverseOrder", label: i18n.t("parallax.reverseOrder"), checked: t.reverseOrder,
+    onChange: checked => { state.parallax = { ...state.parallax, reverseOrder: checked }; shell.rerender(); }
+  }));
+
+  regions.content.appendChild(
+    numberField(document, {
+      id: "parallax-backgroundDepth",
+      label: i18n.t("parallax.backgroundDepth"),
+      value: Math.round(t.backgroundDepth * 100), defaultValue: Math.round(DEFAULT_PARALLAX.backgroundDepth * 100),
+      min: 0,
+      max: 50,
+      step: 1,
+      unit: "%",
+      onCommit: (value) => {
+        state.parallax = { ...state.parallax, backgroundDepth: value / 100 };
         shell.rerender();
       }
     })
@@ -9099,7 +9424,7 @@ function renderFastEdit(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "fastEdit-duration",
         label: i18n.t("fastEdit.duration"),
-        value: t.duration,
+        value: t.duration, defaultValue: DEFAULT_FAST_EDIT.duration,
         min: 0.001,
         max: 10800,
         step: 0.1,
@@ -9117,7 +9442,7 @@ function renderFastEdit(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "fastEdit-frameRate",
         label: i18n.t("fastEdit.frameRate"),
-        value: t.frameRate,
+        value: t.frameRate, defaultValue: DEFAULT_FAST_EDIT.frameRate,
         min: 1,
         max: 999,
         step: 1,
@@ -9139,7 +9464,7 @@ function renderFastEdit(regions: RenderRegions, i18n: I18n): void {
         numberField(document, {
           id: `fastEdit-${campo}`,
           label: i18n.t(chave),
-          value: t[campo],
+          value: t[campo], defaultValue: DEFAULT_FAST_EDIT[campo],
           min: 4,
           max: 30000,
           step: 1,
@@ -9219,12 +9544,13 @@ async function refreshFastEditSummary(): Promise<void> {
   // nova, e a resposta antiga chegando depois sobrescreveria a atual.
   const sequencia = previewSequence + 1;
   previewSequence = sequencia;
+  const requestedContext = contextFingerprint(state.context);
 
   const response = await fiacao.client.execute<Record<string, unknown>>(
     "ae.comp.fast-edit.preview",
     fastEditArgs(state.fastEdit)
   );
-  if (sequencia !== previewSequence) return;
+  if (sequencia !== previewSequence || requestedContext !== contextFingerprint(state.context) || fiacao !== wiringAtual) return;
 
   fiacao.logger.recordResponse("ae.comp.fast-edit.preview", response);
 
@@ -9330,7 +9656,7 @@ function renderShapeLibrary(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "shapeLibrary-size",
       label: i18n.t("shapeLibrary.size"),
-      value: t.size,
+      value: t.size, defaultValue: DEFAULT_SHAPE_LIBRARY.size,
       min: 1,
       max: 100000,
       step: 1,
@@ -9349,7 +9675,7 @@ function renderShapeLibrary(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "shapeLibrary-roundness",
         label: i18n.t("shapeLibrary.roundness"),
-        value: t.roundness,
+        value: t.roundness, defaultValue: DEFAULT_SHAPE_LIBRARY.roundness,
         min: 0,
         max: 100000,
         step: 1,
@@ -9367,7 +9693,7 @@ function renderShapeLibrary(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "shapeLibrary-points",
         label: i18n.t("shapeLibrary.points"),
-        value: t.points,
+        value: t.points, defaultValue: DEFAULT_SHAPE_LIBRARY.points,
         min: 3,
         max: 1000,
         step: 1,
@@ -9383,7 +9709,7 @@ function renderShapeLibrary(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "shapeLibrary-strokeWidth",
       label: i18n.t("shapeLibrary.strokeWidth"),
-      value: t.strokeWidth,
+      value: t.strokeWidth, defaultValue: DEFAULT_SHAPE_LIBRARY.strokeWidth,
       min: 0,
       max: 1000,
       step: 1,
@@ -9484,7 +9810,7 @@ function renderTrimPath(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "trimPath-start",
       label: i18n.t("trimPath.start"),
-      value: t.start,
+      value: t.start, defaultValue: DEFAULT_TRIM_PATH.start,
       min: 0,
       max: 100,
       step: 1,
@@ -9500,7 +9826,7 @@ function renderTrimPath(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "trimPath-end",
       label: i18n.t("trimPath.end"),
-      value: t.end,
+      value: t.end, defaultValue: DEFAULT_TRIM_PATH.end,
       min: 0,
       max: 100,
       step: 1,
@@ -9516,7 +9842,7 @@ function renderTrimPath(regions: RenderRegions, i18n: I18n): void {
     numberField(document, {
       id: "trimPath-offset",
       label: i18n.t("trimPath.offset"),
-      value: t.offset,
+      value: t.offset, defaultValue: DEFAULT_TRIM_PATH.offset,
       min: -3600,
       max: 3600,
       step: 1,
@@ -9547,7 +9873,7 @@ function renderTrimPath(regions: RenderRegions, i18n: I18n): void {
       numberField(document, {
         id: "trimPath-durationFrames",
         label: i18n.t("trimPath.durationFrames"),
-        value: t.durationFrames,
+        value: t.durationFrames, defaultValue: DEFAULT_TRIM_PATH.durationFrames,
         min: 1,
         max: 10000,
         step: 1,
@@ -9735,19 +10061,34 @@ function particlesDisabledReason(i18n: I18n): string | null {
   if (!state.context?.isComposition) return i18n.t("message.quickNoActiveComp");
   return null;
 }
-function renderParticles(regions: RenderRegions, i18n: I18n): void {
-  const shell = regions.shell;
-  regions.content.appendChild(numberField(document, { id: "field.particles.birthRate", label: i18n.t("field.particles.birthRate"), value: state.particles.birthRate, min: 0.1, max: 10, step: 0.1, onCommit: (val: number) => { state.particles.birthRate = val; shell.rerender(); }}));
-  regions.content.appendChild(numberField(document, { id: "field.particles.longevity", label: i18n.t("field.particles.longevity"), value: state.particles.longevity, min: 0.1, max: 10, step: 0.1, onCommit: (val: number) => { state.particles.longevity = val; shell.rerender(); }}));
-  regions.content.appendChild(numberField(document, { id: "field.particles.velocity", label: i18n.t("field.particles.velocity"), value: state.particles.velocity, min: 0, max: 5, step: 0.1, onCommit: (val: number) => { state.particles.velocity = val; shell.rerender(); }}));
-  regions.content.appendChild(hint(document, i18n.t("message.particlesInstructions")));
+function renderParticles(regions: RenderRegions, i18n: I18n, client?: Client, logger?: MotionLogger): void {
+  let disposed = false, reading = false, generation = 0;
+  const editor = createParticlesEditor(document, { i18n, initial: state.particles, onChange: settings => { generation++; state.particles = settings; particleEditSession.edit(settings); } });
+  regions.content.appendChild(editor.element);
+  const refresh = async (): Promise<void> => {
+    if (!client || disposed || reading || state.busy) return;
+    reading = true; const ticket = generation;
+    try {
+      const response = await client.execute<ParticleReadData>("ae.effect.particles.read", {});
+      if (!response.ok && logger) logger.recordResponse("ae.effect.particles.read", response);
+      if (disposed || ticket !== generation || !response.ok || !isParticleReadData(response.data)) return;
+      const next = particleEditSession.hydrate(response.data);
+      if (JSON.stringify(next) !== JSON.stringify(state.particles)) { state.particles = next; editor.setArgs(next); }
+    } finally { reading = false; }
+  };
+  const polling = client ? focusedPoll(document, () => { void refresh(); }, CONTEXT_POLL_MS, undefined, pointerInPanel) : null;
+  refreshToolContext = () => { void refresh(); };
+  void refresh();
+  disposeView = () => { disposed = true; polling?.dispose(); refreshToolContext = null; editor.dispose(); };
 }
+
 async function applyParticles(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
   if (state.busy) return;
   setBusy(shell, true, i18n.t("status.applyingQuick", { tool: i18n.t("tool.particles.name") }));
-  const response = await client.execute("ae.effect.particles", { birthRate: state.particles.birthRate, longevity: state.particles.longevity, velocity: state.particles.velocity });
+  particleEditSession.edit(state.particles);
+  const response = await client.execute("ae.effect.particles", { ...particleEditSession.args() });
   logger.recordResponse("ae.effect.particles", response);
-  if (response.ok) { shell.setStatus(i18n.t("message.particlesApplied"), "ok"); } else { reportFailure(shell, i18n, response); }
+  if (response.ok) { particleEditSession.applied(); shell.setStatus(i18n.t("message.particlesApplied"), "ok"); } else { reportFailure(shell, i18n, response); }
   setBusy(shell, false);
 }
 
@@ -9758,7 +10099,7 @@ function textureDisabledReason(i18n: I18n): string | null {
 }
 function renderTexture(regions: RenderRegions, i18n: I18n): void {
   const shell = regions.shell;
-  regions.content.appendChild(numberField(document, { id: "field.texture.opacity", label: i18n.t("field.texture.opacity"), value: state.texture.opacity, min: 0, max: 100, step: 1, onCommit: (val: number) => { state.texture.opacity = val; shell.rerender(); }}));
+  regions.content.appendChild(numberField(document, { id: "field.texture.opacity", label: i18n.t("field.texture.opacity"), value: state.texture.opacity, defaultValue: DEFAULT_TEXTURE.opacity, min: 0, max: 100, step: 1, onCommit: (val: number) => { state.texture.opacity = val; shell.rerender(); }}));
   regions.content.appendChild(hint(document, i18n.t("message.textureInstructions")));
 }
 async function applyTexture(shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {

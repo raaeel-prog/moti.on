@@ -54,21 +54,25 @@
 
   var MN = {
     transform: "ADBE Transform Group",
+    cameraOptions: "ADBE Camera Options Group",
     position: "ADBE Position",
     orientation: "ADBE Orientation",
     rotationZ: "ADBE Rotate Z",
-    zoom: "ADBE Camera Zoom"
+    zoom: "ADBE Camera Zoom",
+    focusDistance: "ADBE Camera Focus Distance",
+    depthOfField: "ADBE Camera Depth of Field"
   };
 
   /**
-   * Os onze presets.
+   * Os onze presets classicos. Shots profissionais (Hero Push, Depth Slide,
+   * Float Loop...) vivem no motor de camera (ae.camera.shot.*, ADR 0007), com
+   * controles vivos e uma unica pose; esta tabela continua sendo keyframe simples.
    *
    * `eixo` diz qual componente do vetor anda, ou `null` quando a propriedade e
    * escalar. `sentido` multiplica `amount`, entao um mesmo par de presets — push
-   * e pull, crane up e down — e a mesma linha com sinal trocado, e nao duas
-   * contas diferentes que poderiam divergir.
+   * e pull, crane up e down — e a mesma linha com sinal trocado.
    */
-  /** @type {Record<string, {propriedade: string, eixo: number|null, sentido: number}>} */
+  /** @type {Record<string, any>} */
   var PRESETS = {
     pushIn: { propriedade: MN.position, eixo: 2, sentido: 1 },
     pullOut: { propriedade: MN.position, eixo: 2, sentido: -1 },
@@ -113,6 +117,59 @@
       if (Object.prototype.hasOwnProperty.call(PRESETS, chave)) nomes.push(chave);
     }
     return nomes;
+  }
+
+  /** @param {string} matchName @returns {boolean} */
+  function isOpticalProperty(matchName) {
+    return matchName === MN.zoom || matchName === MN.focusDistance || matchName === MN.depthOfField;
+  }
+
+  /**
+   * Detecta se a camera faz parte de um rig Parallax v3 gerenciado pelo Moti.on.
+   * No Parallax v3, a camera fica parenteada ao null 3D `rig.master`, que e a
+   * unica autoridade de movimento espacial/rotacional, enquanto canais opticos
+   * (Zoom, Focus Distance, Depth of Field) continuam na propria camera.
+   *
+   * @param {CompItem} comp
+   * @param {Layer} camera
+   * @returns {{master: any, data: any}|null}
+   */
+  function parallaxRigForCamera(comp, camera) {
+    var parent = /** @type {any} */ (camera).parent;
+    if (!parent || typeof MotionRigMeta === "undefined" || typeof MotionJson === "undefined") return null;
+    var comment = /** @type {any} */ (parent).comment;
+    if (typeof comment !== "string" || !MotionRigMeta.has(comment, "parallax.quick")) return null;
+    try {
+      var start = comment.indexOf(MotionContracts.META_OPEN);
+      var end = comment.indexOf(MotionContracts.META_CLOSE);
+      if (start < 0 || end <= start) return null;
+      var data = /** @type {any} */ (MotionJson.parse(comment.substring(start + MotionContracts.META_OPEN.length, end)));
+      if (!data || data.rigType !== "parallax.quick" || data.schemaVersion !== 3) return null;
+      if (typeof /** @type {any} */ (camera).id === "number" && typeof data.cameraId === "number" && data.cameraId !== /** @type {any} */ (camera).id) {
+        return null;
+      }
+      if (typeof /** @type {any} */ (comp).id === "number" && typeof data.compId === "number" && data.compId !== /** @type {any} */ (comp).id) {
+        return null;
+      }
+      return { master: parent, data: data };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * O canal do preset ja escalado por `amount`: delta escalar ou vetor com um eixo.
+   *
+   * @param {any} preset
+   * @param {number} amount
+   * @returns {any[]}
+   */
+  function resolvePresetChannels(preset, amount) {
+    var d = amount * /** @type {number} */ (preset.sentido);
+    if (preset.eixo === null) return [{ propriedade: preset.propriedade, delta: d, obrigatorio: true }];
+    var vec = [0, 0, 0];
+    vec[preset.eixo] = d;
+    return [{ propriedade: preset.propriedade, delta: vec, obrigatorio: true }];
   }
 
   /** @param {Record<string, unknown>} args @returns {MotionCommandFailure|null} */
@@ -191,7 +248,8 @@
 
   /** @param {unknown} layer @param {string} matchName @returns {Property|null} */
   function transformProperty(layer, matchName) {
-    var grupo = /** @type {any} */ (layer).property(matchName === MN.zoom ? "ADBE Camera Options Group" : MN.transform);
+    if (!layer || typeof /** @type {any} */ (layer).property !== "function") return null;
+    var grupo = /** @type {any} */ (layer).property(isOpticalProperty(matchName) ? MN.cameraOptions : MN.transform);
     if (!grupo) return null;
     var property = grupo.property(matchName);
     return property instanceof Property ? property : null;
@@ -209,30 +267,66 @@
         field: "cameraName"
       });
     }
-    if (/** @type {any} */ (camera).parent) {
-      // Position da camera vive no espaco do pai: com o pai girado, "para a
-      // direita" deixa de ser para a direita na composicao.
+    var rig = parallaxRigForCamera(comp, camera);
+    if (/** @type {any} */ (camera).parent && !rig) {
+      // Position da camera vive no espaco do pai: com um pai externo nao
+      // gerenciado, "para a direita" deixa de ser para a direita na composicao.
       return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camera tem pai; a transicao sairia torta.", null);
     }
-    if (/** @type {any} */ (camera).locked) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie a camera antes de aplicar.", null);
+    if (/** @type {any} */ (camera).locked || (rig && rig.master.locked)) {
+      return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie a camera antes de aplicar.", null);
+    }
 
-    var preset = /** @type {Record<string, unknown>} */ (PRESETS[/** @type {string} */ (args.preset)]);
-    var property = transformProperty(camera, /** @type {string} */ (preset.propriedade));
-    if (!property) {
-      return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camera nao expoe a propriedade do preset.", {
-        property: preset.propriedade
-      });
+    var preset = PRESETS[/** @type {string} */ (args.preset)];
+    // No Parallax o null master fica no plano focal: girar o master seria uma
+    // orbita em volta do fundo, nao um pan. O motor de camera compensa isso.
+    if (rig && preset.propriedade === MN.orientation) {
+      return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Pan e tilt no Parallax usam os shots de camera da aba Parallax.", null);
     }
-    if (property.expression !== "") {
-      return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A propriedade da camera tem expressao ativa.", null);
-    }
-    if (/** @type {any} */ (property).dimensionsSeparated === true) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camera usa dimensoes separadas. Reuna a posicao antes de aplicar.", null);
-    if (property.numKeys > 0) {
-      return failure(
-        MotionContracts.ERROR.KEYFRAME_CONFLICT,
-        "A propriedade da camera ja tem keyframes; a transicao os sobrescreveria.",
-        null
-      );
+    var canais = resolvePresetChannels(preset, /** @type {number} */ (args.amount));
+    var c;
+    for (c = 0; c < canais.length; c += 1) {
+      var canal = /** @type {any} */ (canais[c]);
+      var alvoCamada = (rig && !isOpticalProperty(canal.propriedade)) ? rig.master : camera;
+      var property = transformProperty(alvoCamada, canal.propriedade);
+      if (!property) {
+        if (canal.obrigatorio) {
+          return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A camera nao expoe a propriedade do preset.", {
+            property: canal.propriedade
+          });
+        }
+        continue;
+      }
+      if (property.expression !== "") {
+        return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A propriedade da camera tem expressao ativa.", null);
+      }
+      if (/** @type {any} */ (property).dimensionsSeparated === true) {
+        return failure(
+          MotionContracts.ERROR.INVALID_SELECTION_TYPE,
+          "A camera usa dimensoes separadas. Reuna a posicao antes de aplicar.",
+          null
+        );
+      }
+      if (property.numKeys > 0) {
+        return failure(
+          MotionContracts.ERROR.KEYFRAME_CONFLICT,
+          "A propriedade da camera ja tem keyframes; a transicao os sobrescreveria.",
+          null
+        );
+      }
+      if (rig && canal.propriedade === MN.position && typeof canal.delta !== "number") {
+        var zoomRef = (rig.data.frame && typeof rig.data.frame.zoom === "number") ? rig.data.frame.zoom : 3000;
+        var totalDepth = typeof rig.data.totalDepth === "number" ? rig.data.totalDepth : 0;
+        var posAtual = /** @type {number[]} */ (property.value);
+        var zFinal = (posAtual && typeof posAtual[2] === "number" ? posAtual[2] : 0) + Number(canal.delta[2]);
+        if (-totalDepth - zFinal + zoomRef <= zoomRef * 0.1) {
+          return failure(
+            MotionContracts.ERROR.INVALID_PRESET,
+            "O avanco de dolly ultrapassa a camada mais proxima.",
+            { field: "amount" }
+          );
+        }
+      }
     }
     return null;
   }
@@ -244,76 +338,131 @@
   function run(args) {
     var comp = /** @type {CompItem} */ (app.project.activeItem);
     var camera = /** @type {Layer} */ (findCamera(comp, /** @type {string} */ (args.cameraName)));
-    var preset = /** @type {Record<string, unknown>} */ (PRESETS[/** @type {string} */ (args.preset)]);
-    var property = /** @type {Property} */ (transformProperty(camera, /** @type {string} */ (preset.propriedade)));
+    var rig = parallaxRigForCamera(comp, camera);
+    var preset = PRESETS[/** @type {string} */ (args.preset)];
+    var canais = resolvePresetChannels(preset, /** @type {number} */ (args.amount));
     var curva = /** @type {{x1: number, y1: number, x2: number, y2: number}} */ (args.curve);
 
     var inicio = comp.time;
     var duracaoSegundos = /** @type {number} */ (args.durationFrames) * comp.frameDuration;
     var fim = inicio + duracaoSegundos;
-    var delta = /** @type {number} */ (args.amount) * /** @type {number} */ (preset.sentido);
 
-    var valorInicial = property.value;
-    var eixo = preset.eixo;
+    /** @type {any[]} */
+    var historico = [];
+    var comentarioAnterior = rig ? rig.master.comment : null;
+    var posInicioRig = null;
+    var posFimRig = null;
 
     try {
-      /** @type {unknown} */
-      var valorFinal;
-      /** @type {number[]} */
-      var diferencas;
+      var c;
+      for (c = 0; c < canais.length; c += 1) {
+        var canal = /** @type {any} */ (canais[c]);
+        var alvoCamada = (rig && !isOpticalProperty(canal.propriedade)) ? rig.master : camera;
+        var property = transformProperty(alvoCamada, canal.propriedade);
+        if (!property) continue;
 
-      if (eixo === null) {
-        valorFinal = /** @type {number} */ (valorInicial) + delta;
-        diferencas = [delta];
-      } else {
-        var vetor = /** @type {number[]} */ (valorInicial);
-        var destino = [];
-        diferencas = [];
-        var i;
-        for (i = 0; i < vetor.length; i += 1) {
-          var componente = /** @type {number} */ (vetor[i]);
-          var avanco = i === eixo ? delta : 0;
-          destino.push(componente + avanco);
-          diferencas.push(avanco);
+        var valorInicial = property.value;
+        historico.push({
+          property: property,
+          valorInicial: valorInicial,
+          expressaoInicial: property.expression || "",
+          expressaoAtiva: Boolean(property.expressionEnabled),
+          hadKeys: true
+        });
+
+        /** @type {unknown} */
+        var valorFinal;
+        /** @type {number[]} */
+        var diferencas;
+
+        if (typeof canal.delta === "number") {
+          var bruto = /** @type {number} */ (valorInicial) + canal.delta;
+          if (canal.propriedade === MN.zoom || canal.propriedade === MN.focusDistance) {
+            bruto = Math.max(1, bruto);
+          }
+          valorFinal = bruto;
+          diferencas = [/** @type {number} */ (valorFinal) - /** @type {number} */ (valorInicial)];
+        } else {
+          var vetor = /** @type {number[]} */ (valorInicial);
+          var destino = [];
+          diferencas = [];
+          var i;
+          for (i = 0; i < vetor.length; i += 1) {
+            var componente = /** @type {number} */ (vetor[i]);
+            var avanco = i < canal.delta.length ? /** @type {number} */ (canal.delta[i]) : 0;
+            destino.push(componente + avanco);
+            diferencas.push(avanco);
+          }
+          valorFinal = destino;
+          if (rig && canal.propriedade === MN.position) {
+            posInicioRig = vetor.slice(0);
+            posFimRig = destino.slice(0);
+          }
         }
-        valorFinal = destino;
+
+        property.setValueAtTime(inicio, valorInicial);
+        property.setValueAtTime(fim, valorFinal);
+        if (property.numKeys !== 2) {
+          throw new Error("After Effects nao criou os dois keyframes da transicao.");
+        }
+
+        var easeSaida = [];
+        var easeEntrada = [];
+        if (/** @type {any} */ (property).isSpatial === true) {
+          var distanceSquared = 0;
+          for (var axis = 0; axis < diferencas.length; axis += 1) {
+            distanceSquared += Number(diferencas[axis]) * Number(diferencas[axis]);
+          }
+          diferencas = [Math.sqrt(distanceSquared)];
+        }
+        var d;
+        for (d = 0; d < diferencas.length; d += 1) {
+          var convertido = MotionKeyframes.curveToEase(curva, duracaoSegundos, /** @type {number} */ (diferencas[d]));
+          easeSaida.push(new KeyframeEase(convertido.outSpeed, convertido.outInfluence));
+          easeEntrada.push(new KeyframeEase(convertido.inSpeed, convertido.inInfluence));
+        }
+
+        property.setInterpolationTypeAtKey(1, KeyframeInterpolationType.BEZIER, KeyframeInterpolationType.BEZIER);
+        property.setInterpolationTypeAtKey(2, KeyframeInterpolationType.BEZIER, KeyframeInterpolationType.BEZIER);
+        property.setTemporalEaseAtKey(1, easeSaida, easeSaida);
+        property.setTemporalEaseAtKey(2, easeEntrada, easeEntrada);
       }
 
-      property.setValueAtTime(inicio, valorInicial);
-      property.setValueAtTime(fim, valorFinal);
-      if (property.numKeys !== 2) {
-        throw new Error("After Effects nao criou os dois keyframes da transicao.");
+      if (rig && posInicioRig && posFimRig) {
+        rig.data.motion = {
+          preset: args.preset,
+          start: posInicioRig,
+          end: posFimRig,
+          t1: inicio,
+          t2: fim
+        };
+        rig.master.comment = MotionRigMeta.write(rig.master.comment, MotionJson.stringify(rig.data));
       }
-
-      // A curva do editor vira o ease dos dois keyframes, dimensao a dimensao.
-      var easeSaida = [];
-      var easeEntrada = [];
-      // Spatial Position has ONE speed, in px/s, even though its value has 3
-      // components. AE rejects a three-entry temporal ease array here.
-      if (/** @type {any} */ (property).isSpatial === true) {
-        var distanceSquared = 0;
-        for (var axis = 0; axis < diferencas.length; axis += 1) distanceSquared += Number(diferencas[axis]) * Number(diferencas[axis]);
-        diferencas = [Math.sqrt(distanceSquared)];
-      }
-      var d;
-      for (d = 0; d < diferencas.length; d += 1) {
-        var convertido = MotionKeyframes.curveToEase(curva, duracaoSegundos, /** @type {number} */ (diferencas[d]));
-        easeSaida.push(new KeyframeEase(convertido.outSpeed, convertido.outInfluence));
-        easeEntrada.push(new KeyframeEase(convertido.inSpeed, convertido.inInfluence));
-      }
-
-      property.setInterpolationTypeAtKey(1, KeyframeInterpolationType.BEZIER, KeyframeInterpolationType.BEZIER);
-      property.setInterpolationTypeAtKey(2, KeyframeInterpolationType.BEZIER, KeyframeInterpolationType.BEZIER);
-      property.setTemporalEaseAtKey(1, easeSaida, easeSaida);
-      property.setTemporalEaseAtKey(2, easeEntrada, easeEntrada);
     } catch (transitionError) {
       var rollbackFailed = false;
-      try {
-        var k;
-        for (k = property.numKeys; k >= 1; k -= 1) property.removeKey(k);
-        property.setValue(valorInicial);
-      } catch (restoreError) {
-        rollbackFailed = true;
+      var h;
+      for (h = historico.length - 1; h >= 0; h -= 1) {
+        var reg = /** @type {any} */ (historico[h]);
+        try {
+          if (reg.hadKeys) {
+            var k;
+            for (k = reg.property.numKeys; k >= 1; k -= 1) reg.property.removeKey(k);
+          }
+          reg.property.setValue(reg.valorInicial);
+          if (typeof reg.property.expression === "string") {
+            reg.property.expression = reg.expressaoInicial;
+            reg.property.expressionEnabled = reg.expressaoAtiva;
+          }
+        } catch (restoreError) {
+          rollbackFailed = true;
+        }
+      }
+      if (rig && comentarioAnterior !== null) {
+        try {
+          rig.master.comment = comentarioAnterior;
+        } catch (commentError) {
+          rollbackFailed = true;
+        }
       }
       if (rollbackFailed) {
         var rollbackError = /** @type {Error & {motionCode?: string}} */ (
@@ -333,6 +482,7 @@
       data: {
         preset: args.preset,
         cameraName: /** @type {any} */ (camera).name,
+        targetLayerName: rig ? /** @type {any} */ (rig.master).name : /** @type {any} */ (camera).name,
         startTime: inicio,
         endTime: fim
       }

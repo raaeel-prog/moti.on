@@ -1,24 +1,21 @@
 /** Original Moti.on vector catalog. Presentation only; no host or global DOM. */
-import { DUOTONE_DRAWINGS, duotoneStaticPath, type DuotoneDrawing, type DuotoneGesture, type DuotoneToolId } from "./icon-drawings.js";
+import { DUOTONE_DRAWINGS, NAV_DRAWINGS, duotoneStaticPath, type DuotoneDrawing, type DuotoneGesture, type DuotoneToolId, type NavIconId } from "./icon-drawings.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 export type IconFamily = "neutral" | "keyframes" | "layers" | "animation" | "spatial" | "shapes" | "effects" | "project";
-/** Onyx Vivo (approved 2026-10-07): one gesture per tool; navigation glyphs do not move. */
+/** Onyx Vivo (approved 2026-10-07): one gesture per tool. Since 2026-11-16 the tabs gesture too (NAV_DRAWINGS). */
 export type IconGesture = "none" | DuotoneGesture;
-/** Navigation and utility glyphs stay monoline; tool drawings live in icon-drawings.ts. */
+/** Utility glyphs stay monoline; tool and tab drawings live in icon-drawings.ts. */
 const ICON_PATHS = {
   close: "M4 4l10 10M14 4L4 14",
   back: "M8 4L3 9l5 5M3 9h12",
-  search: "M12 7.5a4.5 4.5 0 1 1-9 0a4.5 4.5 0 1 1 9 0M11 11l4 4",
   favorite: "M9 2l2 4.3 4.7.6-3.4 3.3.8 4.8L9 12.8 4.9 15l.8-4.8L2.3 7l4.7-.7z",
   more: "M4 8.5h.1M9 8.5h.1M14 8.5h.1",
-  presets: "M3 3h12v12H3zM7 6l5 3-5 3z",
   home: "M9 1.5L1.5 8h2v7.5h4v-5h3v5h4V8h2z",
   context: "M2.5 3.5h13v3h-13zM2.5 8.5h5.5v6h-5.5zM9.5 8.5h6v6h-6z",
-  tools: "M2 3h5v5H2zM11 3h5v5h-5zM2 10h5v5H2zM11 10h5v5h-5z",
   system: "M9 2.5l6 3.5v5l-6 3.5-6-3.5v-5zM6.5 8v2M11.5 8v2",
   diagnostics: "M3.5 4.5h11M3.5 9h11M3.5 13.5h7",
-  settings: "M3 5h12M3 9h12M3 13h12M6 3.5v3M12 7.5v3M8 11.5v3"
+  variants: "M3.5 5h11M3.5 9h11M3.5 13h11"
 } as const;
 
 /** Marcadores distintos para runtimes que nao implementam SVG inline. */
@@ -28,7 +25,7 @@ const ICON_FALLBACKS: Record<string, string> = {
   styleSwap: "A>B",
   verticalPulse: "T↕",
   search: "⌕",
-  presets: "▶", favorite: "☆", more: "…",
+  presets: "▶", favorite: "☆", more: "…", videoCamera: "▭", stock: "▦",
   home: "H",
   context: "C",
   tools: "T",
@@ -48,6 +45,7 @@ const ICON_FALLBACKS: Record<string, string> = {
   system: "S",
   diagnostics: "!",
   settings: "⚙",
+  variants: "☰",
   ease: "∫",
   reverseKeys: "⇆",
   reverseValues: "⇕",
@@ -86,7 +84,7 @@ const ICON_FALLBACKS: Record<string, string> = {
   fastEdit: "⌸"
 };
 
-export type IconId = keyof typeof ICON_PATHS | DuotoneToolId;
+export type IconId = keyof typeof ICON_PATHS | DuotoneToolId | NavIconId;
 export interface IconDefinition {
   readonly id: IconId;
   readonly family: IconFamily;
@@ -158,7 +156,7 @@ const FAMILIES: Partial<Record<IconId, IconFamily>> = {
 function describe(id: IconId): IconDefinition {
   const family = FAMILIES[id] ?? "neutral";
   const fallback = ICON_FALLBACKS[id] ?? "?";
-  const duotone = (DUOTONE_DRAWINGS as Record<string, DuotoneDrawing>)[id];
+  const duotone = (DUOTONE_DRAWINGS as Record<string, DuotoneDrawing>)[id] ?? (NAV_DRAWINGS as Record<string, DuotoneDrawing>)[id];
   if (duotone) {
     return Object.freeze({ id, family, gesture: duotone.gesture, fill: duotone.fill ?? "", base: duotone.base ?? "",
       detail: duotone.accent, staticPath: duotoneStaticPath(duotone), fallback });
@@ -167,7 +165,7 @@ function describe(id: IconId): IconDefinition {
   return Object.freeze({ id, family, gesture: "none", fill: "", base: "", detail: staticPath, staticPath, fallback });
 }
 export const ICON_CATALOG: Readonly<Record<IconId, IconDefinition>> = Object.freeze(
-  Object.fromEntries(([...Object.keys(ICON_PATHS), ...Object.keys(DUOTONE_DRAWINGS)] as IconId[]).map(id => [id, describe(id)]))
+  Object.fromEntries(([...Object.keys(ICON_PATHS), ...Object.keys(NAV_DRAWINGS), ...Object.keys(DUOTONE_DRAWINGS)] as IconId[]).map(id => [id, describe(id)]))
 ) as Readonly<Record<IconId, IconDefinition>>;
 
 export function createIcon(doc: Document, name: string): Element {

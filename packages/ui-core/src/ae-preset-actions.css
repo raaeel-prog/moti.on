@@ -1,0 +1,237 @@
+/*
+ * "Action Deck" — menu Ações de presets da Biblioteca (AE), 2026-11-04 (v2: compacto e sutil).
+ * Inspirado no Preset Actions do Composer, com identidade Moti.on:
+ *  - o painel nasce do próprio botão (clip-path circular a partir do canto) e os
+ *    cartões sobem com leve dobra, um após o outro;
+ *  - cada grupo tem uma cor discreta (Copiar azul, Remover coral, Colar menta),
+ *    holofote fraco que segue o ponteiro e trilho que acende no item em foco;
+ *  - Colar mostra a "pilha" do que foi copiado e abre em leque no hover;
+ *  - painel estreito/baixo: os cartões viram linhas com chips (≈100 px de altura).
+ * Chromium 99 (CEP 12): sem :has(), color-mix() ou @container. Só transform,
+ * opacity, clip-path e cores animam. Por último no tema do AE.
+ */
+[data-host="after-effects"] .ch-preset-library-actions {
+  --deck-copy: #9cc2f5;
+  --deck-remove: #eea59d;
+  --deck-paste: #8fd3ae;
+  --deck-copy-rgb: 156, 194, 245;
+  --deck-remove-rgb: 238, 165, 157;
+  --deck-paste-rgb: 143, 211, 174;
+  --deck-ease: cubic-bezier(.2, .9, .3, 1.04);
+  position: relative;
+}
+
+/* ---------- Gatilho ---------- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-library-actions > .ch-preset-actions-trigger {
+  position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 0 7px 0 8px; overflow: visible;
+}
+[data-host="after-effects"] .ch-preset-actions-trigger__chevron {
+  width: 4px; height: 4px; margin-top: -2px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; opacity: .75;
+  transform: rotate(45deg); transition: transform 320ms var(--deck-ease), margin 320ms var(--deck-ease);
+}
+[data-host="after-effects"] .ch-preset-library-actions[data-open="true"] .ch-preset-actions-trigger__chevron { transform: rotate(-135deg); margin-top: 2px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-library-actions[data-open="true"] > .ch-preset-actions-trigger {
+  border-color: #6a6a6a; background: #000; color: #f0f0f0;
+}
+/* Ponto menta: há algo copiado esperando para ser colado. */
+[data-host="after-effects"] .ch-preset-actions-trigger::after {
+  content: ""; position: absolute; top: -2px; right: -2px; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--deck-paste); box-shadow: 0 0 0 2px #1d1d1d; transform: scale(0); transition: transform 320ms var(--deck-ease);
+}
+[data-host="after-effects"] .ch-preset-library-actions[data-clipboard="true"] .ch-preset-actions-trigger::after { transform: scale(1); }
+[data-host="after-effects"] .ch-preset-actions-trigger[data-flash] { animation: ch-deck-flash 800ms ease-out both; }
+[data-host="after-effects"] .ch-preset-actions-trigger[data-flash="copy"] { --flash: var(--deck-copy-rgb); }
+[data-host="after-effects"] .ch-preset-actions-trigger[data-flash="remove"] { --flash: var(--deck-remove-rgb); }
+[data-host="after-effects"] .ch-preset-actions-trigger[data-flash="paste"] { --flash: var(--deck-paste-rgb); }
+@keyframes ch-deck-flash {
+  0% { box-shadow: 0 0 0 0 rgba(var(--flash), .55); border-color: rgb(var(--flash)); }
+  100% { box-shadow: 0 0 0 4px rgba(var(--flash), 0); }
+}
+
+/* ---------- Painel ---------- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu,
+[data-host="after-effects"] .ch-preset-library-actions-menu {
+  position: absolute; z-index: 150; bottom: calc(100% + 8px); left: -4px; top: auto;
+  display: grid; grid-template-columns: 1fr 1fr 88px; gap: 4px;
+  width: 320px; max-width: calc(100vw - 12px); max-height: calc(100vh - 64px); overflow: auto;
+  box-sizing: border-box; padding: 5px; border: 1px solid #333; border-radius: 6px;
+  background: #101010;
+  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, .8), inset 0 1px 0 rgba(255, 255, 255, .03);
+  perspective: 600px; transform-origin: 24px 100%;
+}
+[data-host="after-effects"] .ch-preset-library-actions-menu[hidden] { display: none !important; }
+/* Sem barra de rolagem: os cartões passam da borda por um instante na abertura e
+   a barra piscava. Continua rolável pela roda se o conteúdo não couber. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu,
+[data-host="after-effects"] .ch-preset-library-actions-menu { overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
+[data-host="after-effects"] .ch-preset-library-actions-menu::-webkit-scrollbar { display: none; width: 0; height: 0; }
+/* Fio de luz que percorre a borda superior na abertura e some quase todo. */
+[data-host="after-effects"] .ch-preset-library-actions-menu::before {
+  content: ""; position: absolute; top: 0; left: 8px; right: 8px; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--deck-copy) 30%, var(--deck-remove) 55%, var(--deck-paste) 80%, transparent);
+  opacity: 0; transform: scaleX(0); transform-origin: left;
+}
+[data-host="after-effects"] .ch-preset-library-actions-menu[data-state="open"] { animation: ch-deck-open 300ms var(--deck-ease) both; }
+[data-host="after-effects"] .ch-preset-library-actions-menu[data-state="open"]::before { animation: ch-deck-wire 700ms 80ms ease-out both; }
+[data-host="after-effects"] .ch-preset-library-actions-menu[data-state="closing"] { animation: ch-deck-close 180ms cubic-bezier(.4, 0, 1, 1) both; pointer-events: none; }
+@keyframes ch-deck-open {
+  from { clip-path: circle(0 at 24px 100%); transform: translateY(4px) scale(.985); opacity: .5; }
+  to { clip-path: circle(150% at 24px 100%); transform: none; opacity: 1; }
+}
+@keyframes ch-deck-close {
+  from { clip-path: circle(150% at 24px 100%); opacity: 1; }
+  to { clip-path: circle(0 at 24px 100%); transform: translateY(3px); opacity: 0; }
+}
+@keyframes ch-deck-wire {
+  0% { opacity: 0; transform: scaleX(0); }
+  45% { opacity: .55; }
+  100% { opacity: .18; transform: scaleX(1); }
+}
+
+/* ---------- Cartões ---------- */
+[data-host="after-effects"] .ch-preset-library-actions-menu .ch-preset-actions-column {
+  --tone: var(--deck-copy); --tone-rgb: var(--deck-copy-rgb);
+  position: relative; display: flex; flex-direction: column; gap: 0; min-width: 0; padding: 7px 5px 5px;
+  border: 1px solid #222; border-radius: 4px; overflow: hidden;
+  background: radial-gradient(120px circle at var(--mx, 50%) var(--my, -60px), rgba(var(--tone-rgb), .06), transparent 70%), #151515;
+  transition: border-color 160ms ease;
+  transform-origin: 50% 100%; backface-visibility: hidden;
+}
+[data-host="after-effects"] .ch-preset-library-actions-menu .ch-preset-actions-column[data-group="remove"] { --tone: var(--deck-remove); --tone-rgb: var(--deck-remove-rgb); }
+[data-host="after-effects"] .ch-preset-library-actions-menu .ch-preset-actions-column[data-group="paste"] { --tone: var(--deck-paste); --tone-rgb: var(--deck-paste-rgb); }
+[data-host="after-effects"] .ch-preset-library-actions-menu .ch-preset-actions-column:hover { border-color: rgba(var(--tone-rgb), .22); }
+/* Marca de cor no topo: curta em repouso, inteira no hover. */
+[data-host="after-effects"] .ch-preset-library-actions-menu .ch-preset-actions-column::before {
+  content: ""; position: absolute; top: 0; left: 8px; right: 8px; height: 1px;
+  background: var(--tone); opacity: .4; transform: scaleX(.2); transform-origin: left; transition: transform 300ms var(--deck-ease), opacity 200ms ease;
+}
+[data-host="after-effects"] .ch-preset-library-actions-menu .ch-preset-actions-column:hover::before { transform: scaleX(1); opacity: .8; }
+[data-host="after-effects"] .ch-preset-library-actions-menu[data-state="open"] .ch-preset-actions-column {
+  animation: ch-deck-card 340ms var(--deck-ease) both; animation-delay: calc(40ms + var(--i, 0) * 40ms);
+}
+@keyframes ch-deck-card {
+  from { opacity: 0; transform: translateY(6px) rotateX(-12deg); }
+  to { opacity: 1; transform: none; }
+}
+
+[data-host="after-effects"] .ch-preset-actions-head { display: flex; align-items: center; gap: 5px; min-width: 0; }
+[data-host="after-effects"] .ch-preset-actions-head > strong { font-size: 12px; font-weight: 600; color: #e6e6e6; white-space: nowrap; }
+[data-host="after-effects"] .ch-preset-actions-glyph {
+  flex: 0 0 auto; width: 12px; height: 12px; fill: none; stroke: var(--tone); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; opacity: .85;
+  transition: transform 320ms var(--deck-ease);
+}
+[data-host="after-effects"] .ch-preset-actions-column:hover .ch-preset-actions-glyph { transform: rotate(-6deg); }
+[data-host="after-effects"] .ch-preset-actions-caption { margin: 1px 0 5px; font-size: 9.5px; color: #6f6f6f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-host="after-effects"] .ch-preset-library-actions-menu .ch-preset-actions-unavailable { padding: 2px 0; font-size: 10.5px; color: #5f5f5f; }
+
+/* ---------- Itens: trilho de cor + deslize curto ---------- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-button {
+  position: relative; display: block; width: 100%; min-width: 0; min-height: 20px; height: auto; padding: 2px 5px 2px 10px;
+  border: 0; border-radius: 3px; background: transparent; color: #a3a3a3; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; font-weight: 400;
+  transition: color 120ms ease, background-color 120ms ease, padding 220ms var(--deck-ease), transform 220ms var(--deck-ease);
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-button::before {
+  content: ""; position: absolute; left: 4px; top: 50%; width: 2px; height: 2px; margin-top: -1px; border-radius: 1px;
+  background: #4d4d4d; transition: height 220ms var(--deck-ease), margin 220ms var(--deck-ease), background-color 120ms ease;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-button:not(:disabled):is(:hover, :focus-visible) {
+  padding-left: 12px; color: #f2f2f2; background: rgba(var(--tone-rgb), .06); outline: none;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-button:focus-visible { box-shadow: inset 0 0 0 1px rgba(var(--tone-rgb), .5); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-button:not(:disabled):is(:hover, :focus-visible)::before {
+  height: 10px; margin-top: -5px; background: var(--tone);
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-button:not(:disabled):active { transform: scale(.98); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-button:disabled { color: #565656; cursor: not-allowed; }
+[data-host="after-effects"] .ch-preset-library-actions-menu[data-state="open"] .ch-preset-actions-column > .ch-button:not(.ch-preset-paste-tile) {
+  animation: ch-deck-item 280ms ease-out both; animation-delay: calc(110ms + var(--i, 0) * 40ms + var(--j, 0) * 25ms);
+}
+@keyframes ch-deck-item { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Colar: pilha de folhas que abre em leque ---------- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-preset-paste-tile {
+  flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  min-height: 52px; padding: 6px 4px; border: 1px solid #262626; border-radius: 4px;
+  background: #1a1a1a; color: #d8d8d8; text-align: center; white-space: normal;
+  font-size: 0; /* o rótulo fica no tooltip/leitor; o texto visível é o que foi copiado */
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-preset-paste-tile::before { display: none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-paste-tile[data-loaded="false"] { border-style: dashed; border-color: #2e2e2e; background: transparent; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-preset-paste-tile:not(:disabled):is(:hover, :focus-visible) {
+  padding-left: 4px; border-color: rgba(var(--deck-paste-rgb), .4); background: #18201c;
+}
+[data-host="after-effects"] .ch-preset-paste-stack { order: -1; position: relative; display: block; flex: 0 0 auto; width: 17px; height: 18px; }
+[data-host="after-effects"] .ch-preset-paste-sheet {
+  position: absolute; inset: 0 3px 3px 0; border: 1.2px solid #7a7a7a; border-radius: 3px; background: #202020;
+  transition: transform 340ms var(--deck-ease), border-color 160ms ease;
+}
+[data-host="after-effects"] .ch-preset-paste-sheet + .ch-preset-paste-sheet { inset: 3px 0 0 3px; }
+[data-host="after-effects"] .ch-preset-paste-tile[data-loaded="true"] .ch-preset-paste-sheet { border-color: var(--deck-paste); }
+[data-host="after-effects"] .ch-preset-paste-tile[data-loaded="true"] .ch-preset-paste-sheet + .ch-preset-paste-sheet { background: #1b241f; }
+[data-host="after-effects"] .ch-preset-paste-tile[data-loaded="false"] .ch-preset-paste-sheet { border-style: dashed; border-color: #464646; background: transparent; }
+[data-host="after-effects"] .ch-preset-paste-tile:not(:disabled):is(:hover, :focus-visible) .ch-preset-paste-sheet { transform: translate(-2px, -2px) rotate(-7deg); }
+[data-host="after-effects"] .ch-preset-paste-tile:not(:disabled):is(:hover, :focus-visible) .ch-preset-paste-sheet + .ch-preset-paste-sheet { transform: translate(2px, 1px) rotate(5deg); }
+[data-host="after-effects"] .ch-preset-paste-slot {
+  display: block; max-width: 100%; font-size: 10px; line-height: 1.2; color: #858585;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+[data-host="after-effects"] .ch-preset-paste-tile[data-loaded="true"] .ch-preset-paste-slot { color: var(--deck-paste); }
+[data-host="after-effects"] .ch-preset-paste-tile:disabled { cursor: not-allowed; }
+[data-host="after-effects"] .ch-preset-paste-tile:disabled .ch-preset-paste-stack { opacity: .5; }
+
+/* ---------- Carregando / erro ---------- */
+[data-host="after-effects"] .ch-preset-actions-ghost {
+  min-height: 78px; border-radius: 4px; border: 1px solid #1e1e1e;
+  background: linear-gradient(100deg, #141414 35%, #1b1b1b 50%, #141414 65%) 0 0 / 300% 100%;
+  animation: ch-deck-shimmer 1.2s linear infinite; animation-delay: calc(var(--i, 0) * 90ms);
+}
+@keyframes ch-deck-shimmer { from { background-position: 100% 0; } to { background-position: -50% 0; } }
+[data-host="after-effects"] .ch-preset-library-actions-menu .ch-preset-actions-status { grid-column: 1 / -1; margin: 0; padding: 1px 2px 0; font-size: 10.5px; color: #7a7a7a; }
+[data-host="after-effects"] .ch-preset-library-actions-menu .ch-preset-actions-status[data-tone="error"] { padding: 7px 8px; border-radius: 4px; background: rgba(var(--deck-remove-rgb), .07); color: var(--deck-remove); }
+
+/* ---------- Painel estreito ou baixo: cartões viram linhas com chips ----------
+   [⧉ Copiar ] (Entrada) (Saída)
+   [🗑 Remover] (Entrada) (Saída)
+   [▤ Colar  ] [▣ Nome do preset copiado          ]                        */
+@media (max-width: 420px), (max-height: 380px) {
+  [data-host="after-effects"] .ch-preset-library-actions-menu,
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu {
+    grid-template-columns: minmax(0, 1fr); gap: 3px; width: 300px; padding: 4px;
+  }
+  [data-host="after-effects"] .ch-preset-library-actions-menu .ch-preset-actions-column {
+    flex-direction: row; flex-wrap: wrap; align-items: center; gap: 2px 3px; padding: 3px 4px 3px 7px;
+  }
+  [data-host="after-effects"] .ch-preset-library-actions-menu .ch-preset-actions-column::before {
+    top: 5px; bottom: 5px; left: 0; right: auto; width: 1px; height: auto; transform: scaleY(.4); transform-origin: center;
+  }
+  [data-host="after-effects"] .ch-preset-library-actions-menu .ch-preset-actions-column:hover::before { transform: scaleY(1); }
+  [data-host="after-effects"] .ch-preset-actions-head { flex: 0 0 66px; }
+  [data-host="after-effects"] .ch-preset-actions-head > strong { font-size: 11px; }
+  [data-host="after-effects"] .ch-preset-actions-caption { display: none; }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-button {
+    flex: 0 1 auto; width: auto; max-width: 100%; min-height: 20px; padding: 1px 8px; border-radius: 10px; background: rgba(255, 255, 255, .035);
+  }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-button::before { display: none; }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-button:not(:disabled):is(:hover, :focus-visible) {
+    padding-left: 8px; background: rgba(var(--tone-rgb), .12);
+  }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-preset-paste-tile {
+    flex: 1 1 0; flex-direction: row; justify-content: flex-start; gap: 6px; min-height: 20px; padding: 1px 8px; border-radius: 10px;
+  }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-library-actions-menu .ch-preset-actions-column > .ch-preset-paste-tile:not(:disabled):is(:hover, :focus-visible) { padding-left: 8px; }
+  [data-host="after-effects"] .ch-preset-paste-stack { width: 11px; height: 12px; }
+  [data-host="after-effects"] .ch-preset-paste-sheet { inset: 0 2px 2px 0; border-radius: 2px; }
+  [data-host="after-effects"] .ch-preset-paste-sheet + .ch-preset-paste-sheet { inset: 2px 0 0 2px; }
+  [data-host="after-effects"] .ch-preset-library-actions-menu .ch-preset-actions-unavailable { font-size: 10px; }
+  [data-host="after-effects"] .ch-preset-actions-ghost { min-height: 24px; }
+  [data-host="after-effects"] .ch-preset-library-actions-menu[data-state="open"] .ch-preset-actions-column { animation-name: ch-deck-row; }
+  @keyframes ch-deck-row { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-host="after-effects"] .ch-preset-library-actions-menu,
+  [data-host="after-effects"] .ch-preset-library-actions-menu *,
+  [data-host="after-effects"] .ch-preset-library-actions-menu::before,
+  [data-host="after-effects"] .ch-preset-actions-trigger,
+  [data-host="after-effects"] .ch-preset-actions-trigger * { animation: none !important; transition: none !important; }
+}

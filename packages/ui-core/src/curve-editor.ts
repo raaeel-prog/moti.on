@@ -16,6 +16,10 @@
  * `pointercancel`, `setModel` and `dispose` restore the pre-press snapshot and
  * report `onCancel`; release, lost capture and window blur commit "gesture".
  *
+ * Precision: a dragged dot sticks to the 0 and 1 lines within `SNAP_PX` (Shift or
+ * Alt move it freely), Ctrl/Cmd snaps it to a `SNAP_GRID` grid, and its coordinates
+ * read out beside it while it moves. Arrows step 0.01, Shift 0.1, Alt 0.001.
+ *
  * Tolerance: a press anywhere on the plot grabs the nearest visible dot within
  * `HANDLE_CAPTURE_PX`, so a dot never has to be hit exactly. In the speed view
  * the whole plot is one control (drag down = smoother, up = more linear) with
@@ -45,6 +49,7 @@ import {
   type EasingParams,
   type OscillationParams
 } from "@motion/keyframe-core";
+import { attachMenuGlide } from "./menu-glide.js";
 import { attachScrubbableNumber } from "./scrubbable-number.js";
 import { createElement } from "./shell.js";
 
@@ -94,13 +99,29 @@ export interface CurveEditorLabels {
   overshoot: string;
   inHalf: string;
   outHalf: string;
+  /** Motion cues (opt-in): probe, peak, ruler and handle readout wording. */
+  cueTime?: string;
+  cueValue?: string;
+  cueSpeed?: string;
+  cuePeak?: string;
+  cueReplay?: string;
+  cueFrames?: string;
+  influenceOut?: string;
+  influenceIn?: string;
+  cueOvershoot?: string;
+  /** Decimal separator of the cue texts ("," in pt-BR). */
+  cueDecimal?: string;
 }
 
 export type CurveCommitReason = "gesture" | "keyboard" | "field" | "mode" | "direction" | "view" | "reset" | "point";
 
 export interface CurveEditorOptions {
   model: CurveEditorModel;
+  /** Consumer-specific initial recipe; absent preserves the shared editor default. */
+  resetCurve?: CubicBezierCurve;
   labels: CurveEditorLabels;
+  /** Slot at the start of the header (e.g. the curve's name). */
+  headerStart?: HTMLElement;
   /** Slot at the far right of the header (e.g. a live toggle). */
   headerEnd?: HTMLElement;
   /** Fired during drags; the host does not apply yet. */
@@ -109,12 +130,28 @@ export interface CurveEditorOptions {
   onCommit(model: CurveEditorModel, reason: CurveCommitReason): void;
   /** Fired when a gesture is cancelled (Escape, pointercancel, setModel, dispose) after the model was restored and `onInput` emitted. */
   onCancel?(): void;
+  /**
+   * Opt-in motion cues (design v6): the speed drawn as an area behind the value with its peak, shaded bands
+   * outside 0–100 %, a probe under the cursor (time, value, speed), the influence beside a dragged handle,
+   * a dashed preview curve (setPreview) and a frame ruler with one tick per frame under the graph.
+   */
+  motionCues?: boolean;
+  /** Frames and frame rate of the sample stretch the ruler draws (motion cues). */
+  cueFrames?: number;
+  cueFps?: number;
 }
 
 export interface CurveEditor {
   element: HTMLElement;
-  setModel(model: CurveEditorModel, options?: { silent?: boolean }): void;
+  /** `animate` glides a plain Bézier from the drawn curve to the new one (presets); the model is the target at once. */
+  setModel(model: CurveEditorModel, options?: { silent?: boolean; animate?: boolean }): void;
   getModel(): CurveEditorModel;
+  /** Motion cues: a dashed curve to compare against (e.g. the preset under the pointer); null hides it. */
+  setPreview(curve: CubicBezierCurve | null): void;
+  /** Motion cues: frames and frame rate of the ruler's sample stretch. */
+  setCueTiming(frames: number, fps: number): void;
+  /** Motion cues: shows or hides the speed area behind the value curve. */
+  setSpeedArea(visible: boolean): void;
   dispose(): void;
 }
 
@@ -127,11 +164,28 @@ export const CURVE_PAD = 24;
 const SIZE = CURVE_PLOT + CURVE_PAD * 2;
 const FINE = 0.01;
 const COARSE = 0.1;
+/** Alt + arrow: the precise step. */
+const PRECISE = 0.001;
+/** A dragged dot sticks to the 0 and 1 lines within this many CSS px. */
+export const SNAP_PX = 6;
+/** Ctrl/Cmd while dragging rounds a dot to this grid. */
+export const SNAP_GRID = 0.05;
+/** CSS px size of the coordinate readout and the speed peak, at any dock width. */
+const LABEL_PX = 11;
 const Y_MIN = -1;
 const Y_MAX = 2;
 const MODES: EasingMode[] = ["bezier", "back", "elastic", "bounce"];
 const DIRECTIONS: EasingDirection[] = ["in", "inOut", "out"];
 const DEFAULT_CURVE: CubicBezierCurve = { x1: 0.25, y1: 0.1, x2: 0.25, y2: 1 };
+/** Duration of the preset morph; it eases out (cubic) with no overshoot: the graph is a large surface. */
+export const CURVE_MORPH_MS = 320;
+
+/** Point `t` (0..1) of the straight morph between two Bézier curves. */
+export function morphCurve(from: CubicBezierCurve, to: CubicBezierCurve, t: number): CubicBezierCurve {
+  if (t >= 1) return { ...to };
+  const e = 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
+  return { x1: from.x1 + (to.x1 - from.x1) * e, y1: from.y1 + (to.y1 - from.y1) * e, x2: from.x2 + (to.x2 - from.x2) * e, y2: from.y2 + (to.y2 - from.y2) * e };
+}
 /** A press turns into a drag only after this many CSS px of pointer travel. */
 export const DRAG_THRESHOLD_PX = 3;
 /** Shift scales pointer motion by this factor (fine adjustment). */
@@ -162,6 +216,16 @@ function round3(value: number): number { return Math.round(value * 1000) / 1000;
 function fmt(value: number): string { return String(Math.round(value * 100) / 100); }
 
 // --- pure helpers (exported for tests) --------------------------------------
+
+/**
+ * Snapping of a dragged dot in curve units: with `grid`, rounding to `SNAP_GRID`;
+ * otherwise a magnet to the 0 and 1 lines within `tolerance` per axis.
+ */
+export function snapCurvePoint(x: number, y: number, tolerance: { x: number; y: number }, grid: boolean): { x: number; y: number } {
+  if (grid) return { x: round3(Math.round(x / SNAP_GRID) * SNAP_GRID), y: round3(Math.round(y / SNAP_GRID) * SNAP_GRID) };
+  const stick = (value: number, limit: number): number => Math.abs(value) <= limit ? 0 : Math.abs(value - 1) <= limit ? 1 : value;
+  return { x: stick(x, tolerance.x), y: stick(y, tolerance.y) };
+}
 
 export function curveToPlot(x: number, y: number, range: PlotRange): { x: number; y: number } {
   const span = range.high - range.low || 1;
@@ -314,10 +378,11 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     return () => { if (typeof doc.removeEventListener === "function") doc.removeEventListener(type, handler); };
   }
   function emitInput(): void { options.onInput(cloneModel(model)); }
-  function emitCommit(reason: CurveCommitReason): void { options.onCommit(cloneModel(model), reason); }
+  function emitCommit(reason: CurveCommitReason): void { options.onCommit(cloneModel(model), reason); playTrail(); }
 
   // --- header ------------------------------------------------------------------
   const header = createElement(doc, "div", "ch-curve__header");
+  if (options.headerStart) header.appendChild(options.headerStart);
   const modeWrap = createElement(doc, "div", "ch-curve__mode");
   const modeButton = createElement(doc, "button", "ch-button ch-curve__mode-button") as HTMLButtonElement;
   modeButton.setAttribute("type", "button");
@@ -345,6 +410,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     menu.appendChild(item);
     return item;
   });
+  const menuGlide = typeof menu.insertBefore === "function" ? attachMenuGlide(menu, () => optionNodes) : null;
   modeButton.addEventListener("click", () => { if (menu.hidden) openMenu(); else closeMenu(); });
   modeButton.addEventListener("keydown", e => {
     const key = (e as KeyboardEvent).key;
@@ -369,6 +435,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     if (!menu.hidden || disposed) return;
     hideHtml(menu, false);
     modeButton.setAttribute("aria-expanded", "true");
+    menuGlide?.rest(false);
     focusOption(MODES.indexOf(model.mode));
     const outside = (e: Event): void => {
       const target = e.target as Node | null;
@@ -425,6 +492,9 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     return radio;
   });
   header.appendChild(directions);
+  // The value/speed (or reset) toggle lives here, not over the plot where it covered the (1, 1) end.
+  const headerTools = createElement(doc, "div", "ch-curve__header-tools");
+  header.appendChild(headerTools);
   if (options.headerEnd) {
     const end = createElement(doc, "div", "ch-curve__header-end");
     end.appendChild(options.headerEnd);
@@ -435,6 +505,31 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   // --- plot ----------------------------------------------------------------------
   const plot = createElement(doc, "div", "ch-curve__plot");
   container.appendChild(plot);
+  const TRAIL_MS = 900;
+  const cueOn = Boolean(options.motionCues);
+  let cueFrames = Math.max(2, Math.min(240, Math.round(options.cueFrames ?? 24)));
+  let cueFps = options.cueFps && options.cueFps > 0 ? options.cueFps : 30;
+  let speedAreaOn = true, previewCurve: CubicBezierCurve | null = null;
+  const decimal = (value: number, digits: number): string => value.toFixed(digits).replace(".", labels.cueDecimal ?? ".");
+  // Frame ruler (motion cues): play, one tick per frame placed by the value, the head and "24 q · 0,80 s".
+  const trail = cueOn ? createElement(doc, "div", "ch-curve__ruler") : null;
+  const trailTicks = trail ? createElement(doc, "div", "ch-curve__ruler-ticks") : null;
+  const trailBall = trail ? createElement(doc, "span", "ch-curve__ruler-head") : null;
+  const trailLabel = trail ? createElement(doc, "span", "ch-curve__ruler-label") : null;
+  if (trail && trailTicks && trailBall && trailLabel) {
+    const replay = createElement(doc, "button", "ch-button ch-curve__ruler-play") as HTMLButtonElement;
+    replay.setAttribute("type", "button");
+    replay.setAttribute("aria-label", labels.cueReplay ?? "Replay preview");
+    replay.title = labels.cueReplay ?? "Replay preview";
+    if (canSvg) replay.appendChild(icon("M5 3.5v9l7.5-4.5z", "ch-curve__icon"));
+    replay.addEventListener("click", () => playTrail());
+    const track = createElement(doc, "div", "ch-curve__ruler-track");
+    track.setAttribute("aria-hidden", "true");
+    track.appendChild(trailTicks); track.appendChild(trailBall);
+    track.addEventListener("click", () => playTrail());
+    trail.appendChild(replay); trail.appendChild(track); trail.appendChild(trailLabel);
+    container.appendChild(trail);
+  }
   const status = createElement(doc, "div", "ch-visually-hidden ch-curve__status");
   status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite");
   container.appendChild(status);
@@ -450,7 +545,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     // Without SVG the editor still exposes mode, direction and the fields.
     buildFields();
     render();
-    return { element: container, setModel, getModel: () => cloneModel(model), dispose };
+    return { element: container, setModel, getModel: () => cloneModel(model), setPreview: () => {}, setCueTiming: () => {}, setSpeedArea: () => {}, dispose };
   }
 
   const svg = svgEl("svg", "ch-curve__svg", {
@@ -486,7 +581,24 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   const peakText = svgEl("text", "ch-curve__peak", {
     x: String(CURVE_PAD + 6), y: String(CURVE_PAD + 14), "text-anchor": "start", "aria-label": labels.peak
   });
-  for (const node of [axis, reference, ghost, faint, main, hit, halfIn, halfOut, join, ...stems]) svg.appendChild(node);
+  const readout = svgEl("text", "ch-curve__readout", { "aria-hidden": "true", display: "none" });
+  // Motion cues (design v6). Behind the curve: bands outside 0–100 %, their axis labels and the speed area;
+  // over it: the dashed preview and the probe. Presentation attributes keep them hidden without a stylesheet.
+  const hidden = { "aria-hidden": "true", display: "none" };
+  const bands = cueOn ? [svgEl("rect", "ch-curve__band", hidden), svgEl("rect", "ch-curve__band", hidden)] : [];
+  const axisLabels = cueOn ? [svgEl("text", "ch-curve__axis-label", { ...hidden, "text-anchor": "end" }), svgEl("text", "ch-curve__axis-label", { ...hidden, "text-anchor": "end" })] : [];
+  if (axisLabels[0]) axisLabels[0].textContent = "100";
+  if (axisLabels[1]) axisLabels[1].textContent = "0";
+  const speedArea = svgEl("path", "ch-curve__speed-area", hidden), speedLine = svgEl("path", "ch-curve__speed-line", { ...hidden, fill: "none" });
+  const speedPeak = svgEl("line", "ch-curve__speed-peak", hidden), speedLabel = svgEl("text", "ch-curve__speed-label", hidden);
+  const preview = svgEl("path", "ch-curve__preview", { ...hidden, fill: "none" });
+  const probeLine = svgEl("line", "ch-curve__probe-line", hidden), probeDot = svgEl("circle", "ch-curve__probe-dot", { ...hidden, r: "3.5" });
+  // The two keyframes of the stretch, drawn as the Graph Editor's squares at 0 % and 100 %.
+  const keySquares = cueOn ? [svgEl("rect", "ch-curve__key", hidden), svgEl("rect", "ch-curve__key", hidden)] : [];
+  const cueBack = cueOn ? [...bands, ...axisLabels, speedArea, speedLine, speedPeak, speedLabel] : [];
+  const cueFront = cueOn ? [preview] : [];
+  for (const node of [...cueBack, axis, reference, ghost, faint, ...cueFront, main, hit, halfIn, halfOut, join, ...stems]) svg.appendChild(node);
+  if (cueOn) { svg.appendChild(probeLine); svg.appendChild(probeDot); for (const key of keySquares) svg.appendChild(key); }
 
   function slider(label: string, cls = "ch-curve__handle"): SVGElement {
     const node = svgEl("circle", cls, { r: "5", role: "slider", tabindex: "0", "aria-label": label });
@@ -502,15 +614,18 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   const halfHandles = [slider(labels.outHandle), slider(labels.inHandle)];
   const pointsGroup = svgEl("g", "ch-curve__points");
   svg.appendChild(pointsGroup);
-  for (const node of [...endHandles, ...halfHandles, markerRing, speedMarker, peakText, chip]) svg.appendChild(node);
+  for (const node of [...endHandles, ...halfHandles, markerRing, speedMarker, peakText, chip, readout]) svg.appendChild(node);
   plot.appendChild(svg);
 
   const overlay = createElement(doc, "button", "ch-button ch-curve__overlay") as HTMLButtonElement;
   overlay.setAttribute("type", "button");
   overlay.addEventListener("click", onOverlay);
-  plot.appendChild(overlay);
-  const hint = createElement(doc, "div", "ch-curve__hint", labels.addPointHint);
-  plot.appendChild(hint);
+  headerTools.appendChild(overlay);
+  // The gesture help is read with the graph, not printed over it.
+  const hint = createElement(doc, "div", "ch-visually-hidden ch-curve__hint", labels.addPointHint);
+  hint.id = `${gradientId}-hint`;
+  svg.setAttribute("aria-describedby", hint.id);
+  container.appendChild(hint);
 
   type PointNodes = { knot: SVGElement; ring: SVGElement; handleIn: SVGElement; handleOut: SVGElement; stemIn: SVGElement; stemOut: SVGElement };
   let pointNodes: PointNodes[] = [];
@@ -558,6 +673,34 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   }
   function plotPoint(event: MouseEvent): Pt | null { return clientToPlot(event.clientX, event.clientY); }
   function toCurve(p: Pt): Pt { return plotToCurve(p.x, p.y, range); }
+  /** Ctrl/Cmd: grid; Shift (fine) or Alt: free; otherwise the 0/1 magnet. */
+  function snapped(c: Pt, event: MouseEvent): Pt {
+    const grid = event.ctrlKey || event.metaKey;
+    if (!grid && (event.shiftKey || event.altKey)) return c;
+    const unit = CURVE_PLOT * pxPerUnit();
+    const span = range.high - range.low || 1;
+    return snapCurvePoint(c.x, c.y, { x: SNAP_PX / unit, y: SNAP_PX * span / unit }, grid);
+  }
+  /** Coordinates beside the dot being dragged, kept inside the plot. */
+  function showReadout(node: Element | null): void {
+    if (!node || node.getAttribute("role") !== "slider" || node === speedMarker) { show(readout, false); return; }
+    const cx = Number(node.getAttribute("cx")), cy = Number(node.getAttribute("cy"));
+    if (!Number.isFinite(cx) || !Number.isFinite(cy)) { show(readout, false); return; }
+    const scale = pxPerUnit();
+    const c = toCurve({ x: cx, y: cy });
+    readout.textContent = `${c.x.toFixed(2)}, ${c.y.toFixed(2)}`;
+    if (cueOn && (node === endHandles[0] || node === endHandles[1])) {
+      const out = node === endHandles[0], influence = Math.round((out ? c.x : 1 - c.x) * 100);
+      const over = c.y > 1 ? c.y - 1 : c.y < 0 ? -c.y : 0;
+      readout.textContent = `${out ? labels.influenceOut ?? "Out" : labels.influenceIn ?? "In"} ${influence}%${over > 0.005 ? ` · ${labels.cueOvershoot ?? "overshoot"} ${Math.round(over * 100)}%` : ""}`;
+    }
+    (readout as unknown as HTMLElement).style?.setProperty?.("font-size", `${fmt(LABEL_PX / scale)}px`);
+    const right = cx > SIZE * 0.62;
+    readout.setAttribute("text-anchor", right ? "end" : "start");
+    readout.setAttribute("x", fmt(cx + (right ? -12 : 12) / scale));
+    readout.setAttribute("y", fmt(Math.max(CURVE_PAD * 0.75, Math.min(SIZE - CURVE_PAD * 0.4, cy - 10 / scale))));
+    show(readout, true);
+  }
   function place(node: SVGElement, x: number, y: number, text?: string, ringNode?: SVGElement): void {
     const p = curveToPlot(x, y, range);
     node.setAttribute("cx", fmt(p.x)); node.setAttribute("cy", fmt(p.y));
@@ -686,6 +829,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     g.move(p, event);
     if (g.kind === "speed") fit();
     render();
+    showReadout(g.kind === "line" && activePoint !== null ? pointNodes[activePoint]?.knot ?? null : g.target);
     emitInput();
   }
   /** Drops the record and every listener it owns; the model is left as is. */
@@ -699,6 +843,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     }
     container.removeAttribute("data-dragging");
     show(ghost, false);
+    show(readout, false);
     return g;
   }
   /**
@@ -759,7 +904,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     if (index === 0) { next.x1 = hx; next.y1 = hy; } else { next.x2 = hx; next.y2 = hy; }
     params.inCurve = next;
   }
-  function stepOf(event: KeyboardEvent): number { return event.shiftKey ? COARSE : FINE; }
+  function stepOf(event: KeyboardEvent): number { return event.shiftKey ? COARSE : event.altKey ? PRECISE : FINE; }
   function keyDelta(event: KeyboardEvent): Pt | null {
     const step = stepOf(event);
     switch (event.key) {
@@ -829,7 +974,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
       emitCommit("view");
       return;
     }
-    if (model.mode === "bezier") { model.curve = { ...DEFAULT_CURVE }; model.points = []; syncPoints(); setActivePoint(null); }
+    if (model.mode === "bezier") { model.curve = { ...(options.resetCurve ?? DEFAULT_CURVE) }; model.points = []; syncPoints(); setActivePoint(null); }
     else if (model.mode === "back") model.back = { overshoot: DEFAULT_BACK_OVERSHOOT };
     else if (model.mode === "elastic") model.elastic = defaultParams("elastic");
     else model.bounce = defaultParams("bounce");
@@ -840,7 +985,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   // End handles: drag and keyboard.
   endHandles.forEach((node, i) => {
     const index = i as 0 | 1;
-    bindDrag(node, () => ({ kind: "end", move: p => { const c = toCurve(p); moveEnd(index, c.x, c.y); } }));
+    bindDrag(node, () => ({ kind: "end", move: (p, event) => { const c = snapped(toCurve(p), event); moveEnd(index, c.x, c.y); } }));
     node.addEventListener("keydown", e => {
       const event = e as KeyboardEvent;
       if (model.mode === "bezier" && isInsertKey(event)) { event.preventDefault(); insertAfter(index === 0 ? -1 : model.points.length - 1); return; }
@@ -913,7 +1058,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
     announce(labels.pointAdded ?? "Point added, {n} in total");
     return {
       kind: "line",
-      move: q => { const d = toCurve(q); movePoint(index, { x: d.x, y: d.y }, false); },
+      move: (q, event) => { const d = snapped(toCurve(q), event); movePoint(index, { x: d.x, y: d.y }, false); },
       onClick: () => emitCommit("point")
     };
   }
@@ -938,9 +1083,9 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
       };
       // Pressing a knot or one of its handles makes the point active so Delete right after a click removes only it.
       const activate = (): void => { setActivePoint(index); nodes.knot.focus?.(); };
-      bindDrag(nodes.knot, () => { activate(); return { kind: "point", move: p => { const c = toCurve(p); movePoint(index, { x: c.x, y: c.y }, false); } }; });
-      bindDrag(nodes.handleIn, () => { activate(); return { kind: "handleIn", move: (p, event) => { const c = toCurve(p); movePoint(index, { inX: c.x, inY: c.y }, !event.altKey); } }; });
-      bindDrag(nodes.handleOut, () => { activate(); return { kind: "handleOut", move: (p, event) => { const c = toCurve(p); movePoint(index, { outX: c.x, outY: c.y }, !event.altKey); } }; });
+      bindDrag(nodes.knot, () => { activate(); return { kind: "point", move: (p, event) => { const c = snapped(toCurve(p), event); movePoint(index, { x: c.x, y: c.y }, false); } }; });
+      bindDrag(nodes.handleIn, () => { activate(); return { kind: "handleIn", move: (p, event) => { const c = snapped(toCurve(p), event); movePoint(index, { inX: c.x, inY: c.y }, !event.altKey); } }; });
+      bindDrag(nodes.handleOut, () => { activate(); return { kind: "handleOut", move: (p, event) => { const c = snapped(toCurve(p), event); movePoint(index, { outX: c.x, outY: c.y }, !event.altKey); } }; });
       nodes.knot.addEventListener("animationend", () => { nodes.knot.removeAttribute("data-pop"); nodes.ring.removeAttribute("data-pop"); });
       nodes.knot.addEventListener("keydown", e => {
         const event = e as KeyboardEvent;
@@ -1122,6 +1267,7 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
       speedMarker.setAttribute("aria-valuenow", String(round3(peak)));
       speedMarker.setAttribute("aria-valuemin", "1"); speedMarker.setAttribute("aria-valuemax", "10");
       peakText.textContent = `×${peak.toFixed(1)}`;
+      (peakText as unknown as HTMLElement).style?.setProperty?.("font-size", `${fmt(LABEL_PX / pxPerUnit())}px`);
     }
     // InOut halves of elastic/bounce.
     const split = halves();
@@ -1145,19 +1291,195 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
       chip.setAttribute("transform", `translate(${fmt(cx)} ${fmt(cy)}) scale(${scale})`);
       chipPath.setAttribute("d", valueD);
     }
+    renderCues();
   }
 
-  function setModel(next: CurveEditorModel): void {
+  /** Value samples read back from the drawn path, so every mode and extra point is covered by one code path. */
+  let cueSamples: Pt[] = [];
+  let trailFrame: number | null = null;
+  const trailPercent = (value: number): number => (4 + Math.max(-0.04, Math.min(1.04, value)) * 92);
+  function cueValueAt(time: number): number {
+    if (cueSamples.length < 2) return time;
+    const x = CURVE_PAD + time * CURVE_PLOT;
+    let index = 1;
+    while (index < cueSamples.length - 1 && cueSamples[index]!.x < x) index++;
+    const a = cueSamples[index - 1]!, b = cueSamples[index]!;
+    const y = b.x === a.x ? b.y : a.y + (b.y - a.y) * Math.max(0, Math.min(1, (x - a.x) / (b.x - a.x)));
+    return plotToCurve(x, y, range).y;
+  }
+  function cueSpeedAt(time: number): number {
+    const d = 0.004, a = Math.max(0, time - d), b = Math.min(1, time + d);
+    return (cueValueAt(b) - cueValueAt(a)) / (b - a || 1);
+  }
+  function renderCues(): void {
+    if (!cueOn || !canSvg) return;
+    const path = main as unknown as { getTotalLength?(): number; getPointAtLength?(length: number): Pt };
+    const value = !speedView();
+    const measurable = value && typeof path.getTotalLength === "function" && typeof path.getPointAtLength === "function";
+    container.setAttribute("data-cues", String(measurable));
+    // Bands above 100 % and below 0 %: where overshoot lives.
+    const one = curveToPlot(0, 1, range).y, zero = curveToPlot(0, 0, range).y, bottom = CURVE_PAD + CURVE_PLOT, unit = 1 / pxPerUnit();
+    const bandBox = [[CURVE_PAD, Math.max(0, one - CURVE_PAD)], [zero, Math.max(0, bottom - zero)]] as const;
+    bands.forEach((band, i) => {
+      const [y, height] = bandBox[i]!;
+      band.setAttribute("x", String(CURVE_PAD)); band.setAttribute("y", fmt(y)); band.setAttribute("width", String(CURVE_PLOT)); band.setAttribute("height", fmt(height));
+      show(band, value && height > 0.5);
+    });
+    axisLabels.forEach((label, i) => {
+      label.setAttribute("x", fmt(CURVE_PAD - 4 * unit)); label.setAttribute("y", fmt((i ? zero : one) + 3 * unit));
+      (label as unknown as HTMLElement).style?.setProperty?.("font-size", `${fmt(9 * unit)}px`);
+      show(label, value);
+    });
+    keySquares.forEach((key, i) => {
+      const at = curveToPlot(i, i, range), size = 8 * unit;
+      key.setAttribute("x", fmt(at.x - size / 2)); key.setAttribute("y", fmt(at.y - size / 2));
+      key.setAttribute("width", fmt(size)); key.setAttribute("height", fmt(size));
+      show(key, value);
+    });
+    for (const node of [speedArea, speedLine, speedPeak, speedLabel, preview]) show(node, false);
+    if (trail) hideHtml(trail, !measurable);
+    if (!measurable) { cueSamples = []; return; }
+    const total = path.getTotalLength!(), count = 120;
+    cueSamples = [];
+    for (let i = 0; i <= count; i++) { const point = path.getPointAtLength!(total * i / count); cueSamples.push({ x: point.x, y: point.y }); }
+    // Speed as an area from the 0 % line; the peak reaches half of the 0–100 % height.
+    const speeds: number[] = []; let peak = 0, peakAt = 0;
+    for (let i = 0; i <= count; i++) { const v = cueSpeedAt(i / count); speeds.push(v); if (Math.abs(v) > peak) { peak = Math.abs(v); peakAt = i; } }
+    if (speedAreaOn && peak > 1e-6) {
+      const scale = (zero - one) * 0.5 / peak, top = (v: number): number => Math.max(CURVE_PAD, Math.min(bottom, zero - v * scale));
+      const points = speeds.map((v, i) => `${fmt(CURVE_PAD + i / count * CURVE_PLOT)},${fmt(top(v))}`);
+      speedLine.setAttribute("d", `M ${points.join(" L ")}`);
+      speedArea.setAttribute("d", `M ${CURVE_PAD},${fmt(zero)} L ${points.join(" L ")} L ${CURVE_PAD + CURVE_PLOT},${fmt(zero)} Z`);
+      const px = CURVE_PAD + peakAt / count * CURVE_PLOT, py = top(speeds[peakAt]!), right = peakAt / count < 0.7;
+      speedPeak.setAttribute("x1", fmt(px)); speedPeak.setAttribute("x2", fmt(px)); speedPeak.setAttribute("y1", fmt(zero)); speedPeak.setAttribute("y2", fmt(py));
+      speedLabel.textContent = `${labels.cuePeak ?? "peak"} ${decimal(peak, 1)}×`;
+      speedLabel.setAttribute("text-anchor", right ? "start" : "end");
+      speedLabel.setAttribute("x", fmt(px + (right ? 6 : -6) * unit)); speedLabel.setAttribute("y", fmt(zero - 6 * unit));
+      (speedLabel as unknown as HTMLElement).style?.setProperty?.("font-size", `${fmt(10 * unit)}px`);
+      for (const node of [speedArea, speedLine, speedPeak, speedLabel]) show(node, true);
+    }
+    if (previewCurve) {
+      preview.setAttribute("d", valuePathD({ ...model, mode: "bezier", points: [], curve: previewCurve }, range));
+      show(preview, true);
+    }
+    if (trailTicks && trailLabel) {
+      while (trailTicks.firstChild) trailTicks.removeChild(trailTicks.firstChild);
+      for (let i = 0; i <= cueFrames; i++) {
+        const tick = createElement(doc, "i", i === 0 || i === cueFrames ? "is-key" : "");
+        tick.style.left = `${fmt(trailPercent(cueValueAt(i / cueFrames)))}%`;
+        trailTicks.appendChild(tick);
+      }
+      trailLabel.textContent = `${cueFrames} ${labels.cueFrames ?? "f"} · ${decimal(cueFrames / cueFps, 2)} s`;
+    }
+    if (trailBall && trailFrame === null) trailBall.style.left = `${fmt(trailPercent(cueValueAt(1)))}%`;
+  }
+  // Probe: time, value and speed under the cursor; the ruler head follows it.
+  const probeInfo = cueOn ? createElement(doc, "div", "ch-curve__probe") : null;
+  if (probeInfo) { probeInfo.setAttribute("aria-hidden", "true"); plot.appendChild(probeInfo); }
+  function hideProbe(): void {
+    if (!probeInfo) return;
+    show(probeLine, false); show(probeDot, false); probeInfo.removeAttribute("data-on");
+  }
+  function probeAt(time: number): void {
+    if (!probeInfo || !cueSamples.length) return;
+    const value = cueValueAt(time), speed = cueSpeedAt(time), x = CURVE_PAD + time * CURVE_PLOT;
+    const y = curveToPlot(time, Math.max(range.low, Math.min(range.high, value)), range).y;
+    probeLine.setAttribute("x1", fmt(x)); probeLine.setAttribute("x2", fmt(x));
+    probeLine.setAttribute("y1", String(CURVE_PAD)); probeLine.setAttribute("y2", String(CURVE_PAD + CURVE_PLOT));
+    probeDot.setAttribute("cx", fmt(x)); probeDot.setAttribute("cy", fmt(y));
+    show(probeLine, true); show(probeDot, true);
+    probeInfo.textContent = `${labels.cueTime ?? "time"} ${Math.round(time * 100)}% · ${labels.cueValue ?? "value"} ${Math.round(value * 100)}% · ${labels.cueSpeed ?? "speed"} ${decimal(speed, 1)}×`;
+    probeInfo.setAttribute("data-on", "true");
+    if (trailFrame === null && trailBall) trailBall.style.left = `${fmt(trailPercent(value))}%`;
+  }
+  if (cueOn) {
+    svg.addEventListener("pointermove", event => {
+      if (gesture || speedView()) { hideProbe(); return; }
+      const p = plotPoint(event as MouseEvent);
+      if (!p) return;
+      const time = (p.x - CURVE_PAD) / CURVE_PLOT;
+      if (time < -0.03 || time > 1.03) { hideProbe(); return; }
+      probeAt(Math.max(0, Math.min(1, time)));
+    });
+    svg.addEventListener("pointerleave", () => { hideProbe(); if (trailFrame === null && trailBall && cueSamples.length) trailBall.style.left = `${fmt(trailPercent(cueValueAt(1)))}%`; });
+    svg.addEventListener("pointerdown", hideProbe);
+  }
+  function stopTrail(): void {
+    if (trailFrame !== null) doc.defaultView?.cancelAnimationFrame?.(trailFrame);
+    trailFrame = null;
+  }
+  /** One pass of the head along the ruler, so the timing can be read without touching the timeline. */
+  function playTrail(): void {
+    const win = doc.defaultView;
+    if (!trailBall || !cueSamples.length || disposed) return;
+    stopTrail();
+    if (typeof win?.requestAnimationFrame !== "function" || doc.documentElement?.getAttribute?.("data-reduced-motion") === "true") { renderCues(); return; }
+    let start = 0;
+    const step = (now: number): void => {
+      if (disposed) { trailFrame = null; return; }
+      start = start || now;
+      const time = Math.min(1, (now - start) / TRAIL_MS);
+      trailBall.style.left = `${fmt(trailPercent(cueValueAt(time)))}%`;
+      trailFrame = time < 1 ? win.requestAnimationFrame(step) : null;
+    };
+    trailFrame = win.requestAnimationFrame(step);
+  }
+  function setPreview(curve: CubicBezierCurve | null): void {
+    if (!cueOn || disposed) return;
+    previewCurve = curve ? { ...curve } : null;
+    renderCues();
+  }
+  function setCueTiming(frames: number, fps: number): void {
+    if (!cueOn || disposed || !Number.isFinite(frames) || !Number.isFinite(fps) || fps <= 0) return;
+    cueFrames = Math.max(2, Math.min(240, Math.round(frames))); cueFps = fps;
+    renderCues();
+  }
+  function setSpeedArea(visible: boolean): void {
+    if (!cueOn || disposed) return;
+    speedAreaOn = visible;
+    renderCues();
+  }
+
+  let morphFrame: number | null = null;
+  function stopMorph(): void {
+    if (morphFrame !== null) doc.defaultView?.cancelAnimationFrame?.(morphFrame);
+    morphFrame = null;
+  }
+  const plainBezier = (value: CurveEditorModel): boolean => value.mode === "bezier" && !value.points.length;
+  /** Draws the way from `from` to the model's curve; the model itself already holds the target. */
+  function morphFrom(from: CubicBezierCurve): void {
+    const win = doc.defaultView;
+    if (!canSvg || typeof win?.requestAnimationFrame !== "function" || doc.documentElement?.getAttribute?.("data-reduced-motion") === "true") { render(); return; }
+    let start: number | null = null;
+    const draw = (t: number): void => { const target = model.curve; model.curve = morphCurve(from, target, t); render(); model.curve = target; };
+    const step = (now: number): void => {
+      // A gesture or a newer model takes over from the current drawing.
+      if (disposed || gesture) { morphFrame = null; if (!disposed) render(); return; }
+      start ??= now;
+      const t = Math.min(1, (now - start) / CURVE_MORPH_MS);
+      if (t < 1) { draw(t); morphFrame = win.requestAnimationFrame(step); } else { morphFrame = null; render(); }
+    };
+    draw(0);
+    morphFrame = win.requestAnimationFrame(step);
+  }
+  function setModel(next: CurveEditorModel, setOptions: { silent?: boolean; animate?: boolean } = {}): void {
     if (disposed) return;
+    stopMorph();
     cancelGesture();
     closeMenu(false);
+    const previous = model;
     model = cloneModel(next);
     if (model.mode !== "bezier" || model.points.length) model.view = "value";
     if (canSvg) { syncPoints(); setActivePoint(null); }
-    buildFields(); fit(); render();
+    buildFields(); fit();
+    const moved = previous.curve.x1 !== model.curve.x1 || previous.curve.y1 !== model.curve.y1 || previous.curve.x2 !== model.curve.x2 || previous.curve.y2 !== model.curve.y2;
+    if (setOptions.animate && moved && plainBezier(previous) && plainBezier(model)) morphFrom({ ...previous.curve });
+    else render();
   }
   function dispose(): void {
     if (disposed) return;
+    stopMorph();
+    stopTrail();
     cancelGesture();
     closeMenu(false);
     disposed = true;
@@ -1167,5 +1489,5 @@ export function createCurveEditor(doc: Document, options: CurveEditorOptions): C
   }
 
   syncPoints(); buildFields(); fit(); render();
-  return { element: container, setModel, getModel: () => cloneModel(model), dispose };
+  return { element: container, setModel, getModel: () => cloneModel(model), setPreview, setCueTiming, setSpeedArea, dispose };
 }

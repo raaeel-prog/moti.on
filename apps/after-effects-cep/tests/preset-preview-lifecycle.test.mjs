@@ -1,8 +1,9 @@
 import test from 'node:test';
-import assert from 'node:assert/strict';
+import strictAssert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
-import { createCepDocument } from './cep-dom.mjs';
+import { createCepDocument, domSafeAssert } from './cep-dom.mjs';
+const assert = domSafeAssert(strictAssert);
 import { createFakeWindow } from '../../../packages/ui-core/tests/fake-dom.mjs';
 
 const built=await build({stdin:{contents:'export { createPresetGallery } from "./client/src/preset-gallery.ts"; export { focusedPoll } from "./client/src/focused-poll.ts";',resolveDir:fileURLToPath(new URL('..',import.meta.url))},bundle:true,platform:'node',format:'esm',write:false});
@@ -34,42 +35,69 @@ function fixture(t,{autoplay=true,focused=true,intersection=true,scroll=0,naviga
   }
   const {gallery,grid}=mount(revealId);
   const views=gallery.element.querySelectorAll('.ch-preset-preview'),svgs=views.map(n=>n.children[0]);
-  const io=observers[0],win=globalThis.window;
+  const io=observers[0],aheadIo=observers[1],win=globalThis.window;
   t.after(()=>{for(const gallery of galleries)gallery.dispose();for(const n of names)if(saved[n]===undefined)delete globalThis[n];else globalThis[n]=saved[n];});
-  return {doc,win,gallery,grid,frames,timers,views,svgs,io,prefs,navigation,mount,
+  return {doc,win,gallery,grid,frames,timers,views,svgs,io,aheadIo,prefs,navigation,mount,
     focus(value){focused=value;win.emit(value?'focus':'blur');},
-    visible(indices,on=true){io.callback(indices.map(i=>({target:views[i],isIntersecting:on})));},
+    // The card plays once the pointer has rested on it (hover intent).
+    hover(i){grid.emit('pointerover',{target:views[i]});return new Promise(done=>setTimeout(done,170));},
+    near(indices,on=true){aheadIo.callback(indices.map(i=>({target:views[i],isIntersecting:on})));},
+    visible(indices,on=true,ratio=on?1:0){io.callback(indices.map(i=>({target:views[i],isIntersecting:ratio>0,intersectionRatio:ratio})));},
     tick(time){const callbacks=[...frames.values()];frames.clear();callbacks.forEach(fn=>fn(time));},
     snapshots(){return svgs.map(s=>s.firstChild);}};
 }
 
-test('full catalogue allocates artwork only for visible cards and animates one at the display rate',t=>{
-  const f=fixture(t);assert.equal(f.views.length,232);assert.ok(f.svgs.every(s=>s.children.length===0));
-  f.visible([0,1,2,3,4,5]);assert.equal(f.svgs.filter(s=>s.children.length).length,6);assert.equal(f.frames.size,1);
+test('full catalogue allocates artwork only for visible cards and animates the hovered card through one 30 fps scheduler',async t=>{
+  const f=fixture(t);assert.equal(f.views.length,473,'every offered preset has a card; retired ones have none');assert.ok(f.svgs.every(s=>s.children.length===0));
+  f.visible([0,1,2,3,4,5]);assert.equal(f.svgs.filter(s=>s.children.length).length,6);
+  assert.equal(f.frames.size,0,'resting cards hold their still: a grid of looping entrances blinked in CEP');
+  await f.hover(2);assert.equal(f.frames.size,1);
   let before=f.snapshots();f.tick(1000);
-  assert.equal(f.snapshots().filter((n,i)=>n!==before[i]).length,1);
+  assert.deepEqual(f.snapshots().slice(0,6).map((n,i)=>n!==before[i]),[false,false,true,false,false,false],'only the card under the pointer plays');
   before=f.snapshots();f.tick(1008);assert.deepEqual(f.snapshots(),before,'never more than one paint per display frame');
-  f.tick(1017);assert.equal(f.snapshots().filter((n,i)=>n!==before[i]).length,1,'a cheap preview paints every 60 Hz frame');
+  f.tick(1017);assert.deepEqual(f.snapshots(),before,'cadence is capped at 30 fps');
+  f.tick(1034);assert.equal(f.snapshots().filter((n,i)=>n!==before[i]).length,1);
 });
-test('native focus loss immediately cancels animation, including an already dequeued callback',t=>{
-  const f=fixture(t);f.visible([0,1]);const late=[...f.frames.values()][0];
+test('a card the pointer leaves returns to its still',async t=>{
+  const f=fixture(t);f.visible([0,1]);const still=f.snapshots()[0];
+  await f.hover(0);f.tick(1000);f.tick(1600);assert.notEqual(f.snapshots()[0],still,'the hovered card plays');
+  const markup=()=>JSON.stringify(f.svgs[0].children.map(function walk(n){return [n.tagName,n.attributes?Object.entries(n.attributes):[],(n.children??[]).map(walk)];}));
+  await f.hover(1);const rested=markup();f.tick(2000);f.tick(2400);
+  assert.ok(f.svgs[0].children.length,'the card keeps artwork');assert.equal(markup(),rested,'it stays on its still while another card plays');
+});
+test('clicks, focus and pointer re-entry inside a playing panel never restart the preview clock',async t=>{
+  // Each card repaint under the pointer re-fires mouseenter; resetting the clock
+  // there pinned the playing card to its first, invisible frame.
+  const now=performance.now;let clock=0;performance.now=()=>clock;t.after(()=>{performance.now=now;});
+  const f=fixture(t);f.visible([0]);await f.hover(0);
+  const markup=()=>JSON.stringify(f.svgs[0].children.map(function walk(n){return [n.tagName,n.attributes?Object.entries(n.attributes):[],(n.children??[]).map(walk)];}));
+  f.tick(600);const early=markup();
+  clock=600;for(const type of ['mouseenter','mousedown','focusin'])f.gallery.element.emit(type);
+  f.tick(1200);
+  assert.notEqual(markup(),early,'the preview keeps playing from where it was, not from the start');
+});
+test('native focus loss immediately cancels animation, including an already dequeued callback',async t=>{
+  const f=fixture(t);f.visible([0,1]);await f.hover(0);const late=[...f.frames.values()][0];
   f.focus(false);assert.equal(f.frames.size,0);const before=f.snapshots();late(1000);assert.deepEqual(f.snapshots(),before);assert.equal(f.frames.size,0);
   f.focus(true);assert.equal(f.frames.size,0,'returning to Adobe outside the panel stays idle');
   f.gallery.element.emit('mouseenter');assert.equal(f.frames.size,1);
-  f.gallery.element.emit('mouseleave');assert.equal(f.frames.size,0);
+  f.gallery.element.emit('mouseleave');assert.equal(f.frames.size,1,'a leave the pointer undoes at once is ignored');
+  f.gallery.element.emit('mouseenter');f.gallery.element.emit('mouseleave');
+  await new Promise(done=>setTimeout(done,450));assert.equal(f.frames.size,0,'staying out pauses');
 });
-test('hidden panels remain idle and offscreen previews release their SVG/filter trees',t=>{
-  const f=fixture(t);f.visible([0,1]);f.views[1].emit('mouseenter');
+test('hidden panels remain idle and offscreen previews release their SVG/filter trees',async t=>{
+  const f=fixture(t);f.visible([0,1]);await f.hover(1);
   f.visible([0,1],false);assert.equal(f.frames.size,0);assert.ok(f.svgs.every(s=>s.children.length===0));
-  f.doc.hidden=true;f.doc.emit('visibilitychange');f.visible([2]);assert.equal(f.frames.size,0);
+  f.doc.hidden=true;f.doc.emit('visibilitychange');f.visible([2]);await f.hover(2);assert.equal(f.frames.size,0);
   f.doc.hidden=false;f.gallery.element.emit('mouseenter');assert.equal(f.frames.size,1);
 });
-test('Autoplay off remains idle until explicit hover and never animates a hidden selected card',t=>{
-  const f=fixture(t,{autoplay:false});f.visible([0,1]);assert.equal(f.frames.size,0);
-  f.views[1].emit('mouseenter');assert.equal(f.frames.size,1);
-  f.views[1].emit('mouseleave');assert.equal(f.frames.size,0);
-  f.views[0].click();f.visible([0],false);assert.equal(f.frames.size,0);
+test('Autoplay off animates only an explicitly selected visible card and ignores hover',t=>{
+ const f=fixture(t,{autoplay:false});f.visible([0,1]);assert.equal(f.frames.size,0);
+ f.views[1].emit('mouseenter');assert.equal(f.frames.size,0);f.views[1].click();assert.equal(f.frames.size,1);
+ f.views[1].emit('mouseleave');assert.equal(f.frames.size,1);f.visible([1],false);assert.equal(f.frames.size,0);
+ f.views[0].click();f.visible([0],false);assert.equal(f.frames.size,0);
 });
+
 test('reduced motion, disposal and late observer deliveries cannot restart rendering',t=>{
   const f=fixture(t);f.doc.documentElement.setAttribute('data-reduced-motion','true');f.visible([0,1]);assert.equal(f.frames.size,0);
   f.gallery.dispose();assert.ok(f.svgs.every(s=>s.children.length===0));
@@ -142,9 +170,14 @@ test('applying from Recent keeps its displayed order and offset on return, then 
   next.grid.emit('scroll');f.tick(0);f.tick(16);
   assert.equal(next.grid.scrollTop,520);assert.equal(navigation.scroll,520);
   assert.equal(cards(next.gallery)[2].getAttribute('data-selected'),'true');
-  const filter=next.gallery.element.getElementsByTagName('button').find(node=>node.dataset.scope==='recent');
-  filter.click();assert.equal(navigation.scope,'all');assert.equal(navigation.recentOrder,undefined);
-  filter.click();assert.equal(navigation.scope,'recent');
+  // "Recentes" saiu da barra e vive no menu do filtro, dentro da busca.
+  const filterButton=next.gallery.element.querySelectorAll('.ch-label-filter__button')[0];
+  assert.ok(filterButton,'the filter button sits inside the search field');
+  assert.equal(next.gallery.element.getElementsByTagName('button').some(node=>node.dataset.scope==='recent'),false,'no clock button in the toolbar');
+  const recent_=()=>{filterButton.click();const menu=f.doc.body.querySelectorAll('.ch-context-menu')[0];return menu.querySelectorAll('.ch-context-menu__item').find(node=>node.dataset.id==='recent');};
+  let item=recent_();assert.equal(item.getAttribute('aria-checked'),'true');item.click();
+  assert.equal(navigation.scope,'all');assert.equal(navigation.recentOrder,undefined);
+  item=recent_();assert.equal(item.getAttribute('aria-checked'),'false');item.click();assert.equal(navigation.scope,'recent');
   assert.deepEqual(cards(next.gallery).map(card=>card.id),f.prefs.recent,'explicitly entering Recent shows its current recency order');
   assert.deepEqual(navigation.recentOrder,f.prefs.recent);
 });
@@ -283,7 +316,7 @@ test('disposal cancels a pending scroll restoration, including a dequeued callba
 });
 test('older CEP without IntersectionObserver keeps a bounded fallback and can preview later cards',t=>{
   const f=fixture(t,{intersection:false});assert.equal(f.svgs.filter(s=>s.children.length).length,2);
-  f.views[100].emit('mouseenter');f.tick(1000);assert.ok(f.svgs[100].children.length);assert.equal(f.svgs.filter(s=>s.children.length).length,1);
+  f.views[100].emit('mouseenter');assert.equal(f.svgs[100].children.length,0);f.views[100].click();f.tick(1000);assert.ok(f.svgs[100].children.length);assert.equal(f.svgs.filter(s=>s.children.length).length,1);
 });
 test('host polling owns no timer while unfocused, hidden, inactive or disposed',t=>{
   const f=fixture(t);let reads=0,enabled=true;
@@ -296,3 +329,75 @@ test('host polling owns no timer while unfocused, hidden, inactive or disposed',
   enabled=false;polling.refresh();assert.equal(f.timers.size,0);f.win.emit('focus');assert.equal(f.timers.size,0);
   enabled=true;polling.refresh();assert.equal(f.timers.size,1);polling.dispose();assert.equal(f.timers.size,0);
 });
+
+test('cards near the viewport are built ahead in small slices and arrive ready to play',t=>{
+  const f=fixture(t);f.near([0,1,2,3]);
+  assert.ok(f.svgs.slice(0,4).every(s=>s.children.length===0),'nothing is built inside the observer callback');
+  assert.equal(f.frames.size,1);f.tick(0);
+  assert.ok(f.svgs[0].children.length>0,'at least one card is built per frame');
+  for(let i=0;i<8&&f.frames.size;i++)f.tick(i);
+  assert.ok(f.svgs.slice(0,4).every(s=>s.children.length>0),'the queue drains over a few frames');
+  const built=f.snapshots().slice(0,4);
+  f.visible([0]);assert.equal(f.svgs[0].children.length>0,true);assert.equal(f.snapshots()[0],built[0],'entering view reuses the built artwork');
+  f.visible([0],false);assert.ok(f.svgs[0].children.length>0,'a card leaving view inside the band keeps its still frame');
+  f.near([0,1],false);assert.ok(f.svgs[0].children.length===0&&f.svgs[1].children.length===0,'far cards release their artwork');
+  assert.ok(f.svgs[2].children.length>0);
+});
+
+test('a card arriving in view plays its whole cycle from the start, while a graze at the edge keeps its cycle',async t=>{
+  const now=performance.now;let clock=0;performance.now=()=>clock;t.after(()=>{performance.now=now;});
+  const f=fixture(t);
+  const markup=()=>JSON.stringify(f.svgs[0].children.map(function walk(n){return [n.tagName,n.attributes?Object.entries(n.attributes):[],(n.children??[]).map(walk)];}));
+  f.visible([0]);await f.hover(0);f.tick(534);const fromStart=markup();
+  f.tick(2534);const later=markup();
+  f.visible([0],false);clock=2600;f.visible([0]);f.tick(2600);
+  assert.notEqual(markup(),fromStart,'returning within the grace continues instead of rewinding');
+  f.visible([0],false);clock=9000;f.visible([0]);f.tick(9534);
+  assert.equal(markup(),fromStart,'a real arrival starts the cycle again, from its entrance');
+  assert.notEqual(later,fromStart);
+});
+test('pausing for focus or pointer exit resumes on the same frame instead of rewinding',async t=>{
+  const now=performance.now;let clock=0;performance.now=()=>clock;t.after(()=>{performance.now=now;});
+  const f=fixture(t);
+  const markup=()=>JSON.stringify(f.svgs[0].children.map(function walk(n){return [n.tagName,n.attributes?Object.entries(n.attributes):[],(n.children??[]).map(walk)];}));
+  f.visible([0]);await f.hover(0);f.tick(1000);const before=markup();
+  clock=1000;f.focus(false);clock=4000;f.focus(true);f.gallery.element.emit('mouseenter');
+  f.tick(4000);assert.equal(markup(),before,'three idle seconds do not move or rewind the preview');
+});
+
+test('the pointer over the panel plays the hovered preview even while After Effects keeps the focus',async t=>{
+  const f=fixture(t,{focused:false});f.visible([0,1,2]);await f.hover(1);assert.equal(f.frames.size,0);
+  f.gallery.element.emit('mouseenter');assert.equal(f.frames.size,1,'no click needed');
+  f.focus(false);assert.equal(f.frames.size,0);f.gallery.element.emit('mousemove');assert.equal(f.frames.size,1,'moving inside resumes after a blur');
+});
+test('card hover survives CEP re-firing pointer out and over on every repaint',async t=>{
+  const f=fixture(t);const cards=f.gallery.element.querySelectorAll('.ch-preset-card');
+  const card=cards[0],inner=f.views[0],other=cards[1];
+  if(typeof inner.closest!=='function'){t.skip('fake DOM without closest');return;}
+  f.grid.emit('pointerover',{target:inner});assert.equal(card.getAttribute('data-hover'),'true');
+  for(let i=0;i<10;i++){f.grid.emit('pointerout',{target:inner,relatedTarget:null});f.grid.emit('pointerover',{target:inner});}
+  await new Promise(done=>setTimeout(done,200));
+  assert.equal(card.getAttribute('data-hover'),'true','a storm of out/over never drops the hover');
+  f.grid.emit('pointerout',{target:inner,relatedTarget:null});
+  await new Promise(done=>setTimeout(done,200));assert.ok(!card.getAttribute('data-hover'),'leaving for real clears it');
+  f.grid.emit('pointerover',{target:other.firstChild});assert.equal(other.getAttribute('data-hover'),'true');assert.ok(!card.getAttribute('data-hover'));
+});
+test('every visible text card plays its rendered preview at once over a still that is never hidden',async t=>{
+  const f=fixture(t);
+  const at=id=>f.views.findIndex(v=>v.dataset.previewId===id);
+  const a=at('builtin.motion.premium-glyph-constellation'),b=at('builtin.motion.premium-typewriter');
+  assert.ok(a>=0&&b>=0,'two rendered text presets');
+  const surfaces=i=>f.views[i].children.filter(n=>n.tagName==='canvas');
+  const stills=i=>f.views[i].children.filter(n=>n.tagName==='img');
+  f.visible([a,b]);
+  assert.equal(stills(a).length,1);assert.equal(f.views[a].dataset.media,'true');
+  assert.ok([a,b].every(i=>surfaces(i).length===1),'each card on screen gets its own preview, no hover needed');
+  assert.ok([a,b].every(i=>surfaces(i)[0].getAttribute('data-shown')==='false'),'until a frame is drawn the still shows through');
+  f.grid.emit('scroll');
+  assert.ok([a,b].every(i=>surfaces(i).length===1),'scrolling keeps the previews instead of stopping them');
+  assert.ok([a,b].every(i=>stills(i).length===1&&!stills(i)[0].hidden),'every still stays on screen');
+  f.visible([a,b],false);f.near([a,b],false);
+  assert.ok([a,b].every(i=>surfaces(i).length===0),'a card released far away frees its preview');
+  assert.ok([a,b].every(i=>stills(i).length===1),'and keeps its still for the way back');
+});
+

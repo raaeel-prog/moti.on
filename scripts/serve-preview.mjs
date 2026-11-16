@@ -17,7 +17,10 @@ const contentTypes = new Map([
   [".html", "text/html; charset=utf-8"],
   [".js", "text/javascript; charset=utf-8"],
   [".json", "application/json; charset=utf-8"],
-  [".jsx", "text/plain; charset=utf-8"]
+  [".jsx", "text/plain; charset=utf-8"],
+  [".jpg", "image/jpeg"],
+  [".mp4", "video/mp4"],
+  [".svg", "image/svg+xml"]
 ]);
 
 function safePath(rawUrl) {

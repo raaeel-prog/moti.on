@@ -49,8 +49,10 @@ const envFile = path.join(keyDir, `secrets-${ref}.env`);
 const der = createPrivateKey(privatePem).export({ type: "pkcs8", format: "der" }).toString("base64");
 writeFileSync(envFile, `MOTION_LEASE_PRIVATE_KEY=${der}\n`, { mode: 0o600 });
 supabase(["secrets", "set", "--project-ref", ref, "--env-file", envFile]);
-console.log("\n4/5 Publicando a função motion-account…");
+console.log("\n4/5 Publicando as funções motion-account e motion-assets…");
 supabase(["functions", "deploy", "motion-account", "--project-ref", ref, "--no-verify-jwt"]);
+// The stock library stays off until assets-setup.mjs stores at least one provider key.
+supabase(["functions", "deploy", "motion-assets", "--project-ref", ref, "--no-verify-jwt"]);
 
 console.log("\n5/5 Gerando configuração do painel e credencial de administração…");
 const keys = JSON.parse(supabase(["projects", "api-keys", "--project-ref", ref, "--reveal", "-o", "json"], { capture: true }));

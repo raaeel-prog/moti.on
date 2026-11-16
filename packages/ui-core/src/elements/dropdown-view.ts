@@ -1,4 +1,5 @@
 import { element as createElement, requireText, setHidden } from "../component-dom.js";
+import { attachMenuGlide, type MenuGlide } from "../menu-glide.js";
 
 export interface SelectFieldOption { value: string; label: string; }
 
@@ -148,6 +149,7 @@ export function mountDropdownView(root: HTMLElement, initial: SelectFieldOptions
   sync();
   let menu: HTMLElement | null = null;
   let choices: HTMLButtonElement[] = [];
+  let glide: MenuGlide | undefined;
   let index = 0;
   let isOpen = false;
   let exitTimer: ReturnType<typeof setTimeout> | undefined;
@@ -157,6 +159,7 @@ export function mountDropdownView(root: HTMLElement, initial: SelectFieldOptions
     exitTimer = undefined;
     menu?.parentNode?.removeChild(menu);
     menu = null;
+    glide = undefined;
     choices = [];
     if (openFieldMenus.get(doc) === dispose) openFieldMenus.delete(doc);
   };
@@ -248,7 +251,10 @@ export function mountDropdownView(root: HTMLElement, initial: SelectFieldOptions
       return choice;
     });
     choices.forEach((choice, position) => choice.setAttribute("aria-selected", String(options.options[position]?.value === select.value)));
-    if (!reused) doc.body.appendChild(menu);
+    if (!reused) {
+      doc.body.appendChild(menu);
+      glide = typeof menu.insertBefore === "function" ? attachMenuGlide(menu, () => choices) : undefined;
+    }
     const rect = overlayTrigger.getBoundingClientRect();
     const width = Math.min(Math.max(rect.width, 160), Math.max(0, doc.documentElement.clientWidth - 16));
     menu.style.width = `${width}px`;
@@ -267,6 +273,7 @@ export function mountDropdownView(root: HTMLElement, initial: SelectFieldOptions
     menu.getBoundingClientRect();
     menu.setAttribute("data-open", "true");
     openFieldMenus.set(doc, dispose);
+    glide?.rest(false);
     const browser = doc.defaultView as (Window & typeof globalThis) | null;
     if (typeof browser?.MutationObserver === "function") {
       observer = new browser.MutationObserver(() => {

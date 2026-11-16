@@ -58,7 +58,7 @@ export function createPersonalMediaPreview(doc:Document,options:{
         if("webkitPreservesPitch" in pitchPlayer)pitchPlayer.webkitPreservesPitch=!pitchPreview;
       }
       value.addEventListener("input",updateRate);value.addEventListener("change",updateRate);
-      cleanups.push(attachScrubbableNumber(value,{helpText:pt?"Arraste para ajustar a prévia · Shift: precisão · Clique para digitar":"Drag to adjust preview · Shift: fine · Click to type"}));
+      cleanups.push(attachScrubbableNumber(value,{helpText:pt?"Arraste para ajustar a prévia · Shift: 10× · Ctrl/Alt: precisão · Clique para digitar":"Drag to adjust preview · Shift: 10× · Ctrl/Alt: fine · Click to type"}));
       body.appendChild(createElement(doc,"p","ch-preset-hint",pt?"Estes ajustes afetam somente a prévia. Adicionar à composição usa o arquivo original.":"These settings affect preview only. Add to composition uses the original file."));
       player.src=result.uri;
     }catch(caught){if(!disposed&&current===sequence){status.hidden=false;status.textContent=caught instanceof Error?caught.message:(pt?"Não foi possível abrir a prévia.":"Could not open the preview.");}}

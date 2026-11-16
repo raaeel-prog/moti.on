@@ -1,0 +1,23 @@
+# Source map: keep dependencies, builds, generated copies and external assets out.
+graphify-out/
+.agents/
+.claude/
+.codex/
+node_modules/
+dist/
+artifacts/
+coverage/
+**/generated/
+**/lib/
+**/assets/
+**/vendor/
+**/build/
+**/build-*/
+plugin/cmake-*/
+apps/Site/
+package-lock.json
+pnpm-lock.yaml
+**/.env*
+**/account/config.json
+# Adobe Rez resources use .r but are not the R programming language.
+plugin/**/*.r

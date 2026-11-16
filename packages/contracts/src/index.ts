@@ -121,11 +121,20 @@ export {
 } from "./validators.js";
 
 export * from "./motion-library.js";
+export * from "./motion-library-emulsion.js";
 export * from "./motion-library-math.js";
 export * from "./motion-library-requirements.js";
+export * from "./camera-kernel.js";
+export * from "./camera-presets.js";
+export * from "./camera-choreography.js";
 export * from "./preset-workspace.js";
 
 export * from "./text-effects.js";
 
 export * from "./gradient.js";
+export * from "./gradient-palettes.js";
+export * from "./particles.js";
+export * from "./elements.js";
+export * from "./sounds.js";
+export * from "./stock.js";
 export * from "./selection.js";

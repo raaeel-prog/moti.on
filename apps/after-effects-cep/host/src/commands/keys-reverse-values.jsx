@@ -105,18 +105,27 @@
     // um segundo par aqui fecharia o grupo de fora no meio do comando.
     /** @type {MotionPropertySnapshot[]} */
     var intactos = [];
+    /** @type {MotionPropertySnapshot[]} */
+    var destinos = [];
+    // AE can clear sibling key selection while rebuilding a property.
+    // Capture every target before the first write, including its selection.
+    for (i = 0; i < toProcess.length; i += 1) {
+      var planned = toProcess[i];
+      if (!planned) throw new Error("Plano de ReverseValues incompleto.");
+      intactos.push(MotionKeyframes.captureProperty(planned.property));
+      destinos.push(MotionKeyframes.captureProperty(planned.property));
+    }
 
     try {
       for (i = 0; i < toProcess.length; i += 1) {
         var processItem = toProcess[i];
         if (!processItem) continue;
-        var propObj = /** @type {Property} */ (processItem.property);
         var selArr = /** @type {number[]} */ (processItem.sel);
 
         // Duas capturas: uma para reescrever e outra guardada intacta, que e
         // para onde o rollback volta.
-        intactos.push(MotionKeyframes.captureProperty(propObj));
-        var snapshot = MotionKeyframes.captureProperty(propObj);
+        var snapshot = destinos[i];
+        if (!snapshot) throw new Error("Snapshot de ReverseValues incompleto.");
         var keys = snapshot.keys;
 
         var selectedIndices = [];
@@ -174,6 +183,7 @@
 
         MotionKeyframes.restoreProperty(snapshot, null);
       }
+      MotionKeyframes.restoreSelections(destinos);
     } catch (e) {
       var rollbackFailed = false;
       // Restaura na ordem inversa: a ultima propriedade tocada e a que pode
@@ -186,6 +196,7 @@
           rollbackFailed = true;
         }
       }
+      try { MotionKeyframes.restoreSelections(intactos); } catch (selectionError) { rollbackFailed = true; }
       if (rollbackFailed) {
         var rollbackError = /** @type {Error & {motionCode?: string}} */ (
           new Error("ReverseValues falhou e o estado anterior nao pode ser restaurado.")

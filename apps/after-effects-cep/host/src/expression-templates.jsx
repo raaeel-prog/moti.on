@@ -1718,7 +1718,12 @@
    * mantem o foco grudado no alvo mesmo com os dois animados — que e o motivo de
    * isto ser expressao e nao um valor assado.
    */
-  var PARALLAX_FOCUS_TAIL = "length(toWorld([0, 0, 0]), alvo.toWorld(alvo.anchorPoint)) + offset;";
+  var PARALLAX_FOCUS_TAIL_LEGACY = "length(toWorld([0, 0, 0]), alvo.toWorld(alvo.anchorPoint)) + offset;";
+  var PARALLAX_FOCUS_TAIL =
+    "var c = toWorld([0, 0, 0]);\n" +
+    "var t = alvo.toWorld(alvo.anchorPoint);\n" +
+    "var f = normalize(toWorldVec([0, 0, 1]));\n" +
+    "Math.max(1, dot(sub(t, c), f) + offset);";
 
   var PARALLAX_FOCUS_DECLARATIONS =
     /^var alvo = thisComp\.layer\("(?:[^"\\\n]|\\.)*"\);\nvar offset = (?:-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?);\n/;
@@ -1755,7 +1760,8 @@
     var body = normalized.substring(PARALLAX_FOCUS_HEADER.length);
     var declarations = PARALLAX_FOCUS_DECLARATIONS.exec(body);
     if (!declarations) return false;
-    return body.substring(declarations[0].length) === PARALLAX_FOCUS_TAIL;
+    var tail = body.substring(declarations[0].length);
+    return tail === PARALLAX_FOCUS_TAIL || tail === PARALLAX_FOCUS_TAIL_LEGACY;
   }
 
   var PARALLAX_WIGGLE_ID = "ae.parallax.wiggle";

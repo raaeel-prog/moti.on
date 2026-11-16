@@ -1,3 +1,4 @@
+/* global FootageItem, FolderItem */
 /**
  * Ponto de entrada ÚNICO do host do After Effects.
  *
@@ -16,6 +17,126 @@
 (function (global) {
   var PROTOCOL_VERSION = MotionContracts.PROTOCOL_VERSION;
   var ERROR = MotionContracts.ERROR;
+
+  /** @returns {Record<string, boolean>|null} */
+  function projectItemsBefore() {
+    if (!app.project || typeof app.project.numItems !== "number") return null;
+    /** @type {Record<string, boolean>} */
+    var ids = {};
+    for (var i = 1; i <= app.project.numItems; i++) ids[String(app.project.item(i).id)] = true;
+    return ids;
+  }
+
+  /** Remove only resources created by a failed command and left unused by its rollback.
+   * Existing unused sources, used sources and compositions are never removed.
+   * @param {Record<string, boolean>|null} ids
+   */
+  function removeFailedCommandResources(ids) {
+    if (!ids) return;
+    var failed = false, i;
+    for (i = app.project.numItems; i >= 1; i--) {
+      var item = app.project.item(i);
+      if (!ids[String(item.id)] && item instanceof FootageItem && item.usedIn.length === 0) {
+        try { item.remove(); } catch (removeError) { failed = true; }
+      }
+    }
+    // Reverse traversal plus repeated passes also handles newly nested folders.
+    var removed = true;
+    while (removed) {
+      removed = false;
+      for (i = app.project.numItems; i >= 1; i--) {
+        var folder = app.project.item(i);
+        if (!ids[String(folder.id)] && folder instanceof FolderItem && folder.numItems === 0) {
+          try { folder.remove(); removed = true; } catch (folderError) { failed = true; }
+        }
+      }
+    }
+    if (failed) {
+      var cleanupError = new Error("Command resource rollback failed.");
+      /** @type {Error & {motionCode?: string}} */ (cleanupError).motionCode = ERROR.ROLLBACK_FAILED;
+      throw cleanupError;
+    }
+  }
+
+  /** @returns {{layer: Layer, selected: boolean}[]} */
+  function layersBefore() {
+    var comp = app.project ? app.project.activeItem : null;
+    /** @type {{layer: Layer, selected: boolean}[]} */
+    var layers = [];
+    if (comp instanceof CompItem) for (var i = 1; i <= comp.numLayers; i++) {
+      var layer = comp.layer(i); layers.push({layer: layer, selected: layer.selected});
+    }
+    return layers;
+  }
+
+  /** @param {{layer: Layer, selected: boolean}[]} layers */
+  function restoreFailedLayerSelection(layers) {
+    var failed = false;
+    for (var pass = 0; pass < 2; pass++) for (var i = 0; i < layers.length; i++) {
+      var record = layers[i];
+      if (!record) continue;
+      if (record.selected !== (pass === 1)) continue;
+      try { if (record.layer.selected !== record.selected) record.layer.selected = record.selected; }
+      catch (selectionError) { failed = true; }
+    }
+    if (failed) {
+      var error = /** @type {Error & {motionCode?: string}} */ (new Error("Layer selection rollback failed."));
+      error.motionCode = ERROR.ROLLBACK_FAILED; throw error;
+    }
+  }
+
+  /** Keep paths: adding an indexed effect can invalidate the original property handle.
+   * @returns {any[]}
+   */
+  function selectedPropertiesBefore() {
+    var comp = app.project ? app.project.activeItem : null;
+    var records = /** @type {any[]} */ ([]);
+    if (!(comp instanceof CompItem) || !comp.selectedProperties) return records;
+    var properties = comp.selectedProperties;
+    for (var i = 0; i < properties.length; i++) {
+      var property = properties[i], node = /** @type {any} */ (property), path = [], keys = [];
+      if (!property) continue;
+      while (node && node.parentProperty) {
+        if (path.length >= 32) throw new Error("Invalid selected property path.");
+        path.unshift({index: node.propertyIndex, matchName: node.matchName}); node = node.parentProperty;
+      }
+      for (var k = 1; k <= property.numKeys; k++) keys.push({time: property.keyTime(k), selected: property.keySelected(k)});
+      if (path.length) records.push({layer: node, path: path, selected: property.selected, keys: keys});
+    }
+    return records;
+  }
+
+  /** @param {any[]} records */
+  function restoreFailedPropertySelection(records) {
+    var failed = false, targets = /** @type {any[]} */ ([]);
+    for (var i = 0; i < records.length; i++) {
+      try {
+        var record = records[i], property = record.layer;
+        for (var j = 0; j < record.path.length; j++) {
+          var segment = record.path[j]; property = property.property(segment.index);
+          if (!property || property.matchName !== segment.matchName) throw new Error("Selected property was not restored.");
+        }
+        if (property.selected !== record.selected) property.selected = record.selected;
+        targets.push({property: property, keys: record.keys});
+      } catch (propertyError) { failed = true; }
+    }
+    // Select properties before keys: a property selection can clear sibling keys.
+    for (i = 0; i < targets.length; i++) {
+      try {
+        var target = targets[i];
+        if (target.property.numKeys !== target.keys.length) throw new Error("Selected key count was not restored.");
+        for (var k = 1; k <= target.keys.length; k++) {
+          var key = target.keys[k - 1];
+          if (target.property.keyTime(k) !== key.time) throw new Error("Selected key time was not restored.");
+          if (target.property.keySelected(k) !== key.selected) target.property.setSelectedAtKey(k, key.selected);
+        }
+      } catch (keyError) { failed = true; }
+    }
+    if (failed) {
+      var error = /** @type {Error & {motionCode?: string}} */ (new Error("Property selection rollback failed."));
+      error.motionCode = ERROR.ROLLBACK_FAILED; throw error;
+    }
+  }
 
   /**
    * Numero de linha seguro, quando o ExtendScript o fornece.
@@ -535,7 +656,19 @@
           request.context ? request.context.locale : null
         );
         result = MotionUndo.withUndoGroup(undoLabel, function () {
-          return command.run(request.args || {}, request.context || {}, request.options || {});
+          var originalItems = projectItemsBefore();
+          var originalLayers = layersBefore();
+          var originalProperties = selectedPropertiesBefore();
+          try {
+            return command.run(request.args || {}, request.context || {}, request.options || {});
+          } catch (runError) {
+            try { removeFailedCommandResources(originalItems); }
+            finally {
+              try { restoreFailedLayerSelection(originalLayers); }
+              finally { restoreFailedPropertySelection(originalProperties); }
+            }
+            throw runError;
+          }
         });
       } else {
         result = command.run(request.args || {}, request.context || {}, request.options || {});

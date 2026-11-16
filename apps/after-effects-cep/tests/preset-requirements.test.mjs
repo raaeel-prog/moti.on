@@ -20,7 +20,8 @@ const { MOTION_LIBRARY_PRESETS, libraryRequiredEffects, motionLibraryRequirement
 
 test("o host montado usa a mesma função de efeitos exigidos", async () => {
   const generated = await readFile(new URL("../host/generated/motion-library.jsx", import.meta.url), "utf8");
-  assert.match(generated, /libraryRequiredEffects: function libraryRequiredEffects\(/);
+  assert.match(generated, /\nfunction libraryRequiredEffects\(/);
+  assert.match(generated, /libraryRequiredEffects: libraryRequiredEffects\b/);
   const library = await readFile(new URL("../host/src/commands/preset-library.jsx", import.meta.url), "utf8");
   assert.match(library, /MotionLibraryCore\.libraryRequiredEffects\(p\)/);
   assert.doesNotMatch(library, /function requiredEffects\(p\) \{\s*var r =/, "a tabela antiga do host deve ter saído");
@@ -52,7 +53,7 @@ test("presets que dependem do plugin nativo ou de Cycore declaram isso", () => {
     const needs = motionLibraryRequirements(preset);
     const effects = preset.cameraSpec ? needs.effects : libraryRequiredEffects(preset);
     assert.equal(needs.motionCore, effects.includes("CHMS Motion Core") || effects.includes("Moti.on Native Transition"), preset.id);
-    assert.equal(needs.cycore, effects.some((name) => name.startsWith("CC ")), preset.id);
+    assert.equal(needs.cycore, effects.some((name) => name.startsWith("CC ") || name.startsWith("CS ")), preset.id);
     assert.equal(needs.layer, preset.cameraSpec ? "composition" : preset.category.startsWith("text-") ? "text" : "visual", preset.id);
   }
   assert.ok(MOTION_LIBRARY_PRESETS.some((preset) => motionLibraryRequirements(preset).motionCore));

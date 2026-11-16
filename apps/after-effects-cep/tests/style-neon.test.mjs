@@ -21,7 +21,7 @@ const PropertyType = { PROPERTY: 1, INDEXED_GROUP: 2, NAMED_GROUP: 3 };
 
 /** Parâmetros que cada efeito expõe nesta instalação simulada. */
 const PARAMS = {
-  "ADBE Glo2": ["ADBE Glo2-0003", "ADBE Glo2-0004", "ADBE Glo2-0007", "ADBE Glo2-0012", "ADBE Glo2-0013"]
+  "ADBE Glo2": ["ADBE Glo2-0003", "ADBE Glo2-0004", "ADBE Glo2-0007", "ADBE Glo2-0012", "ADBE Glo2-0013", "ADBE Glo2-0002"]
 };
 
 class FakeProperty {
@@ -46,7 +46,7 @@ class FakeEffect {
     this.name = matchName;
     this.propertyType = PropertyType.INDEXED_GROUP;
     this.lista = lista ?? null;
-    this.filhos = (parametros ?? PARAMS[matchName] ?? []).map((mn) => new FakeProperty(mn, 0));
+    this.filhos = (parametros ?? PARAMS[matchName] ?? []).map((mn) => new FakeProperty(mn, mn==='ADBE Glo2-0002'?153:0));
   }
   get numProperties() {
     return this.filhos.length;
@@ -145,6 +145,8 @@ class FakeLayer {
 
 class FakeCompItem {
   constructor(camadas) {
+    this.camadas = camadas;
+    for(const layer of camadas)layer.selected=true;
     this.selectedLayers = camadas;
     this.selectedProperties = [];
     this.numLayers = camadas.length;
@@ -152,6 +154,7 @@ class FakeCompItem {
     this.frameDuration = 1 / 25;
     this.time = 0;
   }
+  layer(index) { return this.camadas[index-1] ?? null; }
 }
 
 async function fixture(comp) {
@@ -402,5 +405,19 @@ test('Neon writes RGBA to both glow colors while text remains RGB', async () => 
   assert.deepEqual(effect.property('ADBE Glo2-0012').value, [0.2, 0.6, 1, 1]);
   assert.deepEqual(effect.property('ADBE Glo2-0013').value, [0.2, 0.6, 1, 1]);
   assert.deepEqual(layer.sourceText.documento.strokeColor, [0.2, 0.6, 1]);
+});
+
+test('Neon removes the measured native brightness cutoff so dark alpha shapes get a halo',async()=>{
+ const layer=new FakeLayer({semTexto:true});const response=await aplica(new FakeCompItem([layer]));
+ assert.equal(response.ok,true);assert.equal(layer.efeitos.property(1).property('ADBE Glo2-0002').value,0,'AE 26.5 defaults to 153/255, which produced no glow on the dark-shape fixture');
+});
+
+test('Neon protects threshold animation and restores it after a later write failure',async()=>{
+ const layer=new FakeLayer();await aplica(new FakeCompItem([layer]));const threshold=layer.efeitos.property(1).property('ADBE Glo2-0002');threshold.numKeys=1;
+ const response=await aplica(new FakeCompItem([layer]));assert.equal(response.ok,false);assert.equal(response.error.code,'KEYFRAME_CONFLICT');
+ threshold.numKeys=0;threshold.expression='value';const expressionResponse=await aplica(new FakeCompItem([layer]));assert.equal(expressionResponse.error.code,'EXPRESSION_CONFLICT');
+ threshold.expression='';threshold.setValue(80);const colorB=layer.efeitos.property(1).property('ADBE Glo2-0013');let fail=true;
+ colorB.setValue=function(value){if(fail){fail=false;throw Error('injected color failure');}FakeProperty.prototype.setValue.call(this,value);};
+ const failed=await aplica(new FakeCompItem([layer]));assert.equal(failed.ok,false);assert.equal(threshold.value,80,'rollback must restore the preexisting static cutoff');
 });
 

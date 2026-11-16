@@ -34,6 +34,13 @@ export function themeDeclarations(css, theme = "dark") {
   return tokens;
 }
 
+/** AE overrides live at the document root, where compatibility aliases resolve. */
+export function afterEffectsDeclarations(css, aeCss, theme = "dark") {
+  const tokens = themeDeclarations(css, theme);
+  if (theme === "dark") for (const [name,value] of declarations(selectorBlock(aeCss, ':root[data-host="after-effects"]:not([data-theme="light"])'))) tokens.set(name,value);
+  return tokens;
+}
+
 function luminance(hex) {
   const value = Number.parseInt(hex.slice(1), 16);
   const channels = [(value >> 16) & 255, (value >> 8) & 255, value & 255].map((channel) => {
@@ -78,6 +85,14 @@ function auditTheme(name, tokens) {
   for (const background of ["accent", "accent-hover", "accent-press"]) {
     checks.push({ name, foreground: "accent-on", background, target: 4.5 });
   }
+  for (const background of ["action-fill", "action-fill-hover", "action-fill-press"]) {
+    checks.push({ name, foreground: "action-on", background, target: 4.5 });
+  }
+  for (const foreground of ["action-text", "action-text-hover", "action-text-press"]) {
+    for (const background of [...TEXT_SURFACES, "surface-active"]) {
+      checks.push({ name, foreground, background, target: 4.5 });
+    }
+  }
   // Audit the semantic API as well as the compatibility names used by older
   // components. A rename must not silently remove colors from the audit.
   for (const foreground of ["text-primary", "text-secondary", "text-muted"]) {
@@ -100,7 +115,8 @@ export async function auditContrastTokens() {
   const css = await readFile(CSS_URL, "utf8");
   const dark = themeDeclarations(css);
   const light = themeDeclarations(css, "light");
-  const checks = [...auditTheme("dark", dark), ...auditTheme("light", light)];
+  const aeCss = await readFile(new URL("../src/after-effects.css", import.meta.url), "utf8");
+  const checks = [...auditTheme("dark", dark), ...auditTheme("light", light), ...auditTheme("ae-dark", afterEffectsDeclarations(css, aeCss))];
   return { checks, violations: checks.filter((check) => !check.ok) };
 }
 

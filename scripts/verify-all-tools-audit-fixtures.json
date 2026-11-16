@@ -1,0 +1,1290 @@
+{
+  "schemaVersion": 1,
+  "tools": [
+    {
+      "id": "wordReveal",
+      "command": "ae.text.word-reveal",
+      "args": {
+        "action": "apply",
+        "renderer": "morph",
+        "durationFrames": 36,
+        "staggerFrames": 5,
+        "paddingX": 0,
+        "paddingY": 15,
+        "roundness": 0,
+        "revealPoint": 50,
+        "boxGap": 3,
+        "fillColor": [
+          1,
+          0.12,
+          0.08
+        ],
+        "direction": "bottom",
+        "smoothness": 75,
+        "formationPercent": 25,
+        "holdPercent": 10,
+        "travelPercent": 10,
+        "order": "normal",
+        "automatic": true,
+        "progress": 0,
+        "useSourceColor": true,
+        "textColor": [
+          1,
+          1,
+          1
+        ]
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "variableMorph",
+      "command": "ae.text.variable-morph",
+      "args": {
+        "action": "apply",
+        "renderer": "auto",
+        "preset": "soft-weight",
+        "radius": 83.33333333333333,
+        "strength": 100,
+        "weight": 35,
+        "contrast": 0,
+        "italic": 0,
+        "smoothness": 75,
+        "scaleX": 100,
+        "scaleY": 100,
+        "skew": 0,
+        "lift": 0,
+        "sweepFrames": 48,
+        "sweepDirection": "left-to-right"
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "styleSwap",
+      "command": "ae.text.style-swap",
+      "args": {
+        "action": "apply",
+        "durationFrames": 24,
+        "staggerFrames": 2,
+        "unit": "characters"
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "verticalPulse",
+      "command": "ae.text.vertical-pulse",
+      "args": {
+        "action": "apply",
+        "renderer": "morph",
+        "preset": "impact",
+        "durationFrames": 54,
+        "peakScalePercent": 360,
+        "animationMode": "center-out",
+        "waveSpread": 45,
+        "distortion": 65,
+        "glow": 80,
+        "seed": 1,
+        "accentColor": [
+          1,
+          0.68,
+          0.08
+        ],
+        "fluidity": 45
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "loopOut",
+      "command": "ae.expression.loopout",
+      "args": {
+        "type": "cycle",
+        "numKeyframes": 0,
+        "duration": 0,
+        "useDuration": false,
+        "conflictMode": "skip"
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "smooth",
+      "command": "ae.expression.smooth",
+      "args": {
+        "widthSeconds": 0.2,
+        "samples": 5,
+        "referenceTime": "current",
+        "conflictMode": "skip"
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "wiggle",
+      "command": "ae.expression.wiggle",
+      "args": {
+        "frequency": 2,
+        "amplitude": 6.666666666666666,
+        "octaves": 1,
+        "amplitudeMultiplier": 0.5,
+        "seed": 0,
+        "conflictMode": "skip"
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "flicker",
+      "command": "ae.expression.flicker",
+      "args": {
+        "rate": 6,
+        "minFactor": 0.7,
+        "maxFactor": 1,
+        "seed": 0,
+        "conflictMode": "skip"
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "rename",
+      "command": "ae.layer.rename",
+      "args": {
+        "scope": "selected",
+        "prefix": "",
+        "suffix": "",
+        "find": "",
+        "replace": "",
+        "regex": false,
+        "counterStart": 1,
+        "padding": 0,
+        "sourceName": false,
+        "preview": false
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "reverseOrder",
+      "command": "ae.layer.reverse-order",
+      "args": {
+        "scope": "selected",
+        "preserveTrackMattes": true,
+        "preserveParents": true,
+        "reverseTimingToo": false
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "anchor",
+      "command": "ae.anchor.align",
+      "args": {
+        "gridPoint": "center",
+        "mode": "normal",
+        "timeMode": "currentTime",
+        "fixedTime": 0,
+        "includeExtents": false,
+        "preserveVisualPosition": true,
+        "randomSeed": 0,
+        "boundsSource": "visual",
+        "preview": false
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "cutKeys",
+      "command": "ae.keys.cut",
+      "args": {
+        "rangeMode": "afterCti",
+        "startTime": 0,
+        "endTime": 0,
+        "includeBoundary": false,
+        "previewOnly": false
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "delay",
+      "command": "ae.keys.delay",
+      "args": {
+        "delayFrames": 2,
+        "order": "timeline",
+        "reverse": false,
+        "randomSeed": 0,
+        "shiftMode": "layerStart",
+        "spatialOrigin": [
+          0,
+          0
+        ]
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "flip",
+      "command": "ae.layer.flip",
+      "args": {
+        "axis": "horizontal",
+        "pivot": "anchor",
+        "groupMode": "each",
+        "preserveTextReadability": true
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "createNull",
+      "command": "ae.layer.create-null",
+      "args": {
+        "placement": "averageAnchor",
+        "dimension": "2d",
+        "parentSelected": true,
+        "preserveWorldTransform": true,
+        "size": 33,
+        "label": 0
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "parent",
+      "command": "ae.layer.parent",
+      "args": {},
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "textBox",
+      "command": "ae.text.box",
+      "args": {
+        "paddingX": 24,
+        "paddingY": 14,
+        "roundness": 8,
+        "fillColor": [
+          0,
+          0,
+          0
+        ],
+        "fillOpacity": 100,
+        "createPerLayer": true,
+        "conflictMode": "skip"
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "ease",
+      "command": "ae.keys.ease.apply",
+      "args": {
+        "x1": 0.22,
+        "y1": 1,
+        "x2": 0.36,
+        "y2": 1,
+        "applyIn": true,
+        "applyOut": true,
+        "convertHold": false
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "aiToVector",
+      "command": "ae.vector.ai-to-vector",
+      "args": {
+        "keepOriginal": true
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "textToVector",
+      "command": "ae.vector.text-to-vector",
+      "args": {
+        "keepOriginal": true
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "particles",
+      "command": "ae.effect.particles",
+      "args": {
+        "mode": "classic",
+        "birthRate": 2,
+        "longevity": 1,
+        "velocity": 1,
+        "size": 0.05,
+        "opacity": 100,
+        "color": [
+          1,
+          0.8,
+          0.4
+        ],
+        "movement": 1,
+        "seed": 1,
+        "streams": [
+          {
+            "amount": 0.4,
+            "size": 0.45,
+            "opacity": 45,
+            "color": [
+              0.64,
+              0.77,
+              1
+            ],
+            "movement": 0.55
+          },
+          {
+            "amount": 0.3,
+            "size": 0.7,
+            "opacity": 60,
+            "color": [
+              0.76,
+              0.86,
+              1
+            ],
+            "movement": 0.8
+          },
+          {
+            "amount": 0.2,
+            "size": 1,
+            "opacity": 75,
+            "color": [
+              0.91,
+              0.94,
+              1
+            ],
+            "movement": 1
+          },
+          {
+            "amount": 0.1,
+            "size": 1.5,
+            "opacity": 55,
+            "color": [
+              1,
+              0.91,
+              0.76
+            ],
+            "movement": 1.3
+          }
+        ]
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "texture",
+      "command": "ae.asset.texture",
+      "args": {
+        "blendMode": "overlay",
+        "opacity": 100
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "clean",
+      "command": "ae.project.clean",
+      "args": {
+        "removeConfirmed": false
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "reverseKeys",
+      "command": "ae.keys.reverse",
+      "args": {},
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "reverseValues",
+      "command": "ae.keys.reverse-values",
+      "args": {},
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "sendToEdge",
+      "command": "ae.keys.send-to-edge",
+      "args": {
+        "edge": "start",
+        "reference": "comp"
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "neon",
+      "command": "ae.style.neon",
+      "args": {
+        "coreColor": [
+          1,
+          1,
+          1
+        ],
+        "glowColor": [
+          0.2,
+          0.8,
+          1
+        ],
+        "strokeWidth": 4,
+        "glowRadius": 40,
+        "intensity": 2,
+        "mode": "editable"
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "beat",
+      "command": "ae.audio.beat",
+      "args": {
+        "beatMin": 30,
+        "beatMax": 90,
+        "mode": 1,
+        "bumpMin": 0,
+        "bumpMax": 110,
+        "shakeFreq": 10,
+        "shakeAmp": 30
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "cloneKeys",
+      "command": "ae.keys.clone",
+      "args": {
+        "mode": "repeat",
+        "destination": "after"
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "timeController",
+      "command": "ae.time.controller",
+      "args": {
+        "applyTo": "layer",
+        "speedPercent": 100,
+        "offsetFrames": 0,
+        "reverse": false,
+        "freeze": false,
+        "freezeFrame": 0
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "animateKinetic",
+      "command": "ae.animate.kinetic",
+      "args": {
+        "direction": "in",
+        "durationFrames": 15,
+        "overshoot": 1.2,
+        "rotation": 0,
+        "scale": 100,
+        "opacity": 100,
+        "staggerFrames": 0,
+        "splitMode": "none"
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "inertial",
+      "command": "ae.animate.inertial",
+      "args": {
+        "amplitude": 60,
+        "frequency": 2.5,
+        "decay": 6,
+        "maxDurationFrames": 120,
+        "startMode": "lastKey"
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "jump",
+      "command": "ae.animate.jump",
+      "args": {
+        "height": 60,
+        "durationFrames": 20,
+        "direction": "up",
+        "squashStretch": 12,
+        "anticipationFrames": 4,
+        "staggerFrames": 0
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "copyKeys",
+      "command": "ae.keys.copy",
+      "args": {},
+      "allowsNoop": false,
+      "mutates": false
+    },
+    {
+      "id": "pasteKeys",
+      "command": "ae.keys.paste",
+      "args": {
+        "pasteTime": "cti",
+        "mappingMode": "matchName",
+        "relativeTiming": true,
+        "includeExpressions": false,
+        "includeTangents": true
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "lookAt",
+      "command": "ae.3d.look-at",
+      "args": {
+        "targetLayerName": "",
+        "forwardAxis": "+z",
+        "offsetOrientation": [
+          0,
+          0,
+          0
+        ],
+        "constrainAxes": {
+          "x": false,
+          "y": false,
+          "z": false
+        },
+        "upAxis": "+y"
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "orbit",
+      "command": "ae.3d.orbit",
+      "args": {
+        "preset": "frontal",
+        "radius": 90,
+        "speed": 60,
+        "inclination": 0,
+        "azimuth": 0,
+        "bank": 0,
+        "phase": 0,
+        "spread": 100,
+        "targetMode": "newController",
+        "faceTarget": false,
+        "bake": false
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "breakShape",
+      "command": "ae.shape.break",
+      "args": {
+        "keepOriginal": true,
+        "preserveAppearance": true,
+        "namingMode": "groupName",
+        "recursive": false
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "effector",
+      "command": "ae.rig.effector",
+      "args": {
+        "radius": 400,
+        "falloffCurve": "smoothstep",
+        "curve": {
+          "x1": 0.33,
+          "y1": 0,
+          "x2": 0.67,
+          "y2": 1
+        },
+        "positionAmount": 200,
+        "scaleAmount": 0,
+        "rotationAmount": 0,
+        "opacityAmount": 0,
+        "effectorType": "null"
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "cameraTransition",
+      "command": "ae.camera.transition",
+      "args": {
+        "preset": "pushIn",
+        "durationFrames": 30,
+        "amount": 133.33333333333334,
+        "curve": {
+          "x1": 0.33,
+          "y1": 0,
+          "x2": 0.67,
+          "y2": 1
+        },
+        "cameraName": ""
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "cylinder",
+      "command": "ae.3d.cylinder",
+      "args": {
+        "radius": 167,
+        "height": 0,
+        "count": 8,
+        "faceMode": "outward",
+        "startAngle": 0,
+        "arcDegrees": 360,
+        "createCamera": true
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "cube",
+      "command": "ae.3d.cube",
+      "args": {
+        "size": 133,
+        "sourceMode": "duplicateOne",
+        "faceFit": true,
+        "createCamera": true,
+        "controllerOrientation": [
+          0,
+          0,
+          0
+        ],
+        "keepSources": true
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "gradient",
+      "command": "ae.effect.gradient",
+      "args": {
+        "action": "apply",
+        "settings": {
+          "mode": "linear",
+          "centerX": 0.5,
+          "centerY": 0.5,
+          "scale": 1.35,
+          "aspect": 1,
+          "angle": -18,
+          "cycles": 1,
+          "offset": 0,
+          "depth": 0.25,
+          "depthRadius": 40,
+          "bulge": 0.45,
+          "turbulence": 0.5,
+          "turbulenceScale": 550,
+          "seed": 1,
+          "glow": 0.55,
+          "glowRadius": 70,
+          "glowThreshold": 0.6,
+          "highlightProtection": 0.5,
+          "diffusion": 0.65,
+          "diffusionRadius": 100,
+          "focusX": 0.5,
+          "focusY": 0.5,
+          "focusRadius": 0.06,
+          "focusSoftness": 0.4,
+          "grain": 0,
+          "animation": "loop",
+          "duration": 6,
+          "phase": 0,
+          "colorProcessing": "project",
+          "schemaVersion": 1,
+          "stops": [
+            {
+              "enabled": true,
+              "color": [
+                0.025,
+                0.035,
+                0.12
+              ],
+              "position": 0
+            },
+            {
+              "enabled": true,
+              "color": [
+                0.16,
+                0.12,
+                0.85
+              ],
+              "position": 0.3333333333333333
+            },
+            {
+              "enabled": true,
+              "color": [
+                0.98,
+                0.28,
+                0.45
+              ],
+              "position": 0.6666666666666666
+            },
+            {
+              "enabled": true,
+              "color": [
+                1,
+                0.84,
+                0.66
+              ],
+              "position": 1
+            },
+            {
+              "enabled": false,
+              "color": [
+                1,
+                0.84,
+                0.66
+              ],
+              "position": 1
+            },
+            {
+              "enabled": false,
+              "color": [
+                1,
+                0.84,
+                0.66
+              ],
+              "position": 1
+            },
+            {
+              "enabled": false,
+              "color": [
+                1,
+                0.84,
+                0.66
+              ],
+              "position": 1
+            },
+            {
+              "enabled": false,
+              "color": [
+                1,
+                0.84,
+                0.66
+              ],
+              "position": 1
+            }
+          ]
+        }
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "wave",
+      "command": "ae.effect.wave",
+      "args": {
+        "mode": "transform",
+        "amplitude": 40,
+        "frequency": 50,
+        "speed": 1,
+        "direction": "vertical",
+        "phase": 0,
+        "falloff": 0,
+        "bake": false
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "tile",
+      "command": "ae.effect.tile",
+      "args": {
+        "mode": "effect",
+        "outputWidth": 200,
+        "outputHeight": 200,
+        "mirrorEdges": true,
+        "gridRows": 3,
+        "gridColumns": 3,
+        "spacing": 200
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "glitch",
+      "command": "ae.effect.glitch",
+      "args": {
+        "mode": "continuous",
+        "intensity": 0.6,
+        "frequency": 12,
+        "rgbSplit": 15,
+        "displacement": 40,
+        "seed": 1,
+        "durationFrames": 12,
+        "frameHold": false
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "echo",
+      "command": "ae.effect.echo",
+      "args": {
+        "echoTime": -0.05,
+        "numberOfEchoes": 6,
+        "startingIntensity": 0.9,
+        "decay": 0.7,
+        "operator": "screen",
+        "animate": false
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "parallax",
+      "command": "ae.animate.parallax.quick",
+      "args": {
+        "depthStep": 0,
+        "strength": 1,
+        "orderMode": "timeline",
+        "reverseOrder": false,
+        "createCamera": true,
+        "preserveFraming": true,
+        "controllerName": "Parallax",
+        "depthMode": "linear",
+        "backgroundDepth": 0
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "fastEdit",
+      "command": "ae.comp.fast-edit",
+      "args": {
+        "operation": "trimToWorkArea"
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "shapeLibrary",
+      "command": "ae.shape.library",
+      "args": {
+        "shapeType": "rectangle",
+        "size": 66.66666666666667,
+        "fillColor": [
+          0.85,
+          0.85,
+          0.85
+        ],
+        "strokeColor": [
+          0,
+          0,
+          0
+        ],
+        "strokeWidth": 0,
+        "roundness": 20,
+        "points": 5,
+        "position": [
+          320,
+          180
+        ]
+      },
+      "allowsNoop": false,
+      "mutates": true
+    },
+    {
+      "id": "trimPath",
+      "command": "ae.shape.trim-path",
+      "args": {
+        "scope": "layer",
+        "start": 0,
+        "end": 100,
+        "offset": 0,
+        "animate": true,
+        "durationFrames": 24,
+        "reverse": false
+      },
+      "allowsNoop": true,
+      "mutates": true
+    },
+    {
+      "id": "timeMarkerLoop",
+      "command": "ae.time.marker-loop",
+      "args": {
+        "inMarkerName": "in",
+        "outMarkerName": "out",
+        "loopType": "cycle",
+        "autoCreateMarkers": false,
+        "clampToLayer": true
+      },
+      "allowsNoop": false,
+      "mutates": true
+    }
+  ],
+  "quickActions": [
+    {
+      "id": "precompose",
+      "abbreviation": "PRE",
+      "name": "Pré-compor seleção",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 18
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "center",
+      "abbreviation": "CTR",
+      "name": "Centralizar na composição",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 19
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "fit",
+      "abbreviation": "FIT",
+      "name": "Ajustar à composição",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 20
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "freeze",
+      "abbreviation": "FRZ",
+      "name": "Congelar frame",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 21
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "mirror",
+      "abbreviation": "MIR",
+      "name": "Espelhar horizontalmente",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 22
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "dash-stroke",
+      "abbreviation": "DSH",
+      "name": "Contorno tracejado",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 23
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "create-adjustment",
+      "abbreviation": "ADJ",
+      "name": "Criar camada de ajuste",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 24
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "create-solid",
+      "abbreviation": "SOL",
+      "name": "Criar sólido",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 25
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "create-shape",
+      "abbreviation": "SHA",
+      "name": "Criar forma retangular",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 26
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "create-null",
+      "abbreviation": "NUL",
+      "name": "Criar objeto nulo",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 27
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "create-camera",
+      "abbreviation": "CAM",
+      "name": "Criar câmera",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 28
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "save-frame",
+      "abbreviation": "PNG",
+      "name": "Salvar frame em PNG",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 29
+      },
+      "commandId": "ae.quick-tools.save-frame"
+    },
+    {
+      "id": "effect-hue",
+      "abbreviation": "HUE",
+      "name": "Matiz e saturação",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 30
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "effect-fill",
+      "abbreviation": "FILL",
+      "name": "Preenchimento",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 31
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "effect-tint",
+      "abbreviation": "TINT",
+      "name": "Tonalidade",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 32
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "effect-blur",
+      "abbreviation": "BLUR",
+      "name": "Desfoque",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 33
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "effect-lumetri",
+      "abbreviation": "LUM",
+      "name": "Lumetri Color",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 34
+      },
+      "commandId": "ae.quick-tools.apply"
+    },
+    {
+      "id": "effect-curves",
+      "abbreviation": "CURV",
+      "name": "Curvas",
+      "source": {
+        "file": "apps/after-effects-cep/client/src/quick-actions.ts",
+        "line": 35
+      },
+      "commandId": "ae.quick-tools.apply"
+    }
+  ],
+  "geometryCases": [
+    {
+      "width": 640,
+      "height": 360,
+      "cube": {
+        "size": 133,
+        "sourceMode": "duplicateOne",
+        "faceFit": true,
+        "createCamera": true,
+        "controllerOrientation": [
+          0,
+          0,
+          0
+        ],
+        "keepSources": true
+      },
+      "cylinder": {
+        "radius": 167,
+        "height": 0,
+        "count": 8,
+        "faceMode": "outward",
+        "startAngle": 0,
+        "arcDegrees": 360,
+        "createCamera": true
+      }
+    },
+    {
+      "width": 360,
+      "height": 640,
+      "cube": {
+        "size": 133,
+        "sourceMode": "duplicateOne",
+        "faceFit": true,
+        "createCamera": true,
+        "controllerOrientation": [
+          0,
+          0,
+          0
+        ],
+        "keepSources": true
+      },
+      "cylinder": {
+        "radius": 167,
+        "height": 0,
+        "count": 8,
+        "faceMode": "outward",
+        "startAngle": 0,
+        "arcDegrees": 360,
+        "createCamera": true
+      }
+    },
+    {
+      "width": 512,
+      "height": 512,
+      "cube": {
+        "size": 190,
+        "sourceMode": "duplicateOne",
+        "faceFit": true,
+        "createCamera": true,
+        "controllerOrientation": [
+          0,
+          0,
+          0
+        ],
+        "keepSources": true
+      },
+      "cylinder": {
+        "radius": 237,
+        "height": 0,
+        "count": 8,
+        "faceMode": "outward",
+        "startAngle": 0,
+        "arcDegrees": 360,
+        "createCamera": true
+      }
+    }
+  ],
+  "sourceHashes": {
+    "apps/after-effects-cep/client/src/main.ts": "ac66ff83f29969d682af361ed4103007b504e333ad5017fcdbd322f3df943186",
+    "apps/after-effects-cep/client/src/quick-actions.ts": "9117ab57d8011ce8bd8b2cb747d4a7d55dc24aa9cc57fa09221bfbb01aca415e",
+    "apps/after-effects-cep/host/generated/motion-contracts.jsx": "71a0876ec5d4f1d2e4ef0fe245db4a849f1e8ae7fa3a49a737e1e7791c785ae8",
+    "apps/after-effects-cep/host/generated/motion-descriptors.jsx": "0aac6e6972ccc4dcf5aa2c83af79f5fa2ee8023d40603c27aecea6567c30269a",
+    "apps/after-effects-cep/host/generated/control-presets.jsx": "c91ba51e0a8c9acc2fa96e53651cf8fdef0f66a3b236eecf7d83b77a13cf8734",
+    "apps/after-effects-cep/host/src/json.jsx": "7a444d6afce65a74a76e6d313f1da1991f83513bb40927cbd68a3c8e00fbbb84",
+    "apps/after-effects-cep/host/generated/motion-library.jsx": "d891fe5bb706f352d379ca1db4eee49b478b263125831af48537774c2ac9d489",
+    "apps/after-effects-cep/host/generated/camera-library.jsx": "99b75c462de1d9eed0e84c114ab9a378bb0f2337a06f9a01f57e10286553b4e2",
+    "apps/after-effects-cep/host/src/errors.jsx": "cb4862b62e66369b1150f465e241b19d2ebb1b39e7d812eb713156580d20c67e",
+    "apps/after-effects-cep/host/src/preflight.jsx": "9aa791e826460d9044200d6b35dafd4e2d36cbb02da216e4574a5125977ee12f",
+    "apps/after-effects-cep/host/src/undo.jsx": "813eaad55af50fe2f9dc625af296f24c450edbd0eeb0164a648fa0943d3eda6e",
+    "apps/after-effects-cep/host/src/registry.jsx": "a7a2dbb8b23df3a7d76730a26049eed8abdcfebc141d96941607795961fc294f",
+    "apps/after-effects-cep/host/src/expression-templates.jsx": "d6b914c149b1d12c6a97f122fb4d7ea34a003fa72af91acd0a995f6109de4734",
+    "apps/after-effects-cep/host/src/transform-math.jsx": "34494c2cb3226f7a07561fdb612deeb764c3e384203b46a8292a044cfac21215",
+    "apps/after-effects-cep/host/src/keyframe-operations.jsx": "050bbd583e5b7fd352d64c725ebcfd2e862b0f77b11acf1c251960d590a99da6",
+    "apps/after-effects-cep/host/src/selection-signature.jsx": "a83efd2815fe04d8f027e5bb4479f3b38bd5238b1ba694ce9a4a67107b8c3106",
+    "apps/after-effects-cep/host/src/effect-operations.jsx": "bd18a08752840c9f2e29816e8298d78dc18d1e447848b62766631c8d53b4815c",
+    "apps/after-effects-cep/host/src/grouped-controls.jsx": "3d7fc0f108b152b664ab33cb1c62bd7a977e0657037e07f1daf0e225d06b4044",
+    "apps/after-effects-cep/host/src/live-controls.jsx": "67c7735c3ed992002f054fcfcd318c3d54a043480fbbdbbb7ec7e9395a1f0669",
+    "apps/after-effects-cep/host/src/live-preset.jsx": "67e1be0a7221064c00bc1a53357f031f030e444e8629026df3c17538ad2f902e",
+    "apps/after-effects-cep/host/src/quick-effects.jsx": "6bf78087b300a72ec683137346bb224f4de9e384a7cdddb1d64b73a4e26dfdda",
+    "apps/after-effects-cep/host/src/menu-command.jsx": "e2c0a2f636f6cac02122cc0ac337a36ac06ed49f1f5f2f12f0250a1c2091d98d",
+    "apps/after-effects-cep/host/src/rig-meta.jsx": "56a660fe5dc9ecfd4a91722068032bb0957fd75bdfa5afe1c2b7632dca4fcd91",
+    "apps/after-effects-cep/host/src/camera/camera-rig.jsx": "21981ad40dc40632e95d31cec3ee5359407a3c47643c73411b4b521b0929baab",
+    "apps/after-effects-cep/host/src/signature-effects.jsx": "fc245d36eb174ca00289fca3f079457fba869ba78e3224622d10498cbb6dca04",
+    "apps/after-effects-cep/host/src/look-effects.jsx": "c2b8516e0d1a44b16a1ee9b069353a1421c5b36f37bd8b2c82840fcd7f428ad0",
+    "apps/after-effects-cep/host/src/commands/preset-camera-transition.jsx": "b37a653a01c96f0b2a5b620f4c0c8f4a66c7c6369bc5ecb3a375db039fa59ab9",
+    "apps/after-effects-cep/host/src/commands/preset-library.jsx": "0d102c3a7c34cc0e39e24cc854e4d011d3befd4929bc55660236912766b0402e",
+    "apps/after-effects-cep/host/src/commands/preset-phases.jsx": "209428609b3899fb26470bce1a71c220bfb42d3fccf99a3d1617f51bd2a85be9",
+    "apps/after-effects-cep/host/src/commands/preset-colors.jsx": "e5bf780de7e3777bfff26ea4522950d59716eeda7ecd80a5585b2996085224b5",
+    "apps/after-effects-cep/host/src/commands/preset-timing.jsx": "c03b95f836a87a28d5348fc27120a3754e4c8e12cc29c820e72c2203d5c07967",
+    "apps/after-effects-cep/host/src/commands/personal-preset-library.jsx": "4b0cc2ba1c0dc9c4374306b265f24cb4d40f38646ae62939e96afdd958e22fde",
+    "apps/after-effects-cep/host/src/commands/elements-insert.jsx": "23e11d1e0b5d9b91c118e3c936c766891021daf7c1453022ed53367e87bcd3e0",
+    "apps/after-effects-cep/host/src/commands/context-read.jsx": "7cde15583f0ee8cab99e9441eab026e0a470125cc389f7d9409b45f38f579868",
+    "apps/after-effects-cep/host/src/commands/tool-controls.jsx": "bdcb43e8f0dd8db1b76b9008ee0eaa4323b77fce5f729ca3f8938e8fdfcb28f4",
+    "apps/after-effects-cep/host/src/commands/capability-probe.jsx": "2e6ee4f5c8fa1f410334dde919e402bbac9a73b520c7d25af45da692a2ac41dc",
+    "apps/after-effects-cep/host/src/commands/diagnostics-echo.jsx": "58dc47065d18751540051b21c55b7cf1aa295ada1ed93e487ef7cbc2028867f5",
+    "apps/after-effects-cep/host/src/commands/ui-color-picker.jsx": "78e7b27126cad1860c2366fd192debfa49187a85e5e2470b4c358fc343f319d5",
+    "apps/after-effects-cep/host/src/commands/demo-create-composition.jsx": "3f230d022f306eb7afc683c6cbec1c76f43e003ccb8c43e1be4f514d86a9513c",
+    "apps/after-effects-cep/host/src/commands/expression-loopout.jsx": "db1cf916b16bca63bd3290ae6c45294d828f80c285f7eb5b72bcb68f8aa42cd4",
+    "apps/after-effects-cep/host/src/commands/expression-smooth.jsx": "c554a1b75178e8de78fd760dd942aaa8d901ab0a7dd618ead4e28218c8e008d3",
+    "apps/after-effects-cep/host/src/commands/audio-beat.jsx": "713483a4e9f67734abf1b4747349eba33ed66537cdbe216305518faa022a9d47",
+    "apps/after-effects-cep/host/src/commands/expression-wiggle.jsx": "e22b2fc141421f947051df58c8fccc8841b76e05eb6b712e3d12d1a23715a8c9",
+    "apps/after-effects-cep/host/src/commands/expression-flicker.jsx": "e30d7701894535cf59e807c8886a351daf4141f613748b8682305a76463f36d6",
+    "apps/after-effects-cep/host/src/commands/text-box.jsx": "fed6537ba3a24c33b546b6abb4000ccb93ea9163e3d060c3c4091ba55963017e",
+    "apps/after-effects-cep/host/src/morph-geometry.jsx": "875ba1bfe41bdf9faf589a0becbfc0333005998e92e7caea734cc217c7eff168",
+    "apps/after-effects-cep/host/src/text-glyph-outlines.jsx": "5f6538cbaa04793d018af87004ff38e37ffdd7d49186cd4af8ceb66b5a7dfbc4",
+    "apps/after-effects-cep/host/src/commands/text-word-morph.jsx": "16defa45a52b68397e0d6c2f3d9fe25c140503c09a66eadbad33cdc0b7277ecd",
+    "apps/after-effects-cep/host/src/commands/text-word-reveal.jsx": "9825d5da44a041302ab43876aea9f3187c27400eb011657d646c75b3a5447724",
+    "apps/after-effects-cep/host/src/commands/text-variable-morph.jsx": "7a14be142ef522e1c7cdc72383eed31b28709f97fa784b6c2370dedb361cfd50",
+    "apps/after-effects-cep/host/src/commands/text-style-swap.jsx": "57f3f7d3e4dc3814e0ffc03075fa864eb8947be858869e8b0ee9e83dc111ce0a",
+    "apps/after-effects-cep/host/src/commands/text-vertical-pulse.jsx": "da656e6968b44debf45909cd624e9613610951d2da66f1f5229263e20465df72",
+    "apps/after-effects-cep/host/src/commands/text-pulse-morph.jsx": "8c7c1f967d4aaa21f55a312c82bec8f99272873184b840c8d5fc62c57e8cdd03",
+    "apps/after-effects-cep/host/src/commands/layer-list.jsx": "d1dddfb76442e4153656c7d2f1fe5f1c0ee143f7ef582e72e076d726b1009647",
+    "apps/after-effects-cep/host/src/commands/layer-parent.jsx": "6eb25ec3e8ab7b32c944fe5549e7011d81f673ced8396ed7f8ce54139fe08a6c",
+    "apps/after-effects-cep/host/src/commands/layer-create-null.jsx": "1981993251ea9f20ef70b52a15518ccf32d3f48b5f944d1c2622ddde7089fd86",
+    "apps/after-effects-cep/host/src/commands/layer-flip.jsx": "de3baa423ff8dd0892ea65323088bf400912d2fbbdcaf1a1bca0d9480a6c94b1",
+    "apps/after-effects-cep/host/src/commands/anchor-align.jsx": "3cada911e6a9972c9decb319022b4a99f74097c6827cd3343803a925a2518dab",
+    "apps/after-effects-cep/host/src/commands/layer-rename.jsx": "34ff848c076f8efca9e94d8e5f284b40daecbe0736400d1d8a61e842c1c43b86",
+    "apps/after-effects-cep/host/src/commands/layer-reverse-order.jsx": "83125de08cef877a940b62f3e9635239ba3b6840fb3ac519d6b91fb6cd65cca8",
+    "apps/after-effects-cep/host/src/commands/keys-cut.jsx": "c8656a44408c78824bcd601b7ef63882ccfd72c27668908bfe8390c795e73575",
+    "apps/after-effects-cep/host/src/commands/keys-delay.jsx": "fd812074b46bd894581993df618686d21f95661aff1ae78517736b83a2d896b8",
+    "apps/after-effects-cep/host/src/commands/keys-ease.jsx": "77307e5693ef5da7d2348b80f4b4c017e5fb561f742ae90d5d4b6e5946b4469a",
+    "apps/after-effects-cep/host/src/commands/keys-reverse.jsx": "978a76ba4f0c79784b962cf9e50323dd47f274d073ae37e56b067a095e00d52e",
+    "apps/after-effects-cep/host/src/commands/keys-reverse-values.jsx": "e4488aafd336241e2dfc2408338e8c713080b08fc78f554d0333ee99a4df23be",
+    "apps/after-effects-cep/host/src/commands/keys-send-to-edge.jsx": "09bb908a4f59a032944f661e37e6b41ddde070b6ef7750d1defdad0ddf6021ab",
+    "apps/after-effects-cep/host/src/commands/style-neon.jsx": "4792ab4f9b4877d05659a95b5419ea973da3d70c42b759cb454eb46153c4c2b9",
+    "apps/after-effects-cep/host/src/commands/keys-clone.jsx": "3f5fdff512c6af9bad078af5ac9851b8b454bcb622fd48929a39b50ef4d78dc4",
+    "apps/after-effects-cep/host/src/commands/time-controller.jsx": "fc0e45ddd4becaad5b6a99aacb31ae308975503b5cc99b64e7df2d5b94da1012",
+    "apps/after-effects-cep/host/src/commands/animate-kinetic.jsx": "b72a0416cf0170c7bb6e91f7c4009867d79bf852c3189c49a4057069b40ccbfc",
+    "apps/after-effects-cep/host/src/commands/time-marker-loop.jsx": "3c7f614df1c92aa670223a39ab82c35687b5526f3b4689287d158f2f5fc2ffca",
+    "apps/after-effects-cep/host/src/commands/animate-inertial.jsx": "f57002ea10d7230f72704091be4d152643bea6b0bbe6b910330ec96e710072f3",
+    "apps/after-effects-cep/host/src/commands/animate-jump.jsx": "7dab8e31ac40ba77509274f3eadc090c750b2d05b39e8da4b2ec3d7acedb64ec",
+    "apps/after-effects-cep/host/src/commands/keys-copy.jsx": "353986be3d65ccf77c9f87d69f3f6de9de8947e7cdb5ec51b057c0faa4666f63",
+    "apps/after-effects-cep/host/src/commands/shape-library.jsx": "a286417d725edf0dada44bd4cd90995a9b3fca7dcce4f3f2b9eb3c3862416d4b",
+    "apps/after-effects-cep/host/src/commands/shape-trim-path.jsx": "aeccf412c98187010af8c8219dc87c2fa2c5faf0099c66db25bf7e02d1bec557",
+    "apps/after-effects-cep/host/src/commands/animate-parallax-quick.jsx": "a7d5b1a39273f334e418c84bcab667cdf86108d06d389a39503f1b0705db9224",
+    "apps/after-effects-cep/host/src/commands/three-d-look-at.jsx": "a61978feea706c77dbc619afe1d865c6326622951d2ac9c7b5edfc00065e8898",
+    "apps/after-effects-cep/host/src/commands/shape-break.jsx": "b18027087315036acb19d1b9138f84a6117a91d931b4aaabd77f5d954170ec58",
+    "apps/after-effects-cep/host/src/commands/rig-effector.jsx": "63804aa8ae3bfeeba328571dbfc3756638cc3bdceb77f2be8c0117505791a8d5",
+    "apps/after-effects-cep/host/src/commands/camera-transition.jsx": "440e2ca027de3ba3ee32938562429430a223323e733da8b15efa0d09feb44a98",
+    "apps/after-effects-cep/host/src/commands/camera-shots.jsx": "904b8452bdda1c6327a5622bee3e5658e13e80dc85c2bf864a1be5b5d2d5bac1",
+    "apps/after-effects-cep/host/src/commands/camera-choreography.jsx": "57fdb9bbc721cc164ec0a0f6e10745e3d1a0b05e99fffb9a6a83dac771f67ab5",
+    "apps/after-effects-cep/host/src/commands/three-d-cylinder.jsx": "95e2273326ffd8efc8743974aca16c4002c24a0037a342dcd53fddf75c01f227",
+    "apps/after-effects-cep/host/src/commands/three-d-cube.jsx": "0e52a95090869e0e01747064f3616fc1e21f7c58a814735da67e2f0df05a2c80",
+    "apps/after-effects-cep/host/src/commands/three-d-orbit.jsx": "6247918a959cc1200a955a31c8d0e81db8970cfb3ee95e074dde241f781e4887",
+    "apps/after-effects-cep/host/src/commands/effect-echo.jsx": "68a2a4dbfa91634e2bbde904bf4eb9579acd086a95c1dbdc10f73277ddda25be",
+    "apps/after-effects-cep/host/src/commands/effect-wave.jsx": "4f45f92c137bd402b1859003f850bf88c93eb48b51e8da92b5b35a88b27a5ca7",
+    "apps/after-effects-cep/host/src/commands/effect-gradient.jsx": "2ef7ab2ee10b05b94b32677595838b737c809a4ca94e19c297a1fed797f6f828",
+    "apps/after-effects-cep/host/src/commands/effect-tile.jsx": "06cf2f260d97f1b280589de4b92edf17f19428e3cdd81382859d6d9fb4b23be1",
+    "apps/after-effects-cep/host/src/commands/effect-glitch.jsx": "422022e1332cf8254520b04d42bcf815626912302f52bf80a1ffdac6012e1fa6",
+    "apps/after-effects-cep/host/src/commands/comp-fast-edit.jsx": "4e12f034ef5f5818d7dae4d97a67af9d3bcbb5cfe1037950688eef6157dcf211",
+    "apps/after-effects-cep/host/src/commands/quick-tools.jsx": "826b038bdb13e11fe82316c3c9e2dc2fb5505bcb2a21dff81deddb7c2b533a20",
+    "apps/after-effects-cep/host/src/commands/ai-to-vector.jsx": "ca6ecc747c5b49980873b3987ee14af7833a6ed9e977b53ec441a3ca17afc882",
+    "apps/after-effects-cep/host/src/commands/text-to-vector.jsx": "d5380a9b9dd73682c7bfbf68445b4dc5dff162fef1503ba44f0e9b527d5195fb",
+    "apps/after-effects-cep/host/src/commands/particles.jsx": "9282ca1bfce073abd70a7d2533d6e6d346026f816de8665782df608f21ead2f8",
+    "apps/after-effects-cep/host/src/commands/texture.jsx": "88b54ef0a09e536a810297e2afe2bf4a06e11be7f189511cbdd1f1f1a3dd245c",
+    "apps/after-effects-cep/host/src/commands/clean.jsx": "e8c1cfa7b43ea7a4c6c85cc1df1cea2dcc983de9a4058fa251e9d5312fcbb6c6",
+    "apps/after-effects-cep/host/src/commands/parallax-advanced.jsx": "c0638a61762b5b8a5d36c3228b66774909d609a08d30a4520f0b3d06ef3ff851",
+    "apps/after-effects-cep/host/src/dispatch.jsx": "e187ca99285fdbcded26f43ffb3d88dfc2b352869b926e02f6b1bdefdab992cf"
+  }
+}

@@ -12,15 +12,31 @@ import {
 const reviewedPresets = MOTION_LIBRARY_PRESETS.filter((preset) => preset.referenceIndex !== null);
 
 test("every entrance transition declares a fade from zero opacity", () => {
-  const transitions = MOTION_LIBRARY_PRESETS.filter((preset) => preset.mode === "transition" && !preset.effect.startsWith("camera-") && preset.collection !== "premium" && preset.collection !== "signature");
+  const transitions = MOTION_LIBRARY_PRESETS.filter((preset) => preset.mode === "transition" && !preset.effect.startsWith("camera-") && preset.collection !== "premium" && preset.collection !== "signature" && preset.collection !== "momentum" && preset.collection !== "reveal" && preset.collection !== "looks" && preset.collection !== "text");
   assert.equal(transitions.length, 86);
   for (const preset of transitions) {
     assert.equal(preset.fade, true, `${preset.id}: entrance must start invisible`);
   }
 });
 
+test("reveals start hidden by their transition effect and looks only stylize", () => {
+  const reveals = MOTION_LIBRARY_PRESETS.filter((preset) => preset.collection === "reveal");
+  assert.equal(reveals.length, 6);
+  for (const preset of reveals) {
+    assert.equal(preset.mode, "transition", preset.id); assert.equal(preset.fade, false, `${preset.id}: the effect hides it, not a fade`);
+    assert.ok(preset.effect.startsWith("reveal-"), preset.id);
+    assert.deepEqual([preset.position, preset.rotation, preset.scale], [[0, 0, 0], [0, 0, 0], [0, 0, 0]], `${preset.id}: no motion`);
+  }
+  const looks = MOTION_LIBRARY_PRESETS.filter((preset) => preset.collection === "looks");
+  assert.equal(looks.length, 8);
+  for (const preset of looks) {
+    assert.notEqual(preset.mode, "transition", preset.id); assert.ok(preset.effect.startsWith("look-"), preset.id); assert.equal(preset.fade, false, preset.id);
+    assert.deepEqual([preset.position, preset.rotation, preset.scale], [[0, 0, 0], [0, 0, 0], [0, 0, 0]], `${preset.id}: no motion`);
+  }
+});
+
 test("entrance fade correction preserves every continuous and static recipe", () => {
-  const nonTransitions = MOTION_LIBRARY_PRESETS.filter((preset) => preset.mode !== "transition" && preset.collection !== "gemini" && preset.collection !== "native" && preset.collection !== "premium" && preset.collection !== "signature");
+  const nonTransitions = MOTION_LIBRARY_PRESETS.filter((preset) => preset.mode !== "transition" && preset.collection !== "gemini" && preset.collection !== "native" && preset.collection !== "premium" && preset.collection !== "signature" && preset.collection !== "momentum" && preset.collection !== "reveal" && preset.collection !== "looks" && preset.collection !== "text");
   assert.equal(nonTransitions.length, 29);
   const digest = createHash("sha256").update(JSON.stringify(nonTransitions)).digest("hex");
   assert.equal(digest, "f13a7ba199e261272ef9e6021fba59579047092f01a62548c50141cd80d430de");
@@ -32,16 +48,16 @@ test("motion library covers every reviewed reference exactly once", async () => 
     import.meta.url
   ), "utf8"));
   assert.equal(reviewedPresets.length, reference.count);
-  assert.equal(MOTION_LIBRARY_PRESETS.length, 221);
+  assert.equal(MOTION_LIBRARY_PRESETS.length, 471);
   assert.equal(reference.count, 56);
   assert.deepEqual(
     reviewedPresets.map((preset) => preset.referenceIndex).sort((a, b) => a - b),
     reference.items.map((_, index) => index)
   );
-  assert.equal(new Set(MOTION_LIBRARY_PRESETS.map((preset) => preset.id)).size, 221);
+  assert.equal(new Set(MOTION_LIBRARY_PRESETS.map((preset) => preset.id)).size, 471);
   for (const locale of ["pt-BR", "en-US"]) {
     const names = MOTION_LIBRARY_PRESETS.map((preset) => preset.name[locale]);
-    assert.equal(new Set(names).size, 221, `duplicate localized names: ${locale}`);
+    assert.equal(new Set(names).size, 471, `duplicate localized names: ${locale}`);
     for (const name of names) {
       assert.ok(name.trim().length > 0);
       assert.ok(!reference.items.some((item) => item.referenceLabel === name));
@@ -80,7 +96,7 @@ test("library preserves motion and text grouping from the review", () => {
     }
   }
   const signatures = MOTION_LIBRARY_PRESETS.map(({ id: _id, name: _name, referenceIndex: _referenceIndex, ...recipe }) => JSON.stringify(recipe));
-  assert.equal(new Set(signatures).size, 221, "an original variant has the same recipe as another preset");
+  assert.equal(new Set(signatures).size, 471, "an original variant has the same recipe as another preset");
 });
 
 test("options accept defaults and every supported enum", () => {

@@ -233,6 +233,9 @@
 
       var comp = /** @type {CompItem} */ (prepared.comp);
       var selecionadas = prepared.selecionadas;
+      /** @type {(Layer|null)[]} */
+      var originalParents = [];
+      for (var parentIndex = 0; parentIndex < selecionadas.length; parentIndex++) originalParents.push(/** @type {Layer} */ (selecionadas[parentIndex]).parent);
       var nulo = comp.layers.addNull();
       var parenteadas = 0;
       var i;
@@ -294,11 +297,22 @@
           }
         }
       } catch (applyError) {
-        // Rollback e remover o null. As camadas parenteadas a ele voltam a nao
-        // ter pai quando ele some, e o Undo do host cobre o resto.
+        var rollbackFailed = false;
+        for (i = 0; i < parenteadas; i++) {
+          try {
+            var child = /** @type {Layer} */ (selecionadas[i]);
+            var originalParent = /** @type {Layer|null} */ (originalParents[i]);
+            if (args.preserveWorldTransform === true) child.parent = originalParent;
+            else if (originalParent) child.setParentWithJump(originalParent);
+            else child.setParentWithJump();
+          } catch (parentError) { rollbackFailed = true; }
+        }
         try {
           nulo.remove();
         } catch (removeError) {
+          rollbackFailed = true;
+        }
+        if (rollbackFailed) {
           var rollbackError = /** @type {Error & {motionCode?: string}} */ (
             new Error("Rollback do Create Null falhou.")
           );

@@ -6,9 +6,19 @@ import { existsSync } from "node:fs";
 import process from "node:process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { SFX_IDS } from "../scripts/generate-sfx.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist");
+
+test('AE ships the complete gradient and particle preview styles',async()=>{
+ const ae=await readFile(path.join(dist,'after-effects-cep/styles/theme.css'),'utf8');
+ const premiere=await readFile(path.join(dist,'premiere-uxp/styles/theme.css'),'utf8');
+ for(const selector of ['.ch-gradient-preview__canvas','.ch-particles-preview__dot']){
+  assert.ok(ae.includes(selector),`Missing native panel preview style: ${selector}`);
+  assert.ok(!premiere.includes(selector),'AE preview style leaked into Premiere');
+ }
+});
 
 /**
  * Contrato do output de build.
@@ -39,6 +49,9 @@ const dist = path.join(root, "dist");
 const presetSource = path.join(root, "apps/after-effects-cep/assets/control-presets");
 const controlCatalog = JSON.parse(await readFile(path.join(presetSource, "catalog.json"), "utf8"));
 const presetFiles = [...new Set(Object.values(controlCatalog).map(entry => entry.file))];
+// Text previews rendered in AE are declared by their manifest (scripts/text-presets-render.mjs).
+const textPreviewManifest = JSON.parse(await readFile(path.join(root, "apps/after-effects-cep/assets/text-previews/manifest.json"), "utf8"));
+const textPreviewFiles = Object.values(textPreviewManifest.presets).flatMap(entry => [entry.video, entry.poster]);
 const EXPECTED_DIST_FILES = [
   "BUILD_INFO.json",
 
@@ -46,6 +59,7 @@ const EXPECTED_DIST_FILES = [
   "after-effects-cep/CSXS/manifest.xml",
   // Fronteira Node da conta: carregada via cep_node.require por client/src/account.ts.
   "after-effects-cep/account/runtime.cjs",
+  "after-effects-cep/account/stock-download.cjs",
   // Cofre da conta: Keychain no macOS; Gerenciador de Credenciais no Windows,
   // compilado so quando o Visual Studio existe (scripts/build.mjs avisa se faltar).
   ...(process.platform === "darwin" ? ["after-effects-cep/account/bin/darwin-arm64/motion-account-vault", "after-effects-cep/account/bin/darwin-x64/motion-account-vault"] : []),
@@ -54,6 +68,14 @@ const EXPECTED_DIST_FILES = [
   ...(existsSync(path.join(root, "apps/after-effects-cep/account/config.json")) ? ["after-effects-cep/account/config.json"] : []),
   "after-effects-cep/assets/control-presets/catalog.json",
   ...presetFiles.map(file => `after-effects-cep/assets/control-presets/${file}`),
+  // Sons dos Elementos, sintetizados no build (scripts/generate-sfx.mjs, ADR 0006).
+  ...SFX_IDS.map(id => `after-effects-cep/assets/sounds/${id}.wav`),
+  // Pack Emulsion v2, copiado intacto para rodar sozinho (sem scripts, testes e demo).
+  "after-effects-cep/packs/emulsion-v2/manifest.json",
+  "after-effects-cep/packs/emulsion-v2/runtime.jsx",
+  ...["contact-silver-carbon", "gate-cyan-ivory", "leader-amber-strip", "scuff-ivory"].map(name => `after-effects-cep/packs/emulsion-v2/materials/${name}.png`),
+  "after-effects-cep/assets/text-previews/manifest.json",
+  ...textPreviewFiles.map(file => `after-effects-cep/assets/text-previews/${file}`),
   "after-effects-cep/client/index.html",
   "after-effects-cep/client/lib/CSInterface.js",
   "after-effects-cep/client/main.js",
@@ -165,6 +187,21 @@ test("o ExtendScript montado comeca com a diretiva #target, exatamente uma vez",
   assert.equal(occurrences, 1);
 });
 
+test("o ExtendScript montado é sintaxe ES3 do começo ao fim", async () => {
+  // scripts/check-extendscript.mjs é textual e só vê os fontes escritos à mão.
+  // O código gerado por toString passa pelo esbuild, que imprimia `{ roll: roll }`
+  // como `{ roll }`: o AE 26.5 recusou o host inteiro ("Esperado: :") e todos os
+  // comandos sumiram. Um parse ES3 de verdade do arquivo que o AE carrega pega
+  // qualquer sintaxe nova, venha de onde vier. `allowReserved`: o ExtendScript
+  // aceita palavras reservadas como nome de propriedade (`.default`, `.delete`).
+  const { Linter } = await import("eslint");
+  const source = await readFile(path.join(dist, "after-effects-cep/host/index.jsx"), "utf8");
+  const messages = new Linter({ configType: "flat" }).verify(source.replace(/^#target.*$/m, ""), [
+    { languageOptions: { ecmaVersion: 3, sourceType: "script", parserOptions: { allowReserved: true } } }
+  ]);
+  assert.deepEqual(messages.filter((m) => m.fatal).map((m) => `${m.line}:${m.column} ${m.message}`), []);
+});
+
 test("o host montado registra todo comando que o descriptor declara", async () => {
   const source = await readFile(path.join(dist, "after-effects-cep/host/index.jsx"), "utf8");
 
@@ -189,6 +226,13 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
     [...new Set(publicGlobals)].sort(),
     [
       "MotionAE",
+      // Camera engine (ADR 0007). Catalog and Core are generated from
+      // packages/contracts/src/camera-kernel.ts like MotionLibraryCore: data and
+      // pure math, also injected into the rig expressions. MotionCameraRig is the
+      // rig writer shared by the `ae.camera.*` commands: no dispatch surface, no
+      // Undo group of its own. MotionCameraChoreographies is the choreography
+      // catalog (data only) the planner in MotionCameraCore expands.
+      "MotionCameraCatalog", "MotionCameraChoreographies", "MotionCameraCore", "MotionCameraRig",
       "MotionContracts",
       "MotionDescriptors",
       // Operacoes comuns sobre efeitos nativos, compartilhadas por Echo, Wave,
@@ -197,6 +241,9 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       // sistema de modulos, e quatro copias do mesmo reconhecimento de efeito
       // gerenciado divergiriam.
       "MotionEffects",
+      // Catalog and ES3 track math of `ae.elements.insert`, generated from
+      // packages/contracts/src/elements.ts like MotionLibraryCatalog: data only.
+      "MotionElements",
       // Chaves de mensagem de falha (lista fechada) que o dispatcher repassa ao
       // painel. Interno: só monta falhas e lê marcas de exceção.
       "MotionErrors",
@@ -229,6 +276,10 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       // id por nome e **nunca** cravar número, restaurar a seleção, e desistir
       // quando nada resolve. Três cópias disso divergiriam, e a que divergisse
       // dispararia um comando de menu arbitrário no projeto do usuário.
+      // Reveal and look stacks of native effects, used only by the preset
+      // library's effect stage, like MotionSignatureEffects: no dispatch surface,
+      // no Undo group, parameters resolved by match name.
+      "MotionLookEffects",
       "MotionMenuCommand",
       // Internal pure Bézier geometry shared by the word morph and its tests.
       // It never touches AE layers; all host mutations still pass through dispatch.

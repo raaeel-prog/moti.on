@@ -123,6 +123,7 @@ async function fixture(comp) {
       "src/json.jsx",
       "src/undo.jsx",
       "src/registry.jsx",
+      "src/rig-meta.jsx",
       "src/keyframe-operations.jsx",
       "src/commands/camera-transition.jsx",
       "src/dispatch.jsx"
@@ -259,7 +260,7 @@ test("preset desconhecido e recusado com a lista do que existe", async () => {
   const { comp } = comCamera();
   const { scope, calls } = await fixture(comp);
 
-  const resposta = JSON.parse(scope.MotionAE.dispatch(request({ ...baseArgs, preset: "dollyZoom" })));
+  const resposta = JSON.parse(scope.MotionAE.dispatch(request({ ...baseArgs, preset: "presetInexistente" })));
 
   assert.equal(resposta.ok, false);
   assert.equal(resposta.error.code, "INVALID_PRESET");
@@ -289,6 +290,43 @@ test("camera com pai e recusada, porque o deslocamento sairia torto", async () =
   assert.equal(resposta.error.code, "INVALID_SELECTION_TYPE");
   assert.equal(camera.position.numKeys, 0);
   assert.deepEqual(calls, []);
+});
+
+test("camera em rig Parallax v3 move o null master e mantem a camera filha fixa", async () => {
+  const master = new FakeLayer({ name: "Parallax", index: 1 });
+  master.id = 10;
+  master.position.setValue([960, 540, 0]);
+  const camera = new FakeCameraLayer({ name: "Moti.on | PARALLAX | CAMERA", index: 2, parent: master });
+  camera.id = 20;
+  camera.position.setValue([0, 0, -3000]);
+  camera.zoom.setValue(3000);
+  const comp = new FakeCompItem([master, camera]);
+  comp.id = 300;
+  const { scope } = await fixture(comp);
+  master.comment = scope.MotionRigMeta.write(
+    "",
+    JSON.stringify({
+      rigType: "parallax.quick",
+      schemaVersion: 3,
+      compId: 300,
+      cameraId: 20,
+      totalDepth: 1200,
+      frame: { cx: 960, cy: 540, zoom: 3000 }
+    })
+  );
+
+  const resposta = JSON.parse(
+    scope.MotionAE.dispatch(request({ ...baseArgs, preset: "pushIn", amount: 240 }))
+  );
+
+  assert.equal(resposta.ok, true, JSON.stringify(resposta.error ?? null));
+  assert.equal(master.position.numKeys, 2, "o null master recebeu os keyframes espaciais");
+  assert.deepEqual(master.position.keys[1].value, [960, 540, 240]);
+  assert.equal(camera.position.numKeys, 0, "a camera filha manteve o offset local fixo");
+  const open = master.comment.indexOf(scope.MotionContracts.META_OPEN) + scope.MotionContracts.META_OPEN.length;
+  const close = master.comment.indexOf(scope.MotionContracts.META_CLOSE);
+  const meta = JSON.parse(master.comment.slice(open, close));
+  assert.equal(meta.motion.preset, "pushIn");
 });
 
 test("propriedade que ja tem keyframes e recusada antes de sobrescrever", async () => {

@@ -67,6 +67,7 @@ export {
 } from "./shell.js";
 
 export { bezierEditor, type BezierEditorOptions } from "./bezier.js";
+export {createNumberDisclosure, type NumberDisclosureOptions} from "./number-disclosure.js";
 export {
   CURVE_PAD, CURVE_PLOT, DOT_TARGET_PX, DRAG_THRESHOLD_PX, FINE_DRAG_FACTOR, HIT_BAND_PX, HANDLE_CAPTURE_PX, createCurveEditor, curveToPlot, plotToCurve, speedPathD, valuePathD,
   type CurveCommitReason, type CurveEditor, type CurveEditorLabels, type CurveEditorModel, type CurveEditorOptions, type PlotRange
@@ -135,6 +136,7 @@ export * from "./panel-preferences.js";
 
 export * from "./feedback.js";
 
+export { attachMenuGlide, type MenuGlide } from "./menu-glide.js";
 export { attachCompactNumberEditing, attachScrubbableNumber, type ScrubbableNumberOptions } from "./scrubbable-number.js";
 export {
   registerMotiButton,

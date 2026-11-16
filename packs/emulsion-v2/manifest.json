@@ -1,0 +1,418 @@
+{
+  "schemaVersion": 2,
+  "id": "emulsion-v2",
+  "version": "0.2.0",
+  "referenceFps": 30,
+  "defaultDurationFrames": 12,
+  "materials": {
+    "gate": "gate-cyan-ivory.png",
+    "leader": "leader-amber-strip.png",
+    "contact": "contact-silver-carbon.png",
+    "scuff": "scuff-ivory.png"
+  },
+  "profiles": [
+    {
+      "id": "film-gate-cyan",
+      "name": {
+        "pt-BR": "Gate Ciano",
+        "en-US": "Cyan Gate"
+      },
+      "segments": [
+        {
+          "from": 0,
+          "to": 0.272727,
+          "source": "A",
+          "scale": 186,
+          "scaleTo": 191,
+          "cropCenter": [
+            0.472,
+            0.53
+          ],
+          "position": [
+            0,
+            0
+          ],
+          "invert": 100,
+          "saturation": 25,
+          "exposure": 0.1,
+          "blur": 0.2,
+          "grain": 1.0499999999999998,
+          "tintBlack": [
+            0.054901960784313725,
+            0.16862745098039217,
+            0.2196078431372549
+          ],
+          "tintWhite": [
+            0.9215686274509803,
+            0.9411764705882353,
+            0.8313725490196079
+          ],
+          "tintAmount": 100,
+          "gamma": 1.1
+        },
+        {
+          "from": 0.272727,
+          "to": 0.636364,
+          "source": "A",
+          "scale": 375,
+          "scaleTo": 379.5,
+          "cropCenter": [
+            0.511,
+            0.506
+          ],
+          "position": [
+            0,
+            0
+          ],
+          "rotation": 6,
+          "invert": false,
+          "saturation": 55,
+          "exposure": 0.1,
+          "gamma": 1.1,
+          "blur": 0,
+          "grain": 3.3000000000000003,
+          "materialId": "gate",
+          "materialScale": [
+            110,
+            150
+          ],
+          "materialPosition": [
+            -0.1,
+            0
+          ],
+          "materialOpacity": 94
+        },
+        {
+          "from": 0.636364,
+          "to": 1,
+          "source": "A",
+          "scale": 385,
+          "cropCenter": [
+            0.465,
+            0.575
+          ],
+          "position": [
+            0,
+            0
+          ],
+          "rotation": -3,
+          "invert": false,
+          "saturation": 55,
+          "exposure": 0.1,
+          "gamma": 1.1,
+          "blur": 0,
+          "grain": 3.1500000000000004,
+          "materialId": "gate",
+          "materialScale": [
+            110,
+            135
+          ],
+          "materialPosition": [
+            -0.1,
+            -0.145
+          ],
+          "materialOpacity": 94
+        }
+      ],
+      "materialPasses": [
+        {
+          "to": 0.636364,
+          "materialId": "scuff",
+          "scale": [
+            100,
+            100
+          ],
+          "position": [
+            0.12,
+            0.02
+          ],
+          "opacity": 95,
+          "rotation": 3,
+          "from": 0.272727
+        },
+        {
+          "to": 1,
+          "materialId": "scuff",
+          "scale": [
+            83,
+            83
+          ],
+          "position": [
+            0.12,
+            -0.21
+          ],
+          "opacity": 95,
+          "rotation": -5,
+          "from": 0.636364
+        }
+      ]
+    },
+    {
+      "id": "film-leader-amber",
+      "name": {
+        "pt-BR": "Leader Âmbar",
+        "en-US": "Amber Leader"
+      },
+      "segments": [
+        {
+          "from": 0,
+          "to": 0.181818,
+          "source": "A",
+          "scale": 101,
+          "cropCenter": [
+            0.5,
+            0.5
+          ],
+          "position": [
+            0,
+            0
+          ],
+          "invert": false,
+          "saturation": 100,
+          "exposure": 0,
+          "blur": 1.2,
+          "blurTo": 2,
+          "grain": 1.0499999999999998
+        },
+        {
+          "from": 0.181818,
+          "to": 0.363636,
+          "source": "A",
+          "scale": 100,
+          "cropCenter": [
+            0.5,
+            0.5
+          ],
+          "position": [
+            0,
+            0
+          ],
+          "invert": false,
+          "saturation": 90,
+          "exposure": 0.05,
+          "blur": 0,
+          "grain": 2.0999999999999996,
+          "materialId": "leader",
+          "materialScale": [
+            105,
+            150
+          ],
+          "materialPosition": [
+            0,
+            -0.19
+          ],
+          "materialOpacity": 90
+        },
+        {
+          "from": 0.363636,
+          "to": 0.454545,
+          "source": "A",
+          "scale": 360,
+          "cropCenter": [
+            0.46,
+            0.52
+          ],
+          "position": [
+            0,
+            0
+          ],
+          "invert": false,
+          "saturation": 80,
+          "exposure": 0.1,
+          "blur": 0.75,
+          "grain": 3.3000000000000003,
+          "materialId": "leader",
+          "materialScale": [
+            105,
+            150
+          ],
+          "materialPosition": [
+            0,
+            -0.19
+          ],
+          "materialOpacity": 90
+        },
+        {
+          "from": 0.454545,
+          "to": 0.727273,
+          "source": "A",
+          "scale": 362,
+          "scaleTo": 366,
+          "cropCenter": [
+            0.46,
+            0.52
+          ],
+          "position": [
+            0,
+            0
+          ],
+          "invert": false,
+          "saturation": 75,
+          "exposure": 0.1,
+          "blur": 0.75,
+          "grain": 3.3000000000000003,
+          "materialId": "leader",
+          "materialScale": [
+            105,
+            60
+          ],
+          "materialPosition": [
+            0,
+            -0.55
+          ],
+          "materialOpacity": 90
+        },
+        {
+          "from": 0.727273,
+          "to": 1,
+          "source": "B",
+          "scale": 116,
+          "cropCenter": [
+            0.53,
+            0.55
+          ],
+          "position": [
+            0,
+            0
+          ],
+          "invert": false,
+          "saturation": 85,
+          "exposure": 0,
+          "blur": 2.2,
+          "grain": 2.7,
+          "materialId": "gate",
+          "materialScale": [
+            117,
+            115
+          ],
+          "materialPosition": [
+            -0.09,
+            -0.1
+          ],
+          "materialOpacity": 80
+        }
+      ],
+      "materialPasses": []
+    },
+    {
+      "id": "film-contact-silver",
+      "name": {
+        "pt-BR": "Contato Prata",
+        "en-US": "Silver Contact"
+      },
+      "segments": [
+        {
+          "from": 0,
+          "to": 0.166667,
+          "source": "A",
+          "scale": 100,
+          "cropCenter": [
+            0.5,
+            0.5
+          ],
+          "position": [
+            0,
+            0
+          ],
+          "invert": 100,
+          "saturation": 0,
+          "exposure": 0.1,
+          "blur": 0,
+          "grain": 2.25,
+          "materialId": "contact",
+          "materialScale": [
+            100,
+            100
+          ],
+          "materialPosition": [
+            0,
+            0
+          ],
+          "materialOpacity": 90
+        },
+        {
+          "from": 0.166667,
+          "to": 0.416667,
+          "source": "A",
+          "scale": 250,
+          "scaleTo": 252.4,
+          "cropCenter": [
+            0.505,
+            0.52
+          ],
+          "position": [
+            0,
+            0
+          ],
+          "rotation": -1.7,
+          "invert": false,
+          "saturation": 75,
+          "exposure": -0.23,
+          "blur": 0.5,
+          "grain": 2.25,
+          "materialId": "gate",
+          "materialScale": [
+            140,
+            120
+          ],
+          "materialPosition": [
+            0,
+            -0.12
+          ],
+          "materialOpacity": 90
+        },
+        {
+          "from": 0.416667,
+          "to": 0.666667,
+          "source": "A",
+          "scale": 253.6,
+          "scaleTo": 256,
+          "cropCenter": [
+            0.505,
+            0.52
+          ],
+          "position": [
+            0,
+            0
+          ],
+          "rotation": -1.7,
+          "invert": false,
+          "saturation": 75,
+          "exposure": -0.56,
+          "blur": 0.5,
+          "grain": 2.25
+        },
+        {
+          "from": 0.666667,
+          "to": 1,
+          "source": "B",
+          "scale": 112,
+          "cropCenter": [
+            0.5,
+            0.52
+          ],
+          "position": [
+            0,
+            0
+          ],
+          "invert": false,
+          "saturation": 85,
+          "exposure": 0,
+          "blur": 0.3,
+          "grain": 2.55,
+          "materialId": "contact",
+          "materialScale": [
+            100,
+            100
+          ],
+          "materialPosition": [
+            0,
+            0
+          ],
+          "materialOpacity": 80
+        }
+      ],
+      "materialPasses": []
+    }
+  ]
+}

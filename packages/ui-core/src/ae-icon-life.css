@@ -1,0 +1,97 @@
+/* Ícones vivos do painel do AE (2026-11-16). Última camada do tema, depois do design system.
+ * Não cria componente: dá resposta ao ponteiro aos ícones que o painel já monta — ladrilhos de
+ * ferramenta, abas, ações de keyframe da Suavização, estrelas de favorito e a seta das categorias.
+ * Só transform, opacity e cor animam. Tempos e curvas vêm de after-effects.css (--dur-spring,
+ * --ease-spring); motion.css desliga tudo com movimento reduzido. Chromium 99 (CEP 12): sem :has(). */
+
+/* ---------- gestos: o detalhe do ícone tem tempo para preparar, passar do ponto e assentar ---------- */
+[data-host="after-effects"] button:hover:not(:disabled):not([aria-disabled="true"]) [data-motion~="icon-gesture"] .ch-icon__detail,
+[data-host="after-effects"] button:focus-visible:not(:disabled):not([aria-disabled="true"]) [data-motion~="icon-gesture"] .ch-icon__detail { animation-duration:var(--dur-spring); }
+
+/* ---------- ladrilho de ferramenta: o ícone sobe e cresce, afunda no clique ---------- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-button:first-child > .ch-icon { transition:transform var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-button:first-child:hover:not([aria-disabled="true"]) > .ch-icon,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-button:first-child:focus-visible:not([aria-disabled="true"]) > .ch-icon { transform:translateY(-1px) scale(1.1); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-button:first-child:active:not([aria-disabled="true"]) > .ch-icon { transform:scale(.9); transition-duration:var(--dur-press); transition-timing-function:var(--ease-out); }
+/* A área suave do desenho acende junto com a cor da família. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-button:first-child .ch-icon__fill { transition:opacity var(--dur-2) var(--ease-std); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-button:first-child:hover:not([aria-disabled="true"]) .ch-icon__fill,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-button:first-child:focus-visible .ch-icon__fill { opacity:.36; }
+/* Filete na cor da família: cresce do centro da base, como a etiqueta de cor de uma camada. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-button:first-child::before { content:""; position:absolute; left:8px; right:8px; bottom:0; height:2px; border-radius:2px 2px 0 0; background:var(--ds-fam, var(--ds-value)); opacity:0; transform:scaleX(0); transition:transform var(--dur-3) var(--ease-out), opacity var(--dur-2) var(--ease-std); pointer-events:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-button:first-child:hover:not([aria-disabled="true"])::before,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-button:first-child:focus-visible:not([aria-disabled="true"])::before { opacity:1; transform:none; }
+/* Categoria que acabou de abrir: os ladrilhos sobem em sequência curta. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile[data-reveal="true"] { animation:ch-icon-life-reveal var(--dur-3) var(--ease-out) both; animation-delay:calc(var(--reveal-index, 0) * var(--stagger)); }
+
+/* ---------- estrela do ladrilho: contorno no hover, preenchida enquanto é favorita ---------- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-tool-star { position:absolute; top:1px; left:1px; display:grid; place-items:center; width:18px; min-width:18px; height:18px; min-height:18px; padding:0; border:0; border-radius:3px; background:transparent; box-shadow:none; color:var(--ds-text-3); opacity:0; pointer-events:none; transition:opacity var(--dur-1) var(--ease-std), color var(--dur-1) var(--ease-std), background-color var(--dur-1) var(--ease-std), transform var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile:hover > .ch-tool-star,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile:focus-within > .ch-tool-star,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-tool-star[aria-pressed="true"] { opacity:1; pointer-events:auto; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-tool-star:hover { background:var(--ds-active); color:var(--ds-text); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-tool-star:active { transform:scale(.86); transition-duration:var(--dur-press); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-tool-star[aria-pressed="true"],
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-tool-star[aria-pressed="true"]:hover { color:var(--warn); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-tool-star > .ch-ui-icon { width:12px; height:12px; }
+/* Anel que se abre uma vez quando a ferramenta entra nos favoritos. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-tool-star::after { content:""; position:absolute; inset:2px; border-radius:50%; box-shadow:0 0 0 1.5px var(--warn); opacity:0; pointer-events:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-tile > .ch-tool-star[data-pop="true"]::after { animation:ch-icon-life-ring var(--dur-spring) var(--ease-out) both; }
+
+/* ---------- favorito marcado = estrela preenchida, em qualquer lugar do painel ---------- */
+[data-host="after-effects"] .ch-shell .ch-tool-star[aria-pressed="true"] path,
+[data-host="after-effects"] .ch-shell .ch-library-star[aria-pressed="true"] .ch-icon path,
+[data-host="after-effects"] .ch-shell .ch-preset-favorite[aria-pressed="true"] .ch-icon path,
+[data-host="after-effects"] .ch-shell button[data-scope="favorites"][aria-pressed="true"] .ch-ui-icon path { fill:currentColor; }
+/* A estrela herda a cor do botão: sem isto o desenho ficava cinza mesmo com o botão em amarelo. */
+[data-host="after-effects"] .ch-shell .ch-library-star .ch-icon,
+[data-host="after-effects"] .ch-shell .ch-library-star .ch-icon .ch-icon__detail,
+[data-host="after-effects"] .ch-shell .ch-preset-favorite .ch-icon,
+[data-host="after-effects"] .ch-shell .ch-preset-favorite .ch-icon .ch-icon__detail { color:inherit; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] button[data-scope="favorites"][aria-pressed="true"] { color:var(--warn); }
+[data-host="after-effects"] .ch-shell .ch-library-star .ch-icon,
+[data-host="after-effects"] .ch-shell .ch-preset-favorite .ch-icon { transition:transform var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-shell .ch-library-star:hover .ch-icon,
+[data-host="after-effects"] .ch-shell .ch-preset-favorite:hover .ch-icon { transform:scale(1.14) rotate(-8deg); }
+[data-host="after-effects"] .ch-shell .ch-library-star:active .ch-icon,
+[data-host="after-effects"] .ch-shell .ch-preset-favorite:active .ch-icon { transform:scale(.86); transition-duration:var(--dur-press); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-library-refined .ch-library-star[aria-pressed="true"] { color:var(--warn); }
+
+/* ---------- título de categoria: seta ao lado do nome recolhe e expande o grupo ---------- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-group-title { align-items:center; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-group-toggle { display:inline-flex; align-items:center; gap:4px; height:20px; min-height:20px; margin:0 0 0 -4px; padding:0 6px 0 2px; border:0; border-radius:var(--radius-medium); background:transparent; box-shadow:none; color:inherit; font:inherit; cursor:default; transition:background-color var(--dur-1) var(--ease-std), color var(--dur-1) var(--ease-std); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-group-toggle:hover { background:var(--ds-raised); color:var(--ds-text); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-group-toggle:active { background:var(--ds-active); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-group-toggle:focus-visible { outline:var(--focus-ring); outline-offset:-1px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-group-chevron { flex:0 0 12px; width:12px; height:12px; color:var(--ds-text-3); transition:transform var(--dur-2) var(--ease-out), color var(--dur-1) var(--ease-std); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-group-toggle:hover .ch-tool-group-chevron { color:var(--ds-text); transform:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-group-title[data-collapsed="true"] .ch-tool-group-chevron,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-group-title[data-collapsed="true"] .ch-tool-group-toggle:hover .ch-tool-group-chevron { transform:rotate(-90deg); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-group-title[data-collapsed="true"] { color:var(--ds-text-3); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-group-toggle > .ch-tool-group-count { margin-left:2px; }
+
+/* ---------- abas: um tom só em repouso, detalhe aceso no hover, tudo azul na aba ativa ---------- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item > svg .ch-icon__base,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item > svg .ch-icon__detail,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item > svg .ch-icon__fill { color:currentColor; transition:color var(--dur-1) var(--ease-std), opacity var(--dur-2) var(--ease-std); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item > svg { transition:transform var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item:hover:not(:disabled) > svg { transform:translateY(-1px) scale(1.1); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item:active:not(:disabled) > svg { transform:scale(.88); transition-duration:var(--dur-press); transition-timing-function:var(--ease-out); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item:hover:not(.is-active) > svg .ch-icon__detail { color:var(--ds-value); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"].is-active > svg .ch-icon__fill { color:var(--ds-value); opacity:.3; }
+
+/* ---------- Suavização: pictogramas das ações de keyframe na grade de pixel ---------- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-actions .ch-ease-action { padding:0 5px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-actions .ch-ease-action .ch-ease-action__icon { width:24px; height:16px; overflow:visible; transition:transform var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-actions .ch-ease-action:active:not([aria-disabled="true"]) .ch-ease-action__icon { transform:scale(.9); transition-duration:var(--dur-press); transition-timing-function:var(--ease-out); }
+[data-host="after-effects"] .ch-ease-action__source { stroke-width:1.3; opacity:.9; }
+[data-host="after-effects"] .ch-ease-action__guide { stroke-width:1.3; opacity:.62; }
+[data-host="after-effects"] .ch-ease-action__guide--head { fill:currentColor; }
+[data-host="after-effects"] .ch-ease-action__result { color:inherit; transition:color var(--dur-1) var(--ease-std); }
+[data-host="after-effects"] .ch-ease-action__result--line { fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; }
+/* O resultado acende em azul sob o ponteiro: é o que o botão vai criar. */
+[data-host="after-effects"] .ch-ease-action:hover:not([aria-disabled="true"]) .ch-ease-action__result,
+[data-host="after-effects"] .ch-ease-action:focus-visible:not([aria-disabled="true"]) .ch-ease-action__result { color:var(--ds-value); }
+
+@keyframes ch-icon-life-reveal { from { opacity:0; transform:translateY(5px) scale(.94); } to { opacity:1; transform:none; } }
+@keyframes ch-icon-life-ring { 0% { opacity:.8; transform:scale(.5); } 100% { opacity:0; transform:scale(2); } }

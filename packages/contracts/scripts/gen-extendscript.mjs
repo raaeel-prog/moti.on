@@ -115,7 +115,11 @@ async function readContractConstants() {
   });
   const gradient = await import(`data:text/javascript;base64,${Buffer.from(gradientModule.outputFiles[0].text).toString("base64")}`);
 
+  // A versao do pacote vai junto: rigs gravam com que build foram criados.
+  const rootPackage = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
+
   return {
+    pluginVersion: String(rootPackage.version),
     gradient: { native: gradient.GRADIENT_NATIVE, scalars: gradient.GRADIENT_SCALARS, keys: gradient.GRADIENT_PARAMETER_KEYS, defaults: gradient.GRADIENT_DEFAULTS },
     protocolVersion: Number(versionMatch[1]),
     errorCodes,
@@ -165,6 +169,7 @@ export async function renderModule() {
 (function (global) {
   global.MotionContracts = {
     PROTOCOL_VERSION: ${c.protocolVersion},
+    PLUGIN_VERSION: ${quote(c.pluginVersion)},
 
     ERROR: {
 ${errorEntries}

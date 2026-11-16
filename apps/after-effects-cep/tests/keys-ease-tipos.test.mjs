@@ -367,7 +367,7 @@ test("selecao mista aplica no que da e avisa sobre o resto", async () => {
   assert.deepEqual(mascara.chamadas, []);
 });
 
-test("keyframe Hold recebe Bezier ANTES do ease", async () => {
+test("keyframe Hold explicitamente convertido recebe Bezier ANTES do ease", async () => {
   // O fake recusa ease sobre Hold, como o After Effects faz. Se a ordem
   // voltar a ser ease-primeiro, este teste falha com HOST_OPERATION_FAILED.
   const propriedade = new FakeProperty({
@@ -381,7 +381,7 @@ test("keyframe Hold recebe Bezier ANTES do ease", async () => {
     ]
   });
 
-  const resposta = await aplicar([propriedade]);
+  const resposta = await aplicar([propriedade], CURVA, { applyIn: true, applyOut: true, convertHold: true });
 
   assert.equal(resposta.ok, true, `host recusou: ${JSON.stringify(resposta.error)}`);
   const primeira = propriedade.chamadas[0];

@@ -1,13 +1,19 @@
+import {createToolNumberFields} from "./tool-number-fields.js";
 import { protectedWrite, parsesAs } from "./storage-safety.js";
+import {createGradientPreview} from "./gradient-preview.js";
 /** Gradient editor. Commands and host context are injected by the CEP composition root. */
 import {
-  GRADIENT_PARAMETER_KEYS, GRADIENT_PRESETS, GRADIENT_SCALARS, cloneGradientSettings, isGradientSettings,
+  GRADIENT_PALETTE_FAMILIES, GRADIENT_PALETTES, GRADIENT_PARAMETER_KEYS, GRADIENT_PRESETS, GRADIENT_SCALARS, cloneGradientSettings, createGradientSettings, gradientWithPalette, isGradientSettings,
+  type GradientPaletteFamily,
   type GradientArgs, type GradientReadData, type GradientSettingsV1, type GradientScalarKey, type CommandResponse
 } from "@motion/contracts";
 import {
-  checkboxField, colorField, closeOpenColorPicker, createActionButton, createElement, hint, isColorPickerOpen, numberField, selectField, textField,
+  checkboxField, colorField, closeOpenColorPicker, createActionButton, createElement, hint, isColorPickerOpen, selectField, textField,
   type ActionButtonController, type I18n
 } from "@motion/ui-core";
+/** Gradient stop markers: snap in on the spring (--dur-spring), shrink out within --dur-2. */
+const MARKER_POP_MS = 460;
+const MARKER_SHRINK_MS = 200;
 
 type Key = Parameters<I18n["t"]>[0];
 type StorageAccess = Pick<Storage, "getItem" | "setItem">;
@@ -58,11 +64,19 @@ export function reversedGradient(settings: GradientSettingsV1): GradientSettings
 export interface GradientDraftState {
   settings: GradientSettingsV1; read: GradientReadData | null; dirty: Set<string>; revision: number;
 }
-export function createGradientDraft(): GradientDraftState { return { settings: cloneGradientSettings(), read: null, dirty: new Set(), revision: 0 }; }
+export function createGradientDraft(): GradientDraftState { return { settings: createGradientSettings(), read: null, dirty: new Set(), revision: 0 }; }
+function nativeGradientValueEqual(a: unknown,b: unknown): boolean {
+  if(typeof a==='number'&&typeof b==='number')return Number.isFinite(a)&&Number.isFinite(b)&&Math.fround(a)===Math.fround(b);
+  if(Array.isArray(a)&&Array.isArray(b))return a.length===b.length&&a.every((value,index)=>nativeGradientValueEqual(value,b[index]));
+  return a===b;
+}
+function nativeGradientSettingsEqual(a: GradientSettingsV1,b: GradientSettingsV1): boolean {
+  return a.schemaVersion===b.schemaVersion&&GRADIENT_PARAMETER_KEYS.every(key=>nativeGradientValueEqual(gradientValue(a,key),gradientValue(b,key)));
+}
 export function commitGradientValue(state: GradientDraftState, key: string, value: unknown): boolean {
   if (!GRADIENT_PARAMETER_KEYS.includes(key) || state.read?.lockedKeys.includes(key)) return false;
   const next = cloneGradientSettings(state.settings); setValue(next, key, value);
-  if (!isGradientSettings(next) || JSON.stringify(gradientValue(next, key)) === JSON.stringify(gradientValue(state.settings, key))) return false;
+  if (!isGradientSettings(next) || nativeGradientValueEqual(gradientValue(next, key),gradientValue(state.settings, key))) return false;
   state.settings = next; state.dirty.add(key); state.revision++; return true;
 }
 export function hydrateGradientDraft(state: GradientDraftState, data: GradientReadData, revision: number, preserveDirty = true): boolean {
@@ -75,7 +89,7 @@ export function hydrateGradientDraft(state: GradientDraftState, data: GradientRe
     const settings = cloneGradientSettings(data.settings);
     if (preserveDirty) for (const key of state.dirty) if (!data.lockedKeys.includes(key)) setValue(settings, key, gradientValue(state.settings, key));
     state.settings = settings;
-  } else if (previous?.appliedCount && !preserveDirty) state.settings = cloneGradientSettings();
+  } else if (previous?.appliedCount && !preserveDirty) state.settings = createGradientSettings();
   if (!preserveDirty) state.dirty.clear();
   for (const key of data.lockedKeys) state.dirty.delete(key);
   return true;
@@ -105,8 +119,16 @@ export function gradientColorHex(color: readonly number[]): string {
   return `#${color.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0")).join("")}`;
 }
 export function createGradientEditor(doc: Document, options: GradientEditorOptions): GradientEditor {
+  const numbers=createToolNumberFields(),numberField=numbers.field;
   const { i18n } = options, state = createGradientDraft();
   const element = createElement(doc, "div", "ch-gradient-editor"), actions = createElement(doc, "div", "ch-panel-action-bar ch-gradient-actions");
+  const previewBox = createElement(doc, "div", "ch-gradient-preview");
+  const canvas = createElement(doc, "canvas", "ch-gradient-preview__canvas") as HTMLCanvasElement;
+  canvas.width = 128; canvas.height = 72; canvas.setAttribute("role", "img"); canvas.setAttribute("aria-label", i18n.t("gradient.preview" as Key));
+  const previewHelp = hint(doc, i18n.t("gradient.previewHelp" as Key)); previewHelp.id = "gradient-preview-help"; canvas.setAttribute("aria-describedby", previewHelp.id);
+  previewBox.appendChild(canvas); previewBox.appendChild(previewHelp); element.appendChild(previewBox);
+  const preview = createGradientPreview(canvas, state.settings);
+  let previewDraft: GradientSettingsV1 | null = null;
   const status = createElement(doc, "div", "ch-gradient-status"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite");
   element.appendChild(hint(doc, i18n.t("gradient.help"))); element.appendChild(status);
   const fields = createElement(doc, "div", "ch-gradient-fields"); element.appendChild(fields);
@@ -117,6 +139,7 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
   let invalidKeys = new Set<string>();
   const inputDrafts = new Set<string>();
   let markers: HTMLButtonElement[] = [], bar: HTMLElement;
+  let paletteFamily: GradientPaletteFamily = "violet";
   const locked = (key: string): boolean => Boolean(state.read?.lockedKeys.includes(key));
   const allApplied = (): boolean => Boolean(state.read && state.read.selectionCount > 0 && state.read.appliedCount === state.read.selectionCount);
   const invalid = (): boolean => invalidKeys.size > 0;
@@ -182,7 +205,7 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
     for (const input of inputs) {
       if (stopKey) input.setAttribute("aria-label", i18n.t(stopKey[2] === "enabled" ? "gradient.stopEnabled" : stopKey[2] === "position" ? "gradient.stopPositionLabel" : "gradient.stop", { number: Number(stopKey[1]) + 1 }));
       input.addEventListener("input", () => { state.revision++; inputDrafts.add(key); if (input.getAttribute("aria-invalid") === "true") invalidKeys.add(key); else invalidKeys.delete(key); updateChrome(); });
-      input.addEventListener("keydown", event => { if ((event as KeyboardEvent).key === "Escape") { invalidKeys.delete(key); inputDrafts.delete(key); updateChrome(); } });
+      input.addEventListener("keydown", event => { if ((event as KeyboardEvent).key === "Escape") { invalidKeys.delete(key); inputDrafts.delete(key); previewDraft = null; syncPalette(); updateChrome(); } });
       input.addEventListener("blur", () => { if (input.getAttribute("aria-invalid") !== "true") inputDrafts.delete(key); });
     }
     return root;
@@ -192,10 +215,13 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
   }
   function commit(key: string, value: unknown): void {
     if (running || !alive) return;
-    invalidKeys.delete(key); inputDrafts.delete(key);
+    invalidKeys.delete(key); inputDrafts.delete(key); previewDraft = null;
     if (!commitGradientValue(state, key, value)) { syncPalette(); updateChrome(); return; }
     message = ""; syncPalette(); updateChrome();
-    if (allApplied()) void mutate("update");
+  }
+  function previewInput(key: string, value: number): void {
+    state.revision++; inputDrafts.add(key);
+    previewDraft ??= cloneGradientSettings(state.settings); setValue(previewDraft, key, value); preview.update(previewDraft);
   }
   function addSection(id: string): HTMLElement {
     const details = createElement(doc, "details", "ch-tool-disclosure ch-gradient-section") as HTMLDetailsElement;
@@ -208,22 +234,32 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
     const candidate = cloneGradientSettings(next);
     for (const key of state.read?.lockedKeys ?? []) setValue(candidate, key, gradientValue(state.settings, key));
     if (!isGradientSettings(candidate)) { message = i18n.t("gradient.invalid"); updateChrome(); return; }
-    for (const key of GRADIENT_PARAMETER_KEYS) if (JSON.stringify(gradientValue(candidate, key)) !== JSON.stringify(gradientValue(state.settings, key))) state.dirty.add(key);
+    for (const key of GRADIENT_PARAMETER_KEYS) if (!nativeGradientValueEqual(gradientValue(candidate, key),gradientValue(state.settings, key))) state.dirty.add(key);
     state.settings = candidate; state.revision++;
     invalidKeys.clear(); inputDrafts.clear(); message = ""; renderFields(); updateChrome();
-    if (allApplied() && state.dirty.size) void mutate("update");
   }
   function localButton(target: HTMLElement, id: string, key: Key, onPress: () => void): ActionButtonController {
     const button = createActionButton(doc, { id, label: i18n.t(key), variant: "tertiary", onPress: () => { if (!running && alive) onPress(); } });
     controls.push(button); target.appendChild(button.element); return button;
   }
+  /** A stop that turns on snaps in on the spring; one that turns off shrinks away first (F8). */
+  function showMarker(marker: HTMLButtonElement, enabled: boolean): void {
+    const was = marker.dataset["enabled"];
+    marker.dataset["enabled"] = String(enabled);
+    const still = doc.documentElement.getAttribute("data-reduced-motion") === "true" || was === undefined || was === String(enabled);
+    if (still) { if (marker.getAttribute("data-pop") !== "out" || enabled) { marker.hidden = !enabled; if (enabled) marker.removeAttribute("data-pop"); } return; }
+    marker.setAttribute("data-pop", enabled ? "in" : "out");
+    if (enabled) { marker.hidden = false; setTimeout(() => { if (marker.getAttribute("data-pop") === "in") marker.removeAttribute("data-pop"); }, MARKER_POP_MS); return; }
+    setTimeout(() => { if (marker.dataset["enabled"] === "false") { marker.hidden = true; marker.removeAttribute("data-pop"); } }, MARKER_SHRINK_MS);
+  }
   function syncPalette(): void {
+    preview.update(previewDraft ?? state.settings);
     if (!bar) return;
     const stops = state.settings.stops.map((stop, index) => ({ stop, index })).filter(v => v.stop.enabled).sort((a, b) => a.stop.position - b.stop.position);
     bar.style.background = `linear-gradient(90deg, ${stops.map(({ stop }) => `${gradientColorHex(stop.color)} ${stop.position * 100}%`).join(", ")})`;
     for (const marker of markers) {
       const slot = Number(marker.dataset["slot"]), stop = state.settings.stops[slot]!;
-      marker.hidden = !stop.enabled; marker.style.left = `${stop.position * 100}%`;
+      showMarker(marker, stop.enabled); marker.style.left = `${stop.position * 100}%`;
       marker.style.setProperty("--gradient-stop-color", gradientColorHex(stop.color));
       marker.setAttribute("aria-valuenow", String(Math.round(stop.position * 1000) / 10));
       marker.setAttribute("aria-valuetext", i18n.t("gradient.stopPosition", { number: slot + 1, position: i18n.formatNumber(stop.position * 100, 1) }));
@@ -278,15 +314,54 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
       row.appendChild(bind(`${prefix}.color`, colorField(doc, { id: `gradient-stop-${slot}-color`, label: i18n.t("gradient.color"), value: gradientColorHex(stop.color),
         ...fieldOptions(`${prefix}.color`), onCommit: value => commit(`${prefix}.color`, [1, 3, 5].map(index => parseInt(value.slice(index, index + 2), 16) / 255)) })));
       row.appendChild(bind(`${prefix}.position`, numberField(doc, { id: `gradient-stop-${slot}-position`, label: i18n.t("gradient.position"), value: Number((stop.position * 100).toFixed(1)), min: 0, max: 100, step: .1, unit: "%",
-        ...fieldOptions(`${prefix}.position`), onInput: () => { state.revision++; inputDrafts.add(`${prefix}.position`); }, onCommit: value => commit(`${prefix}.position`, value / 100) })));
+        ...fieldOptions(`${prefix}.position`), onInput: value => previewInput(`${prefix}.position`, value / 100), onCommit: value => commit(`${prefix}.position`, value / 100) })));
       colors.appendChild(row);
     });
     const toolbar = createElement(doc, "div", "ch-gradient-toolbar"); colors.appendChild(toolbar);
     localButton(toolbar, "gradient-reverse", "gradient.reverse", () => replaceDraft(reversedGradient(state.settings)));
-    localButton(toolbar, "gradient-reset", "action.reset", () => replaceDraft(cloneGradientSettings()));
+    localButton(toolbar, "gradient-reset", "action.reset", () => replaceDraft(createGradientSettings()));
     syncPalette();
   }
+  /** Color palettes by family: a palette replaces only the stops, so the shape,
+   * light and texture the user tuned stay as they are. */
+  function renderPalettes(colors: HTMLElement): void {
+    const box = createElement(doc, "details", "ch-tool-disclosure ch-gradient-palettes") as HTMLDetailsElement;
+    box.id = "gradient-palettes"; box.open = disclosures.has("palettes");
+    box.addEventListener("toggle", () => { if (box.open) disclosures.add("palettes"); else disclosures.delete("palettes"); });
+    box.appendChild(createElement(doc, "summary", "", i18n.t("gradient.palettes")));
+    const families = createElement(doc, "div", "ch-gradient-families"), swatches = createElement(doc, "div", "ch-gradient-swatches");
+    families.setAttribute("role", "group"); families.setAttribute("aria-label", i18n.t("gradient.paletteFamilies"));
+    const stops = (colors: readonly (readonly number[])[]): string => colors.map((color, index) => `${gradientColorHex(color)} ${colors.length > 1 ? index / (colors.length - 1) * 100 : 0}%`).join(", ");
+    const draw = (): void => {
+      while (swatches.firstChild) swatches.removeChild(swatches.firstChild);
+      for (const palette of GRADIENT_PALETTES.filter(item => item.family === paletteFamily)) {
+        const name = `${i18n.t(`gradient.paletteFamily.${palette.family}` as Key)} · ${i18n.t(`gradient.paletteStyle.${palette.style}` as Key)}`;
+        const swatch = createElement(doc, "button", "ch-gradient-swatch") as HTMLButtonElement;
+        swatch.type = "button"; swatch.disabled = running; swatch.title = name; swatch.dataset["palette"] = palette.id;
+        swatch.setAttribute("aria-label", i18n.t("gradient.paletteApply", { name }));
+        const strip = createElement(doc, "span", "ch-gradient-swatch-strip"); strip.style.background = `linear-gradient(90deg, ${stops(palette.colors)})`;
+        swatch.appendChild(strip); swatch.appendChild(createElement(doc, "span", "ch-gradient-swatch-label", i18n.t(`gradient.paletteStyle.${palette.style}` as Key)));
+        swatch.addEventListener("click", () => { if (!running && alive) replaceDraft(gradientWithPalette(state.settings, palette)); });
+        swatches.appendChild(swatch);
+      }
+    };
+    for (const [family] of GRADIENT_PALETTE_FAMILIES) {
+      const sample = GRADIENT_PALETTES.find(item => item.family === family && item.style === "analog")!;
+      const chip = createElement(doc, "button", "ch-gradient-family") as HTMLButtonElement;
+      chip.type = "button"; chip.dataset["family"] = family; chip.style.background = gradientColorHex(sample.colors[1]!);
+      chip.setAttribute("aria-label", i18n.t(`gradient.paletteFamily.${family}` as Key)); chip.title = chip.getAttribute("aria-label") ?? family;
+      chip.setAttribute("aria-pressed", String(family === paletteFamily));
+      chip.addEventListener("click", () => {
+        paletteFamily = family;
+        for (const item of Array.from(families.children)) item.setAttribute("aria-pressed", String((item as HTMLElement).dataset["family"] === family));
+        draw();
+      });
+      families.appendChild(chip);
+    }
+    box.appendChild(families); box.appendChild(swatches); box.appendChild(hint(doc, i18n.t("gradient.paletteHelp2"))); colors.appendChild(box); draw();
+  }
   function renderFields(): void {
+    numbers.dispose();
     const active = doc.activeElement as HTMLInputElement | null;
     const activeId = active?.getAttribute("data-focus-key") ?? active?.id;
     const selectionStart = active?.selectionStart, selectionEnd = active?.selectionEnd;
@@ -294,13 +369,14 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
     while (fields.firstChild) fields.removeChild(fields.firstChild);
     fieldBindings = [];
     const colors = addSection("colors");
-    const recipes = [...GRADIENT_PRESETS.map(recipe => ({ value: recipe.id, label: i18n.t(`gradient.preset.${recipe.id}`), settings: recipe.settings })),
+    previewDraft = null;
+    const recipes = [...GRADIENT_PRESETS.map(recipe => ({ value: recipe.id, label: i18n.t(`gradient.preset.${recipe.id}` as Key), settings: createGradientSettings(recipe.id) })),
       ...personal.map(recipe => ({ value: recipe.id, label: recipe.name, settings: recipe.settings }))];
-    const matching = recipes.find(recipe => JSON.stringify(recipe.settings) === JSON.stringify(state.settings));
+    const matching = recipes.find(recipe => nativeGradientSettingsEqual(recipe.settings,state.settings));
     const preset = selectField(doc, { id: "gradient-preset", label: i18n.t("gradient.preset"), value: matching?.value ?? "custom",
       options: [...(!matching ? [{ value: "custom", label: i18n.t("gradient.custom") }] : []), ...recipes.map(({ value, label }) => ({ value, label }))],
       disabled: running, onChange: value => { const found = recipes.find(recipe => recipe.value === value); if (found && !running) replaceDraft(cloneGradientSettings(found.settings)); } });
-    colors.appendChild(bind("preset", preset)); renderPalette(colors);
+    colors.appendChild(bind("preset", preset)); renderPalettes(colors); renderPalette(colors);
     const save = createElement(doc, "details", "ch-tool-disclosure ch-gradient-save"); save.appendChild(createElement(doc, "summary", "", i18n.t("gradient.save")));
     const name = textField(doc, { id: "gradient-preset-name", label: i18n.t("gradient.presetName"), value: presetName, maxLength: 80, onCommit: value => { presetName = value.trim(); } });
     name.getElementsByTagName("input")[0]!.addEventListener("input", event => { presetName = (event.target as HTMLInputElement).value.trim(); });
@@ -325,7 +401,7 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
           const unit = multiplier === 100 ? "%" : /Radius$/.test(key) || key === "turbulenceScale" ? "px" : key === "angle" || key === "phase" ? "°" : key === "duration" ? "s" : "";
           target.appendChild(bind(key, numberField(doc, { id: `gradient-${key}`, label, value: Number((Number(state.settings[key]) * multiplier).toFixed(3)),
             min: spec.min! * multiplier, max: spec.max! * multiplier, step: spec.kind === "integer" ? 1 : .01, unit, ...fieldOptions(key),
-            onInput: () => { state.revision++; inputDrafts.add(key); }, onCommit: value => commit(key, value / multiplier) })));
+            onInput: value => previewInput(key, value / multiplier), onCommit: value => commit(key, value / multiplier) })));
         }
       }
       if (section.id === "light") target.appendChild(hint(doc, i18n.t("gradient.linearHelp")));
@@ -408,6 +484,8 @@ export function createGradientEditor(doc: Document, options: GradientEditorOptio
   element.appendChild(retry.element);
   renderFields(); updateChrome();
   return { element, actions, refresh: () => refresh(), dispose() {
+    preview.dispose();
+    numbers.dispose();
     if (element.querySelector('.ch-color-trigger[aria-expanded="true"]')) closeOpenColorPicker(doc);
     alive = false; readSequence++; for (const control of [...controls, apply, background, remove, retry]) control.setDisabled(true, i18n.t("gradient.reading"));
   } };

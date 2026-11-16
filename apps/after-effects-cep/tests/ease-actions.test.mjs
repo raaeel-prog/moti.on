@@ -14,10 +14,11 @@ function fixture(locale = 'pt-BR', disabledReason = null) {
   doc.defaultView = createFakeWindow();
   const i18n = createI18n({locale});
   const toolbar = createEaseActions(doc, {i18n, disabledReason, onAction: action => calls.push(action)});
-  const controls = toolbar.element.getElementsByTagName('button');
+  const rows = toolbar.element.children.find(node => node.id === 'ease-keyframe-actions');
+  const controls = rows.getElementsByTagName('button');
   const tooltip = toolbar.element.getElementsByRole('tooltip')[0];
   tooltip.offsetWidth = 240; tooltip.offsetHeight = 80;
-  return {toolbar, controls, calls, i18n, doc, tooltip};
+  return {toolbar, rows, controls, calls, i18n, doc, tooltip};
 }
 
 test('copy and reverse actions dispatch one precise command each', () => {
@@ -30,9 +31,15 @@ test('copy and reverse actions dispatch one precise command each', () => {
     {id: 'duplicate-reverse', command: 'ae.keys.clone', args: {mode: 'mirror', destination: 'after-gap'}},
     {id: 'duplicate-reverse-start', command: 'ae.keys.clone', args: {mode: 'mirror', destination: 'layer-start'}},
     {id: 'duplicate-reverse-end', command: 'ae.keys.clone', args: {mode: 'mirror', destination: 'layer-end'}},
+    {id: 'copy-ease', command: 'ae.keys.ease-copy', args: {}},
+    {id: 'paste-ease', command: 'ae.keys.ease-paste', args: {target: 'ease'}},
+    {id: 'paste-value', command: 'ae.keys.ease-paste', args: {target: 'value'}},
+    {id: 'align-first', command: 'ae.keys.send-to-edge', args: {edge: 'start', reference: 'playhead'}},
+    {id: 'align-last', command: 'ae.keys.send-to-edge', args: {edge: 'end', reference: 'playhead'}},
   ]);
-  assert.equal(f.toolbar.element.children[0].getElementsByTagName('button').length, 6);
-  assert.equal(f.controls.length, 6);
+  assert.equal(f.rows.children[0].getElementsByTagName('button').length, 6, 'the first row keeps its six buttons');
+  assert.equal(f.rows.children[1].getElementsByTagName('button').length, 5, 'copy/paste and align share the second row');
+  assert.equal(f.controls.length, 11);
 });
 
 test('selection and busy updates block stale activations without replacing controls', () => {
@@ -44,7 +51,7 @@ test('selection and busy updates block stale activations without replacing contr
   assert.equal(first.getAttribute('aria-disabled'), 'true');
   assert.match(f.tooltip.allText, /Selecione keyframes/);
   f.toolbar.update(null);
-  assert.equal(f.toolbar.element.getElementsByTagName('button')[0], first);
+  assert.equal(f.rows.getElementsByTagName('button')[0], first);
   assert.equal(first.getAttribute('aria-disabled'), 'false');
   first.click();
   assert.equal(f.calls.length, 1);
@@ -144,4 +151,31 @@ test('disposing cancels pending tooltips, removes window listeners and blocks st
   f.toolbar.update(null);
   assert.equal(f.tooltip.hidden, true);
   assert.equal(f.calls.length, 0);
+});
+
+test('two rows of captioned families with short names, and each pictogram plays its operation on hover', () => {
+  const f = fixture();
+  const groups = [...f.rows.children[0].children, ...f.rows.children[1].children];
+  assert.deepEqual(groups.map(node => node.getAttribute('data-group')), ['duplicate', 'reverse', 'mirror', 'transfer', 'align']);
+  assert.deepEqual(groups.map(node => node.children[0].textContent), ['Duplicar', 'Inverter', 'Cópia invertida', 'Copiar e colar', 'Alinhar ao cursor']);
+  assert.deepEqual(groups.map(node => node.children[1].children.length), [1, 2, 3, 3, 2]);
+  const wrappers = groups.flatMap(node => node.children[1].children);
+  assert.deepEqual(wrappers.map(node => node.getAttribute('data-group')), ['duplicate', 'reverse', 'reverse', 'mirror', 'mirror', 'mirror', 'transfer', 'transfer', 'transfer', 'align', 'align']);
+  const short = [...f.controls].map(control => control.getElementsByTagName('span').find(node => node.className === 'ch-ease-action__label')?.textContent);
+  assert.deepEqual(short, ['No cursor', 'Tempo', 'Valores', 'Depois', 'No início', 'No fim', 'Copiar', 'Ease', 'Valor', 'Início', 'Fim']);
+  for (const control of f.controls) {
+    const svg = control.getElementsByTagName('svg')[0];
+    assert.equal(svg.getAttribute('viewBox'), '0 0 24 16');
+    // O ponto de partida vai pelo CSSOM (a CSP do painel descarta o atributo style); data-from registra o mesmo deslocamento.
+    const moving = svg.getElementsByTagName('g').find(node => node.getAttribute('class') === 'ch-ease-action__moving');
+    assert.match(moving?.getAttribute('data-from') ?? '', /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/, 'the result keyframes know where they travel from');
+    assert.notEqual(moving.getAttribute('data-from'), '0,0', 'every result travels from somewhere');
+    assert.equal(moving.getAttribute('style'), undefined, 'no inline style attribute for the CSP to block');
+    control.emit('mouseenter');
+    assert.equal(control.getAttribute('data-play'), 'true');
+  }
+  const status = f.toolbar.element.getElementsByTagName('p').find(node => node.className.includes('ch-ease-actions__status'));
+  assert.match(status.className, /ch-visually-hidden/, 'the reason is read aloud, not printed twice');
+  assert.deepEqual([...fixture('en-US').controls].map(control => control.getElementsByTagName('span').find(node => node.className === 'ch-ease-action__label')?.textContent),
+    ['At playhead', 'Time', 'Values', 'After', 'At start', 'At end', 'Copy', 'Ease', 'Value', 'First', 'Last']);
 });

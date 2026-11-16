@@ -1,5 +1,5 @@
 import {
-  appearanceSettings, checkboxField, createAlert, createActionButton, createElement, hint, numberField, sectionTitle, selectField,
+  appearanceSettings, checkboxField, createAlert, createActionButton, createElement, hint, numberField, selectField,
   type I18n, type PanelPreferences
 } from "@motion/ui-core";
 import type { ReducedMotionController } from "@motion/ui-motion";
@@ -20,8 +20,10 @@ export function createAeSettingsView(doc: Document, options: {
   const element = createElement(doc, "div", "ch-settings");
   const section = (key: "settings.interface.title" | "settings.preview.title" | "settings.accessibility.title" | "settings.local.title" | "settings.help.title"): HTMLElement => {
     const group = createElement(doc, "section", "ch-settings-section");
-    group.setAttribute("aria-label", i18n.t(key));
-    group.appendChild(sectionTitle(doc, i18n.t(key)));
+    const heading = createElement(doc, "h3", "ch-section-title", i18n.t(key));
+    heading.id = key.replace(/\./g, "-");
+    group.setAttribute("aria-labelledby", heading.id);
+    group.appendChild(heading);
     element.appendChild(group);
     return group;
   };
@@ -65,16 +67,22 @@ export function createAeSettingsView(doc: Document, options: {
   }
   if (motionPreference.snapshot().system) accessibility.appendChild(hint(doc, i18n.t("settings.accessibility.system")));
   const local = section("settings.local.title");
-  local.appendChild(hint(doc, i18n.t("settings.local.description")));
+  const localDescription = hint(doc, i18n.t("settings.local.description"));
+  localDescription.id = "settings-local-description";
+  local.appendChild(localDescription);
   if (preferences.snapshot().recovered) local.appendChild(hint(doc, i18n.t("settings.preferences.recovered")));
-  const localStatus = createElement(doc, "p", "ch-hint");
+  const localActions = createElement(doc, "div", "ch-settings-actions");
+  local.appendChild(localActions);
+  const localStatus = createElement(doc, "p", "ch-hint ch-settings-status");
   localStatus.setAttribute("role", "status"); localStatus.setAttribute("aria-live", "polite");
   const localAction = (id: string, label: Parameters<I18n["t"]>[0], act: () => void): void => {
     const control = createActionButton(doc, { id, label: i18n.t(label), variant: "tertiary", onPress: () => {
       if (!alive) return;
       act(); localStatus.textContent = i18n.t(preferences.snapshot().persistent ? "settings.local.updated" : "settings.preferences.session");
     } });
-    control.element.classList.add("ch-settings-help-action"); local.appendChild(control.element);
+    control.element.classList.add("ch-settings-local-action");
+    control.button.setAttribute("aria-describedby", localDescription.id);
+    localActions.appendChild(control.element);
   };
   localAction("settings-clear-recent", "settings.local.recent", () => preferences.clearRecent());
   localAction("settings-clear-colors", "settings.local.colors", () => preferences.clearRecentColors());
@@ -84,13 +92,15 @@ export function createAeSettingsView(doc: Document, options: {
   local.appendChild(localStatus);
   const help = section("settings.help.title");
   help.classList.add("ch-settings-help");
+  const helpActions = createElement(doc, "div", "ch-settings-help-actions");
+  help.appendChild(helpActions);
   for (const view of ["context", "system", "diagnostics"] as const) {
     const action = createActionButton(doc, {
       id: `settings-help-${view}`, label: i18n.t(`settings.help.${view}`), variant: "tertiary",
       onPress: () => { if (alive) options.onNavigate(view); }
     });
     action.element.classList.add("ch-settings-help-action");
-    help.appendChild(action.element);
+    helpActions.appendChild(action.element);
   }
   return { element, dispose: () => { alive = false; } };
 }

@@ -81,7 +81,8 @@ export function validateGradientSettings(value: unknown): GradientValidationResu
   return issues.length ? { valid: false, issues } : { valid: true, value: cloneGradientSettings(value as GradientSettingsV1), issues: [] };
 }
 export function isGradientSettings(value: unknown): value is GradientSettingsV1 { return validateGradientSettings(value).valid; }
-export type GradientPresetId = "aurora" | "ember" | "lagoon" | "dusk" | "pearl" | "citrus" | "electric" | "rose";
+export type GradientPresetId = "aurora" | "ember" | "lagoon" | "dusk" | "pearl" | "citrus" | "electric" | "rose"
+  | "silk" | "halo" | "satin" | "duotone" | "mist" | "prism";
 export interface GradientPreset { readonly id: GradientPresetId; readonly settings: Readonly<GradientSettingsV1> }
 function preset(id: GradientPresetId, colors: [number, number, number][], changes: Partial<Omit<GradientSettingsV1, "stops">> = {}): GradientPreset {
   const settings = { ...cloneGradientSettings(), ...changes };
@@ -97,12 +98,36 @@ export const GRADIENT_PRESETS: readonly GradientPreset[] = [
   preset("pearl", [[.28, .32, .42], [.67, .73, .88], [1, .88, .81], [.79, 1, .97]], { depth: .12, glow: .18, turbulence: .08 }),
   preset("citrus", [[.08, .16, .01], [.41, .63, .02], [.94, .89, .04], [1, .4, .025]], { angle: 25, cycles: 1.25 }),
   preset("electric", [[.02, .01, .13], [.31, .015, 1], [.015, .8, 1], [.91, 1, 1]], { mode: "angular", glow: .65, turbulence: .3 }),
-  preset("rose", [[.1, .013, .065], [.61, .055, .28], [1, .4, .63], [1, .87, .91]], { angle: -45, bulge: .3 })
+  preset("rose", [[.1, .013, .065], [.61, .055, .28], [1, .4, .63], [1, .87, .91]], { angle: -45, bulge: .3 }),
+  preset("silk", [[.045, .035, .11], [.28, .2, .53], [.78, .57, .73], [.98, .88, .77]],
+    { angle: -32, scale: 1.5, aspect: 1.8, bulge: .12, turbulence: .27, turbulenceScale: 620,
+      glow: .22, glowRadius: 60, diffusion: .4, diffusionRadius: 85, focusSoftness: .65, grain: .025 }),
+  preset("halo", [[.015, .02, .08], [.12, .08, .44], [.36, .46, .98], [.94, .87, 1]],
+    { mode: "radial", centerX: .42, centerY: .44, scale: .78, cycles: 1.4, offset: .12,
+      bulge: .08, turbulence: .12, turbulenceScale: 650, glow: .7, glowRadius: 95,
+      glowThreshold: .45, highlightProtection: .75, diffusion: .25, diffusionRadius: 65 }),
+  preset("satin", [[.025, .065, .1], [.12, .34, .42], [.58, .77, .77], [.92, .96, .89]],
+    { angle: 38, aspect: .7, scale: 1.6, cycles: 1.6, bulge: .22, turbulence: .18,
+      turbulenceScale: 850, glow: .18, glowRadius: 55, diffusion: .35, diffusionRadius: 70, grain: .018 }),
+  preset("duotone", [[.035, .025, .15], [.98, .43, .23]],
+    { angle: -24, scale: 1.15, bulge: .2, turbulence: .22, turbulenceScale: 560,
+      glow: .22, glowRadius: 65, diffusion: .45, diffusionRadius: 95, focusSoftness: .6 }),
+  preset("mist", [[.34, .43, .59], [.63, .71, .83], [.85, .82, .91], [.98, .94, .87]],
+    { mode: "radial", scale: 1.5, aspect: 1.4, bulge: .08, turbulence: .4, turbulenceScale: 700,
+      glow: .1, glowRadius: 80, highlightProtection: .8, diffusion: .85, diffusionRadius: 160,
+      focusRadius: .02, focusSoftness: .6, grain: .04 }),
+  preset("prism", [[.025, .02, .14], [.29, .1, .78], [.04, .67, .86], [.6, .94, .72], [.99, .67, .55]],
+    { mode: "angular", angle: 20, scale: 1.3, cycles: 1.25, bulge: .08, turbulence: .18,
+      turbulenceScale: 720, glow: .4, glowRadius: 75, diffusion: .35, diffusionRadius: 70, grain: .02 })
 ];
 export function gradientPresetSettings(id: GradientPresetId): GradientSettingsV1 {
   const recipe = GRADIENT_PRESETS.find((item) => item.id === id);
   if (!recipe) throw new Error("Unknown gradient preset.");
   return cloneGradientSettings(recipe.settings);
+}
+/** Premium starting state for new applications only. Native and serialized v1 defaults stay static. */
+export function createGradientSettings(id: GradientPresetId = "aurora"): GradientSettingsV1 {
+  return { ...gradientPresetSettings(id), animation: "loop", duration: 6 };
 }
 export interface GradientInstanceData {
   layerId: number; layerName: string; effectIndex: number; settings: GradientSettingsV1; lockedKeys: string[];

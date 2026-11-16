@@ -1,0 +1,246 @@
+/* Onyx Vivo — Ações rápidas (AE only).
+ * Motion reference: the approved "Ações rápidas — conceito premium" prototype.
+ * Refined 2026-10-24 at the user's request: soft-square tiles (the anchor frame's
+ * corner family), the anchor always at the left, a two-row strip exactly as tall as
+ * the anchor that scrolls sideways with the wheel and page buttons, edge fades instead
+ * of a scrollbar, no selection counter, no category dots and no cursor spotlight.
+ * Markup from apps/after-effects-cep/client/src/quick-actions.ts, quick-strip.ts and quick-dock.ts.
+ * CEP 12 renders with Chromium 99: no color-mix(), :has(), container queries or the
+ * individual scale/translate/rotate properties; tints use rgba() with RGB triplets. */
+@property --qa-fade-start { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --qa-fade-end { syntax: "<length>"; inherits: false; initial-value: 0px; }
+.ch-quick-dock, .ch-quick-anchor {
+  --qa-tile: 44px;
+  --qa-gap: 4px;
+  --qa-radius: 7px;
+  --qa-fade: 24px;
+  --qa-well: var(--bg-3);
+  --qa-line: var(--line-hairline);
+  --qa-muted: #8B8B8B;
+  --qa-dot: #5A5A5A;
+  --qa-dot-hover: #9A9A9A;
+  --qa-dash: #4A4A4A;
+  --qa-sheen: rgba(255, 255, 255, .04);
+  --qa-accent: #4C8DFF;
+  --qa-accent-rgb: 76, 141, 255;
+  --qa-ok: #3DDC84;
+  --qa-ok-rgb: 61, 220, 132;
+  --qa-favorite: #F5C542;
+  --qa-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --qa-glide: cubic-bezier(.2, .8, .2, 1);
+}
+:root[data-theme="light"] .ch-quick-dock, :root[data-theme="light"] .ch-quick-anchor {
+  --qa-muted: #6E6E6E; --qa-dot: #A8A8A8; --qa-dot-hover: #6E6E6E; --qa-dash: #B8B8B8; --qa-sheen: rgba(255, 255, 255, .5);
+}
+.ch-quick-dock [data-icon-family="layers"], .ch-quick-anchor [data-icon-family="layers"] { --qa-cat: #5B9CFF; --qa-cat-rgb: 91, 156, 255; }
+.ch-quick-dock [data-icon-family="project"], .ch-quick-anchor [data-icon-family="project"] { --qa-cat: #A78BFA; --qa-cat-rgb: 167, 139, 250; }
+.ch-quick-dock [data-icon-family="effects"], .ch-quick-anchor [data-icon-family="effects"] { --qa-cat: #F5B14C; --qa-cat-rgb: 245, 177, 76; }
+.ch-quick-anchor [data-icon-family="favorites"] { --qa-cat: #F5C542; --qa-cat-rgb: 245, 197, 66; }
+
+/* The compact shell stretches every .ch-button to a full row; the dock's own
+ * controls keep their intrinsic size. */
+.ch-shell .ch-quick-tabs__tab, .ch-shell .ch-quick-keys-toggle, .ch-shell .ch-quick-rail__action, .ch-shell .ch-quick-recents__action, .ch-shell .ch-quick-dock-toggle { flex: 0 0 auto; margin: 0; }
+.ch-shell .ch-quick-actions .ch-quick-action { margin: 0; }
+
+/* ── Dock: header and the 450 ms glide (quick-dock.ts DOCK_MS) ───────────── */
+.ch-quick-dock-header { box-sizing:border-box; gap:var(--lay-space-1); min-height:var(--lay-footer-h); height:auto; padding:0 var(--lay-space-2); cursor:pointer; transition:background .2s; }
+.ch-quick-dock-header:hover { background: var(--qa-sheen); }
+.ch-library-refined .ch-quick-dock-toggle, .ch-quick-dock-toggle { flex:0 1 auto; min-width:var(--lay-btn-md); height:var(--lay-btn-md); min-height:var(--lay-btn-md); gap:var(--lay-space-1); color:var(--txt-1); font-size:12px; font-weight:600; letter-spacing:.01em; }
+.ch-library-refined .ch-quick-dock-toggle:hover { background: transparent; }
+.ch-quick-dock-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-quick-dock .ch-quick-dock-toggle .ch-library-chevron { transition: transform .45s var(--qa-spring), margin .45s var(--qa-spring); }
+.ch-quick-dock-body { transition: height .45s var(--qa-glide); }
+.ch-quick-dock-body[data-open="true"] { max-height:50vh; overflow-y:auto; overscroll-behavior:contain; }
+.ch-quick-dock-body > .ch-quick-anchor { transition: opacity .3s ease, transform .45s var(--qa-glide); }
+.ch-quick-dock-body[data-open="false"] > .ch-quick-anchor { opacity: 0; transform: translateY(-8px); }
+.ch-quick-dock-pin[data-pop="true"] .ch-quick-dock-pin-glyph { animation: ch-quick-pin-pop .45s var(--qa-spring); }
+@keyframes ch-quick-pin-pop { 40% { transform: rotate(0deg) scale(1.35); } }
+
+@keyframes ch-quick-bump { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* The pin always closes the row, so it never moves when the favorites appear. */
+.ch-quick-dock-pin { margin-left: auto; }
+
+/* Favorites rail beside the pin: fades out while open, pops in 45 ms apart on collapse. */
+.ch-quick-dock-accessory { display:flex; flex:0 0 auto; align-items:center; gap:4px; max-width:0; height:var(--lay-btn-md); margin-left:auto; overflow:hidden; transition:max-width .35s var(--qa-glide); }
+.ch-quick-dock-accessory:not([hidden]) + .ch-quick-dock-pin { margin-left: 0; }
+.ch-quick-dock-accessory[hidden] { display: none; }
+.ch-quick-dock[data-open="false"] .ch-quick-dock-accessory { max-width:116px; }
+.ch-library-refined .ch-quick-rail__action, .ch-quick-rail__action {
+  position: relative; overflow: hidden; width: 24px; min-width: 24px; height: 24px; min-height: 24px; padding: 0; display: grid; place-items: center;
+  border: 1px solid var(--qa-line); border-radius: 6px; background: var(--bg-2); box-shadow: none; color: #CFCFCF;
+  opacity: 0; transform: translateY(6px) scale(.7); visibility: hidden; pointer-events: none;
+  transition: opacity .25s, transform .4s var(--qa-spring), visibility 0s linear .25s, color .2s, border-color .2s; }
+.ch-quick-dock[data-open="false"] .ch-quick-rail__action { opacity: 1; transform: none; visibility: visible; pointer-events: auto;
+  transition-delay: calc(var(--rail-index, 0) * 45ms), calc(var(--rail-index, 0) * 45ms), 0s, 0s, 0s; }
+.ch-quick-rail__action > .ch-icon { width: 14px; height: 14px; --icon-color: var(--qa-cat); }
+.ch-quick-rail__action:hover:not(:disabled) { border-color: var(--qa-cat, var(--line-strong)); color: #fff; }
+.ch-quick-rail__action:disabled { opacity: .38; }
+.ch-quick-rail__action[data-running="true"], .ch-quick-recents__action[data-running="true"] { animation: ch-quick-pulse .6s ease-in-out infinite; }
+@keyframes ch-quick-pulse { 50% { transform: scale(.88); border-color: var(--qa-cat); } }
+.ch-quick-rail__action > .ch-tile-feedback > svg, .ch-quick-recents__action > .ch-tile-feedback > svg { width: 14px; height: 14px; }
+.ch-quick-rail__action .ch-tile-spinner, .ch-quick-recents__action .ch-tile-spinner { display: none; }
+.ch-quick-rail__action[data-feedback="success"], .ch-quick-recents__action[data-feedback="success"] { border-color: var(--qa-ok); color: var(--qa-ok); }
+.ch-quick-rail__action[data-feedback="success"] .ch-tile-check, .ch-quick-recents__action[data-feedback="success"] .ch-tile-check { opacity: 1; }
+.ch-quick-rail__action[data-feedback="success"] > .ch-icon { opacity: 0; }
+
+/* ── Body layout ──────────────────────────────────────────────────────────── */
+.ch-quick-anchor[data-layout="stacked"] { flex-direction: column; align-items: stretch; gap: 10px; padding: 10px; }
+/* The anchor never moves: fixed width at the left, its name underneath, the strip beside it. */
+.ch-quick-anchor__main { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+
+/* Command bar: category filter with sliding indicator (no search since 2026-10-23). */
+.ch-quick-actions-toolbar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ch-quick-action__key { font: 600 11px/1 ui-monospace, Consolas, monospace; }
+.ch-quick-tabs { position: relative; display: flex; height: 30px; padding: 2px; border: 1px solid var(--qa-line); border-radius: 8px; background: var(--qa-well); }
+.ch-quick-tabs__indicator { position: absolute; top: 2px; bottom: 2px; left: 2px; width: 28px; border-radius: 6px; background: var(--bg-2); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), 0 1px 3px rgba(0, 0, 0, .4); transform: translateX(calc(var(--tab-index, 0) * 28px)); transition: transform .4s cubic-bezier(.34, 1.4, .64, 1); pointer-events: none; }
+.ch-library-refined .ch-quick-tabs__tab, .ch-quick-tabs__tab { position: relative; z-index: 1; width: 28px; min-width: 28px; height: 24px; min-height: 24px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; box-shadow: none; color: #777; transition: color .2s; }
+.ch-quick-tabs__tab svg { transition: transform .3s var(--qa-spring); }
+.ch-library-refined .ch-quick-tabs__tab:hover, .ch-quick-tabs__tab:hover { background: transparent; color: #BBB; }
+.ch-quick-tabs__tab:hover svg { transform: scale(1.15); }
+.ch-quick-tabs__tab[aria-pressed="true"] { color: var(--qa-cat, var(--txt-1)); }
+
+/* ── Anchor: framed puck with crosshair guides. Cell centers: 15 / 45 / 75 px
+ *    inside the frame (quick-actions.ts ANCHOR_FIRST / ANCHOR_STEP). ───────── */
+.ch-quick-anchorpad { flex: 0 0 92px; width: 92px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ch-quick-anchorpad__frame { --anchor-x: calc(15px + var(--anchor-col, 1) * 30px); --anchor-y: calc(15px + var(--anchor-row, 1) * 30px);
+  position: relative; box-sizing: border-box; width: 92px; height: 92px; border: 1px solid var(--qa-line); border-radius: 10px; background: var(--qa-well); transition: opacity .25s, filter .25s; }
+.ch-quick-anchorpad__frame[data-disabled="true"] { opacity: .4; filter: grayscale(1); }
+.ch-quick-anchorpad__box { position: absolute; box-sizing: border-box; left: 15px; top: 15px; width: 61px; height: 61px; border: 1px dashed var(--qa-dash); border-radius: 3px; pointer-events: none; }
+.ch-quick-anchorpad__hline, .ch-quick-anchorpad__vline { position: absolute; background: rgba(var(--qa-accent-rgb), .28); pointer-events: none; transition: transform .5s var(--qa-spring); }
+.ch-quick-anchorpad__hline { left: 6px; right: 6px; top: 0; height: 1px; transform: translateY(var(--anchor-y)); }
+.ch-quick-anchorpad__vline { top: 6px; bottom: 6px; left: 0; width: 1px; transform: translateX(var(--anchor-x)); }
+.ch-quick-anchorpad__puck { position: absolute; z-index: 4; left: 0; top: 0; box-sizing: border-box; width: 16px; height: 16px; border-radius: 50%; background: var(--qa-accent); pointer-events: none;
+  box-shadow: 0 0 0 3px rgba(var(--qa-accent-rgb), .25), 0 0 14px rgba(var(--qa-accent-rgb), .7);
+  transform: translate(calc(var(--anchor-x) - 8px), calc(var(--anchor-y) - 8px)); transition: transform .5s var(--qa-spring); }
+.ch-quick-anchorpad__puck::after { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: #fff; }
+.ch-quick-anchorpad__ping { position: absolute; z-index: 4; box-sizing: border-box; width: 16px; height: 16px; border: 2px solid var(--qa-accent); border-radius: 50%; pointer-events: none; animation: ch-quick-ping .6s ease-out forwards; }
+@keyframes ch-quick-ping { from { transform: scale(1); opacity: 1; } to { transform: scale(2.6); opacity: 0; } }
+.ch-quick-anchor .ch-quick-anchorpad .ch-anchor-grid { position: absolute; left: 0; top: 0; z-index: 3; width: 90px; height: 90px; flex: none; margin: 0; padding: 1px; box-sizing: border-box; display: grid; grid-template-columns: repeat(3, 28px); grid-auto-rows: 28px; gap: 2px; }
+.ch-quick-anchor .ch-quick-anchorpad .ch-anchor-grid__cell { box-sizing: border-box; width: 28px; height: 28px; min-width: 28px; min-height: 28px; aspect-ratio: auto; padding: 0; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; box-shadow: none; }
+.ch-quick-anchorpad .ch-anchor-grid__dot { width: 5px; height: 5px; border-radius: 50%; background: var(--qa-dot); transition: transform .25s var(--qa-spring), background .2s; }
+.ch-quick-anchor .ch-quick-anchorpad .ch-anchor-grid__cell:hover:not(:disabled) { background: transparent; }
+.ch-quick-anchorpad .ch-anchor-grid__cell:hover:not(:disabled) .ch-anchor-grid__dot { transform: scale(1.8); background: var(--qa-dot-hover); }
+.ch-quick-anchorpad .ch-anchor-grid__cell[disabled] .ch-anchor-grid__dot { background: var(--qa-dot); }
+.ch-quick-anchorpad__label { width: 100%; height: 16px; overflow: hidden; color: var(--qa-muted); font-size: 11px; line-height: 16px; text-align: center; white-space: nowrap; }
+.ch-quick-anchorpad__name { display: block; overflow: hidden; text-overflow: ellipsis; animation: ch-quick-bump .35s var(--qa-spring); }
+
+/* ── Strip: two rows of soft-square tiles, exactly as tall as the anchor frame
+ *    (2 × 44 + 4 = 92 px). Each row mirrors a keyboard row, so the strip is
+ *    ceil(n / 2) columns wide (quick-actions.ts sets --qa-columns). It scrolls
+ *    sideways without a scrollbar; the sides with more tiles fade out
+ *    (quick-strip.ts sets data-overflow-start/end) and show a page button on hover. */
+.ch-quick-strip { position: relative; flex: 1 1 auto; min-width: 0; }
+.ch-shell[data-layout="library"] .ch-quick-anchor .ch-quick-actions,
+.ch-quick-anchor .ch-quick-actions { --qa-columns: 9; flex: none; display: grid; grid-template-columns: repeat(var(--qa-columns), var(--qa-tile)); grid-template-rows: repeat(2, var(--qa-tile)); grid-auto-rows: var(--qa-tile); gap: var(--qa-gap);
+  justify-content: start; align-content: start; min-height: 0; max-width: none; min-width: 0; margin: -2px; padding: 2px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--qa-fade-start), #000 calc(100% - var(--qa-fade-end)), transparent 100%);
+  transition: --qa-fade-start .25s var(--qa-glide), --qa-fade-end .25s var(--qa-glide); }
+.ch-quick-anchor .ch-quick-actions::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.ch-quick-strip[data-overflow-start="true"] .ch-quick-actions { --qa-fade-start: var(--qa-fade); }
+.ch-quick-strip[data-overflow-end="true"] .ch-quick-actions { --qa-fade-end: var(--qa-fade); }
+.ch-quick-anchor .ch-quick-actions[data-empty="true"] { display: flex; align-items: center; min-height: calc(var(--qa-tile) * 2 + var(--qa-gap)); }
+.ch-library-refined .ch-quick-strip__page, .ch-quick-strip__page { position: absolute; top: 50%; z-index: 5; width: 24px; min-width: 24px; height: 32px; min-height: 32px; margin: -16px 0 0; padding: 0;
+  display: grid; place-items: center; border: 1px solid var(--qa-line); border-radius: 6px; background: var(--bg-2); box-shadow: 0 2px 6px -2px rgba(0, 0, 0, .6); color: var(--txt-2); cursor: pointer;
+  opacity: 0; pointer-events: none; transition: opacity .2s, color .2s, transform .3s var(--qa-spring); }
+.ch-quick-strip__page[data-side="start"] { left: 0; }
+.ch-quick-strip__page[data-side="end"] { right: 0; }
+.ch-quick-strip:hover[data-overflow-start="true"] > .ch-quick-strip__page[data-side="start"],
+.ch-quick-strip:hover[data-overflow-end="true"] > .ch-quick-strip__page[data-side="end"] { opacity: 1; pointer-events: auto; }
+.ch-quick-strip__page:hover { color: var(--txt-1); }
+.ch-quick-strip__page[data-side="start"]:hover { transform: translateX(-1px); }
+.ch-quick-strip__page[data-side="end"]:hover { transform: translateX(1px); }
+.ch-quick-strip__page:active { transform: scale(.92); transition-duration: .08s; }
+/* Prototype "tileIn": quick-actions.ts sets data-stagger only while the cascade plays. */
+.ch-quick-anchor .ch-quick-actions[data-stagger="true"] > .ch-quick-slot { animation: ch-quick-tile-in .42s var(--qa-glide) both; animation-delay: calc(var(--stagger-index, 0) * 22ms); }
+@keyframes ch-quick-tile-in { from { opacity: 0; transform: translateY(8px) scale(.9); } to { opacity: 1; transform: none; } }
+.ch-quick-slot { position: relative; display: block; min-width: 0; transition: opacity .25s, transform .25s, filter .25s; }
+.ch-quick-slot[hidden] { display: none; }
+.ch-quick-slot[data-disabled="true"] { cursor: not-allowed; }
+/* Behaviour, not look: a disabled button gets no mouse events in Chromium 99, so the slot
+ * takes them — its hover shows the reason (rich-tooltip.ts) and its click the refusal. */
+.ch-quick-actions .ch-quick-action:disabled { pointer-events: none; }
+.ch-shell .ch-quick-actions .ch-quick-action, .ch-quick-actions .ch-quick-action {
+  position: relative; overflow: hidden; isolation: isolate; box-sizing: border-box; width: var(--qa-tile); min-width: var(--qa-tile); height: var(--qa-tile); min-height: var(--qa-tile); padding: 0 1px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  border: 1px solid var(--qa-line); border-radius: var(--qa-radius); color: #CFCFCF; background: var(--bg-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03); font-size: 10px; font-weight: 600;
+  transition: transform .22s var(--qa-spring), background-color .2s, opacity .25s, filter .25s, border-color .2s, box-shadow .25s, color .2s; }
+:root[data-theme="light"] .ch-quick-actions .ch-quick-action { color: var(--txt-1); }
+.ch-quick-actions .ch-quick-action > .ch-icon { position: relative; z-index: 2; width: 16px; height: 16px; color: inherit; --icon-color: currentColor; transition: transform .4s var(--qa-spring), opacity .2s; }
+.ch-quick-actions .ch-quick-action:hover:not(:disabled) > .ch-icon, .ch-quick-actions .ch-quick-action:focus-visible > .ch-icon { --icon-color: var(--qa-cat); }
+.ch-quick-action__label { position: relative; z-index: 2; line-height: 1; letter-spacing: .03em; transition: opacity .2s, transform .3s, color .2s; }
+.ch-quick-actions .ch-quick-action:hover:not(:disabled) { color: #fff; transform: translateY(-1px); border-color: var(--line-strong, var(--qa-line)); background: var(--bg-3); box-shadow: 0 2px 6px -2px rgba(0, 0, 0, .6); }
+.ch-quick-actions .ch-quick-action:active:not(:disabled), .ch-quick-actions .ch-quick-action[data-pressed="true"] { transform: scale(.92); transition-duration: .08s; }
+.ch-quick-actions .ch-quick-action:disabled { opacity: .35; filter: grayscale(1); }
+.ch-quick-actions[data-busy="local"] .ch-quick-action:disabled { opacity: .5; filter: none; }
+.ch-quick-actions[data-busy="external"] .ch-quick-action:disabled { opacity: 1; filter: none; cursor: progress; }
+.ch-quick-actions .ch-quick-action:disabled:hover { transform: none; }
+
+.ch-quick-actions__empty { flex: 1 1 auto; margin: 0; padding: 0 10px; color: var(--qa-muted); font-size: 12px; line-height: 1.5; text-align: center; animation: ch-quick-tile-in .4s var(--qa-glide) both; }
+.ch-quick-actions__empty[hidden] { display: none; }
+
+/* Favorites: a small star in the corner that bursts into eight sparks when pinned. */
+.ch-quick-action__star { position: absolute; top: 2px; left: 2px; z-index: 3; display: grid; width: 8px; height: 8px; font-size: 8px; line-height: 1; color: var(--qa-favorite); transform: scale(0) rotate(-60deg); transition: transform .45s var(--qa-spring); pointer-events: none; }
+.ch-quick-action__star > svg { display: block; width: 8px; height: 8px; }
+.ch-quick-slot[data-favorite="true"] .ch-quick-action__star { transform: none; }
+.ch-quick-action__spark { position: absolute; left: 7px; top: 7px; z-index: 4; width: 4px; height: 4px; border-radius: 50%; background: var(--qa-favorite); pointer-events: none; animation: ch-quick-burst .55s ease-out forwards; }
+@keyframes ch-quick-burst { to { transform: translate(var(--spark-x, 0), var(--spark-y, 0)) scale(0); opacity: 0; } }
+.ch-quick-action__key { position: absolute; top: 2px; right: 2px; z-index: 3; padding: 1px 3px; border-radius: 3px; background: rgba(var(--qa-cat-rgb), .18); color: var(--qa-cat); opacity: 0; transform: scale(.5) translateY(-4px); transition: opacity .2s, transform .35s var(--qa-spring); transition-delay: calc(var(--stagger-index, 0) * 14ms); pointer-events: none; }
+.ch-quick-actions[data-show-keys="true"] .ch-quick-action__key:not(:empty) { opacity: 1; transform: none; }
+
+/* Feedback: ripple from the click → ring sweeping the border while the host works
+ * → green wash with a drawn ✓ → applied dot. */
+.ch-quick-action > .ch-tile-ripple { z-index: 1; background-color: rgba(var(--qa-cat-rgb), .45); }
+.ch-quick-action > .ch-tile-ripple[data-active="true"] { animation: ch-quick-ripple .6s var(--qa-glide) forwards; }
+@keyframes ch-quick-ripple { from { transform: scale(0); opacity: 1; } to { transform: scale(1); opacity: 0; } }
+.ch-quick-action__ring { position: absolute; inset: -60%; z-index: 0; background: conic-gradient(from 0deg, transparent 0 55%, var(--qa-cat) 85%, #fff 100%); opacity: 0; transition: opacity .2s; pointer-events: none; }
+.ch-quick-action__cover { position: absolute; inset: 1.5px; z-index: 1; border-radius: calc(var(--qa-radius) - 1.5px); background: var(--bg-2); opacity: 0; transition: opacity .2s; pointer-events: none; }
+.ch-quick-action[data-running="true"] .ch-quick-action__ring { opacity: 1; animation: ch-quick-spin .75s linear infinite; }
+.ch-quick-action[data-running="true"] .ch-quick-action__cover { opacity: 1; }
+.ch-quick-action[data-running="true"] > .ch-icon { animation: ch-quick-breathe .75s ease-in-out infinite; }
+.ch-quick-actions .ch-quick-action .ch-tile-spinner { display: none; }
+@keyframes ch-quick-spin { to { transform: rotate(360deg); } }
+@keyframes ch-quick-breathe { 50% { transform: scale(.85); opacity: .7; } }
+.ch-quick-action > .ch-tile-feedback { z-index: 3; }
+.ch-quick-action > .ch-tile-feedback > svg { width: 18px; height: 18px; }
+.ch-quick-action[data-feedback="success"] { border-color: rgba(var(--qa-ok-rgb), .7); }
+.ch-quick-action[data-feedback="success"] > .ch-tile-feedback { background: radial-gradient(circle, rgba(var(--qa-ok-rgb), .28), rgba(var(--qa-ok-rgb), .06)); }
+.ch-quick-action[data-feedback="success"] .ch-tile-check { opacity: 1; }
+.ch-quick-action[data-feedback="success"] > .ch-icon, .ch-quick-action[data-feedback="success"] > .ch-quick-action__label { opacity: 0; transform: scale(.6); }
+.ch-quick-action__applied { position: absolute; right: 4px; bottom: 4px; z-index: 2; width: 4px; height: 4px; border-radius: 50%; background: var(--qa-cat, var(--qa-accent)); pointer-events: none; }
+.ch-quick-action[data-denied="true"], .ch-quick-rail__action[data-denied="true"], .ch-quick-recents__action[data-denied="true"] { animation: ch-quick-denied .4s cubic-bezier(.36, .07, .19, .97); }
+@keyframes ch-quick-denied { 10%, 90% { transform: translateX(-1px); } 20%, 80% { transform: translateX(2px); } 30%, 50%, 70% { transform: translateX(-3px); } 40%, 60% { transform: translateX(3px); } }
+
+/* ── Footer: recents · shortcuts toggle ───────────────────────────────────── */
+.ch-quick-recents { display: flex; align-items: center; gap: 6px; min-width: 0; height: 34px; padding-top: 9px; border-top: 1px solid var(--qa-line); color: #777; font-size: 12px; }
+.ch-quick-recents__label { flex: 0 0 auto; }
+.ch-quick-recents__list { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
+.ch-quick-recents__empty { color: #5F5F5F; }
+.ch-library-refined .ch-quick-recents__action, .ch-quick-recents__action { position: relative; overflow: hidden; height: 24px; min-height: 24px; padding: 0 7px; display: flex; flex-direction: row; align-items: center; gap: 4px; border: 1px solid var(--qa-line); border-radius: 5px; background: var(--bg-2); box-shadow: none; color: #BDBDBD; font-size: 12px; font-weight: 600; transition: border-color .2s, color .2s, transform .2s; }
+.ch-quick-recents__action > .ch-icon { width: 13px; height: 13px; --icon-color: var(--qa-cat); }
+.ch-quick-recents__action:hover:not(:disabled) { border-color: var(--qa-cat, var(--line-strong)); color: #fff; transform: translateY(-1px); }
+.ch-quick-recents__action:disabled { opacity: .38; }
+.ch-quick-slot--recent[data-new="true"] { animation: ch-quick-slide-in .45s var(--qa-spring) both; }
+@keyframes ch-quick-slide-in { from { opacity: 0; transform: translateX(-12px) scale(.8); } to { opacity: 1; transform: none; } }
+.ch-library-refined .ch-quick-keys-toggle, .ch-quick-keys-toggle { margin-left: auto !important; height: 24px; min-height: 24px; min-width: 0; padding: 0 7px; display: flex; align-items: center; gap: 5px; border: 0; border-radius: 6px; background: transparent; box-shadow: none; color: var(--qa-muted); font-size: 12px; transition: background .2s, color .2s; }
+.ch-library-refined .ch-quick-keys-toggle:hover, .ch-quick-keys-toggle:hover { background: var(--bg-2); color: #DDD; }
+.ch-quick-keys-toggle[aria-pressed="true"] { color: var(--qa-accent); background: rgba(var(--qa-accent-rgb), .12); }
+
+/* ── Narrow docks: the layout never reflows — the anchor keeps its place and the strip
+ *    beside it shows fewer columns (wheel, page buttons). Only text labels go. */
+@media (max-width: 359.98px) {
+  .ch-quick-recents__action > .ch-quick-action__label, .ch-quick-keys-toggle__label { display: none; }
+}
+@media (max-width: 320px) {
+  .ch-quick-anchor[data-layout="stacked"] { padding: 8px; }
+  .ch-quick-anchor__main { gap: 8px; }
+}
+@media (max-width:239px) {
+  .ch-quick-dock-header { padding-inline:4px; }
+  .ch-quick-dock-title { white-space:normal; line-height:12px; }
+}
+
+/* Reduced motion: state changes stay, movement goes. */
+@media (prefers-reduced-motion: reduce) {
+  .ch-quick-dock *, .ch-quick-dock *::before, .ch-quick-dock *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+}

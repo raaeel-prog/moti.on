@@ -27,16 +27,21 @@
 .ch-shell[data-layout="library"] .ch-preset-stage .ch-preset-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,calc(var(--preview-size,320px) * .75)),1fr)); grid-auto-rows:max-content; align-content:start; gap:6px; padding:0 1px 1px 0; flex:1 1 auto; min-height:0; max-height:none; overflow:auto; scrollbar-width:thin; }
 .ch-shell[data-layout="library"] .ch-preset-stage .ch-preset-grid--personal { display:flex; }
 .ch-shell[data-layout="library"] .ch-preset-card { position:relative; border:1px solid transparent; border-radius:var(--radius-medium); background:transparent; overflow:hidden; padding:0; align-self:start; }
-.ch-shell[data-layout="library"] .ch-preset-card[data-selected="true"] { border-color:var(--ch-border-default); }
+/* Selected card lights up like the Elements cards: a white rail and a raised name row. */
+.ch-shell[data-layout="library"] .ch-preset-card[data-selected="true"] { border-color:var(--ch-border-focus); background:var(--ch-surface-raised); }
+.ch-shell[data-layout="library"] .ch-preset-card[data-selected="true"] .ch-preset-apply { font-weight:600; }
 /* Selection belongs to the whole card; keyboard focus marks only the control. */
 .ch-shell[data-layout="library"] .ch-preset-card[data-selected="true"] > .ch-preset-preview { outline:none; }
 .ch-shell[data-layout="library"] .ch-preset-card button:focus-visible { outline:1px dashed var(--ch-text-primary); outline-offset:-4px; }
 .ch-shell[data-layout="library"] .ch-preset-preview { width:100%; height:auto; aspect-ratio:16/9; min-height:0; padding:0; margin:0; border:0; border-radius:0; background:var(--bg-elevated); box-shadow:none; color:var(--ch-text-primary); overflow:hidden; }
 .ch-shell[data-layout="library"] .ch-preset-preview svg { width:100%; height:100%; aspect-ratio:auto; }
+/* Rendered text previews fill the same 16:9 frame as the drawn ones. */
+.ch-shell[data-layout="library"] .ch-preset-preview .ch-preset-media { display:block; width:100%; height:100%; object-fit:cover; pointer-events:none; }
+.ch-shell[data-layout="library"] .ch-preset-preview .ch-preset-media[hidden], .ch-shell[data-layout="library"] .ch-preset-preview[data-media="true"] svg { display:none; }
 .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-actions { display:flex; align-items:center; padding:0 4px 0 0; gap:2px; min-height:26px; background:transparent; }
 .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-apply { display:block; flex:1 1 auto; min-width:0; width:0; height:26px; min-height:26px; padding:0 2px 0 7px; margin:0; border:0; border-radius:0; background:transparent; color:var(--ch-text-primary); font-size:11px; line-height:1.2; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-actions>.ch-preset-favorite { position:absolute; right:4px; top:4px; width:24px; height:24px; min-height:24px; padding:3px; border:0; border-radius:var(--radius-small); background:var(--bg-elevated); opacity:0; pointer-events:none; color:var(--ch-text-secondary); transition:opacity var(--dur-2) var(--ease-out); }
-.ch-shell[data-layout="library"] .ch-preset-card:hover .ch-preset-actions>.ch-preset-favorite,.ch-shell[data-layout="library"] .ch-preset-card:focus-within .ch-preset-actions>.ch-preset-favorite { opacity:1; pointer-events:auto; }
+.ch-shell[data-layout="library"] .ch-preset-card[data-hover="true"] .ch-preset-actions>.ch-preset-favorite,.ch-shell[data-layout="library"] .ch-preset-card:focus-within .ch-preset-actions>.ch-preset-favorite { opacity:1; pointer-events:auto; }
 .ch-shell[data-layout="library"] .ch-preset-editor { margin-top:6px; padding-top:6px; border:0; border-top:1px solid var(--border-muted); border-radius:0; background:transparent; overflow:visible; flex:0 0 auto; }
 .ch-shell[data-layout="library"] .ch-preset-editor .ch-preset-inspector { padding:0; margin:0; flex:0 0 auto; overflow:visible; }
 .ch-preset-approved-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:20px; font-size:12px; margin:0 0 4px; }
@@ -69,10 +74,30 @@
 .ch-shell[data-layout="library"] .ch-preset-adjustments { margin:0; border:0; }
 .ch-shell[data-layout="library"] .ch-preset-adjustments>summary { display:list-item; width:max-content; max-width:100%; margin:0; padding:4px 0; color:var(--ch-text-secondary); font-size:11px; }
 .ch-shell[data-layout="library"] .ch-preset-adjustments[open]>summary { margin-bottom:8px; }
-.ch-shell[data-layout="library"] .ch-preset-directions { display:flex; flex-direction:row; flex-wrap:wrap; gap:4px; margin-bottom:12px; }
+.ch-shell[data-layout="library"] .ch-preset-directions { display:flex; flex-direction:row; flex-wrap:wrap; gap:4px; margin-bottom:10px; }
 .ch-shell[data-layout="library"] .ch-preset-directions .ch-button { flex:0 0 auto; width:auto; min-width:0; font-size:11px; padding:4px 6px; border:1px solid transparent; }
 .ch-shell[data-layout="library"] .ch-preset-directions .ch-button::before { display:none; }
 .ch-shell[data-layout="library"] .ch-preset-directions .ch-button[aria-pressed="true"] { border-color:var(--ch-border-default); background:var(--surface-hover); }
+/* Every direction as a small preview, 2x2: choose by sight, then the hovered tile plays. */
+.ch-preset-direction-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; flex:1 0 100%; min-width:0; }
+/* Compass: eight directions around Original, each where its motion comes from. */
+/* Cells are a third of the card: the position names each tile (aria-label and title
+   keep the words), and Original is the dot at the center. */
+.ch-preset-direction-tile { display:flex; flex-direction:column; align-items:stretch; gap:2px; min-width:0; margin:0; padding:2px; border:1px solid transparent; border-radius:var(--radius-small); background:transparent; color:var(--ch-text-secondary); font:inherit; font-size:11px; cursor:pointer; }
+.ch-preset-direction-tile>svg,.ch-preset-direction-tile>span { pointer-events:none; }
+.ch-preset-direction-tile>.ch-preset-tile-media { pointer-events:none; display:block; width:100%; height:auto; aspect-ratio:2/1; object-fit:cover; border-radius:var(--radius-small); background:#000; }
+.ch-preset-direction-tile>.ch-preset-tile-media[hidden] { display:none; }
+.ch-preset-direction-tile>svg { display:block; width:100%; height:auto; aspect-ratio:2/1; border-radius:var(--radius-small); background:var(--bg-base,#1D1D1D); }
+.ch-preset-direction-tile>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
+.ch-preset-direction-tile:hover { background:var(--surface-hover); color:var(--ch-text-primary); }
+.ch-preset-direction-tile[aria-pressed="true"] { border-color:var(--ch-border-focus); background:var(--surface-hover); color:var(--ch-text-primary); }
+.ch-preset-direction-tile:focus-visible { outline:var(--focus-ring); outline-offset:var(--focus-offset); }
+.ch-preset-direction-tile:disabled { cursor:default; opacity:.5; }
+
+.ch-preset-characters { display:flex; flex-wrap:wrap; gap:4px; margin:0 0 12px; }
+.ch-preset-characters .ch-button { flex:0 0 auto; width:auto; min-width:0; min-height:24px; font-size:11px; padding:2px 8px; border:1px solid var(--border-subtle); border-radius:999px; background:transparent; }
+.ch-preset-characters .ch-button::before { display:none; }
+.ch-preset-characters .ch-button[aria-pressed="true"] { border-color:var(--ch-border-default); background:var(--surface-hover); color:var(--ch-text-primary); }
 .ch-shell[data-layout="library"] .ch-preset-applybar { position:relative; z-index:2; display:flex; flex:0 0 auto; align-items:center; justify-content:space-between; flex-wrap:nowrap; gap:8px; padding:4px 4px 4px 8px; margin:6px 0 0; border:0; border-top:1px solid var(--border-muted); border-radius:0; min-height:36px; background:var(--bg-elevated); box-shadow:none; }
 .ch-preset-target { color:var(--ch-text-secondary); font-size:11px; min-width:0; overflow-wrap:anywhere; }
 .ch-shell[data-layout="library"] .ch-preset-primary-apply { flex:0 0 auto; white-space:nowrap; }
@@ -94,7 +119,7 @@
 .ch-shell[data-layout="library"] .ch-preset-settings-header>.ch-button { flex:0 0 28px; width:28px; height:28px; min-height:28px; padding:4px; border:0; border-radius:var(--radius-small); background:transparent; color:var(--ch-text-secondary); }
 .ch-shell[data-layout="library"] .ch-preset-settings-header>.ch-button:hover { background:var(--surface-hover); color:var(--ch-text-primary); }
 .ch-preset-settings-header svg { width:16px; height:16px; }
-.ch-preset-settings-body { flex:1 1 auto; min-height:0; min-width:0; overflow:auto; padding:12px; scrollbar-width:thin; }
+.ch-preset-settings-body { flex:1 1 auto; min-height:0; min-width:0; overflow:auto; padding:10px; scrollbar-width:thin; }
 .ch-shell[data-layout="library"] .ch-preset-settings-body .ch-preset-adjustments { display:block; margin:0; padding:0; }
 .ch-shell[data-layout="library"] .ch-preset-settings-body .ch-preset-fields { display:flex; flex-direction:column; gap:0; }
 .ch-shell[data-layout="library"] .ch-preset-settings-body .ch-preset-field { display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap:8px; min-height:28px; margin:0 0 8px; padding:0; border:0; color:var(--ch-text-primary); font-size:12px; }
@@ -217,7 +242,38 @@
 .ch-preset-illustrative { color:var(--ch-text-secondary); font-size:11px; line-height:1.45; margin:6px 0 0; }
 .ch-preset-card { position:relative; }
 .ch-preset-core-badge { position:absolute; top:6px; left:6px; padding:1px 5px; border-radius:var(--ch-radius-round); background:var(--ch-surface-raised); color:var(--ch-text-secondary); font-size:9px; line-height:14px; pointer-events:auto; }
+/* Chosen side of a directional card (Alt+Up/Down or the settings list). */
+.ch-preset-direction-badge { position:absolute; top:6px; right:6px; min-width:16px; height:16px; padding:0 3px; box-sizing:border-box; border-radius:var(--ch-radius-round); background:var(--ch-surface-raised); color:var(--action-text, var(--ch-text-primary)); font:11px/16px Arial,sans-serif; text-align:center; pointer-events:none; animation:ch-direction-badge-in var(--dur-2, 160ms) var(--ease-out, ease-out); }
+.ch-preset-direction-badge[hidden] { display:none; }
+@keyframes ch-direction-badge-in { from { opacity:0; transform:scale(.6); } to { opacity:1; transform:none; } }
+[data-reduced-motion="true"] .ch-preset-direction-badge { animation:none; }
+@media (prefers-reduced-motion: reduce) { .ch-preset-direction-badge { animation:none; } }
 
 /* Selected preset controls must respect hidden beneath the library layout rules. */
 .ch-shell[data-layout="library"] .ch-preset-editor[hidden],
 .ch-shell[data-layout="library"] .ch-preset-applybar[hidden] { display:none; }
+/* Lean box under the gallery: the In/Out/Both segments speak for themselves
+   (the radiogroup keeps "Animação" as its accessible name). */
+.ch-shell[data-layout="library"] .ch-preset-inspector .ch-preset-phase-label { display:none; }
+.ch-shell[data-layout="library"] .ch-preset-inspector .ch-preset-phase { flex:1 1 auto; }
+/* Short space: the four directions share one row; names stay as tooltips. */
+.ch-preset-settings-panel[data-compact="true"] .ch-preset-direction-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.ch-preset-settings-panel[data-compact="true"] .ch-preset-direction-tile>span { display:none; }
+/* Popover without a title bar: the name stays only for screen readers and the
+   close button sits on the first row of choices, top right. */
+.ch-shell[data-layout="library"] .ch-preset-settings-header { position:absolute; top:6px; right:6px; z-index:1; padding:0; border:0; gap:0; background:transparent; }
+.ch-shell[data-layout="library"] .ch-preset-settings-header>span { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+.ch-shell[data-layout="library"] .ch-preset-settings-header>.ch-button { flex:0 0 24px; width:24px; height:24px; min-height:24px; padding:2px; }
+.ch-shell[data-layout="library"] .ch-preset-adjustments>:first-child { padding-right:30px; }
+/* One shape: while its settings are open, the card and the popover share the
+   white edge and the surface; the seam side loses its corners and border. */
+.ch-shell[data-layout="library"] .ch-preset-card[data-attached] { border-color:var(--ch-border-focus); background:var(--ch-surface-raised); }
+.ch-shell[data-layout="library"] .ch-preset-card[data-attached="below"] { border-bottom-color:transparent; border-bottom-left-radius:0; border-bottom-right-radius:0; }
+.ch-shell[data-layout="library"] .ch-preset-card[data-attached="above"] { border-top-color:transparent; border-top-left-radius:0; border-top-right-radius:0; }
+.ch-shell[data-layout="library"] .ch-preset-settings-panel[data-attached] { border-color:var(--ch-border-focus); background:var(--ch-surface-raised); }
+.ch-shell[data-layout="library"] .ch-preset-settings-panel[data-attached="below"] { border-top-color:transparent; border-top-left-radius:0; border-top-right-radius:0; transform-origin:top center; }
+.ch-shell[data-layout="library"] .ch-preset-settings-panel[data-attached="above"] { border-bottom-color:transparent; border-bottom-left-radius:0; border-bottom-right-radius:0; transform-origin:bottom center; }
+/* Unfold from the seam: it grows out of the card with the light entry spring
+   and folds back into it on close (transform and opacity only). */
+.ch-shell[data-layout="library"] .ch-preset-settings-panel[data-attached="below"][data-motion~="surface-morph"]:not([data-open="true"]) { transform:translateY(-6px) scaleY(.6); }
+.ch-shell[data-layout="library"] .ch-preset-settings-panel[data-attached="above"][data-motion~="surface-morph"]:not([data-open="true"]) { transform:translateY(6px) scaleY(.6); }

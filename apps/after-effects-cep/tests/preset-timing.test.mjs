@@ -5,11 +5,12 @@ import {loadHostModules} from './host-harness.mjs';
 const ERROR=Object.fromEntries(['INVALID_PRESET','NO_ACTIVE_COMP','NO_SELECTION','INVALID_SELECTION_TYPE','CAPABILITY_UNAVAILABLE','EXPRESSION_CONFLICT','KEYFRAME_CONFLICT','ROLLBACK_FAILED'].map(value=>[value,value]));
 const defaults={operation:'shift',phase:'in',frames:3,order:'forward'};
 
-async function fixture({fps=30,count=3}={}){
+async function fixture({fps=30,count=3,version=1}={}){
   let mutations=0;
   class MarkerValue {
     constructor(comment,params={}){Object.assign(this,{comment,params:{...params},duration:.1,label:7,chapter:'Chapter',url:'https://example.test/cue',frameTarget:'_blank',eventCuePoint:true,cuePointName:'Cue',protectedRegion:false});}
     getParameters(){return {...this.params};}
+    setParameters(params){this.params={...params};}
   }
   function clone(value){return Object.assign(new MarkerValue(value.comment),structuredClone(value));}
   class Markers {
@@ -25,11 +26,15 @@ async function fixture({fps=30,count=3}={}){
   class Layer {
     constructor(index){
       Object.assign(this,{index,id:index,selected:true,locked:false,name:`Artwork ${index}`,startTime:0,inPoint:0,outPoint:10,comment:'Keep my comment',sourceText:'Editable words',keys:[{time:.4,value:[10,20]},{time:6,value:[90,80]}],expression:'// owned managed motion',expressionEnabled:true});
-      this.meta={instance:`100-${index}`,markerVersion:1,markerDurationFrames:24,options:{phase:'both'},effects:[{name:`Moti.on ${index} · Duration`}]};
+      this.meta={instance:`100-${index}`,markerVersion:version,markerDurationFrames:24,options:{phase:'both'},effects:[{name:`Moti.on ${index} · Duration`}]};
       this.control={value:24,numKeys:0,expression:''};
       this.effect={name:this.meta.effects[0].name,property:()=>this.control};
       this.effects={numProperties:1,property:()=>this.effect};
-      this.markers=new Markers();this.markers.setValueAtTime(1+index/10,new MarkerValue(`In ${index}`,{'Moti.on.instance':this.meta.instance,'Moti.on.phase':'in',editor:'keep'}));this.markers.setValueAtTime(8+index/10,new MarkerValue(`Out ${index}`,{'Moti.on.instance':this.meta.instance,'Moti.on.phase':'out',editor:'also keep'}));
+      this.markers=new Markers();
+      // v1 cues are points; v2 cues are .8 s windows starting at the same times.
+      const cueIn=new MarkerValue(`In ${index}`,{'Moti.on.instance':this.meta.instance,'Moti.on.phase':'in',editor:'keep'}),cueOut=new MarkerValue(`Out ${index}`,{'Moti.on.instance':this.meta.instance,'Moti.on.phase':'out',editor:'also keep'});
+      if(version===2){cueIn.duration=.8;cueOut.duration=.8;}
+      this.markers.setValueAtTime(1+index/10,cueIn);this.markers.setValueAtTime(8+index/10,cueOut);
     }
     property(name){return name==='ADBE Marker'?this.markers:name==='ADBE Effect Parade'?this.effects:null;}
   }
@@ -39,7 +44,7 @@ async function fixture({fps=30,count=3}={}){
   }
   const comp=new CompItem();for(let i=1;i<=count;i++)comp.layers.push(new Layer(i));
   const app={project:{activeItem:comp}},library={metadata:layer=>layer.meta,verifyOwnership:layer=>layer.ownershipError??null};
-  const scope=await loadHostModules(['src/registry.jsx','src/commands/preset-timing.jsx'],{app,CompItem,MotionContracts:{ERROR},MotionPresetLibrary:library});
+  const scope=await loadHostModules(['src/registry.jsx','src/marker-window.jsx','src/commands/preset-timing.jsx'],{app,CompItem,MarkerValue,MotionContracts:{ERROR},MotionPresetLibrary:library});
   scope.MotionPresetLibrary=library;
   const handler=scope.MotionRegistry.get('ae.presets.timing');
   const args=overrides=>({...defaults,...overrides});
@@ -187,3 +192,34 @@ test('marker key selections follow the moved cue and keep user marker selections
   }
 });
 
+
+test('v2 shift, align and stagger move the whole phase window and keep its length and payload',async()=>{
+  for(const phase of ['in','out']){
+    const f=await fixture({version:2}),before=f.comp.layers.map(layer=>f.read(layer,phase));
+    f.run({phase,frames:3});f.comp.layers.forEach((layer,i)=>{const cue=f.read(layer,phase);close(cue.time,before[i].time+.1);close(cue.value.duration,.8);assert.equal(cue.value.params.editor,before[i].value.params.editor);assert.equal(cue.value.comment,before[i].value.comment);});
+    f.comp.time=phase==='in'?2:6;f.run({operation:'stagger',phase,frames:3});f.comp.layers.forEach((layer,i)=>{close(f.read(layer,phase).time,f.comp.time+i*.1);close(f.read(layer,phase).value.duration,.8);});
+    f.run({operation:'align',phase,frames:0});for(const layer of f.comp.layers)close(f.read(layer,phase).time,f.comp.time);
+  }
+});
+
+test('v2 duration keeps the entrance start and the exit end',async()=>{
+  const f=await fixture({version:2,count:1}),layer=f.comp.layers[0];
+  f.run({operation:'duration',phase:'in',frames:12});close(f.read(layer,'in').time,1.1);close(f.read(layer,'in').value.duration,.4);
+  f.run({operation:'duration',phase:'out',frames:30});close(f.read(layer,'out').time+f.read(layer,'out').value.duration,8.9);close(f.read(layer,'out').value.duration,1);
+});
+
+test('v2 rejects windows that leave the layer or overlap the other phase, before any write',async()=>{
+  const f=await fixture({version:2}),before=f.snapshot();
+  for(const input of [{phase:'out',frames:40},{phase:'in',frames:-40},{operation:'duration',phase:'in',frames:300},{operation:'align',phase:'in',frames:0}]){
+    if(input.operation==='align')f.comp.time=8.5;
+    assert.equal(f.handler.preflight(f.args(input)).code,'KEYFRAME_CONFLICT',JSON.stringify(input));assert.equal(f.mutations,0);assert.deepEqual(f.snapshot(),before);
+  }
+});
+
+test('v2 ignores a changed Duration slider and rewrites edge anchors with the cue',async()=>{
+  const f=await fixture({version:2,count:1}),layer=f.comp.layers[0];layer.control.value=48;
+  layer.inPoint=1.1;const anchored=f.read(layer,'in');anchored.value.setParameters({...anchored.value.params,'Moti.on.edge':'1.1'});layer.markers.keys=layer.markers.keys.filter(k=>k.value.params['Moti.on.phase']!=='in');layer.markers.setValueAtTime(1.1,anchored.value);
+  f.run({phase:'in',frames:3});const moved=f.read(layer,'in');close(moved.time,1.2);assert.equal(moved.value.params['Moti.on.edge'],undefined);assert.equal(moved.value.params.editor,'keep');
+  f.run({phase:'in',frames:-3});assert.equal(f.read(layer,'in').value.params['Moti.on.edge'],'1.1');
+  layer.inPoint=.5;f.run({phase:'in',frames:3});close(f.read(layer,'in').time,.6,'an anchored entrance moves from the trimmed edge');
+});

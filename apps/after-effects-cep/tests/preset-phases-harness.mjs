@@ -13,8 +13,19 @@ const contracts = await import(`data:text/javascript;base64,${Buffer.from(compil
 const TAG = '[Moti.on.library.v1]';
 const errors = Object.fromEntries(['INVALID_PRESET', 'NO_ACTIVE_COMP', 'NO_SELECTION', 'INVALID_SELECTION_TYPE', 'CAPABILITY_UNAVAILABLE', 'EXPRESSION_CONFLICT', 'ROLLBACK_FAILED'].map(key => [key, key]));
 const hostSource = await readFile(new URL('../host/src/commands/preset-library.jsx', import.meta.url), 'utf8');
+/** Native effects of reveals and looks, with their parameter suffixes as AE 26.5
+ * reports them (scripts/inspect-native-effects.jsx); points default to [0, 0]. */
+const NATIVE_EFFECTS = {
+  'ADBE Linear Wipe': [1, 2, 3], 'ADBE Radial Wipe': [1, 2, [3], 4, 5], 'ADBE Venetian Blinds': [1, 2, 3, 4], 'ADBE Block Dissolve': [1, 2, 3, 4, 5],
+  'CC Grid Wipe': [1, [2], 3, 4, 5, 6, 7], 'CS LineSweep': [1, 2, 3, 4, 5], 'ADBE Noise': [1, 2, 3], 'ADBE Box Blur2': [1, 2, 3, 4],
+  'ADBE Turbulent Displace': [1, 2, 3, [4], 5, 6, 8, 9, 10, 12, 13, 14], 'ADBE HUE SATURATION': [2, 4, 5, 6, 7, 8, 9, 10], 'ADBE Bulge': [1, 2, [3], 4, 5, 6, 7],
+  'ADBE Glo2': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14], 'CS Vignette': [1, 2, [3], 5], 'VISINF Grain Implant': [21, 27, 8, 7, 130, 5, 39], 'ADBE Exposure2': [1, 3, 4, 5],
+  'ADBE Photo Filter': [1, 3, 4], 'CC Ball Action': [6, 7, 9, 10, 1, 8, 11, 12, 5, 4, 2, 3], 'ADBE Posterize': [1], 'ADBE Find Edges': [1, 2],
+  'ADBE Black&White': [1, 2, 3, 4, 5, 6, 7], 'ADBE Easy Levels2': [1, 3, 4, 5, 6, 7, 8, 9], 'ADBE Posterize Time': [1], 'CC Toner': [5, 4]
+};
+const lookSource = await readFile(new URL('../host/src/look-effects.jsx', import.meta.url), 'utf8');
 
-export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
+export async function fixture({ fps = 30, height = 1080, width = 1920, text = false } = {}) {
   let nextId = 1, mutations = 0;
   class MarkerValue {
     constructor(comment) { this.comment = comment; this.params = {}; this.duration = 0; }
@@ -33,12 +44,17 @@ export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
       this.keys.push({time,value:clone(value)});this.keys.sort((a,b)=>a.time-b.time);mutations++;
     }
     removeKey(index) { this.keys.splice(index-1,1);mutations++; }
-    expressionAPI() { return {numKeys:this.numKeys,key:index=>({time:this.keyTime(index),parameters:this.keyValue(index).getParameters()})}; }
+    expressionAPI() { return {numKeys:this.numKeys,key:index=>({time:this.keyTime(index),duration:this.keyValue(index).duration,parameters:this.keyValue(index).getParameters()})}; }
   }
   class Property {
     constructor(name, value, parentProperty) { Object.assign(this, {name, matchName: name, value, parentProperty, canSetExpression: true, expression: '', expressionEnabled: false, expressionError: '', keys: []}); }
     get numKeys() { return this.keys.length; }
-    setValue(value) { assert.equal(this.numKeys, 0, 'do not flatten keys'); this.value = value; mutations++; }
+    setValue(value) {
+      assert.equal(this.numKeys, 0, 'do not flatten keys');
+      // As AE refuses it: a text animator's Skew stops at ±70°.
+      if (this.matchName === 'ADBE Text Skew' && Math.abs(value) > 70) throw new Error('After Effects: Skew value out of range');
+      this.value = value; mutations++;
+    }
     valueAtTime(time, preExpression = false, unitIndex = 0, unitCount = 7) {
       if (!this.expression || !this.expressionEnabled || preExpression) return this.value;
       let layer = this.parentProperty;
@@ -46,8 +62,14 @@ export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
       return vm.runInNewContext(this.expression, {
         time, inPoint: layer.inPoint, outPoint: layer.outPoint, value: this.value, thisComp: comp,
         thisLayer: {marker: layer.markers.expressionAPI()},
-        textIndex: unitIndex + 1, textTotal: unitCount, transform: {scale: layer.transform.property('ADBE Scale').valueAtTime(time, true)},
-        effect: name => index => layer.effects.property(name).property(index).value
+        textIndex: unitIndex + 1, textTotal: unitCount,
+        // As AE reads it: the source string with its style, and the live Anchor Point Grouping.
+        text: layer.text ? {sourceText: Object.assign(new String(layer.sourceText), {style: {fontSize: layer.fontSize ?? 100}}),
+          moreOption: {anchorPointGrouping: layer.text.property('ADBE Text More Options').property('ADBE Text Anchor Point Option').value}} : undefined,
+        // Rotation is read lazily: its own expression evaluates through this context.
+        transform: {scale: layer.transform.property('ADBE Scale').valueAtTime(time, true), anchorPoint: layer.transform.property('ADBE Anchor Point').value, get rotation() { return layer.transform.property('ADBE Rotate Z').valueAtTime(time); }},
+        // AE hands expressions a Property: arithmetic sees its value, typeof never says "number".
+        effect: name => index => { const v = layer.effects.property(name).property(index).value; return Array.isArray(v) ? v : Object.assign(function property() {}, {valueOf: () => v}); }
       });
     }
     setValuesAtTimes(times, values) { this.keys = times.map((time, i) => ({time, value: values[i]})); mutations++; }
@@ -61,7 +83,7 @@ export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
     }
     get numProperties() { return this.children.length; }
     property(key) { return typeof key === 'number' ? this.children[key - 1] : this.children.find(p => p.name === key || p.matchName === key); }
-    canAddProperty(name) { return name === 'ADBE Slider Control' || name === 'ADBE Gaussian Blur 2'; }
+    canAddProperty(name) { return name === 'ADBE Slider Control' || name === 'ADBE Gaussian Blur 2' || name === 'ADBE Point Control' || Object.hasOwn(NATIVE_EFFECTS, name); }
     addProperty(name) {
       let p;
       if (this.matchName === 'ADBE Text Animator Properties') p = new Property(name, 0, this);
@@ -73,6 +95,12 @@ export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
       } else if (name === 'ADBE Gaussian Blur 2') {
         p = new Group(name, this, {'ADBE Gaussian Blur 2-0001': 0, 'ADBE Gaussian Blur 2-0003': 0});
       } else if (name === 'ADBE Slider Control') p = new Group(name, this, {'ADBE Slider Control-0001': 0});
+      else if (name === 'ADBE Point Control') p = new Group(name, this, {'ADBE Point Control-0001': [0, 0]});
+      else if (Object.hasOwn(NATIVE_EFFECTS, name)) {
+        p = new Group(name, this, Object.fromEntries(NATIVE_EFFECTS[name].map(item => [`${name}-${String(Array.isArray(item) ? item[0] : item).padStart(4, '0')}`, Array.isArray(item) ? [0, 0] : 0])));
+        const builtIn = new Group('ADBE Effect Built In Params', p, {'ADBE Effect Mask Opacity': 100});
+        p.children.push(builtIn);
+      }
       else throw new Error(`Unexpected mock property ${name}`);
       p.remove = () => { this.children.splice(this.children.indexOf(p), 1); mutations++; };
       this.children.push(p); mutations++;
@@ -81,22 +109,31 @@ export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
   }
   class Layer {
     constructor(isText) {
-      Object.assign(this, {id: nextId++, name: 'User artwork', comment: 'Keep this comment', inPoint: 0, outPoint: 4, hasVideo: true, nullLayer: false, threeDLayer: false, locked: false, selected: true});
+      Object.assign(this, {id: nextId++, name: 'User artwork', comment: 'Keep this comment', inPoint: 0, outPoint: 4, hasVideo: true, nullLayer: false, threeDLayer: false, locked: false, selected: true, motionBlur: false});
       this.markers = new Markers(this);
       this.effects = new Group('ADBE Effect Parade', this);
       this.transform = new Group('ADBE Transform Group', this, {'ADBE Anchor Point': [50,50,0], 'ADBE Position': [300,200,0], 'ADBE Scale': [100,100,100], 'ADBE Rotate X': 0, 'ADBE Rotate Y': 0, 'ADBE Rotate Z': 0, 'ADBE Opacity': 100});
-      if (isText) { this.sourceText = 'Editable words\rSecond line'; this.text = new Group('ADBE Text Properties', this); this.text.children.push(new Group('ADBE Text Animators', this.text)); }
+      if (isText) {
+        this.sourceText = 'Editable words\rSecond line'; this.text = new Group('ADBE Text Properties', this); { const layer = this, doc = new Property('ADBE Text Document', null, this.text), find = this.text.property.bind(this.text); Object.defineProperty(doc, 'value', {get: () => ({text: String(layer.sourceText), fontSize: layer.fontSize ?? 100}), set() {}}); this.text.property = key => find(key) ?? (key === 'ADBE Text Document' ? doc : undefined); } this._threeDPerChar = false;
+        this.text.children.push(new Group('ADBE Text Animators', this.text));
+        this.text.children.push(new Group('ADBE Text More Options', this.text, {'ADBE Text Anchor Point Option': 1, 'ADBE Text Anchor Point Align': [0, 0]}));
+      }
     }
+    // As in AE, per-character 3D also turns the layer 3D.
+    get threeDPerChar() { return this._threeDPerChar; }
+    set threeDPerChar(v) { this._threeDPerChar = v; if (v) this.threeDLayer = true; }
     get numProperties() { return this.text ? 4 : 3; }
     property(name) { const all = [this.effects, this.transform, this.markers, this.text]; return typeof name === 'number' ? all[name - 1] : all.find(p => p?.matchName === name); }
     sourceRectAtTime() { return {left: 0, top: 0, width: 100, height: 100}; }
   }
   class CompItem {
-    constructor() { Object.assign(this, {id: 100, height, time: .2, frameDuration: 1 / fps, layers: []}); }
+    constructor() { Object.assign(this, {id: 100, width, height, time: .2, frameDuration: 1 / fps, layers: [], motionBlur: false}); }
     get selectedLayers() { return this.layers.filter(l => l.selected); }
+    get numLayers() { return this.layers.length; }
+    layer(index) { return this.layers[index - 1]; }
   }
   const comp = new CompItem(), layer = new Layer(text); comp.layers.push(layer);
-  const scope = await loadHostModules(['src/json.jsx', 'src/registry.jsx']);
+  const scope = await loadHostModules(['src/json.jsx', 'src/registry.jsx', 'src/marker-window.jsx'], {MarkerValue});
   scope.MotionLibraryCore = contracts; scope.MotionLibraryCatalog = contracts.MOTION_LIBRARY_PRESETS;
   const globals = {
     app: {project: {activeItem: comp}}, MarkerValue, CompItem, CameraLayer: class {}, LightLayer: class {}, KeyframeInterpolationType: {LINEAR: 1},
@@ -106,6 +143,7 @@ export async function fixture({ fps = 30, height = 1080, text = false } = {}) {
   layer.containingComp=comp;comp.frameRate=fps;
   const phaseSource=await readFile(new URL('../host/src/commands/preset-phases.jsx',import.meta.url),'utf8');
   new Function('$', ...Object.keys(globals),phaseSource)({global:scope},...Object.values(globals));
+  new Function('$', ...Object.keys(globals), lookSource)({global: scope}, ...Object.values(globals));
   const colorsSource=await readFile(new URL('../host/src/commands/preset-colors.jsx',import.meta.url),'utf8');
   new Function('$', ...Object.keys(globals),colorsSource)({global:scope},...Object.values(globals));
   const handler = id => scope.MotionRegistry.get(`ae.presets.${id}`);

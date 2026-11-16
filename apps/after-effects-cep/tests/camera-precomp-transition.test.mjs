@@ -89,7 +89,7 @@ function fixture({ duration = 8, fps = 30, time = 4, selection = true } = {}) {
 
 async function load(options) {
   const f = fixture(options);
-  const scope = await loadHostModules(['src/json.jsx', 'src/registry.jsx', 'generated/motion-library.jsx', 'src/commands/preset-camera-transition.jsx', 'src/commands/preset-library.jsx'], {
+  const scope = await loadHostModules(['src/json.jsx', 'src/registry.jsx', 'generated/motion-library.jsx', 'src/commands/preset-camera-transition.jsx', 'src/marker-window.jsx', 'src/commands/preset-library.jsx'], {
     ...f, MotionContracts: { ERROR: errorCodes }, MotionLibraryCore: {}, MotionLibraryCatalog: catalog
   });
   const camera = scope.MotionCameraTransition;

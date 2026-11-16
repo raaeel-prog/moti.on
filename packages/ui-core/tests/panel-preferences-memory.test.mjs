@@ -41,6 +41,16 @@ test("aba, galeria e rascunhos sobrevivem a reabrir o painel", () => {
   assert.equal(JSON.parse(storage.data[KEY]).version, 1, "versão mantida: builds anteriores continuam lendo");
 });
 
+test("largura da árvore é opcional, persistente e limitada sem migrar preferências antigas", () => {
+  const storage=memoryStorage();const first=createPanelPreferences(root,storage);
+  assert.equal(first.snapshot().gallery.sidebarWidth,undefined);
+  first.setGallery({sidebarWidth:228});assert.equal(createPanelPreferences(root,storage).snapshot().gallery.sidebarWidth,228);
+  first.setGallery({sidebarWidth:10});assert.equal(first.snapshot().gallery.sidebarWidth,120);
+  first.setGallery({sidebarWidth:1000});assert.equal(first.snapshot().gallery.sidebarWidth,320);
+  first.setGallery({sidebarWidth:Number.NaN});assert.equal(first.snapshot().gallery.sidebarWidth,undefined);
+  assert.equal(JSON.parse(storage.data[KEY]).version,1);
+});
+
 test("aba sem ferramenta aberta e valores estranhos não voltam", () => {
   const storage = memoryStorage({ [KEY]: JSON.stringify({
     version: 1, lastView: "tools",
@@ -107,4 +117,18 @@ test("rascunhos cedem primeiro quando o registro passaria de 32 KB", () => {
   const saved = JSON.parse(storage.data[KEY]);
   assert.ok(storage.data[KEY].length <= 32_768);
   assert.deepEqual(saved.favorites, ["wiggle"]);
+});
+
+test("favoritos e recentes das Ações rápidas sobrevivem a reabrir, e lista vazia é escolha do usuário", () => {
+  const storage = memoryStorage();
+  const first = createPanelPreferences(root, storage);
+  assert.equal(first.snapshot().quickFavorites, null, "sem escolha salva, o painel usa os atalhos padrão");
+  first.setQuickFavorites(["effect-blur", "center", "effect-blur", "../x"]);
+  for (const id of ["center", "fit", "mirror", "freeze", "center", "save-frame"]) first.recordQuickUse(id);
+
+  const reopened = createPanelPreferences(root, storage).snapshot();
+  assert.deepEqual(reopened.quickFavorites, ["effect-blur", "center"]);
+  assert.deepEqual(reopened.quickRecent, ["save-frame", "center", "freeze", "mirror"]);
+  createPanelPreferences(root, storage).setQuickFavorites([]);
+  assert.deepEqual(createPanelPreferences(root, storage).snapshot().quickFavorites, []);
 });

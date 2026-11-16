@@ -5,6 +5,7 @@
   "references": [
     { "path": "./packages/contracts" },
     { "path": "./packages/account-client" },
+    { "path": "./packages/asset-sdk" },
     { "path": "./packages/command-registry" },
     { "path": "./packages/capability-matrix" },
     { "path": "./packages/logging" },

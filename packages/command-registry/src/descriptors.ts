@@ -17,7 +17,7 @@
  */
 import type { CapabilityRequirement, HostId, QuickProfile } from "@motion/contracts";
 
-import { scaleQuickPixelsFrom1080 } from "./quick-defaults.js";
+import { deriveToolStarterArgs, TOOL_OPERATION_QUICK_PROFILES } from "./tool-starter-presets.js";
 
 export interface CommandDescriptor {
   id: string;
@@ -99,7 +99,8 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
     destructive: false, mutates: true, allowsNoopSuccess: true,
     supportsDryRun: false, supportsCancel: false,
-    undoLabelKey: "undo.ae.text.word-reveal", timeoutMs: 60_000
+    undoLabelKey: "undo.ae.text.word-reveal", timeoutMs: 60_000,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.text.word-reveal"]!
   },
   {
     id: "ae.text.variable-morph.read", hosts: ["after-effects"],
@@ -113,14 +114,16 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
     destructive: false, mutates: true, allowsNoopSuccess: true,
     supportsDryRun: false, supportsCancel: false,
-    undoLabelKey: "undo.ae.text.variable-morph", timeoutMs: 60_000
+    undoLabelKey: "undo.ae.text.variable-morph", timeoutMs: 60_000,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.text.variable-morph"]!
   },
   {
     id: "ae.text.style-swap", hosts: ["after-effects"],
     requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
     destructive: false, mutates: true, allowsNoopSuccess: true,
     supportsDryRun: false, supportsCancel: false,
-    undoLabelKey: "undo.ae.text.style-swap", timeoutMs: 60_000
+    undoLabelKey: "undo.ae.text.style-swap", timeoutMs: 60_000,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.text.style-swap"]!
   },
   {
     id: "ae.text.vertical-pulse.read", hosts: ["after-effects"],
@@ -134,7 +137,8 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
     destructive: false, mutates: true, allowsNoopSuccess: true,
     supportsDryRun: false, supportsCancel: false,
-    undoLabelKey: "undo.ae.text.vertical-pulse", timeoutMs: 60_000
+    undoLabelKey: "undo.ae.text.vertical-pulse", timeoutMs: 60_000,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.text.vertical-pulse"]!
   },
   {
     id: "ae.presets.camera-transition", hosts: ["after-effects"],
@@ -310,13 +314,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
        * nove de cada dez vezes. Trocar para vaivém depois não exige
        * reaplicar: o tipo é um dropdown no Effect Controls.
        */
-      derive: () => ({
-        type: "cycle",
-        numKeyframes: 0,
-        duration: 0,
-        useDuration: false,
-        conflictMode: "skip"
-      }),
+      derive: context => deriveToolStarterArgs("ae.expression.loopout", context)!,
       // Base numeric controls; Wiggle also adds axes for vectors and linked scale for Scale.
       liveControls: [
         {
@@ -454,12 +452,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
        * quadros. Cinco amostras equilibram efeito e custo — mais amostras
        * pesam em cada quadro renderizado.
        */
-      derive: () => ({
-        widthSeconds: 0.2,
-        samples: 5,
-        referenceTime: "current",
-        conflictMode: "skip"
-      }),
+      derive: context => deriveToolStarterArgs("ae.expression.smooth", context)!,
       // Base numeric controls; Wiggle also adds axes for vectors and linked scale for Scale.
       liveControls: [
         {
@@ -597,15 +590,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
        * de áudio, Modo Bump (pulsar/piscar) ou Shake (tremer), Bump Min/Max
        * para controle de faixa da propriedade e Shake Freq/Amp.
        */
-      derive: () => ({
-        beatMin: 30,
-        beatMax: 90,
-        mode: 1,
-        bumpMin: 0,
-        bumpMax: 110,
-        shakeFreq: 10,
-        shakeAmp: 30
-      }),
+      derive: context => deriveToolStarterArgs("ae.audio.beat", context)!,
       liveControls: [
         {
           paramId: "beatMin",
@@ -734,14 +719,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
        * 4K, senao o mesmo preset sacode de menos no projeto grande. A frequencia
        * nao escala — 2 Hz e 2 Hz em qualquer resolucao.
        */
-      derive: (context) => ({
-        frequency: 2,
-        amplitude: scaleQuickPixelsFrom1080(20, context),
-        octaves: 1,
-        amplitudeMultiplier: 0.5,
-        seed: 0,
-        conflictMode: "skip"
-      }),
+      derive: context => deriveToolStarterArgs("ae.expression.wiggle", context)!,
       // Base numeric controls; Wiggle also adds axes for vectors and linked scale for Scale.
       liveControls: [
         {
@@ -894,13 +872,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
        * contato — o uso que leva as pessoas a esta ferramenta. Nada aqui escala
        * com resolucao: sao fatores, nao pixels.
        */
-      derive: () => ({
-        rate: 6,
-        minFactor: 0.7,
-        maxFactor: 1,
-        seed: 0,
-        conflictMode: "skip"
-      }),
+      derive: context => deriveToolStarterArgs("ae.expression.flicker", context)!,
       // Base numeric controls; Wiggle also adds axes for vectors and linked scale for Scale.
       liveControls: [
         {
@@ -1109,25 +1081,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
        * A dimensão acompanha a seleção: parentear camadas 3D a um null 2D
        * achata a cena, e é um estrago silencioso.
        */
-      derive: (context) => {
-        const temSelecao = context.selectionLayerCount > 0;
-        return {
-          placement: temSelecao ? "averageAnchor" : "compCenter",
-          dimension: context.selectionIs3D ? "3d" : "2d",
-          parentSelected: temSelecao,
-          preserveWorldTransform: true,
-          // O host exige inteiro de 1 a 10000. Um null de 100 px numa comp 4K
-          // fica pequeno demais para acertar com o mouse, então o tamanho
-          // acompanha a resolução como as amplitudes acompanham.
-          size: Math.max(
-            1,
-            Math.min(10000, Math.round(scaleQuickPixelsFrom1080(100, context)))
-          ),
-          // Rótulo 0 é "sem cor". Escolher um índice de cor aqui seria chutar
-          // qual número é qual cor nesta instalação do After Effects.
-          label: 0
-        };
-      },
+      derive: context => deriveToolStarterArgs("ae.layer.create-null", context)!,
       liveControls: [],
       previewAssetId: "preview.null.controlador",
       oneLine: {
@@ -1164,12 +1118,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
        * mas `derive` existe mesmo assim porque o comando exige os quatro campos
        * e recusa argumento ausente.
        */
-      derive: () => ({
-        axis: "horizontal",
-        pivot: "anchor",
-        groupMode: "each",
-        preserveTextReadability: true
-      }),
+      derive: context => deriveToolStarterArgs("ae.layer.flip", context)!,
       liveControls: [],
       previewAssetId: "preview.flip.horizontal",
       oneLine: {
@@ -1218,17 +1167,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
        * de ignorá-lo, e `preview: false` porque o comando de aplicação exige o
        * campo casando com a própria identidade.
        */
-      derive: () => ({
-        gridPoint: "center",
-        mode: "normal",
-        boundsSource: "visual",
-        timeMode: "currentTime",
-        fixedTime: 0,
-        includeExtents: false,
-        preserveVisualPosition: true,
-        randomSeed: 0,
-        preview: false
-      }),
+      derive: context => deriveToolStarterArgs("ae.anchor.align", context)!,
       liveControls: [],
       previewAssetId: "preview.anchor.centro",
       oneLine: {
@@ -1303,12 +1242,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
        * de empilhamento; levar as ligações junto seria uma segunda operação que
        * ninguém pediu.
        */
-      derive: (context) => ({
-        scope: context.selectionLayerCount >= 2 ? "selected" : "composition",
-        preserveTrackMattes: true,
-        preserveParents: true,
-        reverseTimingToo: false
-      }),
+      derive: context => deriveToolStarterArgs("ae.layer.reverse-order", context)!,
       liveControls: [],
       previewAssetId: "preview.reverseorder.selecao",
       oneLine: {
@@ -1370,7 +1304,8 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.ae.keys.delay",
-    timeoutMs: 30_000
+    timeoutMs: 30_000,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.keys.delay"]!
   },
   {
     id: "ae.keys.ease.apply",
@@ -1476,7 +1411,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
        * com resultados diferentes fariam o clique rápido parecer um comando
        * distinto do botão Aplicar.
        */
-      derive: () => ({ edge: "start", reference: "comp" }),
+      derive: context => deriveToolStarterArgs("ae.keys.send-to-edge", context)!,
       liveControls: [],
       previewAssetId: "preview.sendtoedge.inicio",
       oneLine: {
@@ -1508,6 +1443,33 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     timeoutMs: DEFAULT_TIMEOUT_MS
   },
   {
+    // Copiar a suavização normalizada dos keyframes selecionados (Animation
+    // Composer, Keyframe Actions). Só preenche o clipboard do host.
+    id: "ae.keys.ease-copy",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: false,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.none",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    // Colar a suavização (reescalada para cada trecho) ou só o valor copiado.
+    id: "ae.keys.ease-paste",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.keys.ease-paste",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
     id: "ae.keys.clone",
     hosts: ["after-effects"],
     requirements: ["hasProject", "hasActiveComp"],
@@ -1517,7 +1479,8 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.ae.keys.clone",
-    timeoutMs: DEFAULT_TIMEOUT_MS
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.keys.clone"]!
   },
   {
     id: "ae.time.controller",
@@ -1575,13 +1538,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
        * chama de natural: percebe-se, e para antes de incomodar. Nada aqui
        * escala com resolucao — sao proporcoes do proprio movimento.
        */
-      derive: () => ({
-        amplitude: 60,
-        frequency: 2.5,
-        decay: 6,
-        maxDurationFrames: 120,
-        startMode: "lastKey"
-      }),
+      derive: context => deriveToolStarterArgs("ae.animate.inertial", context)!,
       liveControls: [
         {
           paramId: "amplitude",
@@ -1639,7 +1596,8 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.ae.animate.jump",
-    timeoutMs: DEFAULT_TIMEOUT_MS
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.animate.jump"]!
   },
   {
     // Copiar le e nao muta: sem grupo de Undo, porque nao ha o que desfazer.
@@ -1664,7 +1622,8 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.ae.keys.paste",
-    timeoutMs: 30_000
+    timeoutMs: 30_000,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.keys.paste"]!
   },
   {
     id: "ae.shape.library",
@@ -1678,7 +1637,50 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.ae.shape.library",
-    timeoutMs: DEFAULT_TIMEOUT_MS
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.shape.library"]!
+  },
+  {
+    id: "ae.elements.insert",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    // Cada insercao cria uma pre-comp e uma camada novas; sem camada criada e
+    // falha, nao idempotencia.
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.elements.insert",
+    timeoutMs: 60_000
+  },
+  {
+    id: "ae.sound.insert",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    // Cada insercao cria uma camada de audio nova; sem camada criada e falha.
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.sound.insert",
+    timeoutMs: 30_000
+  },
+  {
+    id: "ae.stock.import",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    // Cada importacao cria uma camada nova (o FootageItem e reaproveitado);
+    // sem camada criada e falha.
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.stock.import",
+    // O download acontece antes, no painel; o host so importa o arquivo local.
+    timeoutMs: 60_000
   },
   {
     id: "ae.shape.trim-path",
@@ -1732,7 +1734,8 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.ae.camera.transition",
-    timeoutMs: DEFAULT_TIMEOUT_MS
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.camera.transition"]!
   },
   {
     id: "ae.3d.cylinder",
@@ -1835,7 +1838,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     allowsNoopSuccess: true,
     supportsDryRun: false,
     supportsCancel: false,
-    undoLabelKey: "undo.ae.animate.parallaxQuick",
+    undoLabelKey: "undo.ae.parallax.adjust",
     timeoutMs: 60_000
   },
   {
@@ -1848,7 +1851,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     allowsNoopSuccess: false,
     supportsDryRun: false,
     supportsCancel: false,
-    undoLabelKey: "undo.ae.animate.parallaxQuick",
+    undoLabelKey: "undo.ae.parallax.move",
     timeoutMs: 60_000
   },
   {
@@ -1861,7 +1864,7 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     allowsNoopSuccess: false,
     supportsDryRun: false,
     supportsCancel: false,
-    undoLabelKey: "undo.ae.animate.parallaxQuick",
+    undoLabelKey: "undo.ae.parallax.remove",
     timeoutMs: 60_000
   },
   {
@@ -1875,7 +1878,8 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.ae.animate.parallaxQuick",
-    timeoutMs: 60_000
+    timeoutMs: 60_000,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.animate.parallax.quick"]!
   },
   {
     id: "ae.3d.look-at",
@@ -1888,7 +1892,8 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.ae.3d.lookAt",
-    timeoutMs: DEFAULT_TIMEOUT_MS
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.3d.look-at"]!
   },
   {
     id: "ae.3d.orbit",
@@ -1901,7 +1906,8 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsCancel: false,
     undoLabelKey: "undo.ae.3d.orbit",
     // Assar percorre a composicao quadro a quadro: precisa de mais folga.
-    timeoutMs: 60_000
+    timeoutMs: 60_000,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.3d.orbit"]!
   },
   {
     id: "ae.effect.echo",
@@ -1964,7 +1970,8 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.ae.vector.aiToVector",
-    timeoutMs: DEFAULT_TIMEOUT_MS
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.vector.ai-to-vector"]!
   },
   {
     id: "ae.parallax.auto-focus",
@@ -2014,6 +2021,93 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     undoLabelKey: "undo.ae.parallax.bake",
     timeoutMs: 30000
   },
+  // Motor de camera (ADR 0007): shots vivos sobre o Parallax ou um rig proprio.
+  {
+    id: "ae.camera.shot.apply",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.camera.shotApply",
+    timeoutMs: 60_000
+  },
+  // Coreografias: le as camadas 3D da cena e escreve uma cadeia de visitas.
+  {
+    id: "ae.camera.choreography.apply",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.camera.choreographyApply",
+    timeoutMs: 120_000
+  },
+  {
+    id: "ae.camera.shot.adjust",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp", "expressionEngine"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.camera.shotAdjust",
+    timeoutMs: 60_000
+  },
+  {
+    id: "ae.camera.shot.remove",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.camera.shotRemove",
+    timeoutMs: 60_000
+  },
+  {
+    id: "ae.camera.remove",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    // Remove a camera e o controle que o proprio motor criou no modo independente.
+    destructive: true,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.camera.remove",
+    timeoutMs: 60_000
+  },
+  {
+    id: "ae.camera.inspect",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: false,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.none",
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  },
+  {
+    id: "ae.camera.bake",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false,
+    mutates: true,
+    allowsNoopSuccess: false,
+    supportsDryRun: false,
+    supportsCancel: false,
+    undoLabelKey: "undo.ae.camera.bake",
+    timeoutMs: 120_000
+  },
   {
     id: "pr.diagnostics.selfTest",
     hosts: ["premiere-pro"],
@@ -2036,7 +2130,16 @@ export const COMMAND_DESCRIPTORS: readonly CommandDescriptor[] = [
     supportsDryRun: false,
     supportsCancel: false,
     undoLabelKey: "undo.ae.vector.textToVector",
-    timeoutMs: DEFAULT_TIMEOUT_MS
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    quickProfile: TOOL_OPERATION_QUICK_PROFILES["ae.vector.text-to-vector"]!
+  },
+  {
+    id: "ae.effect.particles.read",
+    hosts: ["after-effects"],
+    requirements: ["hasProject", "hasActiveComp"],
+    destructive: false, mutates: false, allowsNoopSuccess: false,
+    supportsDryRun: true, supportsCancel: false,
+    undoLabelKey: "undo.none", timeoutMs: DEFAULT_TIMEOUT_MS
   },
   {
     id: "ae.effect.particles",

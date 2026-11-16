@@ -1,0 +1,401 @@
+/*
+ * AE layout layer (layout sprints, 2026-10-30). Loaded last for After Effects, so it settles the
+ * geometry the older layers fought over: spacing and button tokens, one footer shape for every
+ * tool view, and the per-view fixes that cut scrolling. Chromium 99 only: attribute selectors,
+ * flex and grid, no :has/@container/color-mix (ae-css-runtime.test.mjs).
+ */
+[data-host="after-effects"] {
+  --lay-space-1: 4px;
+  --lay-space-2: 8px;
+  --lay-space-3: 12px;
+  --lay-space-4: 16px;
+  --lay-btn-sm: 24px;
+  --lay-btn-md: 28px;
+  --lay-btn-lg: 32px;
+  /* A primary action is sized by its label, inside these bounds, at every dock width. */
+  --lay-btn-min: 96px;
+  --lay-btn-max: 220px;
+  --lay-footer-h: 44px;
+}
+[data-host="after-effects"][data-density="compact"] {
+  --lay-space-3: 10px;
+  --lay-space-4: 12px;
+  --lay-footer-h: 40px;
+}
+
+@media (max-width: 239px) {
+  [data-host="after-effects"] .ch-shell[data-layout="library"] > .ch-nav {
+    gap: var(--lay-space-1); padding-inline: var(--lay-space-1);
+  }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav > .ch-nav__primary,
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav > .ch-nav__utilities { gap: 2px; }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__primary > .ch-nav__item[role="tab"],
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__utilities > .ch-nav__item {
+    flex: 0 0 var(--lay-btn-sm); width: var(--lay-btn-sm); min-width: var(--lay-btn-sm);
+    min-height: var(--lay-btn-sm); height: var(--lay-btn-sm); padding: 0;
+  }
+}
+
+/* ---- Footer: secondary actions left, the primary action right at its natural width. ---- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-actions {
+  display: flex; flex-wrap: nowrap; align-items: center; gap: var(--lay-space-2);
+  min-height: var(--lay-footer-h); box-sizing: border-box; padding: var(--lay-space-2) var(--lay-space-3);
+  border-top: 1px solid var(--border-muted);
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-actions:empty,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-actions[hidden] { display: none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions > .ch-panel-action-bar {
+  flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; justify-content: flex-start; align-items: center; gap: var(--lay-space-2); margin: 0;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions .ch-panel-action-bar > .ch-action,
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions > .ch-action {
+  flex: 0 1 auto; order: 1; width: auto; margin: 0; min-width: 0;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions .ch-action.ch-panel-action-bar__primary {
+  order: 2; margin-left: auto;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions .ch-action-more {
+  order: 1; width: var(--lay-btn-md); height: var(--lay-btn-md);
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions .ch-action-button {
+  width: auto; max-width: 100%; height: var(--lay-btn-md); min-height: var(--lay-btn-md); padding: 0 var(--lay-space-3);
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions .ch-panel-action-bar__primary .ch-action-button {
+  min-width: var(--lay-btn-min); max-width: var(--lay-btn-max); padding: 0 var(--lay-space-4);
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions .ch-action-button__label {
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions[data-tool-footer] {
+  flex-flow: column nowrap; align-items: stretch; gap: var(--lay-space-1);
+}
+[data-host="after-effects"] .ch-tool-action-status {
+  margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.25; overflow-wrap: anywhere;
+}
+[data-host="after-effects"] .ch-tool-action-status:empty { display: none; }
+[data-host="after-effects"] .ch-action-menu__item { flex: 0 0 auto; }
+@media (max-width: 339px) {
+  [data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions {
+    padding: var(--lay-space-1) var(--lay-space-2);
+  }
+  [data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions > .ch-panel-action-bar {
+    gap: var(--lay-space-1);
+  }
+  [data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions .ch-action-button,
+  [data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions .ch-panel-action-bar__primary .ch-action-button {
+    padding-inline: var(--lay-space-2);
+  }
+  [data-host="after-effects"] .ch-shell[data-layout="library"][data-view] .ch-actions .ch-panel-action-bar__primary .ch-action-button {
+    min-width: var(--lay-btn-lg);
+  }
+}
+/* Camera keeps several secondary actions; they wrap above the primary instead of squeezing it. */
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view="parallax"] .ch-actions { flex-wrap: wrap; }
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view="stock"] .ch-actions > .ch-stock-actions { min-width: 0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view="stock"] .ch-stock-actions > .ch-action { flex: 0 0 auto; }
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view="stock"] .ch-stock-actions > .ch-action[hidden] { display: none; }
+@media (max-width:339px) {
+  [data-host="after-effects"] .ch-shell[data-layout="library"][data-view="stock"] .ch-stock-actions .ch-action-button,
+  [data-host="after-effects"] .ch-shell[data-layout="library"][data-view="stock"] .ch-stock-actions .ch-panel-action-bar__primary .ch-action-button { min-width: 0; padding: 0 8px; }
+}
+@media (max-width:239px) {
+  [data-host="after-effects"] .ch-shell[data-layout="library"][data-view="stock"] .ch-actions > .ch-stock-actions {
+    display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px;
+  }
+  [data-host="after-effects"] .ch-shell[data-layout="library"][data-view="stock"] .ch-stock-status { grid-column:1 / -1; }
+  [data-host="after-effects"] .ch-shell[data-layout="library"][data-view="stock"] .ch-stock-status:empty { display:none; }
+  [data-host="after-effects"] .ch-shell[data-layout="library"][data-view="stock"] .ch-stock-actions > .ch-panel-action-bar__primary { grid-column:2; }
+}
+
+/* ---- Quick actions: the category tabs live in the header while the dock is open (no extra row). ---- */
+[data-host="after-effects"] .ch-quick-dock-open-accessory {
+  display: none; align-items: center; flex: 0 1 auto; min-width: 0; margin-left: auto; height: 30px;
+}
+[data-host="after-effects"] .ch-quick-dock[data-open="true"] .ch-quick-dock-open-accessory {
+  display: flex; animation: ch-lay-fade-in .3s ease both;
+}
+[data-host="after-effects"] .ch-quick-dock[data-open="true"] .ch-quick-dock-accessory { margin-left: 0; }
+[data-host="after-effects"] .ch-quick-dock-open-accessory + .ch-quick-dock-pin { margin-left: 0; }
+[data-host="after-effects"] .ch-quick-dock[data-open="true"] .ch-quick-anchor[data-layout="stacked"] { padding-top: var(--lay-space-1); }
+@media (max-width: 339px) {
+  /* The chevron keeps the toggle recognisable; the title gives its room to the tabs. */
+  [data-host="after-effects"] .ch-quick-dock[data-open="true"] .ch-quick-dock-title { display: none; }
+}
+@keyframes ch-lay-fade-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  [data-host="after-effects"] .ch-quick-dock[data-open="true"] .ch-quick-dock-open-accessory { animation: none; }
+}
+[data-reduced-motion="true"] .ch-quick-dock[data-open="true"] .ch-quick-dock-open-accessory { animation: none; }
+
+/* ---- Suavização ---- */
+/* Keyframe operations: three captioned families (Duplicar · Inverter · Cópia invertida), each a well of
+ * buttons naming what they act on; the families share the row in proportion to their buttons. */
+[data-host="after-effects"] .ch-ease-actions { margin: 0 0 var(--lay-space-3); }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-actions__primary {
+  display: flex; gap: var(--lay-space-2); padding: 0; border: 0; border-radius: 0; background: transparent;
+}
+[data-host="after-effects"] .ch-ease-actions .ch-ease-actions__group { display: flex; flex-direction: column; gap: 4px; min-width: 0; margin: 0; }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-actions__group::before { content: none; display: none; }
+[data-host="after-effects"] .ch-ease-actions__group[data-group="duplicate"] { flex: 1 1 0; }
+[data-host="after-effects"] .ch-ease-actions__group[data-group="reverse"] { flex: 2 1 0; }
+[data-host="after-effects"] .ch-ease-actions__group[data-group="mirror"] { flex: 3 1 0; }
+/* Copy/paste and align sit on a second row, so the first keeps its six buttons at 280 px. */
+[data-host="after-effects"] .ch-ease-actions .ch-ease-actions__extra { margin-top: var(--lay-space-2); }
+[data-host="after-effects"] .ch-ease-actions__group[data-group="transfer"] { flex: 3 1 0; }
+[data-host="after-effects"] .ch-ease-actions__group[data-group="align"] { flex: 2 1 0; }
+[data-host="after-effects"] .ch-ease-actions__caption {
+  overflow: hidden; padding: 0 2px; color: var(--text-secondary); font-size: 11px; line-height: 14px; text-overflow: ellipsis; white-space: nowrap;
+}
+[data-host="after-effects"] .ch-ease-actions__buttons {
+  display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line-hairline, var(--ch-border-subtle)); border-radius: 8px; background: var(--bg-3, var(--ch-surface-canvas));
+}
+[data-host="after-effects"] .ch-ease-actions .ch-ease-actions__buttons > .ch-ease-action-control { flex: 1 1 0; min-width: 0; margin: 0; }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-actions__buttons > .ch-ease-action-control::before { content: none; display: none; }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-action { height: 32px; min-height: 32px; color: var(--text-primary); }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-action[aria-disabled="true"] { opacity: 1; color: var(--text-secondary); }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-action[aria-disabled="true"] svg { opacity: .55; }
+[data-host="after-effects"] .ch-ease-action__label { display: none; overflow: hidden; max-width: 100%; font-size: 10px; line-height: 12px; text-overflow: ellipsis; }
+@media (min-width: 360px) {
+  [data-host="after-effects"] .ch-ease-actions .ch-ease-action { height: 44px; min-height: 44px; }
+  [data-host="after-effects"] .ch-ease-action__label { display: block; }
+}
+/* The graph is sized by the height left once the toolbar, values and footer are counted, so Apply
+ * never needs a scroll. When that leaves room beside a narrow graph, X1–Y2 stack there instead of
+ * under it; wider docks give the side to the curve library. */
+[data-host="after-effects"] .ch-ease-editor .ch-curve,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-editor .ch-ease-values {
+  width: min(100%, max(200px, calc(100vh - 340px)));
+}
+@media (min-width: 340px) and (max-width: 479px) and (max-height: 760px) {
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-main { display: flex; flex-wrap: wrap; align-items: flex-start; column-gap: var(--lay-space-3); }
+  [data-host="after-effects"] .ch-ease-editor .ch-curve { flex: 0 0 auto; width: max(200px, min(calc(100% - 100px), calc(100vh - 290px))); }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-editor .ch-ease-values {
+    flex: 1 1 88px; width: auto; min-width: 88px; margin: 34px 0 0; grid-template-columns: minmax(0, 1fr); gap: var(--lay-space-1);
+  }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-main > :not(.ch-curve):not(.ch-ease-values) { flex: 1 0 100%; }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-main > .ch-ease-sides { margin-top: var(--lay-space-2); }
+}
+/* A short or narrow graph keeps the curve's name readable: the mode menu shows its icon only. */
+@media (max-height: 640px), (max-width: 379px) {
+  [data-host="after-effects"] .ch-ease-editor .ch-curve__mode-text { display: none; }
+}
+@media (min-width: 480px) {
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-columns { display: flex; flex-wrap: nowrap; align-items: stretch; gap: var(--lay-space-4); }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-main { flex: 0 1 auto; min-width: 0; }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-library {
+    display: flex; flex-direction: column; flex: 1 1 168px; min-width: 168px; margin-top: 0;
+  }
+  [data-host="after-effects"] .ch-ease-strip { flex: 1 1 auto; min-height: 0; }
+  [data-host="after-effects"] .ch-ease-strip .ch-ease-grid {
+    grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    max-height: calc(100vh - 250px); overflow-x: hidden; overflow-y: auto; -webkit-mask-image: none;
+  }
+}
+
+/* ---- Parallax e câmera: gallery and settings are two panes, Ajustes is one click away. ---- */
+[data-host="after-effects"] .ch-parallax-segments { margin-bottom: var(--lay-space-3); }
+[data-host="after-effects"] .ch-camera-panel { gap: var(--lay-space-3); }
+[data-host="after-effects"] .ch-camera-toolbar { display: flex; align-items: center; gap: var(--lay-space-2); min-width: 0; }
+[data-host="after-effects"] .ch-camera-toolbar > .ch-camera-modes { flex: 0 1 auto; min-width: 0; }
+[data-host="after-effects"] .ch-camera-settings-toggle {
+  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; height: var(--lay-btn-md); min-width: 0; margin-left: auto;
+  padding: 0 10px; border: 1px solid var(--line-hairline, var(--ch-border-subtle)); border-radius: 8px;
+  background: transparent; color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer;
+  transition: color .2s, background-color .2s, border-color .2s;
+}
+[data-host="after-effects"] .ch-camera-settings-toggle:hover { color: var(--text-primary); background: var(--ch-surface-hover); }
+[data-host="after-effects"] .ch-camera-settings-toggle[aria-pressed="true"] { color: var(--text-primary); border-color: var(--ch-accent); background: var(--bg-2, var(--ch-surface-raised)); }
+[data-host="after-effects"] .ch-camera-settings-toggle:focus-visible,
+[data-host="after-effects"] .ch-camera-settings-back:focus-visible { outline: 2px solid var(--ch-accent); outline-offset: 1px; }
+[data-host="after-effects"] .ch-camera-settings-toggle .ch-icon,
+[data-host="after-effects"] .ch-camera-settings-back .ch-icon { width: 14px; height: 14px; flex: 0 0 auto; }
+[data-host="after-effects"] .ch-camera-settings-toggle__meta { color: var(--value-editable, var(--text-secondary)); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Narrow docks keep the icon (values in the tooltip); the values, then the word, come back with room. */
+[data-host="after-effects"] .ch-camera-settings-toggle__label,
+[data-host="after-effects"] .ch-camera-settings-toggle__meta { display: none; }
+[data-host="after-effects"] .ch-camera-settings-toggle { padding: 0 7px; }
+@media (min-width: 440px) {
+  [data-host="after-effects"] .ch-camera-settings-toggle { padding: 0 10px; }
+  [data-host="after-effects"] .ch-camera-settings-toggle__meta { display: inline; }
+}
+@media (min-width: 600px) { [data-host="after-effects"] .ch-camera-settings-toggle__label { display: inline; } }
+[data-host="after-effects"] .ch-camera-settings-head { display: flex; align-items: center; gap: var(--lay-space-2); min-width: 0; }
+[data-host="after-effects"] .ch-camera-settings-back {
+  display: inline-grid; place-items: center; flex: 0 0 auto; width: var(--lay-btn-md); height: var(--lay-btn-md); padding: 0;
+  border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer;
+}
+[data-host="after-effects"] .ch-camera-settings-back:hover { color: var(--text-primary); background: var(--ch-surface-hover); }
+[data-host="after-effects"] .ch-camera-settings-head__title { min-width: 0; overflow: hidden; color: var(--text-primary); font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+[data-host="after-effects"] .ch-camera-panel[data-pane="settings"] .ch-camera-section { animation: ch-lay-fade-in .25s ease both; }
+[data-reduced-motion="true"] .ch-camera-panel[data-pane="settings"] .ch-camera-section { animation: none; }
+@media (prefers-reduced-motion: reduce) { [data-host="after-effects"] .ch-camera-panel[data-pane="settings"] .ch-camera-section { animation: none; } }
+[data-host="after-effects"] .ch-camera-section[data-pane="settings"] > .ch-section-title { display: none; }
+[data-host="after-effects"] .ch-camera-grid { margin-bottom: 0; }
+/* Cards stay small enough that seven choreographies fit a 720 px tall dock without scrolling. */
+@media (min-width: 480px) {
+  [data-host="after-effects"] .ch-camera-choreos .ch-camera-grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); }
+}
+/* Card previews read as a scene (backdrop, subjects, title), not as grey placeholders. */
+[data-host="after-effects"] .ch-camera-card__preview { background: #17191d; }
+[data-host="after-effects"] .ch-camera-plane--background { fill: #2a2e35; }
+[data-host="after-effects"] .ch-camera-plane--subject { fill: #6f8098; }
+[data-host="after-effects"] .ch-camera-plane--text { fill: #eceff3; }
+[data-host="after-effects"] .ch-camera-card:hover .ch-camera-plane--subject,
+[data-host="after-effects"] .ch-camera-card[aria-pressed="true"] .ch-camera-plane--subject { fill: #86a2c6; }
+:root[data-theme="light"] [data-host="after-effects"] .ch-camera-card__preview { background: #dfe2e6; }
+:root[data-theme="light"] [data-host="after-effects"] .ch-camera-plane--background { fill: #c9ced5; }
+:root[data-theme="light"] [data-host="after-effects"] .ch-camera-plane--subject { fill: #7d8da3; }
+:root[data-theme="light"] [data-host="after-effects"] .ch-camera-plane--text { fill: #2b2f36; }
+
+/* ---- Wide docks: content uses the whole dock (the 620 px cap left an empty strip on the right);
+ * forms keep a readable measure instead. ---- */
+[data-host="after-effects"] .ch-shell--comfort[data-layout="library"] .ch-content,
+[data-host="after-effects"] .ch-shell--wide[data-layout="library"] .ch-content { max-width: none; }
+[data-host="after-effects"] .ch-camera-panel[data-pane="settings"] > .ch-camera-section,
+[data-host="after-effects"] .ch-camera-panel[data-pane="settings"] > .ch-camera-settings-head { max-width: 560px; }
+
+/* ---- Presets: what is selected on top, then the library actions and the thumbnail size at the left
+ * and the apply actions at the right; the apply actions drop to their own row only when they do not
+ * fit, and from 640 px everything is one row. ---- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--lay-space-2) var(--lay-space-3); padding: var(--lay-space-2) var(--lay-space-3);
+}
+[data-host="after-effects"] .ch-preset-reference-footer > .ch-preset-selection-summary {
+  flex: 1 0 100%; flex-direction: row; flex-wrap: nowrap; align-items: baseline; justify-content: flex-start; gap: var(--lay-space-2); min-width: 0;
+}
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-selected-name { flex: 0 1 auto; max-width: 60%; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-selection-status { display: block; flex: 0 1 auto; max-width: none; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-selection-status:empty { display: none; }
+[data-host="after-effects"] .ch-preset-reference-footer > .ch-preset-library-actions { flex: 0 0 auto; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-preview-controls { flex: 0 0 auto; width: auto; min-width: 0; max-width: none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-applybar { flex: 0 0 auto; margin-left: auto; justify-self: auto; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-library-actions > .ch-button {
+  min-height: var(--lay-btn-sm); height: var(--lay-btn-sm); padding: 0 8px; border-radius: 6px;
+}
+/* Thumbnail size reads as one: small square, slider, large square. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-size {
+  gap: 6px; width: auto; min-width: 0; max-width: none; flex: 0 0 auto; color: var(--text-secondary);
+}
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::before,
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::after {
+  content: ""; flex: 0 0 auto; box-sizing: border-box; border: 1.5px solid currentColor; border-radius: 2px; opacity: .8;
+}
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::before { width: 8px; height: 8px; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::after { width: 12px; height: 12px; }
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"] { flex-basis: 64px; width: 64px; min-width: 64px; max-width: 64px; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-phase-actions { width: auto; flex: 0 0 auto; gap: var(--lay-space-1); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-phase-actions .ch-action-button {
+  height: var(--lay-btn-md); min-height: var(--lay-btn-md); min-width: 64px; padding: 0 var(--lay-space-3);
+}
+@media (min-width: 640px) {
+  [data-host="after-effects"] .ch-preset-reference-footer > .ch-preset-selection-summary { flex: 1 1 0; min-width: 120px; }
+}
+@media (max-width: 339px) {
+  [data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::before,
+  [data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::after { display: none; }
+  [data-host="after-effects"] .ch-preset-reference-footer input[type="range"] { flex-basis: 48px; width: 48px; min-width: 48px; max-width: 48px; }
+}
+
+/* ---- Wide docks: content uses the whole dock (the 620 px cap left an empty strip on the right);
+ * forms keep a readable measure instead. ---- */
+[data-host="after-effects"] .ch-shell--comfort[data-layout="library"] .ch-content,
+[data-host="after-effects"] .ch-shell--wide[data-layout="library"] .ch-content { max-width: none; }
+[data-host="after-effects"] .ch-camera-panel[data-pane="settings"] > .ch-camera-section,
+[data-host="after-effects"] .ch-camera-panel[data-pane="settings"] > .ch-camera-settings-head { max-width: 560px; }
+
+/* ---- Presets: the footer is two rows at most (one from 640 px): what is selected on top, then the
+ * library actions and the thumbnail size at the left and the apply actions at the right. ---- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer {
+  /* Row one says what is selected; row two holds every control, the apply action at the right. */
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "summary summary summary summary" "library size . apply";
+  align-items: center; gap: var(--lay-space-2) var(--lay-space-3); padding: var(--lay-space-2) var(--lay-space-3);
+}
+[data-host="after-effects"] .ch-preset-reference-footer > .ch-preset-selection-summary {
+  grid-area: summary; flex-direction: row; flex-wrap: nowrap; align-items: baseline; justify-content: flex-start; gap: var(--lay-space-2); min-width: 0;
+}
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-selected-name { flex: 0 1 auto; max-width: 60%; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-selection-status { display: block; flex: 0 1 auto; max-width: none; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-selection-status:empty { display: none; }
+[data-host="after-effects"] .ch-preset-reference-footer > .ch-preset-library-actions { grid-area: library; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-preview-controls { grid-area: size; width: auto; min-width: 0; max-width: none; }
+[data-host="after-effects"] .ch-preset-reference-footer > .ch-preset-applybar,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-applybar { grid-area: apply; justify-self: end; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-library-actions > .ch-button {
+  min-height: var(--lay-btn-sm); height: var(--lay-btn-sm); padding: 0 8px; border-radius: 6px;
+}
+/* Thumbnail size reads as one: small square, slider, large square. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-size {
+  gap: 6px; width: auto; min-width: 0; max-width: none; flex: 0 0 auto; color: var(--text-secondary);
+}
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::before,
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::after {
+  content: ""; flex: 0 0 auto; box-sizing: border-box; border: 1.5px solid currentColor; border-radius: 2px; opacity: .8;
+}
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::before { width: 8px; height: 8px; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::after { width: 12px; height: 12px; }
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"] { flex-basis: 64px; width: 64px; min-width: 64px; max-width: 64px; }
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-phase-actions { width: auto; flex: 0 0 auto; gap: var(--lay-space-1); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-phase-actions .ch-action-button {
+  height: var(--lay-btn-md); min-height: var(--lay-btn-md); min-width: 72px; padding: 0 var(--lay-space-3);
+}
+@media (min-width: 640px) {
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer {
+    grid-template-columns: minmax(0, 1fr) auto auto auto; grid-template-areas: "summary library size apply";
+  }
+}
+@media (max-width: 339px) {
+  /* Three Entrada/Saída/Ambos buttons need their own row at the narrowest dock. */
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer {
+    grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "summary summary summary" "library . size" "apply apply apply";
+  }
+}
+@media (max-width: 339px) {
+  [data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::before,
+  [data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::after { display: none; }
+  [data-host="after-effects"] .ch-preset-reference-footer input[type="range"] { flex-basis: 48px; width: 48px; min-width: 48px; max-width: 48px; }
+}
+
+/* ---- Início: the tile columns spread across the dock, so no ragged empty strip on the right. ---- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-grid { justify-content: space-between; column-gap: 6px; }
+
+/* ---- Scroll edges: a soft shade says there is more above or below; it disappears at the ends
+ * (local backgrounds cover it), so nothing moves and no script measures the scroll. ---- */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-grid,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-content {
+  background:
+    linear-gradient(var(--bg-host) 30%, transparent) center top / 100% 28px no-repeat local,
+    linear-gradient(transparent, var(--bg-host) 70%) center bottom / 100% 28px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, .5), transparent) center top / 100% 10px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, .5), transparent) center bottom / 100% 10px no-repeat scroll;
+  background-color: var(--bg-host);
+}
+:root[data-theme="light"] [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-grid,
+:root[data-theme="light"] [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-content {
+  background:
+    linear-gradient(var(--bg-host) 30%, transparent) center top / 100% 28px no-repeat local,
+    linear-gradient(transparent, var(--bg-host) 70%) center bottom / 100% 28px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, .14), transparent) center top / 100% 10px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, .14), transparent) center bottom / 100% 10px no-repeat scroll;
+  background-color: var(--bg-host);
+}
+
+/* A rendered preview sits on black: a frame the panel fails to paint shows the
+   video's own background, never the grey card behind it. */
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-preview[data-media="true"] { background:#000; }
+
+/* The shared preview players sit over a still that is never hidden, and stay
+   invisible until they have painted a frame: no empty box, no grey. */
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-preview { position:relative; overflow:hidden; }
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-preview>.ch-preset-player { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; background:#000; border-radius:inherit; pointer-events:none; }
+[data-host="after-effects"] .ch-preset-direction-tile { position:relative; }
+[data-host="after-effects"] .ch-preset-direction-tile>.ch-preset-tile-player { position:absolute; top:2px; left:2px; width:calc(100% - 4px); height:auto; aspect-ratio:2/1; object-fit:cover; background:#000; border-radius:var(--radius-small); pointer-events:none; }
+[data-host="after-effects"] .ch-preset-directions[data-view="list"] .ch-preset-direction-tile>.ch-preset-tile-player { display:none; }
+[data-host="after-effects"] .ch-preset-player[data-shown="false"], [data-host="after-effects"] .ch-preset-tile-player[data-shown="false"] { opacity:0; }
+/* A card whose still or drawing has not arrived yet shows a quiet skeleton
+   sweep instead of an empty black box (the still's own black would hide a
+   plain background, so it is an overlay). Reduced motion keeps it still. */
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-preview[data-loading="true"]::after { content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(100deg, #101010 35%, #1a1a1a 50%, #101010 65%) 0 0 / 300% 100%; animation:ch-preset-skeleton 1.2s linear infinite; }
+@keyframes ch-preset-skeleton { from { background-position:100% 0; } to { background-position:-50% 0; } }
+[data-reduced-motion="true"] [data-host="after-effects"] .ch-preset-gallery .ch-preset-preview[data-loading="true"]::after, [data-host="after-effects"][data-reduced-motion="true"] .ch-preset-gallery .ch-preset-preview[data-loading="true"]::after { animation:none; background:#141414; }
+@media (prefers-reduced-motion: reduce) { [data-host="after-effects"] .ch-preset-gallery .ch-preset-preview[data-loading="true"]::after { animation:none; background:#141414; } }

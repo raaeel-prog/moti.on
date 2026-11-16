@@ -48,6 +48,23 @@ export function createAccountClient(options: AccountClientOptions): AccountClien
     }
     return response.body;
   }
+  /**
+   * Stock media BFF. Unlike account routes, a 403/404/409/429 here is about the media request
+   * (license gate, provider off, quota), so it must not discard the session.
+   */
+  async function assets(body: Record<string, unknown>): Promise<unknown> {
+    if (!user) throw new AccountError("SIGN_IN_REQUIRED");
+    requireConfig();
+    const expected = epoch;
+    if (!accessToken || now() >= accessExpires - 30_000) await refreshAuth();
+    ensureEpoch(expected);
+    const response = await options.transport.request({ method: "POST", url: `${config!.url}/functions/v1/motion-assets`, headers: { apikey: config!.publishableKey, "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body });
+    ensureEpoch(expected);
+    if (response.status >= 200 && response.status < 300) return response.body;
+    if (response.status === 401) { accessToken = ""; accessExpires = 0; throw new AccountError("SESSION_EXPIRED"); }
+    const code = object(response.body) && typeof response.body["error"] === "string" && /^[A-Z_]{3,40}$/.test(response.body["error"]) ? response.body["error"] : response.status >= 500 ? "SERVICE_UNAVAILABLE" : "REQUEST_REJECTED";
+    throw new AccountError(code);
+  }
   async function verifyLease(candidate: unknown): Promise<void> {
     if (!signedLease(candidate)) throw new AccountError("LEASE_INVALID");
     let parsed: unknown; try { parsed = JSON.parse(candidate.payload); } catch { throw new AccountError("LEASE_INVALID"); }
@@ -150,6 +167,7 @@ export function createAccountClient(options: AccountClientOptions): AccountClien
     async refresh() { await attempt(async () => { await refreshAuth(); await license("status"); if (licenseState === "inactive") await license("activate"); }); },
     async activateDevice() { await attempt(() => license("activate")); },
     async deactivateDevice(target) { await attempt(() => license("deactivate", target)); },
+    async assets(body) { try { return await assets(body); } catch (caught) { throw new AccountError(safeCode(caught)); } },
     canMutate() { const result = permitted(); if (result) lastSeen = Math.max(lastSeen, now()); return result; },
     async enqueue(kind, id, value, deleted = false) { if (!user) throw new AccountError("SIGN_IN_REQUIRED"); await sync.enqueue(kind, id, value, deleted); emit(); },
     async importLocal(records) { if (!user) throw new AccountError("SIGN_IN_REQUIRED"); await sync.importLocal(records); emit(); },

@@ -1,7 +1,7 @@
 export interface ScrubbableNumberOptions {
   /** An invisible, larger press area, such as the numeric row around the value. */
   hitTarget?: HTMLElement;
-  /** Horizontal pixels per normal increment. Shift slows the gesture tenfold. */
+  /** Horizontal pixels per normal increment. Ctrl/Alt slow the gesture tenfold, Shift speeds it up. */
   pixelsPerStep?: number;
   /** Pointer movement required before a click becomes a drag. */
   dragThreshold?: number;
@@ -51,7 +51,8 @@ export function attachCompactNumberEditing(input: HTMLInputElement): () => void 
 
 /** Enhance an existing numeric field without owning its validation or host state.
  * A click selects the value for typing; horizontal dragging and ↑/↓ change the local draft.
- * Shift is fine, Alt/Option is coarse. Return cleanup to dispose with the view.
+ * After Effects convention: Shift is coarse (×10), Ctrl/Cmd or Alt/Option is fine (×0.1).
+ * Return cleanup to dispose with the view.
  */
 export function attachScrubbableNumber(input: HTMLInputElement, options: ScrubbableNumberOptions = {}): () => void {
   const doc = input.ownerDocument;
@@ -153,7 +154,8 @@ export function attachScrubbableNumber(input: HTMLInputElement, options: Scrubba
     input.value = next;
     publish();
   }
-  function modifier(event: MouseEvent | KeyboardEvent): number { return event.shiftKey ? 0.1 : event.altKey ? 10 : 1; }
+  function isFine(event: MouseEvent | KeyboardEvent): boolean { return event.ctrlKey || event.metaKey || event.altKey; }
+  function modifier(event: MouseEvent | KeyboardEvent): number { return event.shiftKey ? 10 : isFine(event) ? 0.1 : 1; }
   function finish(cancel: boolean): void {
     const current = gesture;
     if (!current) return;
@@ -196,7 +198,7 @@ export function attachScrubbableNumber(input: HTMLInputElement, options: Scrubba
     const { min, max, step } = current.limits;
     current.value = Math.max(min, Math.min(max, current.value + (event.clientX - current.lastX) / pixels * step * modifier(event)));
     current.lastX = event.clientX;
-    setValue(current.value, event.shiftKey, current.limits);
+    setValue(current.value, isFine(event), current.limits);
   }
   function start(event: MouseEvent | PointerEvent, pointer: boolean): void {
     if (unavailable() || event.button !== 0 || (pointer && (event as PointerEvent).isPrimary === false)) return;
@@ -249,7 +251,7 @@ export function attachScrubbableNumber(input: HTMLInputElement, options: Scrubba
     const sign = wheel.deltaY < 0 ? 1 : -1;
     const scale = modifier(wheel);
     const increment = step >= 1 ? Math.max(step, step * scale) : step * scale;
-    setValue(value + sign * increment, wheel.shiftKey);
+    setValue(value + sign * increment, isFine(wheel));
     commit();
   }, removers, { passive: false });
   listen(input, "focus", () => { input.setAttribute("data-number-editing","true");focusDraft = input.value; lastCommitted = input.value; });
@@ -281,7 +283,7 @@ export function attachScrubbableNumber(input: HTMLInputElement, options: Scrubba
     const sign = key.key === "ArrowUp" || key.key === "PageUp" ? 1 : -1;
     const scale = key.key.startsWith("Page") ? 10 : modifier(key);
     const increment = step >= 1 ? Math.max(step, step * scale) : step * scale;
-    setValue(value + sign * increment, key.shiftKey);
+    setValue(value + sign * increment, isFine(key));
     commit();
   });
   syncAria();

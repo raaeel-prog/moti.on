@@ -1,6 +1,7 @@
 # ADR 0004 — Identidade necessária para reparar o rig Parallax
 
 - **Status:** proposta; implementação pendente
+- **Atualização 2026-10-18:** o motor de câmera ([ADR 0007](0007-motor-de-camera.md)) adota o master v3 por `compId`/`cameraId`, não por nome. O Parallax passou a gravar `pluginVersion`. A identidade v4 dos membros, o reparo e `set-focus` continuam pendentes.
 - **Data:** 2026-09-21
 - **Escopo:** `ae.parallax.create-null` e `ae.parallax.set-focus` da §16 do `MASTER_BUILD_SPEC.md`
 

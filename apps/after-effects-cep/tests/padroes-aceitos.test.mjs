@@ -36,6 +36,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 import { loadHostModules } from "./host-harness.mjs";
+import { getToolStarterDraft } from "../../../packages/command-registry/dist/index.js";
 
 const MAIN = new URL("../client/src/main.ts", import.meta.url);
 const orbitBundle = await build({entryPoints: [fileURLToPath(new URL("../client/src/orbit-presets.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", write: false});
@@ -51,6 +52,10 @@ const {DEFAULT_ORBIT} = await import(`data:text/javascript;base64,${Buffer.from(
  * repositório.
  */
 const NAO_AVALIAVEL = new Map([
+  ["ae.effect.particles", "o editor envia apenas campos alterados a partir do rig lido; particle-edit-session.test.mjs, particle-styles.test.mjs e particles.test.mjs cobrem defaults, payload, schema e preflight"],
+  ["ae.elements.insert", "o editor envia so o que difere do padrao do elemento escolhido; elements-editor.test.mjs verifica o payload e elements-insert.test.mjs compara o preflight do host com elementInsertError"],
+  ["ae.stock.import", "a aba Banco de mídia monta os argumentos do ticket do servidor (stockImportArgs); stock-library-ui.test.mjs confere com stockImportError e stock-import.test.mjs compara com o preflight do host"],
+  ["ae.sound.insert", "a pasta Sons envia so o id do som e os ajustes alterados (soundDraftArgs); sound-insert.test.mjs compara o preflight do host com soundInsertError"],
   ["ae.tools.adjust", "os argumentos sao montados pelo managed-tools-editor a partir dos controles gerenciados lidos do host; nao existe padrao do painel para verificar"],
   ["ae.ui.color-picker", "o argumento é a cor atual do seletor do painel e o resultado vem de um diálogo modal do sistema; color-picker.test.mjs cobre o fluxo e o host valida #rrggbb no preflight"],
   ["ae.effect.gradient", "o editor dedicado monta settings e changedKeys a partir da leitura e do gesto; gradient-ui.test.mjs, gradient.test.mjs e contratos/gradient.test.mjs verificam os valores padrao, schema e preflight"],
@@ -122,6 +127,9 @@ function recortarBloco(fonte, aPartirDe) {
  */
 function lerPadroes(fonte) {
   const padroes = new Map();
+  for (const match of fonte.matchAll(/^const (DEFAULT_[A-Z_0-9]+):[^=\n]+ = getToolStarterDraft<[^>]+>\("([^"]+)"\);/gm)) {
+    padroes.set(match[1], getToolStarterDraft(match[2]));
+  }
   const re = /^const (DEFAULT_[A-Z_0-9]+): [A-Za-z]+ = (?=\{)/gm;
   let m;
   while ((m = re.exec(fonte)) !== null) {
@@ -217,7 +225,12 @@ const MODULOS = [
   "src/selection-signature.jsx",
   "src/transform-math.jsx",
   "src/effect-operations.jsx",
-  "src/rig-meta.jsx"
+  "src/rig-meta.jsx",
+  "generated/camera-library.jsx",
+  // Emulsion: o comando le o manifesto e o runtime do pack ao carregar.
+  "generated/emulsion-manifest.jsx",
+  "../../../packs/emulsion-v2/runtime.jsx",
+  "src/camera/camera-rig.jsx"
 ];
 
 async function carregarHost() {

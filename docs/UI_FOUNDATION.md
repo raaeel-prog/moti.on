@@ -1,5 +1,33 @@
 # Fundação Visual — CrossHost Workstation
 
+## After Effects — direção de 22/10/2026
+
+No AE, esta direção substitui a paleta fixa e as linhas de ferramentas da revisão anterior. O Premiere conserva sua aparência atual.
+
+- Origem canônica: `packages/ui-tokens/src/after-effects.css`, anexada apenas ao CSS do AE; espelho gerado em `shared/after-effects.tokens.json`.
+- Tema automático acompanha `appSkinInfo` e `ThemeColorChanged`, com fundo exato do host e superfícies derivadas com contraste verificado. Fallback da captura: fundo `#323232`, campos `#262626`, elevado `#393939`, divisórias `#4a4a4a`, texto `#dddddd`; azul discreto em foco e valores. Claro/Escuro continuam disponíveis manualmente.
+- Ferramentas mantém categorias e quadradinhos com ícones de 56 px (44 px compacto), gap de 8 px, nome/descrição no tooltip e clique rápido. Ajustes têm comando separado ao hover/foco; menu contextual por botão direito ou Shift+F10.
+- Um único inspetor de 300 px a partir de 720 px; em larguras menores, controles no conteúdo com a barra de busca/filtros preservada. Conteúdo rola e ações permanecem visíveis.
+- Presets conserva miniaturas e abas Navegar/Editar sempre visíveis. Aplicação confirmada abre Editar; falhas mantêm a biblioteca. Busca, filtros, rolagem e rascunhos são preservados. Ferramentas reutilizam o padrão de números/sliders expansíveis, resets e controles do editor.
+- Presets segue a gravação de 22/10: busca e árvore fixa à esquerda, divisória arrastável, miniaturas 16:9 à direita e rodapé fixo com Ações de presets, tamanho das miniaturas e Entrada/Saída/Ambos. Ajustes abrem como continuação do card, na mesma largura, sobrepondo a grade. SOMENTE clique no card ou ícone abre as opções, e SOMENTE clique escolhe a direção. Hover não altera seleção, direção nem menu. Sair com o cursor mantém o menu aberto; Escape/clique fora/rolagem efetiva fecham. "Ver todas" expõe as prévias e ajustes existentes. Autoplay anima miniaturas visíveis com um agendador de 30 fps, sem depender de hover. Esta direção substitui a versão anterior dos popovers. Ver `docs/implementation/2026-10-22-preset-library-video.md`.
+- Evitar caixas em torno de cada seção. Tipografia de sistema, controles de 28 px, alvos mínimos de 24 px, espaços 4/8/12/16 px. Movimento explica estados e respeita movimento reduzido.
+- Os resultados de checks, navegador, integridade da instalação e runtime Adobe são evidências separadas. Ver `docs/implementation/2026-10-22-ae-workstation.md`.
+
+### Movimento do AE — 23/10/2026 (substitui o teto de 320 ms no AE)
+
+Aprovado pelo responsável em 23/10: levar ao painel inteiro o movimento das Ações rápidas, **só movimento** — o visual continua neutro (paleta acima; sem cor por categoria, brilho que segue o cursor ou degradê fora do dock aprovado).
+
+- Fonte: tokens em `packages/ui-tokens/src/after-effects.css` (bloco `:root[data-host="after-effects"]`), catálogo AE em `apps/after-effects-cep/client/src/motion/catalog.ts` (IDs a partir de 36; o catálogo compartilhado continua com 35) e regras em `packages/ui-core/src/ae-motion.css`.
+- Curvas: mola `--ease-spring` (.34, 1.56, .64, 1), deslize `--ease-glide` (.2, .8, .2, 1), folha `--ease-sheet` (.32, 1.12, .5, 1). Overshoot só em elementos de até 32 px (pílula, chips, toggles, estrela, toast); superfícies grandes deslizam.
+- Orçamentos: transições até 360 ms; movimento espacial (posição/tamanho) até 480 ms com mola, deslize ou folha; altura só no `height-glide`; laços infinitos só para progresso real.
+- Movimento reduzido efetivo (`interno OR sistema`) zera tudo: os helpers JS leem `data-reduced-motion` e vão direto ao estado final.
+- CEP 12 roda Chromium 99: nada de `color-mix()`, `:has()`, `@container`, `linear()`, `@starting-style` ou `scale:`/`translate:` separados (`ae-css-runtime.test.mjs`).
+- Plano e fases: `docs/implementation/2026-10-23-motion-f0.md`, `2026-10-23-motion-f1-f5.md` e `2026-10-24-motion-f6-f9.md`.
+- Seleções em grupo (abas, chips, segmentos, menus, paleta) usam um único destaque que desliza (`selection-glide`), nunca cada item acendendo sozinho.
+- Atalhos do painel: 1–5 trocam de tela, Ctrl/Cmd+K abre a paleta de comandos; números arrastáveis seguem o AE (Shift ×10, Ctrl/Alt ×0,1).
+- Dicas: todo controle com `title`/`data-tip` ganha a dica rica (nome, `<kbd>`, motivo); ícones de interface vêm de `ui-icons.ts` (16 px, traço 1,33 px).
+
+
 > **Atualização normativa (2026-09-02):** `docs/ADDENDUM_A_QUICK_UX_SPEC.md`
 > substitui os detalhes de interação, acessibilidade, cor e movimento das
 > seções §22.3/§22.4 do MASTER. A fonte executável dos tokens agora é
@@ -20,8 +48,9 @@ abaixo, esta prevalece.
   (`--ease-pop`, ~6 %) a partir da origem e saem mais rápido, sem overshoot;
   entrar numa ferramenta desliza para frente e "← Ferramentas" desliza para trás;
   a grade entra em cascata curta (no máximo 12 passos de 18 ms) ao abrir a tela
-  ou trocar de filtro, nunca a cada tecla da busca. Transições até 320 ms;
-  feedback até 420 ms; o único laço é progresso real (spinner). Movimento
+  ou trocar de filtro, nunca a cada tecla da busca. Transições até 320 ms
+  (no AE: até 360 ms, e movimento espacial até 480 ms — ver "Movimento do AE —
+  23/10/2026"); feedback até 420 ms; o único laço é progresso real (spinner). Movimento
   reduzido remove ripple, deslocamentos e cascatas e mostra o ✓ pronto.
 - **Seletor de cor no painel**: os campos de cor não dependem mais do
   `<input type=color>` nativo, que não abre no painel mínimo de 280×280. O

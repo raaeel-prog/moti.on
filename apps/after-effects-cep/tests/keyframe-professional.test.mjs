@@ -117,8 +117,9 @@ test('multi-property clone selects every mirrored copy after sibling recreation 
 });
 test('rollback restores sibling selection including a property not yet written', async () => {
  const a=prop('Rotation',[4,5,7]), b=prop('Opacity',[6]), c=prop('Scale',[6]), properties=[a,b,c];
- const layer={inPoint:1,outPoint:10,locked:false};
- for (const property of properties) property.parentProperty=layer;
+ // O dispatch reencontra a propriedade pelo caminho (layer.property(indice)) para restaurar a selecao.
+ const layer={inPoint:1,outPoint:10,locked:false,property:index=>properties[index-1]??null};
+ properties.forEach((property,i)=>{property.parentProperty=layer;property.propertyIndex=i+1;});
  a.keys[0].selected=false; a.keys[1].label=5;
  a.expression='value*2'; a.expressionEnabled=true;
  clearSiblingSelectionOnRecreation(properties);

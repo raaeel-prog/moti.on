@@ -5,8 +5,8 @@ import { MOTION_LIBRARY_DEFAULTS, isMotionLibraryOptions } from '../dist/motion-
 import { libraryChoreography, libraryEase } from '../dist/motion-library-math.js';
 
 test('authored collection provides distinct 2D, perspective and text choreography', () => {
-  assert.equal(presets.length, 41);
-  for (const [category, count] of [['motion-2d',6],['motion-3d',6],['text-characters',12],['text-words',10],['text-lines',7]]) {
+  assert.equal(presets.length, 49);
+  for (const [category, count] of [['motion-2d',6],['motion-3d',14],['text-characters',12],['text-words',10],['text-lines',7]]) {
     assert.equal(presets.filter(p => p.category === category).length, count, category);
   }
   const paths = new Set(presets.map(p => p.choreography.path));

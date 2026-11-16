@@ -4,15 +4,16 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { createCepDocument } from './cep-dom.mjs';
 import { createI18n } from '../../../packages/ui-core/dist/i18n.js';
-import { cloneGradientSettings, GRADIENT_PRESETS } from '../../../packages/contracts/dist/index.js';
+import { cloneGradientSettings, createGradientSettings, GRADIENT_PRESETS } from '../../../packages/contracts/dist/index.js';
 const built = await build({ entryPoints: [fileURLToPath(new URL('../client/src/gradient-editor.ts', import.meta.url))], bundle: true, platform: 'node', format: 'esm', write: false });
 const ui = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 const response = data => ({ protocolVersion:1, requestId:'gradient-test', ok:true, data, warnings:[], error:null });
 const data = (applied = 0, override = {}) => ({ settings:applied ? cloneGradientSettings() : null, selectionToken:'comp1/layer1/time0', selectionCount:1, appliedCount:applied,
   instances:Array.from({length:applied},(_,i)=>({layerId:i+1,layerName:`Layer ${i+1}`,effectIndex:1,settings:cloneGradientSettings(),lockedKeys:[]})), mixedKeys:[], lockedKeys:[], capabilities:{nativeAvailable:true}, ...override });
 const tick = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
-function fixture(t, initial = data(), locale='pt-BR', overrides={}) {
+function fixture(t, initial = data(), locale='pt-BR', overrides={}, setupDoc) {
   const doc=createCepDocument(),calls=[],busy=[],storageData=new Map();
+  setupDoc?.(doc);
   let current=initial, context={isComposition:true,signature:'context1'};
   const storage={getItem:key=>storageData.get(key)??null,setItem:(key,value)=>storageData.set(key,value)};
   const editor=ui.createGradientEditor(doc,{i18n:createI18n({locale}),storage,context:()=>context,
@@ -43,15 +44,17 @@ test('read guard rejects malformed host payloads before draft hydration',()=>{
  assert.equal(ui.isGradientReadData(data(1)),true);
  for(const d of [null,{},data(2),data(1,{lockedKeys:['untrusted']}),data(1,{settings:{schemaVersion:2}}),data(1,{instances:[]}),data(1,{capabilities:{nativeAvailable:'yes'}})]) assert.equal(ui.isGradientReadData(d),false);
 });
-test('eight authored presets, a custom default and five disclosure sections render in both locales', async t=>{
+test('fourteen authored presets, premium Aurora default and five disclosure sections render in both locales', async t=>{
  for(const locale of ['pt-BR','en-US']) {
   const f=fixture(t,data(),locale);await f.editor.refresh();
   const sections=f.editor.element.getElementsByTagName('details').filter(v=>v.id.startsWith('gradient-section-'));
   assert.equal(sections.length,5);assert.equal(sections[0].open,true);assert.ok(sections.slice(1).every(v=>!v.open));
   const options=f.select('gradient-preset').getElementsByTagName('option');
   assert.deepEqual(options.filter(option=>option.value!=='custom').map(option=>option.value),GRADIENT_PRESETS.map(recipe=>recipe.id));
-  assert.equal(options.filter(option=>option.value==='custom').length,1);
-  assert.equal(f.select('gradient-preset').value,'custom');
+  assert.equal(options.filter(option=>option.value==='custom').length,0);
+  assert.equal(f.select('gradient-preset').value,'aurora');
+  assert.equal(f.select('gradient-animation').value,'loop'); assert.equal(f.input('gradient-duration').value,'6');
+  assert.equal(f.editor.element.getElementsByTagName('canvas').length,1);
   assert.equal(f.editor.element.getElementsByTagName('input').filter(v=>v.type==='checkbox').length,8);
   assert.equal(f.calls.length,0);
  }
@@ -64,13 +67,13 @@ test('native missing, no composition, no selection and empty removals have visib
  f.button('gradient-background').click();await tick();assert.equal(f.calls[0].action,'create-background');assert.equal(f.calls[0].selectionToken,undefined);
  f.setContext({isComposition:false,signature:'none'});await f.editor.refresh();assert.match(f.editor.element.allText,/Abra uma composição/);
 });
-test('typing and dragging preview locally; one host update is emitted only on commit',async t=>{
+test('typing and dragging remain local until explicit Apply, including existing instances',async t=>{
  const f=fixture(t,data(1));await f.editor.refresh();
  const angle=f.input('gradient-angle');angle.value='45';angle.emit('input');assert.equal(f.calls.length,0);angle.emit('change');await tick();
- assert.equal(f.calls.length,1);assert.deepEqual(f.calls[0].changedKeys,['angle']);assert.equal(f.calls[0].settings.angle,45);
+ assert.equal(f.calls.length,0);f.button('gradient-apply').click();await tick();assert.equal(f.calls.length,1);assert.deepEqual(f.calls[0].changedKeys,['angle']);assert.equal(f.calls[0].settings.angle,45);
  const marker=f.editor.element.getElementsByTagName('button').find(v=>v.dataset.slot==='0');
  marker.emit('pointerdown',{pointerId:4,button:0});marker.emit('pointermove',{pointerId:4,clientX:90});assert.equal(f.calls.length,1);
- marker.emit('pointerup',{pointerId:4});await tick();assert.equal(f.calls.length,2);assert.deepEqual(f.calls[1].changedKeys,['stops.0.position']);assert.equal(f.calls[1].settings.stops[0].position,.5);
+ marker.emit('pointerup',{pointerId:4});await tick();assert.equal(f.calls.length,1);f.button('gradient-apply').click();await tick();assert.equal(f.calls.length,2);assert.deepEqual(f.calls[1].changedKeys,['stops.0.position']);assert.equal(f.calls[1].settings.stops[0].position,.5);
 });
 test('stop keyboard controls honor fine/coarse modifiers and cancelled gestures do not mutate',async t=>{
  const f=fixture(t,data());await f.editor.refresh();const marker=f.editor.element.getElementsByTagName('button').find(v=>v.dataset.slot==='0');
@@ -83,7 +86,16 @@ test('mixed selection updates only edited keys; floating HDR colors are preserve
  const settings=cloneGradientSettings();settings.stops[0].color=[2.5,-.1,.005];
  const f=fixture(t,data(1,{settings,mixedKeys:['angle','stops.0.color'],lockedKeys:['depth']}));await f.editor.refresh();
  assert.equal(f.input('gradient-depth').disabled,true);f.change('gradient-glow',55);await tick();
+ assert.equal(f.calls.length,0);f.button('gradient-apply').click();await tick();
  assert.equal(f.calls.length,1);assert.deepEqual(f.calls[0].changedKeys,['glow']);assert.deepEqual(f.calls[0].settings.stops[0].color,[2.5,-.1,.005]);
+});
+
+test('native Float32 roundtrips retain every original recipe label without hiding real edits',async t=>{
+ for(const recipe of GRADIENT_PRESETS){
+  const settings=JSON.parse(JSON.stringify(createGradientSettings(recipe.id),(_key,value)=>typeof value==='number'?Math.fround(value):value));
+  const f=fixture(t,data(1,{settings}));await f.editor.refresh();assert.equal(f.select('gradient-preset').value,recipe.id,recipe.id);
+  settings.angle+=.5;f.setData(data(1,{settings}));await f.editor.refresh();assert.equal(f.select('gradient-preset').value,'custom');
+ }
 });
 test('invalid numeric input survives reads, blocks apply and never sends a host command',async t=>{
  const f=fixture(t,data());await f.editor.refresh();f.change('gradient-duration','abc');
@@ -111,7 +123,30 @@ test('personal presets validate storage and report unavailable writes; saved rec
  assert.equal(ui.writeGradientLibrary(undefined,stored),false);
  assert.deepEqual(ui.readGradientLibrary({getItem:()=>'{broken'}),[]);
  assert.deepEqual(ui.readGradientLibrary({getItem:()=>JSON.stringify([{id:'custom-1',name:'bad',settings:{}}])}),[]);
- assert.equal(GRADIENT_PRESETS.length,8);
+ assert.equal(GRADIENT_PRESETS.length,14);
+});
+
+test('new defaults and reset never replace existing settings until explicitly chosen',async t=>{
+ const f=fixture(t,data(1));await f.editor.refresh();
+ assert.equal(f.select('gradient-animation').value,'static');assert.equal(f.input('gradient-duration').value,'4');
+ assert.equal(f.input('gradient-angle').value,'0');assert.equal(f.calls.length,0);
+ f.button('gradient-reset').click();await tick();
+ assert.equal(f.calls.length,0);f.button('gradient-apply').click();await tick();
+ assert.equal(f.calls.length,1);assert.equal(f.calls[0].settings.animation,'loop');assert.equal(f.calls[0].settings.duration,6);
+ assert.equal(f.calls[0].settings.angle,-18);
+});
+
+test('numeric input changes the full preview locally and Escape restores the rendered committed value',async t=>{
+ const pending=new Map(),painted=[];let id=0;
+ const f=fixture(t,data(1),'en-US',{},doc=>{
+   doc.defaultView={requestAnimationFrame(fn){pending.set(++id,fn);return id;},cancelAnimationFrame(key){pending.delete(key);}};
+   const create=doc.createElement.bind(doc);doc.createElement=tag=>{const node=create(tag);if(tag==='canvas')node.getContext=()=>({createImageData(w,h){return{data:new Uint8ClampedArray(w*h*4)};},putImageData(image){painted.push([...image.data]);}});return node;};
+ });await f.editor.refresh();
+ const frame=time=>{const work=[...pending.values()];pending.clear();work.forEach(fn=>fn(time));};
+ frame(0);const before=painted.at(-1);assert.ok(before);
+ const angle=f.input('gradient-angle');angle.value='80';angle.emit('input');frame(80);
+ assert.notDeepEqual(painted.at(-1),before);assert.equal(f.calls.length,0);
+ angle.keydown('Escape');frame(160);assert.deepEqual(painted.at(-1),before);assert.equal(f.calls.length,0);
 });
 test('remove targets the captured selection and unrelated action cannot duplicate a running mutation',async t=>{
  let finish;const f=fixture(t,data(1),'pt-BR',{execute:args=>{f.calls.push(args);return new Promise(r=>{finish=r;});}});await f.editor.refresh();
@@ -127,6 +162,7 @@ test('returning to a focused but committed field reads external Effect Controls 
 test('a preset preserves locked expression fields while applying all editable differences in one update',async t=>{
  const f=fixture(t,data(1,{lockedKeys:['angle','stops.0.color']}));await f.editor.refresh();
  const preset=f.select('gradient-preset');preset.value='ember';preset.emit('change');await tick();
+ assert.equal(f.calls.length,0);f.button('gradient-apply').click();await tick();
  assert.equal(f.calls.length,1);assert.equal(f.calls[0].action,'update');assert.ok(!f.calls[0].changedKeys.includes('angle'));
  assert.ok(!f.calls[0].changedKeys.includes('stops.0.color'));assert.equal(f.calls[0].settings.angle,0);
  assert.deepEqual(f.calls[0].settings.stops[0].color,cloneGradientSettings().stops[0].color);
@@ -138,4 +174,24 @@ test('personal preset storage failures are visible and never report success',asy
  assert.match(f.editor.element.allText,/Não foi possível salvar/);
  assert.deepEqual(f.select('gradient-preset').getElementsByTagName('option').map(option=>option.value),initialOptions);
  assert.deepEqual(ui.readGradientLibrary(f.storage),[]);
+});
+
+test('palettes show twelve families and apply only colors, keeping the gradient shape', async t=>{
+  const f=fixture(t,data(1));await f.editor.refresh();await tick();
+  const box=f.editor.element.getElementsByTagName('details').find(v=>v.id==='gradient-palettes');
+  assert.ok(box);assert.equal(box.open,false,'closed until asked');
+  const buttons=()=>box.getElementsByTagName('button');
+  const families=buttons().filter(v=>v.dataset.family),swatches=()=>buttons().filter(v=>v.dataset.palette);
+  assert.equal(families.length,12);assert.equal(swatches().length,8);
+  assert.ok(swatches().every(v=>v.dataset.palette.startsWith('violet-')));
+  const teal=families.find(v=>v.dataset.family==='teal');teal.click();
+  assert.equal(teal.getAttribute('aria-pressed'),'true');assert.ok(swatches().every(v=>v.dataset.palette.startsWith('teal-')));
+  assert.match(swatches()[0].getAttribute('aria-label'),/Verde-água · Profundo/);
+  swatches().find(v=>v.dataset.palette==='teal-duotone').click();await tick();
+  assert.equal(f.calls.length,0,'palette remains a draft until Apply');f.button('gradient-apply').click();await tick();
+  const update=f.calls.find(call=>call.action==='update');
+  assert.ok(update,'explicit Apply updates the existing gradient');
+  assert.ok(update.changedKeys.every(key=>key.startsWith('stops.')),`only colors: ${update.changedKeys}`);
+  assert.equal(update.settings.stops.filter(stop=>stop.enabled).length,2);
+  assert.equal(update.settings.mode,'linear','shape untouched');
 });

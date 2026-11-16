@@ -73,5 +73,6 @@
 .ch-action-menu[data-side="below"] { transform-origin:top right; }
 .ch-action-menu__item { display:flex; align-items:center; min-height:28px; padding:0 var(--s2); border:0; border-radius:var(--radius-small); background:transparent; color:var(--txt-1); font:inherit; font-size:var(--font-label); text-align:left; cursor:pointer; }
 .ch-action-menu__item:hover, .ch-action-menu__item:focus-visible { background:var(--surface-hover); outline:none; }
+.ch-action-menu[data-glide="true"] > .ch-action-menu__item:hover, .ch-action-menu[data-glide="true"] > .ch-action-menu__item:focus-visible { background:transparent; }
 .ch-action-menu__item[aria-disabled="true"] { color:var(--txt-3); cursor:not-allowed; }
 .ch-action-menu__item[data-tone="destructive"] { color:var(--danger); }

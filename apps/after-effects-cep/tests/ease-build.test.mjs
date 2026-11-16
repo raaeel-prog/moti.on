@@ -6,7 +6,7 @@ const build = { durationFrames: 15, useOpacity: true, opacityFrom: 0, opacityTo:
 const curve = { x1: 0.25, y1: 0.1, x2: 0.25, y2: 1, applyIn: true, applyOut: true };
 class FakeComp { constructor(layers) { this.selectedLayers = layers; this.time = 1; this.duration = 5; this.frameDuration = 1 / 30; } }
 class FakeProperty {
-  constructor(value) { this.value = value; this.keys = []; this.canVaryOverTime = true; this.expressionEnabled = false; }
+  constructor(value) { this.value = value; this.propertyValueType = 6417; this.keys = []; this.canVaryOverTime = true; this.expressionEnabled = false; }
   get numKeys() { return this.keys.length; }
   keyTime(i) { return this.keys[i - 1].time; }
   keyValue(i) { return this.keys[i - 1].value; }
@@ -32,6 +32,7 @@ async function setup(layers = [layer()]) {
   const comp = new FakeComp(layers);
   await loadHostModules(["src/commands/keys-ease.jsx"], {
     app: { project: { activeItem: comp } }, CompItem: FakeComp,
+    PropertyValueType: {OneD:6417,COLOR:6418},
     KeyframeInterpolationType: { LINEAR: 1, BEZIER: 2 },
     KeyframeEase: class { constructor(speed, influence) { this.speed = speed; this.influence = influence; } },
     MotionContracts: { ERROR: { INVALID_PRESET: "INVALID_PRESET", HOST_OPERATION_FAILED: "HOST_OPERATION_FAILED", ROLLBACK_FAILED: "ROLLBACK_FAILED" } },
@@ -40,6 +41,7 @@ async function setup(layers = [layer()]) {
       isSupportedProperty: p => p instanceof FakeProperty,
       captureProperty: property => ({ property, keys: structuredClone(property.keys) }),
       restoreProperty: snapshot => { snapshot.property.keys = structuredClone(snapshot.keys); },
+      restoreSelections() {},
       curveToEase: () => ({ inSpeed: 0, outSpeed: 0, inInfluence: 25, outInfluence: 25 })
     }
   });

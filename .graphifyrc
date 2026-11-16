@@ -1,0 +1,3 @@
+# Native Adobe headers contain C++ declarations.
+language.h=cpp
+viz_node_limit=15000

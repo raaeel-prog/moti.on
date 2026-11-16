@@ -44,6 +44,7 @@ const CATALOGADOS_SEM_IMPLEMENTACAO = new Map([
  * catalogado, e listá-los inflaria a tabela sem informar ninguém.
  */
 const IMPLEMENTADOS_FORA_DO_CATALOGO = new Map([
+  ["ae.effect.particles.read", "Leitura sem mutacao dos controles do rig de particulas da secao ae.effect.particles; nao e uma ferramenta independente."],
   ["ae.quick-tools.apply", "Atalhos migrados do FX Studio a pedido do usuario em 2026-09-14; contrato em docs/research/fx-studio-quick-actions.md."],
   ["ae.quick-tools.save-frame", "Exportacao PNG do FX Studio, separada por nao alterar o projeto nem criar Undo; contrato em docs/research/fx-studio-quick-actions.md."],
   ["ae.effect.gradient.read", "Leitura auxiliar dos controles, selecao e capacidades de Gradientes; consumida pelo editor."],
@@ -59,7 +60,9 @@ const IMPLEMENTADOS_FORA_DO_CATALOGO = new Map([
   ["ae.keys.reverse", "Mirror de keyframes, coberto pela §15.5 em vez do §13."],
   ["ae.keys.reverse-values", "Inversão de valores, coberta pela §15.5."],
   ["ae.keys.clone", "Duplicar/Duplicar+Inverter, cobertos pela §15.5."],
-  ["ae.keys.send-to-edge", "Enviar ao começo/final, cobertos pela §15.5."],
+  ["ae.keys.send-to-edge", "Enviar ao começo/final e alinhar ao cursor, cobertos pela §15.5."],
+  ["ae.keys.ease-copy", "Copiar suavização (Keyframe Actions do Animation Composer), coberto pela §15.5."],
+  ["ae.keys.ease-paste", "Colar suavização ou valor (Keyframe Actions do Animation Composer), coberto pela §15.5."],
   ["ae.keys.ease.apply", "Editor de curva da §15, coberto lá."],
   ["ae.anchor.align", "Alinhador de âncora da §14, coberto lá."],
   ["ae.camera.transition", "Transições de câmera da §17, cobertas lá."],

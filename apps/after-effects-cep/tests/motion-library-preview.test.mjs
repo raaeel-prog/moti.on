@@ -25,15 +25,28 @@ test('camera overlay previews start neutral, peak at CUT, and settle without fad
   }
 });
 
+// The card glyph spans x -36..36 and y -35..22 around (160, 98) in a 320x180 frame.
+function hiddenByGeometry(s){
+  if(Math.abs(s.sx)<1e-9||Math.abs(s.sy)<1e-9)return true;
+  const r=s.rz*Math.PI/180,points=[[-36,-35],[36,-35],[-36,22],[36,22]].map(([x,y])=>{const a=x*s.sx,b=y*s.sy;return [160+s.x+a*Math.cos(r)-b*Math.sin(r),98+s.y+a*Math.sin(r)+b*Math.cos(r)];});
+  return points.every(p=>p[0]<0)||points.every(p=>p[0]>320)||points.every(p=>p[1]<0)||points.every(p=>p[1]>180);
+}
 test('every transition previews a transparent start, readable rest and transparent exit',()=>{
   const transitions=GALLERY_PRESETS.filter(p=>p.motion?.mode==='transition'&&!p.motion.effect.startsWith('camera-'));
-  assert.equal(transitions.length,149);
+  assert.equal(transitions.length,365);
   for(const {motion:p} of transitions){
     const o={...defaultLibraryOptions(p),phase:'both'},end=libraryPreviewEnd(o);
     for(let index=0;index<7;index++){
-      assert.equal(librarySample(p,o,0,index,7).opacity,0,`${p.id} start`);
-      assert.equal(librarySample(p,o,end/2,index,7).opacity,1,`${p.id} rest`);
-      assert.equal(librarySample(p,o,end,index,7).opacity,0,`${p.id} exit`);
+      const start=librarySample(p,o,0,index,7),rest=librarySample(p,o,end/2,index,7),exit=librarySample(p,o,end,index,7);
+      assert.equal(rest.opacity,1,`${p.id} rest`);
+      if(p.fade){assert.equal(start.opacity,0,`${p.id} start`);assert.equal(exit.opacity,0,`${p.id} exit`);continue;}
+      // Reveals are hidden by their effect: full completion at both edges, none at rest.
+      if(p.collection==='reveal'){assert.ok(start.weight>=1-1e-9&&exit.weight>=1-1e-9,`${p.id} edges fully covered`);assert.ok(Math.abs(rest.weight)<1e-9,`${p.id} rest uncovered`);continue;}
+      // Only Momentum recipes skip the fade: out of frame or at zero scale instead.
+      assert.equal(p.collection,'momentum',`${p.id} must fade`);
+      assert.ok(hiddenByGeometry(start),`${p.id} start must be out of frame or flat`);
+      assert.ok(hiddenByGeometry(exit),`${p.id} exit must be out of frame or flat`);
+      assert.ok(Math.abs(rest.x)<1e-9&&Math.abs(rest.y)<1e-9&&Math.abs(rest.rz)<1e-9&&Math.abs(rest.sx-1)<1e-9&&Math.abs(rest.sy-1)<1e-9,`${p.id} rest pose`);
     }
   }
 });
@@ -89,7 +102,7 @@ test('premium trajectories differ in travel, twist, squash and depth without a d
     const o=defaultLibraryOptions(p);
     return [.12,.32,.56,.8].map(t=>librarySample(p,o,o.durationFrames/30*t,2,7)).map(s=>[s.x,s.y,s.z,s.rx,s.ry,s.rz,s.sx,s.sy,s.opacity].map(n=>n.toFixed(5)).join(',')).join('|');
   });
-  assert.equal(new Set(signatures).size,41);
+  assert.equal(new Set(signatures).size,49);
   const p=presets.find(p=>p.motion.id==='premium-arc-arrival').motion,o=defaultLibraryOptions(p);
   const a=librarySample(p,o,.25),b=librarySample(p,o,.6);
   assert.ok(Math.abs(a.x*b.y-a.y*b.x)>1,'arc curves rather than just rising');

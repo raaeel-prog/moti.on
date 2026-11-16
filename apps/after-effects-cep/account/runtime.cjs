@@ -33,7 +33,7 @@ exports.createRuntime = function createRuntime(openBrowser) {
   const transport = { request(request) {
     return new Promise((resolve, reject) => {
       let url; try { url = new URL(request.url); } catch { reject(new Error("INVALID_URL")); return; }
-      if (url.origin !== origin || url.protocol !== "https:" || url.username || url.password || !/^\/(auth\/v1\/|functions\/v1\/motion-account)/.test(url.pathname)) { reject(new Error("INVALID_URL")); return; }
+      if (url.origin !== origin || url.protocol !== "https:" || url.username || url.password || !/^\/(auth\/v1\/|functions\/v1\/motion-(account|assets)$)/.test(url.pathname)) { reject(new Error("INVALID_URL")); return; }
       const body = request.body === undefined ? "" : JSON.stringify(request.body);
       if (Buffer.byteLength(body) > 1048576) { reject(new Error("REQUEST_TOO_LARGE")); return; }
       const call = https.request(url, { method: request.method, headers: request.headers, timeout: 15000 }, response => {

@@ -16,6 +16,12 @@
   function option(camera, name) { return camera.property("ADBE Camera Options Group").property(name); }
   /** @param {string} message @returns {never} */
   function reject(message) { throw new Error(message); }
+  /** @param {string} message @returns {never} */
+  function invalid(message) {
+    var error = /** @type {Error & {motionCode?: string}} */ (new Error(message));
+    error.motionCode = MotionContracts.ERROR.INVALID_PRESET;
+    throw error;
+  }
   /** @param {any} value @returns {any} */
   function copy(value) { return MotionJson.parse(MotionJson.stringify(value)); }
   /** @param {any} a @param {any} b @returns {boolean} */
@@ -35,6 +41,47 @@
     for (var i = 0; i < values.length; i += 1) {
       if (typeof values[i] !== "number" || !isFinite(values[i])) reject("Parallax: transformacao invalida.");
     }
+  }
+  /** The camera engine (ADR 0007) owns this property through its managed expression.
+   * @param {any} p @returns {boolean} */
+  function engineOwned(p) { return !!p && typeof MotionCameraRig !== "undefined" && MotionCameraRig.isAnyManaged(p.expression); }
+  /** Depth order: rank 0 sits nearest the camera, the last rank is the background.
+   * "area" puts the biggest plane at the back and the smallest in front.
+   * Keep metadata in its original identity order; ranks read current timeline indices.
+   * @param {any[]} layers @param {any[]} originals @param {string} mode @param {number} time @param {string} orderMode @param {boolean} reverse @returns {number[]} */
+  function depthRanks(layers, originals, mode, time, orderMode, reverse) {
+    /** @type {number[]} */
+    var order = [];
+    /** @type {number[]} */
+    var area = [];
+    /** @type {number[]} */
+    var ranks = [];
+    var i;
+    for (i = 0; i < layers.length; i += 1) order.push(i);
+    if (orderMode === "timeline") order.sort(function (a, b) { return layers[a].index - layers[b].index; });
+    if (mode === "area") {
+      for (i = 0; i < layers.length; i += 1) {
+        if (typeof layers[i].sourceRectAtTime !== "function") reject("Parallax: a camada nao expoe limites para ordenar por tamanho. Use a ordem da timeline.");
+        var r = layers[i].sourceRectAtTime(time, false), sc = originals[i].scale;
+        var size = r ? Math.abs(r.width * sc[0] * r.height * sc[1]) / 10000 : NaN;
+        if (!isFinite(size) || size <= 0) reject("Parallax: limites de camada invalidos para ordenar por tamanho. Use a ordem da timeline.");
+        area.push(size);
+      }
+      order.sort(function (a, b) { return (Number(area[a]) - Number(area[b])) || (orderMode === "timeline" ? layers[a].index - layers[b].index : a - b); });
+    }
+    if (reverse) order.reverse();
+    for (i = 0; i < order.length; i += 1) ranks[Number(order[i])] = i;
+    return ranks;
+  }
+  /** "linear" spaces planes evenly; "front" opens the gaps near the camera. The
+   * background may sit behind the focal plane (back > 0): it then grows to keep
+   * the framing, so more of the scene parallaxes against it.
+   * @param {number} rank @param {number} n @param {number} total @param {string} mode @param {number} back @returns {number} */
+  function depthAt(rank, n, total, mode, back) {
+    if (rank === n - 1 && back > 0) return back;
+    if (mode === "front") { var s = (n - 1 - rank) / (n - 1); return -total * s * s; }
+    // Same arithmetic as rigs created before the depth modes, so they adjust identically.
+    return -total * (n - 1 - rank) / (n - 1);
   }
   /** @param {any} property @returns {any} */
   function raw(property) {
@@ -170,27 +217,38 @@
   }
   /** @param {any} args @returns {any} */
   function plan(args) {
-    var active = app.project.activeItem;
-    if (!(active instanceof CompItem)) reject("Abra uma composicao.");
-    var comp = /** @type {any} */ (active);
     /** @type {Record<string, number>} */
-    var allowed = {depthStep: 1, strength: 1, orderMode: 1, createCamera: 1, preserveFraming: 1, controllerName: 1};
-    for (var key in args) if (!allowed[key]) reject("Parallax: argumento invalido.");
+    var allowed = {depthStep: 1, strength: 1, orderMode: 1, createCamera: 1, preserveFraming: 1, controllerName: 1, depthMode: 1, backgroundDepth: 1, reverseOrder: 1};
+    if (!args || typeof args !== "object") invalid("Parallax: parametros invalidos.");
+    for (var key in args) if (!Object.prototype.hasOwnProperty.call(allowed, key)) invalid("Parallax: argumento invalido: " + key + ".");
+    if ((args.reverseOrder !== undefined && typeof args.reverseOrder !== "boolean") ||
+        (args.depthMode !== undefined && args.depthMode !== "linear" && args.depthMode !== "front" && args.depthMode !== "area") ||
+        (args.backgroundDepth !== undefined && (typeof args.backgroundDepth !== "number" || !isFinite(args.backgroundDepth) || args.backgroundDepth < 0 || args.backgroundDepth > 0.5))) {
+      invalid("Parallax: distribuicao de profundidade invalida.");
+    }
     if (typeof args.depthStep !== "number" || !isFinite(args.depthStep) || args.depthStep < 0 || args.depthStep > 100000 ||
         typeof args.strength !== "number" || !isFinite(args.strength) || args.strength < 0 || args.strength > 10 ||
         (args.orderMode !== "timeline" && args.orderMode !== "selection") || typeof args.createCamera !== "boolean" ||
         args.preserveFraming !== true || typeof args.controllerName !== "string" || !args.controllerName.length || args.controllerName.length > 120) {
-      reject("Parallax: parametros invalidos; preservar enquadramento deve estar ativo.");
+      invalid("Parallax: parametros invalidos; preservar enquadramento deve estar ativo.");
     }
+    var active = app.project.activeItem;
+    if (!(active instanceof CompItem)) reject("Abra uma composicao.");
+    var comp = /** @type {any} */ (active);
     var rig = existing(comp);
     /** @type {any[]} */
     var layers = [];
     var originals = [];
     var i;
     if (rig) {
-      if (!rig.data.originals || rig.data.originals.length < 2 || rig.master.locked) reject("Parallax: metadata incompleta ou controle bloqueado.");
+      if (!rig.data.originals || rig.data.originals.length < 2 || rig.data.originals.length > 64 || !rig.data.applied ||
+          rig.data.applied.length !== rig.data.originals.length || rig.master.locked) reject("Parallax: metadata incompleta ou controle bloqueado.");
+      var identities = /** @type {Record<string, boolean>} */ ({});
       for (i = 0; i < rig.data.originals.length; i += 1) {
         var original = rig.data.originals[i];
+        if (!original || typeof original.id !== "number" || identities[original.id] ||
+            !rig.data.applied[i] || rig.data.applied[i].id !== original.id) reject("Parallax: identidade de camada duplicada ou metadata incompleta.");
+        identities[original.id] = true;
         var member = byId(comp, original.id);
         validateLayer(member, true);
         var current = snapshot(member);
@@ -217,19 +275,24 @@
         }
       }
       var camera = byId(comp, rig.data.cameraId);
+      var zoomProp = camera ? option(camera, "ADBE Camera Zoom") : null;
+      // The camera engine drives Zoom through its own expression; the reference
+      // is the value under it.
+      var zoomVal = zoomProp ? (zoomProp.numKeys ? zoomProp.keyValue(1) : zoomProp.valueAtTime(comp.time, true)) : null;
       if (!camera || comp.activeCamera !== camera || camera.locked || (rig.data.schemaVersion === 3 ? camera.parent !== rig.master : camera.parent) || !camera.enabled ||
           camera.inPoint > 0 || camera.outPoint < comp.duration || camera.autoOrient !== AutoOrientType.NO_AUTO_ORIENT ||
           !equal(prop(camera, "ADBE Orientation").value, [0, 0, 0]) ||
           prop(camera, "ADBE Rotate X").value !== 0 || prop(camera, "ADBE Rotate Y").value !== 0 || prop(camera, ROT).value !== 0 ||
-          !equal(option(camera, "ADBE Camera Zoom").value, rig.data.frame.zoom)) {
+          !equal(zoomVal, rig.data.frame.zoom)) {
         reject("Parallax: a camera de referencia foi alterada ou esta indisponivel.");
       }
-      requireStatic(option(camera, "ADBE Camera Zoom"));
+      if (!engineOwned(zoomProp) && (!rig.data.motion || !zoomProp.numKeys)) requireStatic(zoomProp);
       var cameraNames = ["ADBE Orientation", "ADBE Rotate X", "ADBE Rotate Y", ROT];
       for (var cn = 0; cn < cameraNames.length; cn += 1) requireStatic(prop(camera, /** @type {string} */ (cameraNames[cn])));
       if (comp.width / 2 !== rig.data.frame.cx || comp.height / 2 !== rig.data.frame.cy) reject("Parallax: a composicao mudou de tamanho. Use a montagem original.");
       var cameraPosition = prop(camera, POS);
-      if (cameraPosition.expression || cameraPosition.dimensionsSeparated) reject("Parallax: a camera tem expressao ou dimensoes separadas.");
+      var managedWiggle = typeof MotionExpressions !== "undefined" && MotionExpressions.isManagedParallaxWiggle && MotionExpressions.isManagedParallaxWiggle(cameraPosition.expression);
+      if ((cameraPosition.expression && !managedWiggle) || cameraPosition.dimensionsSeparated) reject("Parallax: a camera tem expressao ou dimensoes separadas.");
       if (rig.data.schemaVersion === 3) {
         if (!rig.master.threeDLayer || rig.master.parent || cameraPosition.numKeys || !equal(cameraPosition.value, [0, 0, -rig.data.frame.zoom])) reject("Parallax: mova a camera pelo null de controle; preserve o vinculo do rig.");
       }
@@ -249,7 +312,14 @@
       }
     }
     validateScene(comp, layers, rig);
-    return { comp: comp, rig: rig, layers: layers, originals: originals };
+    var referenceZoom = rig ? rig.data.frame.zoom : 3000;
+    var plannedDepth = (args.depthStep === 0 ? referenceZoom * (5 / 6) : args.depthStep * (layers.length - 1)) * args.strength;
+    if (!isFinite(plannedDepth) || plannedDepth > referenceZoom * 0.85) reject("Parallax: profundidade total excede 85% do Zoom. Reduza o passo ou a intensidade.");
+    if (rig && rig.data.motion && -plannedDepth - rig.data.motion.end[2] + referenceZoom <= referenceZoom * 0.1) reject("Parallax: profundidade muito proxima da camera.");
+    var depthMode = args.depthMode || (rig && rig.data.depthMode) || "linear";
+    var reverse = typeof args.reverseOrder === "boolean" ? args.reverseOrder : !!(rig && rig.data.reverseOrder);
+    var ranks = depthRanks(layers, originals, depthMode, comp.time, args.orderMode, reverse);
+    return { comp: comp, rig: rig, layers: layers, originals: originals, ranks: ranks, reverseOrder: reverse, totalDepth: plannedDepth };
   }
   /** @param {any[]} originals @param {number} id @returns {boolean} */
   function byOriginal(originals, id) {
@@ -259,7 +329,7 @@
   /** @param {any} args @returns {MotionCommandFailure|null} */
   function preflight(args) {
     try { var p = plan(args); if (p.rig && p.rig.data.schemaVersion === 2) reject("Parallax: restaure a montagem 2D do rig anterior antes de criar a versao editavel."); return null; }
-    catch (e) { return { code: MotionContracts.ERROR.INVALID_SELECTION_TYPE, message: /** @type {Error} */ (e).message, recoverable: true, details: null }; }
+    catch (e) { return { code: /** @type {any} */ (e).motionCode || MotionContracts.ERROR.INVALID_SELECTION_TYPE, message: /** @type {Error} */ (e).message, recoverable: true, details: null }; }
   }
   /** @param {any} original @param {number} z @param {any} frame @returns {any} */
   function compensate(original, z, frame) {
@@ -314,13 +384,18 @@
         prop(camera, POS).setValue([0, 0, -zoom]);
       }
       var frame = p.rig ? p.rig.data.frame : {cx: comp.width / 2, cy: comp.height / 2, zoom: option(camera, "ADBE Camera Zoom").value};
-      var total = (args.depthStep === 0 ? frame.zoom * (5 / 6) : args.depthStep * (p.layers.length - 1)) * args.strength;
+      var total = p.totalDepth;
       if (p.rig && options && options.mode === "quick") total = p.rig.data.totalDepth;
       if (!isFinite(total) || total > frame.zoom * 0.85) reject("Parallax: profundidade total excede 85% do Zoom. Reduza o passo ou a intensidade.");
       if (p.rig && p.rig.data.motion && -total - p.rig.data.motion.end[2] + (p.rig.data.schemaVersion === 3 ? frame.zoom : 0) <= frame.zoom * 0.1) reject("Parallax: profundidade muito proxima da camera.");
-      var applied = [];
+      var applied = [], warnings = [];
+      var depthMode = args.depthMode || (p.rig && p.rig.data.depthMode) || "linear";
+      var back = (typeof args.backgroundDepth === "number" ? args.backgroundDepth : (p.rig && p.rig.data.backgroundDepth) || 0) * frame.zoom;
+      var ranks = p.ranks, backgroundIndex = 0;
+      for (i = 0; i < p.layers.length; i += 1) if (ranks[i] === p.layers.length - 1) backgroundIndex = i;
+      if (back > 0) warnings.push({code: "PARALLAX_BACKGROUND_UPSCALED", message: "O fundo foi ampliado para " + Math.round(100 + 100 * back / frame.zoom) + "% para ficar atrás do plano focal: confira a resolução.", details: null});
       for (i = 0; i < p.layers.length; i += 1) {
-        var z = -total * (p.layers.length - 1 - i) / (p.layers.length - 1);
+        var z = depthAt(Number(ranks[i]), p.layers.length, total, depthMode, back);
         var original = p.originals[i];
         var compensation = compensate(original, z, frame);
         var exp = expressions(frame);
@@ -336,19 +411,21 @@
         if (prop(p.layers[i], POS).expressionError || prop(p.layers[i], SCALE).expressionError) reject("Parallax: o After Effects recusou a compensacao por expressao.");
         applied.push(next);
       }
-      if (comp.activeCamera !== camera || p.layers[p.layers.length - 1].parent || prop(p.layers[p.layers.length - 1], POS).value[2] !== 0) {
+      if (comp.activeCamera !== camera || p.layers[backgroundIndex].parent || !equal(prop(p.layers[backgroundIndex], POS).value[2], back)) {
         reject("Parallax: camera ativa ou fundo nao confirmado.");
       }
       /** @type {any} */
       var data = {schemaVersion: 3, rigType: TYPE, rigId: p.rig ? p.rig.data.rigId : "parallax-" + comp.id + "-" + master.id,
         pluginVersion: MotionContracts.PLUGIN_VERSION, compId: comp.id, cameraId: camera.id,
         referenceTime: p.rig ? p.rig.data.referenceTime : comp.time, frame: frame,
-        originals: p.originals, applied: applied, totalDepth: total, state: "committed"};
+        originals: p.originals, applied: applied, totalDepth: total, depthMode: depthMode, orderMode: args.orderMode,
+        reverseOrder: p.reverseOrder, backgroundDepth: back / frame.zoom, state: "committed"};
       if (p.rig && p.rig.data.motion) data.motion = p.rig.data.motion;
       master.comment = MotionRigMeta.write(master.comment, MotionJson.stringify(data));
-      return {changed: true, warnings: [], data: {mode: p.rig ? "adjust" : "create", status: p.rig ? "adjusted" : "created",
-        rigId: data.rigId, layerCount: p.layers.length, cameraDistance: frame.zoom, backgroundZ: 0,
-        totalDepth: total, cameraActiveAtReference: true, referenceProjectionCheck: "not-run", motionApplied: false}};
+      return {changed: true, warnings: warnings, data: {mode: p.rig ? "adjust" : "create", status: p.rig ? "adjusted" : "created",
+        rigId: data.rigId, layerCount: p.layers.length, cameraDistance: frame.zoom, backgroundZ: back, depthMode: depthMode,
+        totalDepth: total, orderMode: args.orderMode, reverseOrder: p.reverseOrder,
+        cameraActiveAtReference: true, referenceProjectionCheck: "not-run", motionApplied: false}};
     } catch (e) {
       var failed = false;
       for (i = journal.length - 1; i >= 0; i -= 1) {
@@ -381,6 +458,7 @@
     var p = managedRig();
     if (args.preset !== "subtle" && args.preset !== "truck" && args.preset !== "vertical" && args.preset !== "dolly") reject("Parallax: movimento invalido.");
     for (var key in args) if (key !== "preset" && key !== "durationSeconds") reject("Parallax: argumento invalido.");
+    if (engineOwned(prop(p.motionLayer, POS))) reject("Parallax: o motor de camera ja controla este rig. Use os shots da aba Parallax ou remova a camera antes.");
     if (typeof args.durationSeconds !== "number" || !isFinite(args.durationSeconds) || args.durationSeconds <= 0 || args.durationSeconds > 60) reject("Parallax: duracao invalida.");
     var t = p.rig.data.referenceTime;
     if (t + args.durationSeconds > p.comp.duration || t < 0) reject("Parallax: nao ha tempo suficiente para o movimento.");
@@ -423,10 +501,23 @@
       throw e;
     }
   }
+  /** @param {any} parade @returns {boolean} */
+  function hasUnmanagedEffects(parade) {
+    if (!parade || !parade.numProperties) return false;
+    for (var i = 1; i <= parade.numProperties; i += 1) {
+      var ef = parade.property(i);
+      var nome = ef && typeof ef.name === "string" ? ef.name : "";
+      if (nome !== "Moti.on \u00B7 Parallax" && nome !== "Parallax Frequencia" && nome !== "Parallax Amplitude") return true;
+    }
+    return false;
+  }
   /** @param {any} args @returns {any} */
   function removalPlan(args) {
     for (var key in args) if (Object.prototype.hasOwnProperty.call(args, key)) reject("Parallax: argumento invalido.");
     var p = managedRig();
+    if (typeof MotionCameraRig !== "undefined" && String(p.rig.master.comment || "").indexOf(MotionCameraRig.TAG) >= 0) {
+      reject("Parallax: remova a camera (shots da aba Parallax) antes de remover o Parallax.");
+    }
     var cameraPosition = prop(p.motionLayer, POS);
     if (cameraPosition.numKeys && (!p.rig.data.motion || cameraPosition.numKeys !== 2 ||
         !equal(cameraPosition.keyValue(1), p.rig.data.motion.start) || !equal(cameraPosition.keyValue(2), p.rig.data.motion.end))) reject("Parallax: preserve a animacao manual do controle antes de remover.");
@@ -436,21 +527,30 @@
       var layer = p.comp.layer(i);
       if (layer !== p.camera && (layer.parent === p.camera || layer.parent === p.rig.master)) reject("Parallax: ha camadas dependentes do rig. Remova esses vinculos antes de remover.");
       if (layer !== p.camera && layer !== p.rig.master) {
-        inspectDependencies(layer, p.rig.data.schemaVersion === 3 && byOriginal(p.originals, layer.id) ? expressions(p.rig.data.frame) : null);
+        inspectDependencies(layer, p.rig.data.schemaVersion === 3 && byOriginal(p.originals, layer.id) ? expressions(p.rig.data.frame) : null,
+          [p.rig.master.name, p.camera.name]);
       }
     }
     var cameraEffects = p.camera.property("ADBE Effect Parade");
     var masterEffects = p.rig.master.property("ADBE Effect Parade");
-    if ((cameraEffects && cameraEffects.numProperties) || (masterEffects && masterEffects.numProperties)) reject("Parallax: os controles foram modificados. Preserve essas alteracoes antes de remover.");
+    if ((cameraEffects && cameraEffects.numProperties) || hasUnmanagedEffects(masterEffects)) reject("Parallax: os controles foram modificados. Preserve essas alteracoes antes de remover.");
     return p;
   }
-  /** @param {any} group @param {any} [owned] */
-  function inspectDependencies(group, owned) {
+  /** Refuses only expressions that read the rig: the active camera or the
+   * master/camera layers by name. Unrelated expressions elsewhere no longer block.
+   * @param {any} group @param {any} owned @param {string[]} rigNames */
+  function inspectDependencies(group, owned, rigNames) {
     for (var i = 1; i <= group.numProperties; i += 1) {
       var item = group.property(i);
       if (item.propertyType === PropertyType.PROPERTY) {
-        if (item.expression && !(owned && ((item.matchName === POS && item.expression === owned.position) || (item.matchName === SCALE && item.expression === owned.scale)))) reject("Parallax: existem expressoes na composicao; verifique dependencias antes de remover.");
-      } else inspectDependencies(item, owned);
+        if (!item.expression || (owned && ((item.matchName === POS && item.expression === owned.position) || (item.matchName === SCALE && item.expression === owned.scale)))) continue;
+        var text = String(item.expression), reads = text.indexOf("activeCamera") >= 0;
+        for (var n = 0; n < rigNames.length && !reads; n += 1) {
+          var rigName = rigNames[n];
+          if (rigName && (text.indexOf("\"" + rigName + "\"") >= 0 || text.indexOf("'" + rigName + "'") >= 0)) reads = true;
+        }
+        if (reads) reject("Parallax: uma expressao da composicao le a camera ou o controle do rig. Remova esse vinculo antes de remover.");
+      } else inspectDependencies(item, owned, rigNames);
     }
   }
   /** @param {any} args @returns {MotionCommandFailure|null} */

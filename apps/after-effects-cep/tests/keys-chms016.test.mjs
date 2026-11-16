@@ -52,6 +52,7 @@ class FakeProperty {
     this.name = name;
     this.matchName = `ADBE ${name}`;
     this.propertyIndex = options.propertyIndex ?? 1;
+    if (layer && layer.children) layer.children[this.propertyIndex] = this;
     this.propertyType = PropertyType.PROPERTY;
     this.propertyValueType = options.spatial ? PropertyValueType.TwoD_SPATIAL : PropertyValueType.OneD;
     this.keys = keys.map((key) => ({ ...key, value: clone(key.value) }));
@@ -134,8 +135,11 @@ class FakeLayer {
     this.startTime = startTime;
     this.point = point;
     this.selected = true;
+    this.children = {};
   }
+  // O dispatch reencontra a propriedade pelo caminho (layer.property(indice)) para restaurar a selecao.
   property(matchName) {
+    if (typeof matchName === "number") return this.children[matchName] ?? null;
     assert.equal(matchName, "ADBE Transform Group");
     return { property: () => ({ value: [0, 0] }) };
   }
@@ -364,3 +368,15 @@ test("comandos de keys recusam campos extras antes de Undo", async () => {
   assert.equal(f.calls.length, 0);
 });
 
+
+test("Delay do centro para as pontas e das pontas para o centro (convexo/côncavo do Brazu)", async () => {
+  const f = await fixture();
+  const plan = order => JSON.parse(f.scope.MotionAE.dispatch(request("ae.keys.delay.preview", delayArgs({ order }))));
+  const centre = plan("center-out"), edges = plan("edges-in");
+  assert.equal(centre.ok, true, JSON.stringify(centre.error));
+  assert.deepEqual(centre.data.targets.map((target) => target.offsetFrames), [3, 0, 3], "o meio sai primeiro");
+  assert.deepEqual(edges.data.targets.map((target) => target.offsetFrames), [0, 3, 0], "as pontas saem primeiro");
+  const fourth = new FakeLayer(4, "D", 3, [40, 0]); f.layers.push(fourth); f.comp.selectedLayers.push(fourth);
+  assert.deepEqual(plan("center-out").data.targets.map((target) => target.offsetFrames), [3, 0, 0, 3], "com número par os dois do meio saem juntos");
+  assert.deepEqual(plan("edges-in").data.targets.map((target) => target.offsetFrames), [0, 3, 3, 0]);
+});

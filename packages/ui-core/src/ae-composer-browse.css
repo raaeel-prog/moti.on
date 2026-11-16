@@ -1,0 +1,202 @@
+/*
+ * Árvore de pastas e menu "…" no estilo Animation Composer (só After Effects).
+ * Medidas e cores conferidas no browser.css distribuído do Composer, tema
+ * spectrum--darkest (ver composer-ui-clone-20261103/ARCHITECTURE_REA.md):
+ * linha 24 px com separador 1 px, raízes em gray-75, etiqueta = borda 3 px +
+ * tinta da cor a 10 %, seleção com etiqueta soma branco a 10 %.
+ * Carregada por último no tema do AE (scripts/build.mjs).
+ */
+
+/* Cores das etiquetas na ordem do Composer. Ids preservados das preferências:
+   cyan = Seafoam, pink = Magenta; orange continua só para etiquetas antigas. */
+[data-host="after-effects"] .ch-preset-categories [data-color="red"],
+[data-host="after-effects"] .ch-folder-palette [data-color="red"] { --folder-color: #c40706; }
+[data-host="after-effects"] .ch-preset-categories [data-color="yellow"],
+[data-host="after-effects"] .ch-folder-palette [data-color="yellow"] { --folder-color: #e9c700; }
+[data-host="after-effects"] .ch-preset-categories [data-color="green"],
+[data-host="after-effects"] .ch-folder-palette [data-color="green"] { --folder-color: #0dab25; }
+[data-host="after-effects"] .ch-preset-categories [data-color="cyan"],
+[data-host="after-effects"] .ch-folder-palette [data-color="cyan"] { --folder-color: #1ab9b2; }
+[data-host="after-effects"] .ch-preset-categories [data-color="blue"],
+[data-host="after-effects"] .ch-folder-palette [data-color="blue"] { --folder-color: #1d80f5; }
+[data-host="after-effects"] .ch-preset-categories [data-color="purple"],
+[data-host="after-effects"] .ch-folder-palette [data-color="purple"] { --folder-color: #9146ec; }
+[data-host="after-effects"] .ch-preset-categories [data-color="pink"],
+[data-host="after-effects"] .ch-folder-palette [data-color="pink"] { --folder-color: #e34589; }
+[data-host="after-effects"] .ch-preset-categories [data-color="orange"] { --folder-color: #e87400; }
+[data-host="after-effects"] .ch-folder-palette [data-color="none"] { --folder-color: #ffffff; }
+
+/* ---------- linhas da árvore ---------- */
+[data-host="after-effects"] .ch-preset-categories { padding: 0; }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row {
+  min-height: 24px; border-radius: 0; border-left: 3px solid transparent;
+  box-shadow: inset 0 -1px #000 !important; background: #1d1d1d !important;
+}
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-depth="0"] { background: #0e0e0e !important; }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row:hover { background: #262626 !important; }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-depth="0"]:hover { background: #161616 !important; }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-selected="true"] { background: #303030 !important; box-shadow: inset 0 -1px #000 !important; }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-selected="true"] .ch-folder-name { color: #ebebeb; font-weight: 400; }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-color] { border-left-color: var(--folder-color); }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-color]::before { opacity: .1; }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-color][data-selected="true"] { background: #1d1d1d !important; }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-color][data-selected="true"]::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; background: #fff; opacity: .1;
+}
+[data-host="after-effects"] .ch-preset-categories > .ch-menu-glide { box-shadow: none; opacity: 0 !important; }
+[data-host="after-effects"] .ch-preset-categories .ch-folder-toggle { flex: 0 0 24px; width: 24px; min-height: 24px; color: #d0d0d0; }
+[data-host="after-effects"] .ch-preset-categories .ch-folder-select { min-height: 24px; gap: 6px; color: #d0d0d0; font-size: 12px; }
+[data-host="after-effects"] .ch-preset-categories .ch-folder-name { font-size: 12px; }
+[data-host="after-effects"] .ch-preset-categories .ch-folder-icon { width: 14px; height: 10px; flex-basis: 14px; opacity: 1; color: #d0d0d0; }
+[data-host="after-effects"] .ch-preset-categories .ch-folder-icon::before { width: 6px; }
+[data-host="after-effects"] .ch-preset-categories .ch-folder-more { flex: 0 0 24px; width: 24px; min-height: 24px; color: #d0d0d0; }
+
+/* ---------- modo "Focar pasta" ---------- */
+[data-host="after-effects"] .ch-folder-focus {
+  display: flex; align-items: center; gap: 5px; height: 34px; padding: 0 5px;
+  background: #303030; box-shadow: inset 0 -1px #000;
+}
+[data-host="after-effects"] .ch-folder-focus-back {
+  display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; color: #d0d0d0; cursor: default;
+}
+[data-host="after-effects"] .ch-folder-focus-back:hover { background: rgba(75, 75, 75, .5); }
+[data-host="after-effects"] .ch-folder-focus-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #d0d0d0; }
+
+/* ---------- popover "…" (capturas 230405 / 230419) ---------- */
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-palette {
+  position: absolute; z-index: 1000; display: flex; flex-direction: column; flex-wrap: nowrap; gap: 0;
+  width: 222px; padding: 10px 2px 8px; background: #1d1d1d; border-radius: 5px;
+  box-shadow: 0 10px 30px 0 #0000004d, inset 0 0 1px 0 #fff9; color: #d0d0d0;
+  animation: ch-folder-menu-in 120ms cubic-bezier(.16, 1, .3, 1);
+}
+@keyframes ch-folder-menu-in { from { opacity: 0; transform: translateY(-3px); } }
+[data-host="after-effects"] .ch-folder-palette .ch-folder-menu-item {
+  display: flex; align-items: center; width: 100%; min-height: 24px; padding: 4px 20px; border: 0; border-radius: 0;
+  background: transparent; color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: default;
+}
+[data-host="after-effects"] .ch-folder-palette .ch-folder-menu-item:hover,
+[data-host="after-effects"] .ch-folder-palette .ch-folder-menu-item:focus-visible { background: #303030; outline: none; }
+[data-host="after-effects"] .ch-folder-palette .ch-folder-menu-separator { padding: 6px 5px 5px; }
+[data-host="after-effects"] .ch-folder-palette .ch-folder-menu-separator::before { content: ""; display: block; height: 1px; background: #4b4b4b; }
+[data-host="after-effects"] .ch-folder-palette .ch-folder-labels { display: flex; align-items: center; gap: 10px; padding: 10px 20px 14px; }
+[data-host="after-effects"] .ch-folder-palette .ch-folder-swatch {
+  position: relative; flex: 0 0 14px; width: 14px; height: 14px; min-height: 0; padding: 0; border: 0; border-radius: 50%;
+  background: var(--folder-color); cursor: default;
+}
+[data-host="after-effects"] .ch-folder-palette .ch-folder-swatch[aria-checked="true"] { box-shadow: 0 0 0 3px #1d80f5; }
+[data-host="after-effects"] .ch-folder-palette .ch-folder-swatch:hover:not([aria-checked="true"]),
+[data-host="after-effects"] .ch-folder-palette .ch-folder-swatch:focus-visible:not([aria-checked="true"]) { box-shadow: 0 0 0 2px #6a6a6a; outline: none; }
+[data-host="after-effects"] .ch-folder-palette .ch-folder-swatch[data-color="none"]::after {
+  content: ""; position: absolute; top: 0; left: 6px; width: 2px; height: 100%; background: #c40706; transform: rotate(45deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-host="after-effects"] .ch-preset-categories > .ch-folder-palette { animation: none; }
+}
+
+/* ---------- Fundo único da biblioteca (capturas atualizacao/234906–234943) ----------
+   No Composer, painel, árvore e linhas têm a mesma cor (gray-100 #1d1d1d); só a
+   moldura do grid é mais escura (gray-75 #0e0e0e) e os cards voltam ao #1d1d1d.
+   No Moti.on toda pasta é raiz, então a raiz não leva o tom de "seção". */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-sidebar,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-categories,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-splitter { background: #1d1d1d; }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row,
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-depth="0"] { margin: 0 !important; background: #1d1d1d !important; }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row:hover,
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-depth="0"]:hover { background: #262626 !important; }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-selected="true"] { background: #303030 !important; }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-color][data-selected="true"] { background: #1d1d1d !important; }
+[data-host="after-effects"] .ch-preset-categories { gap: 0 !important; row-gap: 0 !important; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-scroll,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-stage,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-grid { background: #0e0e0e; }
+
+/* ---------- Rodapé numa linha só, como o content-browser__footer do Composer ----------
+   [Ações de presets][slider] .......... [Entrada][Saída][Ambos]
+   O resumo "nome · motivo" sai daqui: o motivo continua no title/aria-describedby
+   dos botões de aplicar. Os botões encolhem antes de qualquer quebra de linha. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-reference-footer {
+  display: flex !important; flex-wrap: nowrap !important; align-items: center; gap: 10px;
+  min-height: 40px; height: 40px; padding: 0 10px; box-sizing: border-box;
+  background: #1d1d1d; border-top: 1px solid #000;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-selection-summary { display: none !important; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-library-actions { flex: 0 0 auto; order: 1; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-preview-controls { flex: 0 1 100px; order: 2; min-width: 40px; max-width: 100px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-applybar {
+  order: 3; flex: 0 0 auto !important; min-width: max-content !important; margin: 0 0 0 auto !important; padding: 0 !important;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-library-actions > .ch-button {
+  height: 22px; min-height: 22px; padding: 0 8px; border: 1px solid #4b4b4b; border-radius: 4px; background: #0e0e0e; color: #d0d0d0; font-size: 12px;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-library-actions > .ch-button:hover { background: #000; border-color: #6a6a6a; }
+/* Slider do Composer: trilho 2 px, polegar redondo 11 px; sem os quadradinhos de tamanho. */
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::before,
+[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::after { display: none !important; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-size { gap: 0; flex: 1 1 auto !important; width: 100% !important; min-width: 0 !important; max-width: 100% !important; overflow: hidden; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-preview-controls { width: auto !important; }
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"] { flex: 1 1 auto !important; width: 100% !important; min-width: 0 !important; max-width: 100px !important; height: 22px; }
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]::-webkit-slider-runnable-track { height: 2px; background: #6a6a6a; }
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]::-webkit-slider-thumb {
+  width: 11px; height: 11px; margin-top: -4.5px; border: 2px solid #d0d0d0; border-radius: 50%; background: #1d1d1d;
+}
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]:hover::-webkit-slider-thumb,
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]:active::-webkit-slider-thumb { border-width: 4px; border-color: #ebebeb; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-phase-actions { display: flex; flex-wrap: nowrap; gap: 4px; flex: 0 0 auto !important; min-width: max-content !important; width: auto !important; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-phase-actions .ch-action,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-phase-actions .ch-action-button { min-width: 0; flex: 0 0 auto; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-phase-actions .ch-action-button {
+  height: 22px; min-height: 22px; padding: 0 10px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* O rodapé responsivo final fica em ae-design-system.css. */
+@media (max-width: 400px) {
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-reference-footer { gap: 6px; padding: 0 8px; }
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-library-actions > .ch-button { padding: 0 6px; }
+}
+
+/* ---------- Seleção dos presets igual à dos Elementos ----------
+   Card cinza com moldura interna de 4 px; passar o mouse só clareia o cinza
+   (ch-elements-card: #262626 → #393939); selecionado = a mesma borda fina dos
+   Elementos (--ch-border-focus). Sem glow, sem barra lateral, sem fundo claro fixo. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card {
+  padding: 4px; border: 1px solid transparent !important; border-radius: 2px;
+  background: #262626 !important; box-shadow: none !important; outline: none;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card::before,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card::after { box-shadow: none !important; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card:hover,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-hover="true"] {
+  background: #393939 !important; border-color: transparent !important; box-shadow: none !important;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-selected="true"],
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-selected="true"][data-hover="true"] {
+  border-color: var(--ch-border-focus, #b3d4ff) !important; box-shadow: none !important;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-selected="true"] { background: #262626 !important; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-selected="true"]:hover,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-selected="true"][data-hover="true"] { background: #393939 !important; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card .ch-preset-preview { border-radius: 1px; outline: none !important; box-shadow: none !important; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card .ch-preset-actions,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-selected="true"] > .ch-preset-actions {
+  background: transparent !important; box-shadow: none !important;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-selected="true"] .ch-preset-apply { color: var(--ch-text-primary, #ebebeb); }
+
+/* ---------- Elementos seguem o slider de miniaturas ----------
+   Mesmas colunas do grid de presets (preset-approved.css): a largura mínima do
+   card é 75 % de --preview-size, gravado na raiz da galeria pelo slider. */
+[data-host="after-effects"] .ch-preset-gallery .ch-elements-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--preview-size, 200px) * .75)), 1fr));
+  gap: 6px; margin: 0 0 8px;
+}
+[data-host="after-effects"] .ch-preset-gallery .ch-elements-card { width: auto !important; margin: 0 !important; min-width: 0; transition: background-color 120ms ease-out, border-color 120ms ease-out; }
+[data-host="after-effects"] .ch-preset-gallery .ch-elements-card svg { width: 100%; height: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card,
+  [data-host="after-effects"] .ch-preset-gallery .ch-elements-card { transition: none; }
+}

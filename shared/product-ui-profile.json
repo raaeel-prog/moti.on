@@ -50,5 +50,23 @@
     "shapes": "pink",
     "effects": "coral",
     "project": "blue-gray"
+  },
+  "hostOverrides": {
+    "after-effects": {
+      "approvedDirection": "2026-10-22: follow native AE theme; categorized icon tiles, Browse/Edit tabs and unified parameter controls.",
+      "canonicalTokens": "packages/ui-tokens/src/after-effects.css",
+      "tokenMirror": "shared/after-effects.tokens.json",
+      "background": "#323232",
+      "deep": "#262626",
+      "raised": "#393939",
+      "divider": "#4a4a4a",
+      "text": "#dddddd",
+      "accent": "restrained blue",
+      "inspectorWidth": 300,
+      "splitBreakpoint": 720,
+      "themeMode": "host",
+      "toolTileSize": 56,
+      "compactToolTileSize": 44
+    }
   }
 }

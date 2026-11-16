@@ -1,0 +1,5 @@
+{
+  "$comment": "Edge Functions are ES modules. Lets the Node tests import them without a reparse warning; Deno ignores it.",
+  "private": true,
+  "type": "module"
+}

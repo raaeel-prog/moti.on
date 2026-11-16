@@ -252,3 +252,19 @@ test("varias propriedades preservam a fase na mesma operacao", async () => {
   assert.deepEqual(tempos(b), [0, 4]);
 });
 
+
+test("reference playhead alinha o primeiro ou o ultimo key ao cursor (Align First/Last do AC)", async () => {
+  const first = new FakeProperty("Opacity", [makeKey(1, 10, 1, 1), makeKey(1.5, 20, 2, 2), makeKey(3, 30, 3, 3)]);
+  const comp = new FakeCompItem([first]);
+  comp.duration = 10; comp.time = 4;
+  const inicio = await envia(comp, { edge: "start", reference: "playhead" });
+  assert.equal(inicio.ok, true, JSON.stringify(inicio));
+  assert.deepEqual(tempos(first), [4, 4.5, 6], "o primeiro key cai no cursor e o grupo mantem o espacamento");
+
+  const last = new FakeProperty("Opacity", [makeKey(1, 10, 1, 1), makeKey(1.5, 20, 2, 2), makeKey(3, 30, 3, 3)]);
+  const outra = new FakeCompItem([last]);
+  outra.duration = 10; outra.time = 4;
+  const fim = await envia(outra, { edge: "end", reference: "playhead" });
+  assert.equal(fim.ok, true, JSON.stringify(fim));
+  assert.deepEqual(tempos(last), [2, 2.5, 4], "o ultimo key cai no cursor");
+});

@@ -22,7 +22,7 @@ const SEM_FERRAMENTA_PROPRIA = new Map([
 
 test("todo comando do After Effects e alcancavel pelo painel", async () => {
   const descriptors = await fonte("packages/command-registry/src/descriptors.ts");
-  const painel = (await Promise.all(["main.ts", "preset-workspace.ts", "preset-gallery.ts", "preset-phase-editor.ts", "preset-layer-sections.ts"].map(file=>fonte(`apps/after-effects-cep/client/src/${file}`)))).join("\n");
+  const painel = (await Promise.all(["main.ts", "preset-workspace.ts", "preset-gallery.ts", "preset-phase-editor.ts", "preset-layer-sections.ts", "camera-panel.ts", "ease-actions.ts"].map(file=>fonte(`apps/after-effects-cep/client/src/${file}`)))).join("\n");
 
   // Este teste existe por um caso real: uma reescrita do painel removeu 19
   // ferramentas de uma vez. O host continuou registrando os comandos, os

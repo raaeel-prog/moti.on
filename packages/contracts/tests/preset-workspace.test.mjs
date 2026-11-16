@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MOTION_LIBRARY_DEFAULTS, isMotionLibraryOptions, validateCommandRequest } from "../dist/index.js";
+import { MOTION_LIBRARY_DEFAULTS, MOTION_LIBRARY_EASINGS, isMotionLibraryOptions, validateCommandRequest } from "../dist/index.js";
 
 const target = { compId: 2, layerId: 3, instance: "1726539600-3", fingerprint: '{"version":1}' };
 const adjust = () => ({ target: { ...target }, presetId: "mist-reveal", options: { ...MOTION_LIBRARY_DEFAULTS } });
@@ -62,14 +62,18 @@ test("adjust rejects incomplete, imprecise or unbounded target identities", () =
 test("Adjust option schema agrees with the shared motion controls on bounds and optional Studio controls", () => {
   for (const [key, values] of [
     ["phase", ["in", "out", "both", "bad", null]],
-    ["direction", ["preset", "bottom", "top", "left", "right", "bad"]],
+    ["direction", ["preset", "bottom", "top", "left", "right", "top-left", "top-right", "bottom-left", "bottom-right", "top-bottom", "bad"]],
+    ["exitOrder", ["mirror", "repeat", "bad", "", null]],
     ["durationFrames", [0, 1, 600, 601, 1.5]], ["intensity", [-1, 0, 34.5, 300, 301]],
     ["staggerFrames", [-1, 0, 60, 61, 1.5]],
     ["unit", ["preset", "characters", "words", "lines", "all", "bad"]],
     ["elasticity", [-1, 0, 50.5, 100, 101]], ["overlap", [-1, 0, 50.5, 100, 101]],
     ["speed", [24, 25, 100.5, 200, 201]],
     ["order", ["preset", "forward", "reverse", "center-out", "edges-in", "random", "bad"]],
-    ["seed", [-1, 0, 17, 9999, 10000, 1.5]]
+    ["seed", [-1, 0, 17, 9999, 10000, 1.5]],
+    ["easing", [...MOTION_LIBRARY_EASINGS, "bad", ""]],
+    ["settleAmount", [-1, 0, 35.5, 100, 101]], ["settleCount", [0.4, 0.5, 2.5, 8, 8.1]],
+    ["settleDamping", [-1, 0, 55, 100, 101]]
   ]) for (const value of values) {
     const options = { ...MOTION_LIBRARY_DEFAULTS, [key]: value };
     assert.equal(valid("ae.presets.adjust", { ...adjust(), options }), isMotionLibraryOptions(options), `${key}=${value}`);

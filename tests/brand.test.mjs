@@ -86,6 +86,9 @@ async function collectTextFiles(directory, accumulated = []) {
   for (const entry of entries) {
     if (entry.isDirectory()) {
       if (SKIPPED_DIRECTORIES.has(entry.name)) continue;
+      // Graphify caches AST strings from the allowlisted scanner itself. Its
+      // root output is generated analysis, never a distributable source tree.
+      if (directory === root && entry.name === "graphify-out") continue;
       // Bundled compiler documentation and generated native output are not product source.
       if (directory === path.join(root, "plugin") && /^(?:cmake-|build(?:$|-))/.test(entry.name)) continue;
       await collectTextFiles(path.join(directory, entry.name), accumulated);

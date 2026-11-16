@@ -183,7 +183,11 @@
             "bottom",
             "left",
             "right",
-            "top"
+            "top",
+            "top-left",
+            "top-right",
+            "bottom-left",
+            "bottom-right"
           ]
         },
         "durationFrames": {
@@ -250,7 +254,54 @@
             "flicker",
             "silk",
             "glide",
-            "spring"
+            "spring",
+            "velvet",
+            "drift",
+            "snap",
+            "settle-wave",
+            "settle-hop",
+            "sine-out",
+            "sine-in",
+            "sine-in-out",
+            "quad-out",
+            "quad-in",
+            "quad-in-out",
+            "quart-out",
+            "quart-in",
+            "quart-in-out",
+            "quint-out",
+            "quint-in",
+            "quint-in-out",
+            "expo-out",
+            "expo-in",
+            "expo-in-out",
+            "circ-out",
+            "circ-in",
+            "circ-in-out"
+          ]
+        },
+        "settleAmount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "settleCount": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 8
+        },
+        "settleDamping": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "motionBlur": {
+          "type": "boolean"
+        },
+        "exitOrder": {
+          "enum": [
+            "mirror",
+            "repeat"
           ]
         }
       }
@@ -344,7 +395,7 @@
         "optionKeys": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 12,
+          "maxItems": 17,
           "uniqueItems": true,
           "items": {
             "enum": [
@@ -359,7 +410,12 @@
               "speed",
               "order",
               "seed",
-              "easing"
+              "easing",
+              "settleAmount",
+              "settleCount",
+              "settleDamping",
+              "motionBlur",
+              "exitOrder"
             ]
           }
         }
@@ -878,7 +934,8 @@
         "phase": {
           "enum": [
             "in",
-            "out"
+            "out",
+            "effect"
           ]
         },
         "presetId": {
@@ -904,7 +961,8 @@
         "phase": {
           "enum": [
             "in",
-            "out"
+            "out",
+            "effect"
           ]
         },
         "action": {
@@ -930,7 +988,8 @@
         "phase": {
           "enum": [
             "in",
-            "out"
+            "out",
+            "effect"
           ]
         },
         "frames": {
@@ -1368,6 +1427,152 @@
           }
         }
       ]
+    },
+    "particleArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "apply",
+            "remove"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "classic",
+            "dust",
+            "bokeh",
+            "snow",
+            "sparks",
+            "field3d",
+            "rising"
+          ]
+        },
+        "birthRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "longevity": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 100
+        },
+        "velocity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "size": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 1
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "color": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "movement": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "streams": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "amount",
+              "size",
+              "opacity",
+              "color",
+              "movement"
+            ],
+            "properties": {
+              "amount": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "size": {
+                "type": "number",
+                "minimum": 0.1,
+                "maximum": 3
+              },
+              "opacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "color": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "movement": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 3
+              }
+            }
+          }
+        },
+        "direction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 360
+        },
+        "spread": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "targetRigId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9-]{1,128}$"
+        },
+        "targetCompId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "changedFields": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "pattern": "^(mode|birthRate|longevity|velocity|size|opacity|color|movement|seed|direction|spread|streams\\.[0-3]\\.(amount|size|opacity|color|movement))$"
+          }
+        },
+        "precompose": {
+          "type": "boolean"
+        }
+      }
     }
   },
   "allOf": [
@@ -1748,6 +1953,45 @@
         "properties": {
           "command": {
             "const": "ae.effect.gradient.read"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.effect.particles"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "args": {
+            "$ref": "#/$defs/particleArgs"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "ae.effect.particles.read"
           }
         },
         "required": [

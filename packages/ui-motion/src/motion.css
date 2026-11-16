@@ -108,32 +108,47 @@ button:focus-visible:not(:disabled):not([aria-disabled="true"]) [data-motion~="i
 [data-icon-motion="dolly"] { --icon-gesture:motion-icon-dolly; }
 [data-icon-motion="morph"] { --icon-gesture:motion-icon-morph; }
 [data-icon-motion="settle"] { --icon-gesture:motion-icon-settle; }
+[data-icon-motion="snip"] { --icon-gesture:motion-icon-snip; }
+[data-icon-motion="thump"] { --icon-gesture:motion-icon-thump; }
+[data-icon-motion="sweep"] { --icon-gesture:motion-icon-sweep; }
+[data-icon-motion="twirl"] { --icon-gesture:motion-icon-twirl; }
+[data-icon-motion="burst"] { --icon-gesture:motion-icon-burst; }
+/* Pivôs próprios: a vassoura gira pelo cabo, as partículas saem do emissor e o ponteiro do cronômetro do seu eixo. */
+[data-icon-motion="sweep"] .ch-icon__detail { transform-origin:88% 8%; }
+[data-icon-motion="burst"] .ch-icon__detail { transform-box:view-box; transform-origin:12px 19px; }
+[data-icon="timeController"] .ch-icon__detail { transform-origin:12px 13.33px; }
 @keyframes motion-icon-draw { from { stroke-dashoffset:1; } to { stroke-dashoffset:0; } }
-@keyframes motion-icon-bounce { 0% { transform:none; } 35% { transform:translateY(-3px); } 68% { transform:translateY(0) scale(1.14, 0.8); } 100% { transform:none; } }
-@keyframes motion-icon-shake { 0%,100% { transform:none; } 20% { transform:translateX(-1.5px); } 40% { transform:translateX(1.5px); } 60% { transform:translateX(-1px); } 80% { transform:translateX(0.5px); } }
-@keyframes motion-icon-flash { 0%,100% { opacity:1; } 18% { opacity:0.2; } 36% { opacity:1; } 54% { opacity:0.35; } }
-@keyframes motion-icon-spin { from { transform:rotate(-40deg); } to { transform:none; } }
-@keyframes motion-icon-tick { from { transform:rotate(-90deg); } to { transform:none; } }
-@keyframes motion-icon-slide { from { transform:translateX(-3px); opacity:0.4; } to { transform:none; opacity:1; } }
-@keyframes motion-icon-slide-back { from { transform:translateX(3px); opacity:0.4; } to { transform:none; opacity:1; } }
-@keyframes motion-icon-bob { 0%,100% { transform:none; } 35% { transform:translateY(-2px); } 70% { transform:translateY(1px); } }
-@keyframes motion-icon-rise { from { transform:translateY(3px); opacity:0.2; } to { transform:none; opacity:1; } }
-@keyframes motion-icon-drop { from { transform:translateY(-3px); opacity:0.2; } to { transform:none; opacity:1; } }
-@keyframes motion-icon-pop { 0% { transform:scale(0.6); opacity:0.3; } 70% { transform:scale(1.08); opacity:1; } 100% { transform:none; } }
-@keyframes motion-icon-pulse { 0% { transform:scaleY(0.55); } 60% { transform:scaleY(1.1); } 100% { transform:none; } }
-@keyframes motion-icon-glitch { 0%,100% { transform:none; } 20% { transform:translateX(-2px); } 40% { transform:translateX(2px); } 60% { transform:translateX(-1px); } 80% { transform:translateX(1px); } }
-@keyframes motion-icon-look { 0%,100% { transform:none; } 30% { transform:translateX(-2px); } 65% { transform:translateX(1.5px); } }
-@keyframes motion-icon-turn { 0%,100% { transform:none; } 45% { transform:scaleX(0.4); } }
-@keyframes motion-icon-flip { from { transform:scaleX(-1); } to { transform:none; } }
-@keyframes motion-icon-equalize { 0% { transform:scaleY(0.4); } 55% { transform:scaleY(1.12); } 100% { transform:none; } }
-@keyframes motion-icon-spread { from { transform:scale(0.7); opacity:0.5; } to { transform:none; opacity:1; } }
-@keyframes motion-icon-trail { from { transform:translateX(3px); opacity:0.3; } to { transform:none; opacity:1; } }
-@keyframes motion-icon-write { 0%,100% { transform:none; } 45% { transform:translate(-1.5px, 1.5px); } }
-@keyframes motion-icon-wave { from { transform:translateX(-3px); } to { transform:none; } }
-@keyframes motion-icon-dolly { from { transform:scale(0.85); opacity:0.5; } to { transform:none; opacity:1; } }
-@keyframes motion-icon-morph { 0% { transform:scaleX(0.6); } 60% { transform:scaleX(1.1); } 100% { transform:none; } }
-@keyframes motion-icon-settle { 0%,100% { transform:none; } 30% { transform:translateX(-3px); } 60% { transform:translateX(2px); } 82% { transform:translateX(-1px); } }
-@keyframes motion-icon-swap { 0% { transform:translateX(-2px); opacity:.45; } 55% { transform:translateX(1px); opacity:1; } 100% { transform:none; } }
+/* Cada gesto tem preparação, passagem do ponto e assentamento: lê como peso, não como um fade. */
+@keyframes motion-icon-bounce { 0% { transform:none; } 16% { transform:translateY(1px) scale(1.14, 0.82); } 46% { transform:translateY(-3.5px) scale(0.94, 1.08); } 76% { transform:translateY(0) scale(1.12, 0.84); } 100% { transform:none; } }
+@keyframes motion-icon-shake { 0%,100% { transform:none; } 14% { transform:translateX(-2px); } 30% { transform:translateX(2px); } 48% { transform:translateX(-1.5px); } 66% { transform:translateX(1px); } 84% { transform:translateX(-0.5px); } }
+@keyframes motion-icon-flash { 0%,100% { opacity:1; } 14% { opacity:0.15; } 30% { opacity:1; } 48% { opacity:0.25; } 66% { opacity:1; } 82% { opacity:0.6; } }
+@keyframes motion-icon-spin { 0% { transform:rotate(-70deg); } 70% { transform:rotate(8deg); } 100% { transform:none; } }
+@keyframes motion-icon-tick { 0% { transform:rotate(-150deg); } 68% { transform:rotate(10deg); } 100% { transform:none; } }
+@keyframes motion-icon-slide { 0% { transform:translateX(-4px); opacity:0.3; } 62% { transform:translateX(0.8px); opacity:1; } 100% { transform:none; opacity:1; } }
+@keyframes motion-icon-slide-back { 0% { transform:translateX(4px); opacity:0.3; } 62% { transform:translateX(-0.8px); opacity:1; } 100% { transform:none; opacity:1; } }
+@keyframes motion-icon-bob { 0%,100% { transform:none; } 30% { transform:translateY(-2.5px); } 62% { transform:translateY(1.2px); } 84% { transform:translateY(-0.4px); } }
+@keyframes motion-icon-rise { 0% { transform:translateY(4px); opacity:0.15; } 62% { transform:translateY(-0.8px); opacity:1; } 100% { transform:none; opacity:1; } }
+@keyframes motion-icon-drop { 0% { transform:translateY(-4px); opacity:0.15; } 58% { transform:translateY(0.8px) scale(1.06, 0.92); opacity:1; } 100% { transform:none; opacity:1; } }
+@keyframes motion-icon-pop { 0% { transform:scale(0.5); opacity:0.25; } 55% { transform:scale(1.14); opacity:1; } 80% { transform:scale(0.97); } 100% { transform:none; } }
+@keyframes motion-icon-pulse { 0% { transform:scaleY(0.5); } 45% { transform:scaleY(1.16); } 75% { transform:scaleY(0.95); } 100% { transform:none; } }
+@keyframes motion-icon-glitch { 0%,100% { transform:none; opacity:1; } 12% { transform:translateX(-2.5px); } 26% { transform:translateX(2.5px); opacity:0.5; } 40% { transform:translateX(-1px); opacity:1; } 58% { transform:translateX(2px); } 76% { transform:translateX(-1px); opacity:0.7; } }
+@keyframes motion-icon-look { 0%,100% { transform:none; } 26% { transform:translateX(-2px); } 62% { transform:translateX(1.8px); } 84% { transform:translateX(-0.4px); } }
+@keyframes motion-icon-turn { 0%,100% { transform:none; } 40% { transform:scaleX(0.3); } 78% { transform:scaleX(1.06); } }
+@keyframes motion-icon-flip { 0% { transform:scaleX(-1); } 68% { transform:scaleX(1.08); } 100% { transform:none; } }
+@keyframes motion-icon-equalize { 0% { transform:scaleY(0.35); } 40% { transform:scaleY(1.16); } 68% { transform:scaleY(0.82); } 100% { transform:none; } }
+@keyframes motion-icon-spread { 0% { transform:scale(0.62); opacity:0.4; } 62% { transform:scale(1.06); opacity:1; } 100% { transform:none; opacity:1; } }
+@keyframes motion-icon-trail { 0% { transform:translateX(4px); opacity:0.15; } 62% { transform:translateX(-0.8px); opacity:1; } 100% { transform:none; opacity:1; } }
+@keyframes motion-icon-write { 0%,100% { transform:none; } 28% { transform:translate(-2px, 2px); } 56% { transform:translate(0.5px, -0.5px); } 78% { transform:translate(-0.8px, 0.8px); } }
+@keyframes motion-icon-wave { 0% { transform:translateX(-4px); } 62% { transform:translateX(1px); } 100% { transform:none; } }
+@keyframes motion-icon-dolly { 0% { transform:scale(0.78); opacity:0.4; } 62% { transform:scale(1.08); opacity:1; } 100% { transform:none; opacity:1; } }
+@keyframes motion-icon-morph { 0% { transform:scaleX(0.5); } 55% { transform:scaleX(1.14); } 80% { transform:scaleX(0.96); } 100% { transform:none; } }
+@keyframes motion-icon-settle { 0%,100% { transform:none; } 24% { transform:translateX(-3px); } 50% { transform:translateX(2px); } 72% { transform:translateX(-1px); } 88% { transform:translateX(0.4px); } }
+@keyframes motion-icon-swap { 0% { transform:translateX(-3px); opacity:0.35; } 55% { transform:translateX(1px); opacity:1; } 100% { transform:none; } }
+@keyframes motion-icon-snip { 0%,100% { transform:none; } 22% { transform:rotate(-10deg); } 50% { transform:translateX(1px) rotate(7deg); } 76% { transform:rotate(-3deg); } }
+@keyframes motion-icon-thump { 0%,100% { transform:none; } 20% { transform:scale(1.2); } 44% { transform:scale(0.92); } 68% { transform:scale(1.08); } }
+@keyframes motion-icon-sweep { 0%,100% { transform:none; } 24% { transform:rotate(13deg); } 52% { transform:rotate(-10deg); } 78% { transform:rotate(4deg); } }
+@keyframes motion-icon-twirl { 0% { transform:rotate(-90deg) scale(0.8); } 66% { transform:rotate(8deg) scale(1.06); } 100% { transform:none; } }
+@keyframes motion-icon-burst { 0% { transform:scale(0.35); opacity:0.15; } 58% { transform:scale(1.1); opacity:1; } 100% { transform:none; opacity:1; } }
 @keyframes motion-surface-in { from { opacity:0; transform:translateY(4px) scale(0.97); } to { opacity:1; transform:none; } }
 @keyframes motion-surface-out { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(3px); } }
 @keyframes motion-drawer-in { from { opacity:0; transform:translateX(8px); } to { opacity:1; transform:none; } }

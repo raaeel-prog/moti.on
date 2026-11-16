@@ -12,6 +12,8 @@ test('preset preferences persist without changing legacy favorites and theme',()
   assert.ok(!raw.includes('layerId')&&!raw.includes('options')&&!raw.includes('path'));
 });
 test('untrusted color and folder values cannot inject styles or prototype data',()=>{
+  const cleared=createPanelPreferences(root,{getItem:()=>'{"version":1,"folderColors":{"motion":"red","text":"green"}}',setItem(){}});
+  cleared.clearFolderColors();assert.deepEqual(cleared.snapshot().folderColors,{},'Clear all labels removes every folder color');
   const p=createPanelPreferences(root,{getItem:()=>'{"version":1,"folderColors":{"motion":"url(evil)","__proto__":"red","text":"green"},"presetSize":99999,"presetAutoplay":"false"}',setItem(){}});
   p.setFolderColor('__proto__','red');p.setFolderColor('camera','url(evil)');const s=p.snapshot();assert.deepEqual(s.folderColors,{text:'green'});assert.equal(s.presetSize,200);assert.equal(s.presetAutoplay,true);
 });
@@ -36,7 +38,7 @@ test('quick dock pin is an additive preference and survives reopening with legac
   assert.equal(preferences.snapshot().quickDockPinned,false);
   preferences.setQuickDockPinned(true);
   const reopened=createPanelPreferences(root,storage);
-  assert.deepEqual(reopened.snapshot(),{theme:'light',locale:'pt-BR',density:'compact',category:'layers',favorites:['wiggle'],recent:['ease'],recentColors:[],persistent:true,recovered:false,presetAutoplay:false,presetSize:240,quickDockPinned:true,folderColors:{motion:'green'},collapsedFolders:['text'],lastView:'',gallery:{category:'all',scope:'all',query:'',presetId:''},drafts:{}});
+  assert.deepEqual(reopened.snapshot(),{theme:'light',locale:'pt-BR',density:'compact',category:'layers',favorites:['wiggle'],recent:['ease'],recentColors:[],persistent:true,recovered:false,presetAutoplay:false,presetSize:240,quickDockPinned:true,quickFavorites:null,quickRecent:[],folderColors:{motion:'green'},collapsedFolders:['text'],collapsedToolGroups:[],lastView:'',gallery:{category:'all',scope:'all',query:'',presetId:''},drafts:{}});
   reopened.setQuickDockPinned(false);
   assert.equal(createPanelPreferences(root,storage).snapshot().quickDockPinned,false);
 });

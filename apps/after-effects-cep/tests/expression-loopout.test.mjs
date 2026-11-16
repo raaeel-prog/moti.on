@@ -46,6 +46,11 @@ class FakeProperty {
     this.failRestoreTo = options.failRestoreTo;
     this.writes = [];
   }
+  // O dispatch guarda a selecao de keys antes de cada comando (rollback): toda
+  // Property real do AE tem estes metodos.
+  keyTime(index) { return (index - 1) / 24; }
+  keySelected() { return false; }
+  setSelectedAtKey() {}
 
   get expression() {
     return this._expression;

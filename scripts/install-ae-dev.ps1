@@ -26,6 +26,7 @@ $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $Source = Join-Path $ProjectRoot "dist\after-effects-cep"
 $TargetRoot = Join-Path $env:APPDATA "Adobe\CEP\extensions"
 $Target = Join-Path $TargetRoot "com.motion.plugin.ae"
+$MaxBackups = 3
 
 if (-not (Test-Path $Source)) {
   throw "Build não encontrado. Execute 'npm run build' antes da instalação."
@@ -39,6 +40,10 @@ if (Test-Path $Target) {
   Copy-Item -Recurse -Force $Target (Join-Path $Backup "previous")
   Write-Host "Backup da instalação anterior: $Backup\previous"
   Remove-Item -Recurse -Force $Target
+  # Rodizio: guarda so os 3 backups mais recentes da extensao.
+  Get-ChildItem -Directory (Split-Path $Backup) -Filter "ae-*" |
+    Sort-Object Name -Descending | Select-Object -Skip $MaxBackups |
+    ForEach-Object { Remove-Item -Recurse -Force $_.FullName }
 }
 Copy-Item -Recurse -Force $Source $Target
 

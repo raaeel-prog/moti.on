@@ -19,6 +19,8 @@ if [[ -d "$TARGET" ]]; then
   mkdir -p "$BACKUP"
   cp -R "$TARGET" "$BACKUP/previous"
   echo "Backup da instalação anterior: $BACKUP/previous"
+  # Rodizio: guarda so os 3 backups mais recentes da extensao.
+  ls -1d "$(dirname "$BACKUP")"/ae-* 2>/dev/null | sort -r | tail -n +4 | while read -r OLD; do rm -rf -- "$OLD"; done
 fi
 mkdir -p "$TARGET"
 rsync -a "$SOURCE/" "$TARGET/"

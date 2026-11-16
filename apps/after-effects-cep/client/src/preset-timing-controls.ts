@@ -73,7 +73,7 @@ export function createPresetTimingControls(doc: Document, options: {
     status.textContent = blocked || draft.message; status.hidden = !status.textContent;
     input.setAttribute("aria-invalid", String(draft.operation !== "align" && (!draft.frames.trim() || !Number.isInteger(Number(draft.frames)) || Math.abs(Number(draft.frames)) > 600 || (draft.operation==="duration"&&Number(draft.frames)<1))));
   }
-  const helpText=pt?"Arraste para ajustar · Shift: precisão · Alt: rápido · Clique para digitar":"Drag to adjust · Shift: fine · Alt: fast · Click to type";
+  const helpText=pt?"Arraste para ajustar · Shift: 10× · Ctrl/Alt: precisão · Clique para digitar":"Drag to adjust · Shift: 10× · Ctrl/Alt: fine · Click to type";
   const cleanups=[attachScrubbableNumber(input,{helpText}),attachScrubbableNumber(seed,{helpText})];
   update(); return { element, updateContext: update, dispose(){for(const cleanup of cleanups)cleanup();} };
 }

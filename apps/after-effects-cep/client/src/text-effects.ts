@@ -1,10 +1,12 @@
+import {toolNumberField as numberField} from "./tool-number-fields.js";
+import {getToolStarterDraft} from "@motion/command-registry";
 import {
   WORD_REVEAL_DEFAULTS, PROXIMITY_MORPH_DEFAULTS, PROXIMITY_MORPH_PRESETS, STYLE_SWAP_DEFAULTS,
   validateCommandRequest, type TextEffectKind, type TextEffectAction,
   type WordRevealArgs, type WordRevealAction, type WordRevealReadData, type StyleSwapArgs,
-  type VariableMorphArgs, type VariableMorphAction, type VariableMorphReadData, type ProximityMorphPreset
+  type VariableMorphArgs, type VariableMorphAction, type VariableMorphReadData, type ProximityMorphPreset, type QuickContext
 } from "@motion/contracts";
-import { checkboxField, colorField, createElement, numberField, selectField, notice, type RenderRegions, type I18n } from "@motion/ui-core";
+import { checkboxField, colorField, createElement, selectField, notice, type RenderRegions, type I18n } from "@motion/ui-core";
 
 type Key = Parameters<I18n["t"]>[0];
 const drafts = {
@@ -12,19 +14,21 @@ const drafts = {
   variableMorph: { ...PROXIMITY_MORPH_DEFAULTS },
   styleSwap: { ...STYLE_SWAP_DEFAULTS }
 };
+const starterContexts: Partial<Record<TextEffectKind, Readonly<QuickContext>>> = {};
 let wordRevealRead: WordRevealReadData | null = null;
 let wordRevealReadFailed = false;
 let wordRevealAdvancedOpen = false;
 let variableMorphRead: VariableMorphReadData | null = null;
 let variableMorphReadFailed = false;
 let variableMorphAdvancedOpen = false;
-function wordRevealDefaults(): Required<WordRevealArgs> {
-  return { ...WORD_REVEAL_DEFAULTS, fillColor: [...WORD_REVEAL_DEFAULTS.fillColor], textColor: [...WORD_REVEAL_DEFAULTS.textColor] };
+function wordRevealDefaults(context?: Readonly<QuickContext>): Required<WordRevealArgs> {
+  return getToolStarterDraft<Required<WordRevealArgs>>("wordReveal",context);
 }
-export function resetTextEffect(kind: TextEffectKind): void {
-  if (kind === "wordReveal") drafts.wordReveal = { ...wordRevealDefaults(), renderer: wordRevealRead?.renderer ?? "morph" };
-  if (kind === "variableMorph") drafts.variableMorph = { ...PROXIMITY_MORPH_DEFAULTS, renderer: variableMorphRead?.renderer ?? "auto" };
-  if (kind === "styleSwap") drafts.styleSwap = { ...STYLE_SWAP_DEFAULTS };
+export function resetTextEffect(kind: TextEffectKind,context?: Readonly<QuickContext>): void {
+  if(context)starterContexts[kind]=context;
+  if (kind === "wordReveal") drafts.wordReveal = { ...wordRevealDefaults(context), renderer: wordRevealRead?.renderer ?? "morph" };
+  if (kind === "variableMorph") drafts.variableMorph = { ...getToolStarterDraft<typeof drafts.variableMorph>("variableMorph",context), renderer: variableMorphRead?.renderer ?? "auto" };
+  if (kind === "styleSwap") drafts.styleSwap = getToolStarterDraft<typeof drafts.styleSwap>("styleSwap",context);
 }
 export function textEffectArgs(kind: TextEffectKind): Record<string, unknown> {
   if (kind === "wordReveal") return { ...drafts.wordReveal, fillColor: [...drafts.wordReveal.fillColor], textColor: [...drafts.wordReveal.textColor] };
@@ -131,7 +135,7 @@ export function renderTextEffect(kind: TextEffectKind, regions: RenderRegions, i
   }
   function numeric<T extends object>(target: T, key: keyof T, label: Key, min: number, max: number, unit: string): void {
     content.appendChild(numberField(document, {
-      id: `${kind}-${String(key)}`, label: i18n.t(label), value: target[key] as number,
+      id: `${kind}-${String(key)}`, label: i18n.t(label), value: target[key] as number, defaultValue: Number(getToolStarterDraft<Record<string,unknown>>(kind,starterContexts[kind])[String(key)]),
       min, max, step: 1, unit, disabled: busy,
       onCommit: (value) => { target[key] = value as T[keyof T]; shell.rerender(); }
     }));
@@ -160,7 +164,7 @@ function renderVariableMorph(regions: RenderRegions, i18n: I18n, busy: boolean):
     const locked = Boolean(variableMorphRead?.lockedControls?.includes(key));
     // Native slider floats stay exact in the draft; only the field display is shortened.
     const displayValue = Number((d[key] as number).toFixed(2));
-    target.appendChild(numberField(document, { id: `variableMorph-${key}`, label: i18n.t(label), value: displayValue,
+    target.appendChild(numberField(document, { id: `variableMorph-${key}`, label: i18n.t(label), value: displayValue, defaultValue: Number(getToolStarterDraft<Record<string,unknown>>("variableMorph",starterContexts.variableMorph)[String(key)]),
       min, max, step: key === "sweepFrames" ? 1 : .1, unit, disabled: busy || locked || (d.action !== "apply" && key !== "sweepFrames"),
       ...(locked ? { description: i18n.t("proximityMorph.lockedHelp") } : {}),
       onCommit: value => { (d[key] as number) = value; shell.rerender(); } }));
@@ -245,7 +249,7 @@ function renderWordReveal(regions: RenderRegions, i18n: I18n, busy: boolean): vo
   }
   if (d.action === "update") content.appendChild(notice(document, i18n.t("wordReveal.updateHelp")));
   const numeric = (target: HTMLElement, key: keyof Required<WordRevealArgs>, label: Key, min: number, max: number, unit: string): void => {
-    target.appendChild(numberField(document, { id: `wordReveal-${key}`, label: i18n.t(label), value: d[key] as number,
+    target.appendChild(numberField(document, { id: `wordReveal-${key}`, label: i18n.t(label), value: d[key] as number, defaultValue: Number(wordRevealDefaults(starterContexts.wordReveal)[key as keyof Required<WordRevealArgs>]),
       min, max, step: key === "durationFrames" || key === "staggerFrames" ? 1 : .1, unit, disabled: busy,
       onCommit: value => { (d[key] as number) = value; shell.rerender(); } }));
   };

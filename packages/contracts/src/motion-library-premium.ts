@@ -200,5 +200,39 @@ export const MOTION_LIBRARY_PREMIUM_PRESETS: readonly MotionLibraryPreset[] = [
     rotation: [-15, 25, 0], scale: [-20, -20, 0],
     choreography: { path: "rebound" }, easing: "spring",
     defaults: { durationFrames: 42, staggerFrames: 2, elasticity: 40, overlap: 75 }
+  }),
+  // 3D arrivals added 2026-11-08 to close the 3D gap. Each one is a distinct spatial
+  // behaviour, not a variant of an earlier recipe: page turn, flip drop, depth spiral,
+  // tilted slide, floor rise, turntable approach, corner swing and side flip.
+  recipe("page-turn", "Virada de página", "Page turn", "motion-3d", {
+    rotation: [0, -180, 0], pivot: "edge", defaults: { durationFrames: 36, direction: "left" }
+  }),
+  recipe("flip-drop", "Queda com giro", "Flip drop", "motion-3d", {
+    position: [0, -420, 0], rotation: [-180, 0, 0], easing: "spring",
+    choreography: { path: "rebound" }, defaults: { durationFrames: 34, elasticity: 45 }
+  }),
+  recipe("depth-spiral", "Espiral da profundidade", "Depth spiral", "motion-3d", {
+    position: [120, -40, -1600], rotation: [0, 0, -180], scale: [-20, -20, 0],
+    choreography: { path: "spiral", turns: 0.7 }, defaults: { durationFrames: 40 }
+  }),
+  recipe("tilted-slide", "Deslize inclinado", "Tilted slide", "motion-3d", {
+    position: [-520, 0, 0], rotation: [0, 65, 0], easing: "glide",
+    defaults: { durationFrames: 30 }
+  }),
+  recipe("floor-rise", "Subida do chão", "Floor rise", "motion-3d", {
+    position: [0, 260, -320], rotation: [80, 0, 0], pivot: "edge", easing: "spring",
+    defaults: { durationFrames: 34, direction: "bottom", elasticity: 30 }
+  }),
+  recipe("turntable-approach", "Toca-discos", "Turntable approach", "motion-3d", {
+    position: [0, 0, 700], rotation: [0, -540, 0], scale: [-60, -60, 0],
+    defaults: { durationFrames: 40 }
+  }),
+  recipe("corner-swing", "Balanço de canto", "Corner swing", "motion-3d", {
+    rotation: [40, -70, 0], pivot: "edge",
+    choreography: { path: "swing", turns: 1.1 }, defaults: { durationFrames: 40, direction: "right" }
+  }),
+  recipe("side-flip-bounce", "Flip lateral com quique", "Side flip bounce", "motion-3d", {
+    position: [0, 0, -260], rotation: [0, 180, 0], easing: "overshoot",
+    choreography: { path: "rebound" }, defaults: { durationFrames: 34, elasticity: 55 }
   })
 ];

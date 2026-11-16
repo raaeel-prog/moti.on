@@ -3,6 +3,9 @@ import { MOTION_LIBRARY_STUDIO_PRESETS } from "./motion-library-studio.js";
 import { MOTION_LIBRARY_CAMERA_PRESETS } from "./motion-library-camera.js";
 import { MOTION_LIBRARY_NATIVE_PRESETS } from "./motion-library-native.js";
 import { MOTION_LIBRARY_SIGNATURE_PRESETS } from "./motion-library-signature.js";
+import { MOTION_LIBRARY_MOMENTUM_PRESETS } from "./motion-library-momentum.js";
+import { MOTION_LIBRARY_LOOK_PRESETS, MOTION_LIBRARY_REVEAL_PRESETS } from "./motion-library-reveals-looks.js";
+import { MOTION_LIBRARY_TEXT_PRESETS } from "./motion-library-text.js";
 
 /**
  * Original, declarative Moti.on animation library.
@@ -26,9 +29,15 @@ export interface MotionLibraryPreset {
   referenceIndex: number | null;
   /** Exact master-spec overlay recipe; does not apply directly to user layers. */
   cameraSpec?: { id: string; blur: "none" | "gaussian" | "lens"; exposure?: number; native?: { style: number; angle: number }; impact?: CameraImpactSpec };
-  collection?: "studio" | "gemini" | "native" | "premium" | "signature";
+  /** Independently packaged original film overlay, applied around a cut. */
+  filmSpec?: { id: string; family: "burn" | "chemical" | "splice" | "mixed-media"; version?: 2 };
+  collection?: "studio" | "gemini" | "native" | "premium" | "signature" | "momentum" | "reveal" | "looks" | "text" | "emulsion";
   /** Signature gallery family; absent on every other collection. */
   family?: "essentials" | "cinema" | "light-matter" | "variation";
+  /** Text family independent of Signature's gallery family. */
+  textFamily?: "fade" | "position" | "rotate" | "scale" | "tracking" | "mask" | "typewriter" | "decode" | "combination" | "loop";
+  /** Stable useful variant with its own original, localized label. */
+  textVariant?: { id: string; name: { "pt-BR": string; "en-US": string } };
   /** Authored tempo character, in frames at the 30 fps reference. A kinetic
    * look depends on velocity, so its window is narrow; a cinematic look keys
    * its effects to progress and keeps its character at any duration; a loop
@@ -43,7 +52,11 @@ export interface MotionLibraryPreset {
   /** Curated initial controls; omitted values use the legacy library defaults. */
   defaults?: Partial<MotionLibraryOptions>;
   mode: "transition" | "continuous" | "static";
-  easing: "smooth" | "cubic" | "overshoot" | "bounce" | "flicker" | "silk" | "glide" | "spring" | "velvet" | "drift" | "snap";
+  easing: "smooth" | "cubic" | "overshoot" | "bounce" | "flicker" | "silk" | "glide" | "spring" | "velvet" | "drift" | "snap"
+    /** Momentum settles: a decaying ricochet or hops, tuned live by the settle controls. */
+    | "settle-wave" | "settle-hop"
+    /** Classic power/trigonometric families; "out" decelerates into the resting pose. */
+    | MotionPennerEasing;
   /** Nominal offsets/amplitudes in pixels for a 1080-pixel-high composition. */
   position: [number, number, number];
   /** X, Y and Z offsets/amplitudes in degrees. */
@@ -51,7 +64,7 @@ export interface MotionLibraryPreset {
   /** Transition offsets from 100%; continuous amplitudes in percentage points. */
   scale: [number, number, number];
   fade: boolean;
-  waveform: "none" | "wiggle" | "cosine" | "abs-cosine" | "orbit";
+  waveform: "none" | "wiggle" | "cosine" | "abs-cosine" | "orbit" | "spin" | "blink" | "heartbeat" | "stepped" | "burst";
   effect:
     | "none"
     | "blur"
@@ -83,7 +96,11 @@ export interface MotionLibraryPreset {
     | "dust"
     | "smoke"
     | "projector"
-    | "halo";
+    | "halo"
+    /** Reveals: a native transition effect uncovers the layer; it starts hidden by the effect. */
+    | "reveal-linear" | "reveal-radial" | "reveal-blinds" | "reveal-blocks" | "reveal-grid" | "reveal-sweep"
+    /** Looks: a stack of native effects that stylizes the layer; Intensity blends it in. */
+    | "look-vhs" | "look-crt" | "look-film" | "look-halftone" | "look-dither" | "look-sketch" | "look-stopmotion" | "look-vintage";
   /** Effect-specific nominal amount; zero when no effect is requested. */
   effectAmount: number;
   /** Screen-space direction: 0° right, 90° down, 180° left, 270° up. */
@@ -92,6 +109,14 @@ export interface MotionLibraryPreset {
   effectColor?: [number, number, number];
   text: {
     unit: "characters" | "words" | "lines" | "all";
+    /** Real per-segment 3D text; legacy recipes remain 2D unless explicitly set. */
+    dimension?: "2d" | "3d";
+    /** Segment pivot grouping; omitted means the effective selector unit. */
+    grouping?: "characters" | "words" | "lines" | "all";
+    /** Where each unit turns and scales, as an offset from its visual centre in
+     * em of the live font size: [0, .36] is the baseline, [0, -.36] the cap line.
+     * Omitted means the visual centre. The text stays where it was at rest. */
+    origin?: [number, number, number];
     random: boolean;
     decode: boolean;
     tracking: number;
@@ -110,7 +135,18 @@ export interface MotionLibraryPreset {
     /** Restrict per-unit blur to one axis for a directional motion streak. */
     blurAxis?: "x" | "y";
   };
-  pivot: "anchor" | "edge";
+  /** "offset" turns around a point away from the Anchor Point, set by pivotOffset
+   * and then by a live "Transition center" control; Anchor Point never changes. */
+  pivot: "anchor" | "edge" | "offset";
+  /** Pivot relative to the Anchor Point, in fractions of the layer's width and height. */
+  pivotOffset?: [number, number];
+  /** "offscreen" replaces the authored distance: the host measures how far the
+   * layer must travel to leave the composition and exposes it as a live control. */
+  travel?: "authored" | "offscreen";
+  /** No longer offered: another preset already gives this motion (from another
+   * side, or with another curve). It stays in the catalog so layers that use it
+   * keep being inspected, adjusted and removed exactly as before. */
+  retired?: true;
 }
 
 /**
@@ -144,11 +180,36 @@ export interface CameraImpactSpec {
   wave: number;
 }
 
+/** Classic easing families, each with three accelerations. */
+export const MOTION_PENNER_FAMILIES = ["sine", "quad", "quart", "quint", "expo", "circ"] as const;
+export const MOTION_PENNER_SHAPES = ["out", "in", "in-out"] as const;
+export type MotionPennerFamily = typeof MOTION_PENNER_FAMILIES[number];
+export type MotionPennerShape = typeof MOTION_PENNER_SHAPES[number];
+export type MotionPennerEasing = `${MotionPennerFamily}-${MotionPennerShape}`;
+
+/** Family and acceleration of a classic easing, or undefined for any other curve. */
+export function parsePennerEasing(easing: string | undefined): {family: MotionPennerFamily; shape: MotionPennerShape} | undefined {
+  if (!easing) return undefined;
+  const dash = easing.indexOf("-");
+  const family = MOTION_PENNER_FAMILIES.find(name => name === easing.slice(0, dash));
+  const shape = MOTION_PENNER_SHAPES.find(name => name === easing.slice(dash + 1));
+  return dash > 0 && family && shape ? {family, shape} : undefined;
+}
+
+export type MotionLibraryDiagonal = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+export const MOTION_LIBRARY_DIAGONALS: readonly MotionLibraryDiagonal[] = ["top-left", "top-right", "bottom-left", "bottom-right"];
+/** Every accepted direction, the recipe's own ("preset") first. */
+export const MOTION_LIBRARY_DIRECTIONS: readonly MotionLibraryOptions["direction"][] = ["preset", "bottom", "left", "right", "top", ...MOTION_LIBRARY_DIAGONALS];
+
 export interface MotionLibraryOptions {
   /** Use the recipe's curve or explicitly choose its transition response. */
   easing?: "preset" | MotionLibraryPreset["easing"];
   phase: "in" | "out" | "both";
-  direction: "preset" | "bottom" | "left" | "right" | "top";
+  /** Diagonals apply only where libraryUsesDiagonals holds (position travel). */
+  direction: "preset" | "bottom" | "left" | "right" | "top" | MotionLibraryDiagonal;
+  /** Exit sequence of phase out/both: "mirror" (default) leaves last-in first,
+   * "repeat" leaves in the entrance order. Absent means "mirror". */
+  exitOrder?: "mirror" | "repeat";
   /** Preserve recipe sequence unless explicitly overridden. */
   order?: "preset" | "forward" | "reverse" | "center-out" | "edges-in" | "random";
   /** Deterministic variation of scattered motion and random sequencing. */
@@ -163,7 +224,26 @@ export interface MotionLibraryOptions {
   overlap?: number;
   /** Continuous-animation frequency, as a percentage of the base cycle speed. */
   speed?: number;
+  /** Momentum settle size: ricochet amplitude or first hop height, in percent. */
+  settleAmount?: number;
+  /** Ricochet oscillations or number of hops after the arrival. */
+  settleCount?: number;
+  /** How quickly the ricochet fades or how much height each hop loses, in percent. */
+  settleDamping?: number;
+  /** Turn on the layer's motion blur (and the composition's, when off) while the
+   * preset is applied; only switches Moti.on turned on are turned off again. */
+  motionBlur?: boolean;
 }
+
+/** Defaults of the Momentum settle controls; the shared curve and the host use the same values. */
+export const MOTION_SETTLE_DEFAULTS: Readonly<Record<"settle-wave" | "settle-hop", Readonly<Required<Pick<MotionLibraryOptions, "settleAmount" | "settleCount" | "settleDamping">>>>> = {
+  "settle-wave": { settleAmount: 35, settleCount: 2.5, settleDamping: 55 },
+  "settle-hop": { settleAmount: 40, settleCount: 3, settleDamping: 60 }
+};
+
+/** Every accepted easing option, including the recipe's own ("preset"). */
+export const MOTION_LIBRARY_EASINGS: readonly string[] = ["preset", "smooth", "cubic", "overshoot", "bounce", "flicker", "silk", "glide", "spring", "velvet", "drift", "snap", "settle-wave", "settle-hop",
+  ...MOTION_PENNER_FAMILIES.flatMap(family => MOTION_PENNER_SHAPES.map(shape => `${family}-${shape}`))];
 
 export const MOTION_LIBRARY_DEFAULTS: Readonly<MotionLibraryOptions> = {
   phase: "in",
@@ -182,7 +262,7 @@ export function isMotionLibraryOptions(value: unknown): value is MotionLibraryOp
   const requiredKeys = [
     "phase", "direction", "durationFrames", "intensity", "staggerFrames", "unit"
   ];
-  const expectedKeys = [...requiredKeys, "elasticity", "overlap", "speed", "order", "seed", "easing"];
+  const expectedKeys = [...requiredKeys, "elasticity", "overlap", "speed", "order", "seed", "easing", "settleAmount", "settleCount", "settleDamping", "motionBlur", "exitOrder"];
   const keys = Reflect.ownKeys(value);
   if (keys.length < requiredKeys.length || keys.length > expectedKeys.length) return false;
   if (requiredKeys.some((key) => !Object.prototype.hasOwnProperty.call(value, key))) return false;
@@ -193,18 +273,20 @@ export function isMotionLibraryOptions(value: unknown): value is MotionLibraryOp
   }
   const options = value as Record<string, unknown>;
   for (const [key, minimum, maximum] of [
-    ["elasticity", 0, 100], ["overlap", 0, 100], ["speed", 25, 200]
+    ["elasticity", 0, 100], ["overlap", 0, 100], ["speed", 25, 200],
+    ["settleAmount", 0, 100], ["settleCount", 0.5, 8], ["settleDamping", 0, 100]
   ] as const) {
     if (!Object.prototype.hasOwnProperty.call(options, key)) continue;
     const number = options[key];
     if (typeof number !== "number" || !Number.isFinite(number) || number < minimum || number > maximum) return false;
   }
-  if (Object.prototype.hasOwnProperty.call(options, "easing") && !["preset", "smooth", "cubic", "overshoot", "bounce", "flicker", "silk", "glide", "spring", "velvet", "drift", "snap"].includes(options.easing as string)) return false;
+  if (Object.prototype.hasOwnProperty.call(options, "easing") && !MOTION_LIBRARY_EASINGS.includes(options.easing as string)) return false;
+  if (Object.prototype.hasOwnProperty.call(options, "motionBlur") && typeof options.motionBlur !== "boolean") return false;
   if (Object.prototype.hasOwnProperty.call(options, "order") && !["preset", "forward", "reverse", "center-out", "edges-in", "random"].includes(options.order as string)) return false;
+  if (Object.prototype.hasOwnProperty.call(options, "exitOrder") && options.exitOrder !== "mirror" && options.exitOrder !== "repeat") return false;
   if (Object.prototype.hasOwnProperty.call(options, "seed") && (typeof options.seed !== "number" || !Number.isInteger(options.seed) || options.seed < 0 || options.seed > 9999)) return false;
   return (options.phase === "in" || options.phase === "out" || options.phase === "both")
-    && (options.direction === "preset" || options.direction === "bottom" || options.direction === "left"
-      || options.direction === "right" || options.direction === "top")
+    && MOTION_LIBRARY_DIRECTIONS.includes(options.direction as MotionLibraryOptions["direction"])
     && typeof options.durationFrames === "number" && Number.isInteger(options.durationFrames)
     && options.durationFrames >= 1 && options.durationFrames <= 600
     && typeof options.intensity === "number" && Number.isFinite(options.intensity)
@@ -215,7 +297,18 @@ export function isMotionLibraryOptions(value: unknown): value is MotionLibraryOp
       || options.unit === "lines" || options.unit === "all");
 }
 
-export const MOTION_LIBRARY_PRESETS: readonly MotionLibraryPreset[] = [
+/** Fast layer transitions apply with motion blur on: at their default timing the
+ * preview peaks above 40 px (at 1080 px, in X, Y and Z) or 8 degrees per frame.
+ * The user can turn it off; tests keep this list equal to the measured set. */
+export const MOTION_BLUR_BY_DEFAULT: ReadonlySet<string> = new Set([
+  "hinged-reveal", "spring-depth-swing", "elastic-pivot", "bounce-flip", "front-fold", "premium-elastic-drop", "glitch-slide",
+  "dynamic-flip-3d", "smooth-z-push", "aggressive-orbit", "cinematic-deep-focus", "premium-snap-stretch",
+  "momentum-push", "momentum-push-spin", "momentum-push-grow", "momentum-push-shrink", "momentum-spin", "momentum-twist",
+  "momentum-pendulum", "momentum-tumble-x", "momentum-tumble-y", "momentum-depth-drop", "momentum-deep-pendulum", "momentum-hinge",
+  "premium-page-turn", "premium-flip-drop", "premium-depth-spiral", "premium-floor-rise", "premium-turntable-approach", "premium-side-flip-bounce"
+]);
+
+const MOTION_LIBRARY_RECIPES: readonly MotionLibraryPreset[] = [
   {
     id: "mist-reveal",
     name: {"pt-BR": "Revelação suave", "en-US": "Mist reveal"},
@@ -366,7 +459,9 @@ export const MOTION_LIBRARY_PRESETS: readonly MotionLibraryPreset[] = [
     category: "motion-2d",
     referenceIndex: 8,
     mode: "transition",
-    easing: "bounce",
+    easing: "settle-hop",
+    /** Fitted to the former fixed bounce (RMS 0.036), now tuned live. */
+    defaults: {settleAmount: 48, settleCount: 3, settleDamping: 78},
     position: [0, 0, 0],
     rotation: [0, 0, 0],
     scale: [-100, -100, 0],
@@ -474,7 +569,9 @@ export const MOTION_LIBRARY_PRESETS: readonly MotionLibraryPreset[] = [
     category: "motion-3d",
     referenceIndex: 14,
     mode: "transition",
-    easing: "bounce",
+    easing: "settle-hop",
+    /** Fitted to the former fixed bounce (RMS 0.036), now tuned live. */
+    defaults: {settleAmount: 48, settleCount: 3, settleDamping: 78},
     position: [0, 0, 0],
     rotation: [90, 0, 0],
     scale: [0, 0, 0],
@@ -1373,10 +1470,11 @@ export const MOTION_LIBRARY_PRESETS: readonly MotionLibraryPreset[] = [
     referenceIndex: null,
     collection: "gemini",
     mode: "transition",
-    easing: "smooth",
-    position: [0, 150, 0],
+    easing: "drift",
+    defaults: {durationFrames: 40},
+    position: [-240, 0, 0],
     rotation: [0, 0, 0],
-    scale: [0, 0, 0],
+    scale: [6, 6, 0],
     fade: true,
     waveform: "none",
     effect: "none",
@@ -1392,7 +1490,9 @@ export const MOTION_LIBRARY_PRESETS: readonly MotionLibraryPreset[] = [
     referenceIndex: null,
     collection: "gemini",
     mode: "transition",
-    easing: "bounce",
+    easing: "settle-hop",
+    /** Fitted to the former fixed bounce (RMS 0.036), now tuned live. */
+    defaults: {settleAmount: 48, settleCount: 3, settleDamping: 78},
     position: [0, -180, 0],
     rotation: [0, 0, 0],
     scale: [0, 0, 0],
@@ -1449,7 +1549,9 @@ export const MOTION_LIBRARY_PRESETS: readonly MotionLibraryPreset[] = [
     referenceIndex: null,
     collection: "gemini",
     mode: "transition",
-    easing: "bounce",
+    easing: "settle-hop",
+    /** Fitted to the former fixed bounce (RMS 0.036), now tuned live. */
+    defaults: {settleAmount: 48, settleCount: 3, settleDamping: 78},
     position: [0, 0, 0],
     rotation: [0, -270, 0],
     scale: [-80, -80, 0],
@@ -1818,5 +1920,12 @@ export const MOTION_LIBRARY_PRESETS: readonly MotionLibraryPreset[] = [
   ...MOTION_LIBRARY_CAMERA_PRESETS,
   ...MOTION_LIBRARY_NATIVE_PRESETS,
   ...MOTION_LIBRARY_PREMIUM_PRESETS,
-  ...MOTION_LIBRARY_SIGNATURE_PRESETS
+  ...MOTION_LIBRARY_SIGNATURE_PRESETS,
+  ...MOTION_LIBRARY_REVEAL_PRESETS,
+  ...MOTION_LIBRARY_LOOK_PRESETS,
+  ...MOTION_LIBRARY_MOMENTUM_PRESETS,
+  ...MOTION_LIBRARY_TEXT_PRESETS
 ];
+
+export const MOTION_LIBRARY_PRESETS: readonly MotionLibraryPreset[] = MOTION_LIBRARY_RECIPES.map(p =>
+  MOTION_BLUR_BY_DEFAULT.has(p.id) ? { ...p, defaults: { ...p.defaults, motionBlur: true } } : p);

@@ -9,7 +9,8 @@ import { createFakeDocument } from "./fake-dom.mjs";
 function measuredBar(doc, width) {
   const bar = doc.createElement("div");
   bar.className = "ch-panel-action-bar";
-  Object.defineProperty(bar, "clientWidth", { get: () => width });
+  bar.measureWidth = typeof width === "function" ? width : () => width;
+  Object.defineProperty(bar, "clientWidth", { get: () => bar.measureWidth() });
   Object.defineProperty(bar, "scrollWidth", {
     get: () => bar.children.filter(node => node.getAttribute("data-overflow") !== "true" && node.hidden !== true)
       .reduce((sum, node) => sum + (node.className === "ch-action-more" ? 28 : 90) + 8, -8)
@@ -104,5 +105,24 @@ test("menu items run the original action, mirror disabled reasons and restore fo
   const again = doc.body.children.find(node => node.className === "ch-action-menu");
   again.children[1].keydown("Escape");
   assert.equal(doc.body.children.includes(again), false);
+  overflow.dispose();
+});
+
+test("resizing hands focus between a secondary action and the overflow menu", () => {
+  const doc = overlayFake(createFakeDocument());
+  let width = 380;
+  const bar = measuredBar(doc, () => width);
+  const controls = fill(doc, bar, []);
+  const overflow = attachActionOverflow(doc, bar, { label: "Mais ações" });
+  controls.reset.button.focus();
+  width = 230;
+  overflow.refresh();
+  assert.equal(doc.activeElement, overflow.button);
+  overflow.button.click();
+  width = 380;
+  overflow.refresh();
+  assert.equal(overflow.button.hidden, true);
+  assert.equal(doc.body.children.some(node => node.className === "ch-action-menu"), false);
+  assert.equal(doc.activeElement, controls.reset.button);
   overflow.dispose();
 });

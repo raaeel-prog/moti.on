@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
 import {
+  MOTION_BLUR_BY_DEFAULT,
   MOTION_LIBRARY_DEFAULTS,
   MOTION_LIBRARY_PRESETS,
   isMotionLibraryOptions
@@ -118,13 +119,29 @@ test("the 56 established recipes preserve all data except the explicit entrance 
     "reverse-depth-turn", "spring-depth-swing", "elastic-pivot", "bounce-flip",
     "front-fold", "word-curtain", "line-resolve"
   ]);
+  // 2026-10-14 catalog upgrade (docs/implementation/2026-10-14-motion-catalog-upgrade.md):
+  // the fixed bounce became the fitted live Hop, and fast transitions default to motion blur.
+  const hopIds = new Set(["bounce-pop", "bounce-flip"]);
   const established = MOTION_LIBRARY_PRESETS.slice(0, 56);
   assert.equal(established.filter((preset) => correctedIds.has(preset.id)).length, correctedIds.size);
   const originalRecipes = established.map((preset) => {
-    if (!correctedIds.has(preset.id)) return preset;
+    let original = preset;
+    if (hopIds.has(preset.id)) {
+      assert.equal(preset.easing, "settle-hop", preset.id);
+      assert.deepEqual([preset.defaults.settleAmount, preset.defaults.settleCount, preset.defaults.settleDamping], [48, 3, 78], preset.id);
+      const { settleAmount: _a, settleCount: _c, settleDamping: _d, ...rest } = preset.defaults;
+      original = { ...original, easing: "bounce", defaults: rest };
+    }
+    if (MOTION_BLUR_BY_DEFAULT.has(preset.id)) {
+      assert.equal(preset.defaults.motionBlur, true, preset.id);
+      const { motionBlur: _blur, ...rest } = original.defaults;
+      original = { ...original, defaults: rest };
+    }
+    if (original.defaults && Object.keys(original.defaults).length === 0) { const { defaults: _empty, ...rest } = original; original = rest; }
+    if (!correctedIds.has(preset.id)) return original;
     assert.equal(preset.mode, "transition", preset.id);
     assert.equal(preset.fade, true, `${preset.id}: approved entrance fade correction`);
-    return { ...preset, fade: false };
+    return { ...original, fade: false };
   });
   const digest = createHash("sha256").update(JSON.stringify(originalRecipes)).digest("hex");
   assert.equal(digest, "f74196cc66cf7fcf273c6f6aa101bc8ae7549cda9b572e4cbb1120eb37818936");

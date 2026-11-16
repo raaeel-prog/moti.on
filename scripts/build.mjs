@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { generateMotionLibrary } from "./build-motion-library.mjs";
 import { buildExtendScript } from "./build-extendscript.mjs";
 import { buildAeClient, buildPremiereClient } from "./build-client.mjs";
+import { generateSfx } from "./generate-sfx.mjs";
 import { renderModule as renderContractsModule, GENERATED_PATH as CONTRACTS_ES5_PATH } from "../packages/contracts/scripts/gen-extendscript.mjs";
 import { renderModule as renderDescriptorsModule, GENERATED_PATH as DESCRIPTORS_ES5_PATH } from "../packages/command-registry/scripts/gen-extendscript.mjs";
 
@@ -24,6 +25,12 @@ for (const entry of Object.values(controlCatalog)) {
   await readFile(path.join(controlPresetRoot, entry.file));
   controlPresetFiles.add(entry.file);
 }
+// Card renders ship only while their manifest declares them: a render the
+// current engine no longer matches (dropped by text-presets-render --prune)
+// stays in source until the next render, and the card draws its preview.
+const textPreviewRoot = path.join(apps, "after-effects-cep", "assets", "text-previews");
+const textPreviewManifest = JSON.parse(await readFile(path.join(textPreviewRoot, "manifest.json"), "utf8"));
+const textPreviewFiles = new Set(["manifest.json", ...Object.values(textPreviewManifest.presets).flatMap(entry => [entry.video, entry.poster])]);
 
 /**
  * Nomes de arquivo e diretorio que existem na arvore fonte por razoes de
@@ -102,6 +109,7 @@ async function copyAppShell(appName, outputName) {
       const base = path.basename(source);
       // Ship only the current catalog; obsolete authoring variants stay in source.
       if (path.dirname(source) === controlPresetRoot && !controlPresetFiles.has(base)) return false;
+      if (path.dirname(source) === textPreviewRoot && !textPreviewFiles.has(base)) return false;
       if (EXCLUDED_BASENAMES.has(base)) return false;
       // Artefatos do compilador: tsc -b grava .tsbuildinfo ao lado do tsconfig.
       // Prefixo, e nao lista de nomes: tsconfig.client.json vazou para dist/
@@ -116,6 +124,33 @@ async function copyAppShell(appName, outputName) {
   const themeParts = await Promise.all(
     SHARED_THEME_SOURCES.map((source) => readFile(source, "utf8"))
   );
+  // Host-specific polish must never alter Premiere or the shared Onyx palette.
+  if (appName === "after-effects-cep") {
+    themeParts.push(await readFile(path.join(packages, "ui-tokens", "src", "after-effects.css"), "utf8"));
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-refinement.css"), "utf8"));
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-settings.css"), "utf8"));
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-camera.css"), "utf8"));
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-workstation.css"), "utf8"));
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-motion.css"), "utf8"));
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-quick-actions.css"), "utf8"));
+    themeParts.push(await readFile(path.join(apps, "after-effects-cep", "client", "src", "gradient-preview.css"), "utf8"));
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "particles-editor.css"), "utf8"));
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-layout.css"), "utf8"));
+    // Árvore e menu de etiquetas no estilo Composer: por último, para vencer as camadas acima.
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-composer-browse.css"), "utf8"));
+    // Micro-interações de botões, ícones e sliders (motion/micro.ts liga o JS).
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-micro.css"), "utf8"));
+    // Menu "Ações de presets" (Action Deck): depois das micro-interações para vencer o press genérico.
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-preset-actions.css"), "utf8"));
+    // Polimento da aba Presets: divisor aceso, menu de contexto, filtro por etiqueta e busca compacta.
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-browse-polish.css"), "utf8"));
+    // Ajustes do preset como gaveta na grade: por último, para vencer o popover fixo.
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-preset-drawer.css"), "utf8"));
+    // Design system do painel (2026-11-12): escala única de cor, texto, raio e layout por largura. Última camada.
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-design-system.css"), "utf8"));
+    // Ícones vivos (2026-11-16): resposta ao ponteiro em ladrilhos, abas, estrelas e setas. Depois do design system.
+    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-icon-life.css"), "utf8"));
+  }
   await mkdir(path.dirname(themeDestination), { recursive: true });
   await writeFile(themeDestination, `${themeParts.join("\n\n").trimEnd()}\n`, "utf8");
 }
@@ -128,6 +163,8 @@ await writeFile(DESCRIPTORS_ES5_PATH, await renderDescriptorsModule(), "utf8");
 
 await copyAppShell("premiere-uxp", "premiere-uxp");
 await copyAppShell("after-effects-cep", "after-effects-cep");
+// Sons dos Elementos: sintetizados a cada build, sem binario no repositorio (ADR 0006).
+await generateSfx(path.join(dist, "after-effects-cep", "assets", "sounds"));
 
 // Cofre da conta (Keychain no macOS, Gerenciador de Credenciais no Windows). O
 // Node do CEP procura bin/<plataforma>-<arquitetura>; no macOS o binario e
@@ -187,6 +224,12 @@ function buildWindowsVault(output) {
 const extendScript = await buildExtendScript(
   path.join(dist, "after-effects-cep", "host", "index.jsx")
 );
+
+// Keep the independently runnable pack intact beside the test integration.
+await cp(path.join(root, "packs", "emulsion-v2"), path.join(dist, "after-effects-cep", "packs", "emulsion-v2"), {
+  recursive: true,
+  filter: source => !["scripts", "tests", "demo", "__pycache__"].includes(path.basename(source))
+});
 
 // O cliente do painel e empacotado, nao copiado: ele importa o encoder de
 // evalScript e os descriptors de packages/, e nem o CEP nem o UXP resolvem

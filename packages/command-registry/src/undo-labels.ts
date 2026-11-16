@@ -114,6 +114,10 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
     "en-US": "Moti.on: reverse keyframes",
     "pt-BR": "Moti.on: inverter keyframes"
   },
+  "undo.ae.keys.ease-paste": {
+    "en-US": "Moti.on: paste ease",
+    "pt-BR": "Moti.on: colar suavização"
+  },
   "undo.ae.keys.reverse-values": {
     "en-US": "Moti.on: reverse keyframe values",
     "pt-BR": "Moti.on: inverter valores dos keyframes"
@@ -171,6 +175,18 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
     "en-US": "Moti.on: apply glitch",
     "pt-BR": "Moti.on: aplicar glitch"
   },
+  "undo.ae.parallax.adjust": {
+    "en-US": "Moti.on: adjust parallax rig",
+    "pt-BR": "Moti.on: ajustar rig de parallax"
+  },
+  "undo.ae.parallax.move": {
+    "en-US": "Moti.on: move parallax camera",
+    "pt-BR": "Moti.on: mover câmera do parallax"
+  },
+  "undo.ae.parallax.remove": {
+    "en-US": "Moti.on: remove parallax rig",
+    "pt-BR": "Moti.on: remover rig de parallax"
+  },
   "undo.ae.animate.parallaxQuick": {
     "en-US": "Moti.on: create parallax rig",
     "pt-BR": "Moti.on: criar rig de parallax"
@@ -190,6 +206,18 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
   "undo.ae.comp.fastEdit": {
     "en-US": "Moti.on: edit composition",
     "pt-BR": "Moti.on: editar composi\u00e7\u00e3o"
+  },
+  "undo.ae.elements.insert": {
+    "en-US": "Moti.on: insert element",
+    "pt-BR": "Moti.on: inserir elemento"
+  },
+  "undo.ae.sound.insert": {
+    "en-US": "Moti.on: insert sound",
+    "pt-BR": "Moti.on: inserir som"
+  },
+  "undo.ae.stock.import": {
+    "en-US": "Moti.on: import stock media",
+    "pt-BR": "Moti.on: importar mídia do banco"
   },
   "undo.ae.shape.library": {
     "en-US": "Moti.on: create shape",
@@ -234,6 +262,30 @@ export const UNDO_LABELS: Record<string, Record<SupportedLocale, string>> = {
   "undo.ae.parallax.bake": {
     "en-US": "Moti.on: bake parallax",
     "pt-BR": "Moti.on: bake parallax"
+  },
+  "undo.ae.camera.choreographyApply": {
+    "en-US": "Moti.on: apply camera choreography",
+    "pt-BR": "Moti.on: aplicar coreografia de câmera"
+  },
+  "undo.ae.camera.shotApply": {
+    "en-US": "Moti.on: apply camera shot",
+    "pt-BR": "Moti.on: aplicar shot de câmera"
+  },
+  "undo.ae.camera.shotAdjust": {
+    "en-US": "Moti.on: adjust camera shot",
+    "pt-BR": "Moti.on: ajustar shot de câmera"
+  },
+  "undo.ae.camera.shotRemove": {
+    "en-US": "Moti.on: remove camera shot",
+    "pt-BR": "Moti.on: remover shot de câmera"
+  },
+  "undo.ae.camera.remove": {
+    "en-US": "Moti.on: remove camera rig",
+    "pt-BR": "Moti.on: remover rig de câmera"
+  },
+  "undo.ae.camera.bake": {
+    "en-US": "Moti.on: bake camera",
+    "pt-BR": "Moti.on: bake da câmera"
   },
   "undo.ae.vector.textToVector": {
     "en-US": "Moti.on: apply text to vector",

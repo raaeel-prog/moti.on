@@ -1,0 +1,217 @@
+/* AE motion layer (2026-10-23 upgrade, phase F0). Loaded only by the AE build, after
+ * ae-workstation.css and before ae-quick-actions.css (the approved dock wins).
+ * Neutral visuals only: no gradients, glows or hex colours; durations and curves come
+ * from the tokens in ui-tokens/src/after-effects.css. Every id of the AE motion catalog
+ * (apps/after-effects-cep/client/src/motion/catalog.ts) has its rule here.
+ * Chromium 99 (CEP 12): no color-mix(), :has(), @container or standalone transforms. */
+
+/* 36 spring-move — small elements that travel (pill, puck, knob). */
+[data-host="after-effects"] [data-motion~="spring-move"] { transition: transform var(--dur-spring) var(--ease-spring); }
+
+/* 37 height-glide — disclosures and docks open by height; content rises 8 px and fades. */
+[data-host="after-effects"] [data-motion~="height-glide"] { overflow: hidden; transition: height var(--dur-glide) var(--ease-glide); }
+[data-host="after-effects"] [data-motion~="height-glide"] > * { transition: opacity var(--dur-3) var(--ease-std), transform var(--dur-glide) var(--ease-glide); }
+[data-host="after-effects"] [data-motion~="height-glide"][data-open="false"] > * { opacity: 0; transform: translateY(-8px); }
+
+/* 38–40 sheet — side sheet enters with a light overshoot, leaves faster; scrim fades. */
+[data-host="after-effects"] [data-motion~="sheet-enter"][data-open="true"] { animation: ch-ae-sheet-in var(--dur-sheet) var(--ease-sheet) backwards; }
+[data-host="after-effects"] [data-motion~="sheet-exit"][data-closing="true"] { animation: ch-ae-sheet-out var(--dur-sheet-out) var(--ease-in) both; }
+[data-host="after-effects"] [data-motion~="sheet-scrim"] { transition: opacity var(--dur-3) var(--ease-std); }
+[data-host="after-effects"] [data-motion~="sheet-scrim"][data-open="false"] { opacity: 0; pointer-events: none; }
+
+/* 41 list-stagger — playStagger() sets data-stagger only while the cascade plays. */
+[data-host="after-effects"] [data-motion~="list-stagger"][data-stagger="true"] > [data-cascade="true"] { animation: ch-ae-rise var(--dur-spring) var(--ease-glide) both; animation-delay: calc(var(--motion-index, 0) * var(--stagger-step)); }
+
+/* 42 selection-glide — the selected underlay of tabs, chips and segmented controls. */
+[data-host="after-effects"] [data-motion~="selection-glide"] { transition: transform var(--dur-spring) var(--ease-spring), width var(--dur-glide) var(--ease-glide); }
+
+/* 43 smooth-scroll — JS drives the position; the scroller keeps the gesture to itself. */
+[data-host="after-effects"] [data-motion~="smooth-scroll"] { overscroll-behavior: contain; }
+
+/* 44 text-swap — a fresh node per change slides up into place (swapText()). */
+[data-host="after-effects"] [data-motion~="text-swap"] { display: inline-block; animation: ch-ae-swap-in var(--dur-swap) var(--ease-spring) both; }
+
+/* 45 focus-ring — the keyboard ring settles onto the control instead of popping in. */
+[data-host="after-effects"] .ch-shell :focus-visible,
+[data-host="after-effects"] [data-motion~="focus-ring"]:focus-visible { animation: ch-ae-focus-in var(--dur-1) var(--ease-out); }
+
+/* 46 stack-shift — flip() hands moved items (toasts, rows) over to this transition. */
+[data-host="after-effects"] [data-motion~="stack-shift"] { transition: transform var(--dur-sheet) var(--ease-glide); }
+
+/* F1 — shell. A view enters from the side of its tab (data-direction from shell-motion.ts).
+ * Presets only fades: its settings panel is position:fixed and a transform would offset it.
+ * Fill "backwards" so no transform lingers on the view body once it has landed. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-view-body[data-motion~="view-enter"][data-active="true"] { animation: ch-ae-view-rise var(--dur-4) var(--ease-glide) backwards; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-view-body[data-motion~="view-enter"][data-active="true"][data-direction="forward"] { animation-name: ch-ae-view-forward; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-view-body[data-motion~="view-enter"][data-active="true"][data-direction="back"] { animation-name: ch-ae-view-back; }
+[data-host="after-effects"] .ch-shell[data-layout="library"][data-view="presets"] .ch-view-body[data-motion~="view-enter"][data-active="true"] { animation-name: ch-ae-view-fade; }
+
+/* The nav pill (selection-glide) waits for its first placement before it starts to travel. */
+[data-host="after-effects"] .ch-nav__indicator:not([data-ready="true"]) { transition: none; }
+
+/* Toasts arrive on the spring, leave within the region's 140 ms removal and ride the dock:
+ * the lift is a translate (it glides) instead of `bottom` (it jumped). */
+[data-host="after-effects"] .ch-toast-region { bottom: 0; transform: translateY(calc(0px - var(--ch-feedback-bottom, 12px))); transition: transform var(--dur-glide) var(--ease-glide); }
+[data-host="after-effects"] [data-motion~="toast-enter"][data-open="true"] { animation: ch-ae-toast-in var(--dur-spring) var(--ease-spring) backwards; }
+[data-host="after-effects"] [data-motion~="toast-exit"][data-closing="true"] { animation: ch-ae-toast-out var(--dur-1) var(--ease-in) both; }
+
+/* F2 — rich tooltip (rich-tooltip.ts): grows from the control it explains, shortcut in a <kbd>. */
+[data-host="after-effects"] .ch-rich-tooltip strong { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+[data-host="after-effects"] .ch-rich-tooltip__kbd { flex: none; min-width: 16px; padding: 0 4px; border: 1px solid var(--border-subtle); border-radius: var(--radius-small); color: var(--text-secondary); font: inherit; font-size: 11px; font-weight: var(--weight-regular); line-height: 16px; text-align: center; }
+[data-host="after-effects"] .ch-rich-tooltip span + span { margin-top: 3px; }
+/* F9: every tip of the panel (library, ease actions, rich) grows from its control on the same spring. */
+[data-host="after-effects"] .ch-quick-tooltip[data-motion~="tooltip-enter"] { transform: translateY(3px) scale(.96); transition: opacity var(--dur-2) var(--ease-out), transform var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-rich-tooltip[data-motion~="tooltip-enter"][data-side="above"] { transform: translateY(-3px) scale(.96); }
+[data-host="after-effects"] .ch-quick-tooltip[data-motion~="tooltip-enter"][data-open="true"] { transform: none; }
+
+/* F2 — pressable chrome: buttons sink to .97 on press and come back on the spring.
+ * Tiles, the Quick dock and the curve editor keep their own press. */
+[data-host="after-effects"] .ch-shell .ch-nav__item,
+[data-host="after-effects"] .ch-shell .ch-nav__more,
+[data-host="after-effects"] .ch-shell .ch-context-back,
+[data-host="after-effects"] .ch-shell .ch-actions .ch-button,
+[data-host="after-effects"] .ch-shell .ch-library-icon,
+[data-host="after-effects"] .ch-shell .ch-ease-star,
+[data-host="after-effects"] .ch-shell .ch-ease-delete,
+[data-host="after-effects"] .ch-shell .ch-folder-toggle,
+[data-host="after-effects"] .ch-shell .ch-folder-more,
+[data-host="after-effects"] .ch-shell .ch-preset-settings-header > .ch-button,
+[data-host="after-effects"] .ch-toast__dismiss,
+[data-host="after-effects"] .ch-toast__action,
+[data-host="after-effects"] [data-motion~="button-press"] { transition: background-color var(--dur-1) var(--ease-std), color var(--dur-1) var(--ease-std), border-color var(--dur-1) var(--ease-std), box-shadow var(--dur-1) var(--ease-std), opacity var(--dur-1) var(--ease-std), transform var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-shell .ch-nav__item:active:not(:disabled),
+[data-host="after-effects"] .ch-shell .ch-nav__more:active:not(:disabled),
+[data-host="after-effects"] .ch-shell .ch-context-back:active:not(:disabled),
+[data-host="after-effects"] .ch-shell .ch-actions .ch-button:active:not(:disabled):not([aria-disabled="true"]),
+[data-host="after-effects"] .ch-shell .ch-library-icon:active:not(:disabled),
+[data-host="after-effects"] .ch-shell .ch-ease-star:active:not(:disabled),
+[data-host="after-effects"] .ch-shell .ch-ease-delete:active:not(:disabled),
+[data-host="after-effects"] .ch-shell .ch-folder-toggle:active:not(:disabled),
+[data-host="after-effects"] .ch-shell .ch-folder-more:active:not(:disabled),
+[data-host="after-effects"] .ch-shell .ch-preset-settings-header > .ch-button:active,
+[data-host="after-effects"] .ch-toast__dismiss:active,
+[data-host="after-effects"] .ch-toast__action:active,
+[data-host="after-effects"] button[data-motion~="button-press"]:active:not(:disabled):not([aria-disabled="true"]) { transition-duration: var(--dur-press); transition-timing-function: var(--ease-out); transform: scale(.97); }
+
+/* F3 — library (Home). Tiles lift 2 px on hover, sink on press and come back on the
+ * spring; group titles and tiles rise in reading order (playStagger → list-stagger). */
+[data-host="after-effects"] .ch-tool-tile > [data-motion~="tile-hover"] { transition: background-color var(--dur-1) var(--ease-std), color var(--dur-1) var(--ease-std), transform var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-tool-tile > [data-motion~="tile-hover"]:hover:not(:disabled):not([aria-disabled="true"]) { transform: translateY(-2px); }
+[data-host="after-effects"] .ch-tool-tile > [data-motion~="tile-press"]:active:not(:disabled):not([aria-disabled="true"]) { transition-duration: var(--dur-press); transition-timing-function: var(--ease-in); transform: scale(.96); }
+[data-host="after-effects"] .ch-tool-grid[data-motion~="list-stagger"][data-stagger="true"] > .ch-tool-group-title[data-cascade="true"] { animation-name: ch-ae-view-rise; }
+
+/* Menus grow from the control that opened them and land on the spring; one highlight
+ * slides between the options instead of each row lighting up on its own. */
+[data-host="after-effects"] [data-motion~="surface-morph"][data-open="true"] { transition: opacity var(--dur-3) var(--ease-out), transform var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-library-menu[data-motion~="surface-morph"]:not([data-open="true"]) { transform: scale(.94); }
+/* Same spring for every select/curve menu (menu-glide.ts). */
+[data-host="after-effects"] .ch-menu-glide[data-motion~="selection-glide"] { transition: transform var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-menu-glide:not([data-ready="true"]) { transition: none; }
+[data-host="after-effects"] .ch-select-menu[data-motion~="surface-morph"]:not([data-open="true"]) { transform: scale(.94); }
+[data-host="after-effects"] .ch-library-menu__glide { position: absolute; top: 0; left: 4px; right: 4px; z-index: 0; border-radius: var(--radius-input); background: var(--surface-hover); pointer-events: none; }
+[data-host="after-effects"] .ch-library-menu:not([data-glide="true"]) > .ch-library-menu__glide,
+[data-host="after-effects"] .ch-library-menu > .ch-library-menu__glide:not([data-ready="true"]) { transition: none; }
+[data-host="after-effects"] .ch-library-menu:not([data-glide="true"]) > .ch-library-menu__glide { opacity: 0; }
+[data-host="after-effects"] .ch-library-menu[data-glide="true"] > .ch-button,
+[data-host="after-effects"] .ch-library-menu[data-glide="true"] > .ch-library-menu-label { position: relative; z-index: 1; }
+[data-host="after-effects"] .ch-library-menu[data-glide="true"] > .ch-button:hover,
+[data-host="after-effects"] .ch-library-menu[data-glide="true"] > .ch-button:focus-visible { background: transparent; }
+
+/* F4 — inspector (inspector-sheet.ts). Below 720 px it is a sheet (38–40 above); a tool
+ * replacing the open one only crossfades; from 720 px the column slides in 12 px. */
+@media (min-width: 720px) {
+  [data-host="after-effects"] .ch-context-inspector[data-motion~="sheet-enter"][data-open="true"] { animation-name: ch-ae-view-forward; animation-duration: var(--dur-4); }
+  [data-host="after-effects"] .ch-context-inspector[data-motion~="sheet-exit"][data-closing="true"] { animation-name: ch-ae-column-out; animation-duration: var(--dur-sheet-out); }
+}
+[data-host="after-effects"] .ch-context-inspector[data-motion~="sheet-enter"][data-open="true"][data-swap="true"] { animation-name: ch-ae-view-fade; animation-duration: var(--dur-2); }
+
+/* F5 — command palette: drops in on the spring, leaves faster; one highlight glides
+ * between results (no cascade while typing); the scrim is the sheet scrim (40). */
+[data-host="after-effects"] .ch-palette[data-motion~="command-palette"][data-open="true"] { animation: ch-ae-palette-in var(--dur-spring) var(--ease-spring) backwards; }
+[data-host="after-effects"] .ch-palette[data-closing="true"] { animation: ch-ae-palette-out var(--dur-sheet-out) var(--ease-in) both; }
+[data-host="after-effects"] .ch-palette__glide:not([data-ready="true"]) { transition: none; }
+
+/* F6 — curve editor. Handles grow on hover and settle on the spring, pressed ones sit a
+ * little smaller; presets morph the curve (curve-editor.ts `animate`); a star that turns
+ * on pops once; the curve name slides in (text-swap). */
+[data-host="after-effects"] .ch-curve__handle,
+[data-host="after-effects"] .ch-curve__point,
+[data-host="after-effects"] .ch-curve__marker { transform-box: fill-box; transform-origin: center; transition: fill var(--dur-1) var(--ease-std), transform var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-curve__handle:hover,
+[data-host="after-effects"] .ch-curve__point:hover,
+[data-host="after-effects"] .ch-curve__marker:hover { transform: scale(1.3); }
+[data-host="after-effects"] .ch-curve__handle:active,
+[data-host="after-effects"] .ch-curve__point:active,
+[data-host="after-effects"] .ch-curve__marker:active { transform: scale(1.12); transition-duration: var(--dur-press); transition-timing-function: var(--ease-out); }
+[data-host="after-effects"] .ch-shell .ch-ease-star[data-pop="true"] .ch-ui-icon { animation: ch-ae-pop var(--dur-spring) var(--ease-spring) backwards; }
+
+/* F7 — presets. Folder rows a toggle reveals rise in; the splitter grip stretches while
+ * dragged and settles on the spring; one underline slides between Navegar and Editar. */
+[data-host="after-effects"] .ch-preset-categories[data-motion~="list-stagger"][data-stagger="true"] > [data-cascade="true"] { animation-name: ch-ae-view-rise; }
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-splitter::after { transition: color var(--dur-1) var(--ease-std), transform var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-splitter[data-dragging="true"] { background: var(--surface-hover); }
+[data-host="after-effects"] .ch-preset-gallery .ch-preset-splitter[data-dragging="true"]::after { color: var(--action-text); transform: scaleY(1.5); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs[data-glide="true"] { position: relative; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs[data-glide="true"] > [aria-selected="true"] { border-bottom-color: transparent; }
+[data-host="after-effects"] .ch-preset-tabs__glide { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--action-text); pointer-events: none; }
+[data-host="after-effects"] .ch-preset-tabs__glide:not([data-ready="true"]) { transition: none; }
+
+/* F8 — chips, cards, toggles, gradient stops, Settings.
+ * One accent ring slides between the chips of a group (chip-glide.ts); camera cards lift
+ * and sink like tiles; a flipped checkbox pops; gradient stops snap in and shrink out;
+ * Settings sections rise in on arrival (list-stagger, playStagger in main.ts). */
+[data-host="after-effects"] .ch-chip-group[data-glide="true"] { position: relative; }
+[data-host="after-effects"] .ch-chip-glide { position: absolute; top: 0; left: 0; z-index: 1; box-sizing: border-box; border: 1px solid var(--ch-accent); border-radius: var(--r-chip); pointer-events: none; }
+[data-host="after-effects"] .ch-chip-glide[data-visible="false"] { opacity: 0; }
+[data-host="after-effects"] .ch-chip-glide:not([data-ready="true"]) { transition: none; }
+[data-host="after-effects"] .ch-chip-group[data-glide="true"] > .ch-chip[data-active="true"],
+[data-host="after-effects"] .ch-chip-group[data-glide="true"] > .ch-chip[aria-pressed="true"],
+[data-host="after-effects"] .ch-chip-group[data-glide="true"] > .ch-chip[aria-selected="true"],
+[data-host="after-effects"] .ch-chip-group[data-glide="true"] > .ch-chip[aria-checked="true"] { border-color: transparent; }
+[data-host="after-effects"] .ch-camera-card { transition: background-color var(--dur-1) var(--ease-std), color var(--dur-1) var(--ease-std), border-color var(--dur-2) var(--ease-std), transform var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-camera-card:hover:not(:disabled) { transform: translateY(-2px); }
+[data-host="after-effects"] .ch-camera-card:active:not(:disabled) { transform: scale(.97); transition-duration: var(--dur-press); transition-timing-function: var(--ease-in); }
+[data-host="after-effects"] input[type="checkbox"][data-pop="true"],
+[data-host="after-effects"] input[type="radio"][data-pop="true"] { animation: ch-ae-pop-soft var(--dur-spring) var(--ease-spring); }
+[data-host="after-effects"] .ch-gradient-marker[data-pop="in"] { animation: ch-ae-marker-in var(--dur-spring) var(--ease-spring) backwards; }
+[data-host="after-effects"] .ch-gradient-marker[data-pop="out"] { animation: ch-ae-marker-out var(--dur-2) var(--ease-in) both; pointer-events: none; }
+[data-host="after-effects"] .ch-view-body[data-motion~="list-stagger"][data-stagger="true"] > [data-cascade="true"],
+[data-host="after-effects"] .ch-settings[data-motion~="list-stagger"][data-stagger="true"] > [data-cascade="true"] { animation-name: ch-ae-view-rise; }
+
+/* Keyframe operations (Suavização, compact review 2026-10-24): on hover or keyboard focus the
+ * result keyframes travel from where they come from (ease-actions.ts sets --op-x/--op-y and
+ * restarts data-play), so each pictogram shows what its button will do. */
+[data-host="after-effects"] .ch-ease-action[data-play="true"] .ch-ease-action__moving { animation: ch-ae-op-travel var(--dur-glide) var(--ease-glide) both; }
+
+/* Motion probe (System view): a short strip to test wheel scrolling in the host. */
+[data-host="after-effects"] .ch-motion-probe__strip { height: 72px; margin: 8px 0 4px; overflow-y: auto; border: 1px solid var(--line-hairline); border-radius: var(--radius-medium); }
+[data-host="after-effects"] .ch-motion-probe__track { height: 400px; padding: 8px; color: var(--text-secondary); font-size: 11px; }
+[data-host="after-effects"] .ch-motion-probe .ch-row__value { white-space: normal; overflow: visible; text-overflow: clip; text-align: right; overflow-wrap: anywhere; }
+
+/* Disabled controls never move. */
+[data-host="after-effects"] .ch-shell button:disabled,
+[data-host="after-effects"] .ch-shell [aria-disabled="true"] { transform: none; }
+
+/* Reduced motion: motion.css already removes every animation and transition; resting
+ * states that would otherwise stay offset are cleared here. */
+[data-host="after-effects"][data-reduced-motion="true"] [data-motion~="height-glide"][data-open="false"] > * { transform: none; }
+
+@keyframes ch-ae-op-travel { 0% { opacity: 0; transform: translate(var(--op-x, 0), var(--op-y, 0)); } 30% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+@keyframes ch-ae-sheet-in { from { opacity: 0; transform: translateX(var(--sheet-from, 100%)); } to { opacity: 1; transform: none; } }
+@keyframes ch-ae-sheet-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(var(--sheet-from, 100%)); } }
+@keyframes ch-ae-rise { from { opacity: 0; transform: translateY(8px) scale(.94); } to { opacity: 1; transform: none; } }
+@keyframes ch-ae-swap-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes ch-ae-view-rise { from { opacity: 0; transform: translateY(6px); } }
+@keyframes ch-ae-view-forward { from { opacity: 0; transform: translateX(12px); } }
+@keyframes ch-ae-view-back { from { opacity: 0; transform: translateX(-12px); } }
+@keyframes ch-ae-view-fade { from { opacity: 0; } }
+@keyframes ch-ae-pop { from { opacity: .4; transform: scale(.55); } }
+@keyframes ch-ae-pop-soft { 0% { transform: scale(.8); } 100% { transform: none; } }
+@keyframes ch-ae-marker-in { from { opacity: 0; transform: translateX(-50%) scale(.4); } }
+@keyframes ch-ae-marker-out { to { opacity: 0; transform: translateX(-50%) scale(.4); } }
+@keyframes ch-ae-palette-in { from { opacity: 0; transform: translateY(-8px) scale(.97); } }
+@keyframes ch-ae-palette-out { to { opacity: 0; transform: translateY(-4px) scale(.98); } }
+@keyframes ch-ae-column-out { to { opacity: 0; transform: translateX(12px); } }
+@keyframes ch-ae-toast-in { from { opacity: 0; transform: translateY(12px) scale(.96); } }
+@keyframes ch-ae-toast-out { to { opacity: 0; transform: translateY(4px) scale(.98); } }
+@keyframes ch-ae-focus-in { from { outline-offset: 4px; } to { outline-offset: var(--focus-offset, 1px); } }

@@ -51,15 +51,21 @@ class CompItem {
 const args = {depthStep:0,strength:1,orderMode:"selection",createCamera:true,preserveFraming:true,controllerName:"Parallax"};
 async function setup(n=4) {
   const comp=new CompItem(n), original=[...comp.items];
-  const scope=await loadHostModules(["generated/motion-contracts.jsx","src/json.jsx","src/registry.jsx","src/rig-meta.jsx","src/commands/animate-parallax-quick.jsx"],{app:{project:{activeItem:comp}},CompItem,CameraLayer,LightLayer,Property,PropertyType:{PROPERTY:1},AutoOrientType:{NO_AUTO_ORIENT:0},BlendingMode:{NORMAL:1},KeyframeInterpolationType:{LINEAR:1}});
+  const app={project:{activeItem:comp}};
+  const scope=await loadHostModules(["generated/motion-contracts.jsx","src/json.jsx","src/registry.jsx","src/rig-meta.jsx","src/commands/animate-parallax-quick.jsx"],{app,CompItem,CameraLayer,LightLayer,Property,PropertyType:{PROPERTY:1},AutoOrientType:{NO_AUTO_ORIENT:0},BlendingMode:{NORMAL:1},KeyframeInterpolationType:{LINEAR:1}});
   const handler=scope.MotionRegistry.get("ae.animate.parallax.quick");
-  return {comp,original,scope,handler,run:(a=args)=>{assert.equal(handler.preflight(a),null);return handler.run(a);}};
+  return {comp,original,scope,handler,app,run:(a=args)=>{assert.equal(handler.preflight(a),null);return handler.run(a);}};
 }
 const value=(l,k)=> {
   const p=l.values[k];
   if (!p.expression || !p.expressionEnabled) return p.value;
   return Array.from(runInNewContext(p.expression, {value:p.value, transform: {position: k === "ADBE Scale" ? value(l,"ADBE Position") : p.value}}));
 };
+test("invalid arguments use INVALID_PRESET before inspecting scene context",async()=>{
+  const f=await setup();f.app.project.activeItem=null;
+  assert.equal(f.handler.preflight({...args,unexpected:1}).code,"INVALID_PRESET");
+  assert.equal(f.handler.preflight({...args,reverseOrder:"yes"}).code,"INVALID_PRESET");
+});
 function corners(layer) {
   const p=value(layer,"ADBE Position"),s=value(layer,"ADBE Scale"),a=value(layer,"ADBE Anchor Point"),r=value(layer,"ADBE Rotate Z")*Math.PI/180;
   return [[0,0],[500,0],[500,300],[0,300],a].map(([x,y])=>{
@@ -116,7 +122,7 @@ test("manual edits and composition duplication cannot silently adopt or overwrit
   const f=await setup();f.run();f.original[0].values["ADBE Scale"].value=[1,2,100];assert.ok(f.handler.preflight(args));
   const g=await setup();g.run();g.comp.id++;assert.ok(g.handler.preflight(args));
 });
-test("depth safety rollback leaves the original scene intact",async()=>{const f=await setup();assert.throws(()=>f.run({...args,depthStep:10000}),/85%/);assert.equal(f.comp.numLayers,4);assert.ok(f.original.every(l=>!l.threeDLayer));});
+test("depth safety preflight leaves the original scene intact",async()=>{const f=await setup();assert.match(f.handler.preflight({...args,depthStep:10000}).message,/85%/);assert.equal(f.comp.numLayers,4);assert.ok(f.original.every(l=>!l.threeDLayer));});
 test("Create and Quick share one executor; movement produces native Position keys without changing Zoom",async()=>{
   const f=await setup();assert.equal(f.scope.MotionRegistry.get("ae.parallax.create").run,f.handler.run);f.run();
   const h=f.scope.MotionRegistry.get("ae.parallax.move");const a={preset:"subtle",durationSeconds:3};assert.equal(h.preflight(a),null);h.run(a);
@@ -169,3 +175,69 @@ test("collapsed precomps containing nested 3D are refused before mutation",async
  assert.match(f.handler.preflight(args).message,/cena 3D/);assert.equal(f.comp.numLayers,4);
 });
 
+
+test("depth modes: front opens the near gaps, the background can sit behind the focal plane, framing holds",async()=>{
+  const f=await setup();const before=f.original.map(corners);
+  const result=f.run({...args,depthMode:"front",backgroundDepth:0.2});
+  const z=f.original.map(l=>value(l,"ADBE Position")[2]);
+  assert.deepEqual(z.map(v=>Math.round(v*1000)/1000),[-2500,-1111.111,-277.778,600]);
+  assert.equal(result.warnings[0].code,"PARALLAX_BACKGROUND_UPSCALED");
+  assert.equal(result.data.backgroundZ,600);
+  const after=f.original.map(corners);
+  before.flat(2).forEach((v,i)=>assert.ok(Math.abs(v-after.flat(2)[i])<1e-8));
+  const master=f.comp.items.find(l=>l.comment.includes('"rigType":"parallax.quick"'));
+  assert.match(master.comment,/"depthMode":"front"/);assert.match(master.comment,/"pluginVersion":"0.2.0"/);
+  assert.ok(f.handler.preflight({...args,depthMode:"spiral"}),"unknown mode is refused");
+  assert.ok(f.handler.preflight({...args,backgroundDepth:0.9}),"background beyond half the zoom is refused");
+});
+test("area mode puts the biggest plane at the back regardless of selection order",async()=>{
+  const f=await setup();const widths=[100,2000,500,300];
+  f.original.forEach((l,i)=>{l.sourceRectAtTime=()=>({left:0,top:0,width:widths[i],height:100});});
+  f.run({...args,depthMode:"area"});
+  const z=f.original.map(l=>value(l,"ADBE Position")[2]);
+  assert.equal(z[1]+0,0,"the widest plane is the background");
+  assert.equal(z[0],-2500,"the smallest is nearest the camera");
+  assert.ok(z[3]<z[2]&&z[2]<0);
+});
+
+test("timeline adjust follows current layer indices after reorder and keeps original projection",async()=>{
+  const f=await setup(3), before=f.original.map(corners); f.run({...args,orderMode:"timeline"});
+  f.original[2].moveToBeginning();
+  f.run({...args,orderMode:"timeline"});
+  assert.deepEqual(f.original.map(l=>value(l,"ADBE Position")[2]),[-1250,-0,-2500]);
+  before.flat(2).forEach((v,i)=>assert.ok(Math.abs(v-f.original.map(corners).flat(2)[i])<1e-8));
+  assert.equal(f.comp.numLayers,5);
+});
+
+test("reverse order is explicit, reversible and independent of distribution",async()=>{
+  const f=await setup(3); f.run({...args,orderMode:"timeline",reverseOrder:true});
+  assert.deepEqual(f.original.map(l=>value(l,"ADBE Position")[2]),[-0,-1250,-2500]);
+  f.run({...args,orderMode:"timeline",reverseOrder:false});
+  assert.deepEqual(f.original.map(l=>value(l,"ADBE Position")[2]),[-2500,-1250,-0]);
+  assert.ok(f.handler.preflight({...args,reverseOrder:"yes"}));
+});
+
+test("size-order failure is caught before mutation and metadata cannot repeat a member id",async()=>{
+  const f=await setup(3); f.original[1].sourceRectAtTime=()=>({width:NaN,height:100});
+  assert.ok(f.handler.preflight({...args,depthMode:"area"}));
+  assert.equal(f.comp.numLayers,3);
+  const g=await setup(3);g.run();
+  const master=g.comp.items.find(l=>l.comment.includes('"rigType":"parallax.quick"'));
+  const start=master.comment.indexOf(g.scope.MotionContracts.META_OPEN)+g.scope.MotionContracts.META_OPEN.length;
+  const end=master.comment.indexOf(g.scope.MotionContracts.META_CLOSE);
+  const meta=JSON.parse(master.comment.slice(start,end)); meta.originals[1]=meta.originals[0];meta.applied[1]=meta.applied[0];
+  master.comment=g.scope.MotionRigMeta.write(master.comment,JSON.stringify(meta));
+  assert.match(g.handler.preflight(args).message,/identidade|metadata/i);
+});
+test("remove ignores unrelated expressions but refuses expressions that read the rig",async()=>{
+  const f=await setup();const extra=new Layer();extra.selected=false;extra.comp=f.comp;f.comp.items.push(extra);
+  const exprProp={propertyType:1,matchName:"ADBE Opacity",expression:"wiggle(2, 10)"};
+  extra.numProperties=1;extra.property=(i)=>i===1?exprProp:{numProperties:0,property:()=>null};
+  f.run();
+  const h=f.scope.MotionRegistry.get("ae.parallax.remove");
+  assert.equal(h.preflight({}),null,"an unrelated wiggle does not block");
+  exprProp.expression='thisComp.layer("Parallax").transform.position[0]';
+  assert.match(h.preflight({}).message,/le a camera ou o controle/);
+  exprProp.expression="thisComp.activeCamera.zoom";
+  assert.ok(h.preflight({}));
+});

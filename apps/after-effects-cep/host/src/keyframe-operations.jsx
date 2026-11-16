@@ -321,6 +321,29 @@
     };
   }
 
+  /** Arc length of the native cubic spatial path, not its endpoint chord.
+   * Composite Simpson integration is bounded (128 slices) and exact for the
+   * straight path; spatial speed is one scalar even for a 3D property.
+   * @param {Property} property @param {number} firstIndex @param {number} lastIndex
+   * @returns {number} */
+  function spatialSegmentLength(property, firstIndex, lastIndex) {
+    var a = /** @type {number[]} */ (property.keyValue(firstIndex));
+    var b = /** @type {number[]} */ (property.keyValue(lastIndex));
+    var outgoing = /** @type {number[]} */ (property.keyOutSpatialTangent(firstIndex));
+    var incoming = /** @type {number[]} */ (property.keyInSpatialTangent(lastIndex));
+    var total = 0;
+    for (var step = 0; step <= 128; step += 1) {
+      var t = step / 128, u = 1 - t, squared = 0;
+      for (var d = 0; d < a.length; d += 1) {
+        var derivative = 3 * u * u * Number(outgoing[d] || 0) + 6 * u * t * (Number(b[d]) + Number(incoming[d] || 0) - Number(a[d]) - Number(outgoing[d] || 0)) - 3 * t * t * Number(incoming[d] || 0);
+        if (!isFinite(derivative)) throw new Error("Caminho espacial nao finito.");
+        squared += derivative * derivative;
+      }
+      total += (step === 0 || step === 128 ? 1 : step % 2 ? 4 : 2) * Math.sqrt(squared);
+    }
+    return total / 384;
+  }
+
   /**
    * Converte uma curva Bezier cubica em velocidade e influencia do After Effects,
    * para uma dimensao.
@@ -780,6 +803,8 @@
     isSupportedProperty: isSupportedProperty,
     captureProperty: captureProperty,
     restoreProperty: restoreProperty,
+    restoreSelections: restoreSelections,
+    spatialSegmentLength: spatialSegmentLength,
     removeIndicesDescending: removeIndicesDescending,
     describeProperty: describeProperty,
     curveToEase: curveToEase,

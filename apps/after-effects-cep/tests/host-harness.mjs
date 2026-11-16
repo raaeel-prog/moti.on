@@ -27,9 +27,10 @@ const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
  * que precisa, e um teste que se esqueceu de montar algo falha com
  * "is not defined" em vez de passar por acidente.
  */
-export async function loadHostModules(fileNames, hostGlobals = {}) {
+export async function loadHostModules(fileNames, hostGlobals = {}, dollarExtras = {}) {
   const scope = {};
-  const dollar = { global: scope };
+  // `dollarExtras` carries what the real `$` adds, like `fileName` of the bundle.
+  const dollar = { global: scope, ...dollarExtras };
 
   // errors.jsx e preflight.jsx sao infraestrutura, como json.jsx: comandos e
   // dispatcher os chamam. Sao incluidos sempre, para que cada teste nao precise

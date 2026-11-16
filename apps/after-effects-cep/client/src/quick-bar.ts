@@ -57,6 +57,8 @@ export interface QuickBarOptions {
   read(): Promise<QuickBarContext | null>;
   isBusy(): boolean;
   enabled(): boolean;
+  /** Skips host reads while true (the pointer is over the panel, so no new Timeline selection). */
+  paused?(): boolean;
   items(): QuickBarItem[];
   labels(): QuickBarLabels;
   /** Applies a preset; when it returns a promise, picks are serialized (latest wins). */
@@ -70,6 +72,8 @@ export interface QuickBar {
   /** The native bar answered the handshake in this AE session. */
   available(): boolean;
   hide(): void;
+  /** Redraws the open bar after a favourites change, without reading the host. */
+  refreshItems(): void;
   dispose(): void;
 }
 
@@ -194,11 +198,12 @@ export function createQuickBar(options: QuickBarOptions): QuickBar {
     if (signature === shown) { refreshItems(); return; }
     if (suppressed.has(signature)) return;
     show(signature);
-  }, options.intervalMs ?? 400, () => !options.isBusy());
+  }, options.intervalMs ?? 400, () => !options.isBusy() && !options.paused?.());
 
   return {
     available: () => handshake() !== null,
     hide,
+    refreshItems,
     dispose() {
       if (disposed) return;
       hide(); disposed = true;

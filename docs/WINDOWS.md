@@ -206,6 +206,29 @@ Falta: aplicar ferramentas pelo painel numa composição real e, por fim,
 `-RealLicense` + login Google. matchNames e disk IDs são os mesmos do Mac, então
 projetos `.aep` abrem nos dois.
 
+### Cursor piscando no painel (2026-10-18)
+
+No Windows, o After Effects redefine o cursor do mouse **a cada `evalScript`**.
+O painel lia o contexto do AE em segundo plano a cada 400–700 ms (barra rápida,
+coordenador de seleção, editor de Gradiente). Sobre um número arrastável, um
+slider ou um item do popover de presets, o cursor voltava para a seta a cada
+leitura e o painel parecia estar sempre carregando. No Mac isso não acontece.
+
+Correção: `client/src/pointer-presence.ts`. Com o ponteiro sobre o painel, as
+leituras periódicas param. Na entrada do ponteiro, no foco e depois de cada
+operação do painel, ele ainda lê uma vez. Fora do painel o polling continua, e
+a barra rápida segue acompanhando a seleção de keyframes. Qualquer novo polling
+de host no painel deve respeitar `pointerInPanel` em `main.ts`.
+
+Verificação no AE 26.5 (Windows 11), 2026-10-18: painel reaberto, cursor estável
+sobre números arrastáveis, sliders e presets do popover (teste manual do dono).
+**PASS.**
+
+Ainda vale fora do painel: com o ponteiro sobre a Timeline ou o Composition, a
+barra rápida lê a cada 400 ms. Se o cursor das ferramentas do AE piscar ali, o
+próximo passo é o AEGP `MotionGestureBridge` avisar mudanças de seleção, sem
+ExtendScript.
+
 ## 6. Fase 2 — GPU NVIDIA e AMD no Windows
 
 Pedido do dono em 2026-10-11: no Windows, usar a placa de vídeo (NVIDIA e AMD) e

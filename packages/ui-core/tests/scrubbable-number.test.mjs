@@ -36,7 +36,7 @@ function fixture({ value = "24", min = "1", max = "600", step = "1" } = {}) {
 }
 function fire(target, type, init = {}) {
   const event = new Event(type, { cancelable: true });
-  Object.assign(event, { button: 0, buttons: 1, clientX: 0, pointerId: 1, isPrimary: true, shiftKey: false, altKey: false }, init);
+  Object.assign(event, { button: 0, buttons: 1, clientX: 0, pointerId: 1, isPrimary: true, shiftKey: false, altKey: false, ctrlKey: false, metaKey: false }, init);
   target.dispatchEvent(event);
   return event;
 }
@@ -109,17 +109,19 @@ test("a numeric row can be the invisible drag target while the compact number st
   dispose();
 });
 
-test("frames stay integral with Shift, clamp at bounds and respond immediately on reversal", () => {
+test("frames stay integral with Ctrl/Alt, clamp at bounds with Shift (AE: Shift ×10, Ctrl/Alt ×0.1)", () => {
   const f = fixture({ value: "590" });
   fire(f.input, "pointerdown", { clientX: 100 });
-  fire(f.doc, "pointermove", { clientX: 140, altKey: true });
+  fire(f.doc, "pointermove", { clientX: 140, shiftKey: true });
   assert.equal(f.input.value, "600");
   fire(f.doc, "pointermove", { clientX: 136 });
   assert.equal(f.input.value, "599");
-  fire(f.doc, "pointermove", { clientX: 96, shiftKey: true });
+  fire(f.doc, "pointermove", { clientX: 96, altKey: true });
   assert.equal(f.input.value, "598");
+  fire(f.doc, "pointermove", { clientX: 56, ctrlKey: true });
+  assert.equal(f.input.value, "597", "Ctrl is fine too, like After Effects");
   fire(f.doc, "pointerup");
-  assert.deepEqual(f.commits, [598]);
+  assert.deepEqual(f.commits, [597]);
   f.dispose();
 });
 
@@ -143,7 +145,7 @@ test("Escape, pointer cancellation and window blur restore the draft without com
 test("fine decimal scrubbing preserves commas for typing, disabled fields and disposal", () => {
   const f = fixture({ value: "1,25", min: "0", max: "10", step: "0.1" });
   fire(f.input, "mousedown");
-  fire(f.doc, "mousemove", { clientX: 4, shiftKey: true });
+  fire(f.doc, "mousemove", { clientX: 4, altKey: true });
   assert.equal(f.input.value, "1.26");
   fire(f.doc, "mouseup");
   assert.deepEqual(f.commits, [1.26]);

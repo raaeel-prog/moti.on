@@ -41,7 +41,10 @@ export class FakeLayer {
   constructor({ index = 1, name = "Layer " + index } = {}) {
     this.index = index; this.name = name; this.parentProperty = null;
     this.locked = false; this.inPoint = 0; this.outPoint = 10; this.threeDLayer = false;
+    this.children = {};
   }
+  // O dispatch reencontra a propriedade pelo caminho (layer.property(indice)) para restaurar a selecao.
+  property(index) { return this.children[index] ?? null; }
 }
 
 export class FakeProperty {
@@ -50,6 +53,7 @@ export class FakeProperty {
     this.propertyType = PropertyType.PROPERTY; this.propertyValueType = valueType;
     this.canVaryOverTime = true; this.canSetExpression = true; this.expression = ""; this.expressionEnabled = false;
     this.parentProperty = layer; this.propertyIndex = propertyIndex; this.selected = true;
+    if (layer && layer.children) layer.children[propertyIndex] = this;
     this.eases = eases;
     this.keys = keys.map(([time, value]) => makeKey(time, value, eases));
     this.selectedKeys = selected ?? keys.map((_, i) => i + 1);

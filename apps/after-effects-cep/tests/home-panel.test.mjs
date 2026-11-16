@@ -11,7 +11,7 @@ import { WORD_REVEAL_DEFAULTS, PROXIMITY_MORPH_DEFAULTS, PROXIMITY_MORPH_PRESETS
 
 const bundle = readFileSync(new URL("../../../dist/after-effects-cep/client/main.js", import.meta.url), "utf8");
 
-async function mountPanel(commandData, { holdWrites = false, holdCommands = [] } = {}) {
+async function mountPanel(commandData, { holdWrites = false, holdCommands = [], contextChanges = {} } = {}) {
   const document = createCepDocument();
   const mount = document.createElement("div");
   document.querySelector = () => null;
@@ -27,7 +27,7 @@ async function mountPanel(commandData, { holdWrites = false, holdCommands = [] }
     selectionPropertyCount: 1, selectionExpressibleCount: 1,
     selectionSelectedKeyCount: 2, selectionHasKeyframes: true,
     selectionHasExpressions: false, selectionIs3D: false,
-    averageLayerDurationSeconds: 5, selectionTruncated: false
+    averageLayerDurationSeconds: 5, selectionTruncated: false, ...contextChanges
   };
   class CSInterface {
     getHostEnvironment() { return { appVersion: "26.3.0", appUILocale: "en_US" }; }
@@ -62,14 +62,37 @@ async function mountPanel(commandData, { holdWrites = false, holdCommands = [] }
     nav: (label) => mount.getElementsByRole("tab").find((node) => node.allText === label) };
 }
 
-test("AE bundle: icon-only tools, fixed anchor and no diagnostic actions on Home", async () => {
+test("AE bundle: named tools, fixed anchor and no diagnostic actions on Home", async () => {
   const f = await mountPanel();
-  assert.ok(f.mount.getElementsByTagName("input").some(node => node.type === "search"));
+  // One search for the whole panel: the nav button (command palette); Home has no field of its own.
+  assert.ok(!f.mount.getElementsByTagName("input").some(node => node.type === "search"));
   const tiles = f.buttons().filter(node => node.id.startsWith("library-tool-"));
   assert.equal(tiles.length, 44);
-  assert.ok(tiles.every(node => node.allText === "" && node.getAttribute("aria-label")));
+  assert.ok(tiles.every(node => node.allText === node.getAttribute("aria-label")));
   assert.equal(f.mount.getElementsByRole("radio").length, 9);
   assert.doesNotMatch(f.mount.allText, /Export diagnostics|Apply$|Tool options|Opções das ferramentas/);
+});
+
+test("AE bundle: direct adjustments retain the library, have one inspector and no global Edit tab", async () => {
+  const f = await mountPanel();
+  f.buttons().find(node => node.id === 'library-adjust-wiggle').click();
+  await setImmediate();
+  assert.ok(f.buttons().find(node => node.id === 'library-tool-wiggle'));
+  assert.ok(f.mount.getElementsByTagName('input').find(node => node.id === 'wiggle-frequency'));
+  assert.equal(f.mount.getElementsByTagName('aside').filter(node => node.className.includes('ch-context-inspector')).length, 1);
+  assert.ok(!f.mount.getElementsByRole('tab').some(node => node.getAttribute('data-view') === 'tools'));
+  assert.equal(f.requests.filter(request => request.command === 'ae.expression.wiggle').length, 0);
+  f.buttons().find(node => node.id === 'tool-inspector-close').click();
+  await setImmediate();
+  assert.ok(!f.mount.getElementsByTagName('input').find(node => node.id === 'wiggle-frequency'));
+  assert.ok(f.buttons().find(node => node.id === 'library-tool-wiggle'));
+});
+
+test('premium text duration samples the composition FPS on first opening',async()=>{
+ const f=await mountPanel(undefined,{contextChanges:{compFrameRate:60}});
+ f.buttons().find(n=>n.id==='library-tool-wordReveal').click();await setImmediate();
+ assert.equal(f.mount.getElementsByTagName('input').find(n=>n.id==='wordReveal-durationFrames').value,'72');
+ assert.equal(f.requests.filter(r=>r.command==='ae.text.word-reveal').length,0);
 });
 
 test("AE bundle: vertical text pulse appears in the Effects tool category", async () => {
@@ -83,15 +106,17 @@ test("AE bundle: vertical text pulse appears in the Effects tool category", asyn
   assert.ok(!byId("library-tool-wordReveal"));
 });
 
-test("AE bundle: one click executes Quick once; options open the editor without execution", async () => {
+test("AE bundle: opening premium settings never mutates; explicit Apply dispatches once", async () => {
   const f = await mountPanel();
   const byId = id => f.buttons().find(node => node.id === id);
   const wiggle = byId("library-tool-wiggle");
   wiggle.click(); wiggle.click();
   await setImmediate();
+  assert.equal(f.requests.filter(r=>r.command==='ae.expression.wiggle').length,0);
+  byId('tool-wiggle-apply').click();byId('tool-wiggle-apply').click();await setImmediate();
   const writes = f.requests.filter(r => r.command === "ae.expression.wiggle");
   assert.equal(writes.length, 1);
-  assert.equal(writes[0].options.mode, "quick"); assert.equal(writes[0].options.emitLiveControls, true);
+  assert.equal(writes[0].options.mode, "advanced"); assert.equal(writes[0].options.emitLiveControls, true);
   assert.equal(writes[0].args.amplitude, 20);
   assert.ok(byId("library-tool-wiggle"), "Quick stays on the grid");
   byId("library-options-wiggle").click();
@@ -101,14 +126,16 @@ test("AE bundle: one click executes Quick once; options open the editor without 
   assert.ok(f.mount.getElementsByTagName("input").some(n => n.id === "wiggle-frequency"));
 });
 
-test("AE bundle: search preserves focus and query across a Quick render", async () => {
-  const f = await mountPanel(); const search = f.mount.getElementsByTagName("input").find(n => n.type === "search");
-  search.focus(); search.value = "wig"; search.emit("input");
-  assert.equal(f.document.activeElement, search);
-  assert.ok(f.buttons().filter(n => n.id.startsWith("library-tool-")).length < 47);
-  assert.ok(!f.buttons().some(n => n.id === "library-tool-anchor"));
+test("AE bundle: Home keeps the category title and the grid across a Quick render", async () => {
+  const f = await mountPanel();
+  const category = f.buttons().find(n => n.id === "library-category-select");
+  assert.match(category.allText, /^(All|Todas)$/);
+  assert.ok(!f.buttons().some(n => n.id === "library-tool-anchor"), "the anchor lives in the quick dock");
   f.buttons().find(n => n.id === "library-tool-wiggle").click(); await setImmediate();
-  assert.equal(f.mount.getElementsByTagName("input").find(n => n.type === "search").value, "wig");
+  // The library redraws behind the inspector; the title survives the redraw.
+  const after = f.buttons().find(n => n.id === "library-category-select");
+  assert.ok(after, "the category title is still there");
+  assert.match(after.allText, /^(All|Todas)$/);
 });
 
 test("AE bundle: video text effects apply directly from the quick grid", async () => {
@@ -117,11 +144,12 @@ test("AE bundle: video text effects apply directly from the quick grid", async (
     if (tool === "styleSwap") f.context.selectionLayerCount = 2;
     const button = f.buttons().find(node => node.id === `library-tool-${tool}`);
     assert.ok(button, tool); button.click(); button.click(); await setImmediate();
+    assert.equal(f.requests.filter(request=>request.command===command).length,0);
+    f.buttons().find(n=>n.id===`tool-${tool}-apply`).click();await setImmediate();
     const writes = f.requests.filter(request => request.command === command);
     assert.equal(writes.length, 1, "double click cannot create two rigs");
     assert.equal(writes[0].args.action, "apply");
     assert.equal(writes[0].options.mode, "quick");
-    assert.equal(writes[0].options.emitLiveControls, true);
     assert.equal(writes[0].options.preserveSelection, tool === "wordReveal");
     assert.ok(f.buttons().find(node => node.id === `library-tool-${tool}`), "quick stays on the grid");
     if (tool === "wordReveal") {
@@ -151,6 +179,7 @@ test("AE bundle: Word morph Quick rereads native controls instead of resetting t
   const f = await mountPanel(request => request.command === "ae.text.word-reveal.read" ? wordSnapshot(controls) : null);
   f.buttons().find(n => n.id === "library-tool-wordReveal").click();
   await setImmediate();
+  f.buttons().find(n=>n.id==='tool-wordReveal-apply').click();await setImmediate();
   const write = f.requests.find(r => r.command === "ae.text.word-reveal");
   assert.equal(write.args.durationFrames, 67); assert.equal(write.args.direction, "right");
   assert.equal(write.args.smoothness, 94); assert.equal(write.args.automatic, false); assert.equal(write.args.progress, 48);
@@ -237,10 +266,11 @@ test("AE bundle: Proximity Quick reads and preserves existing project controls a
   const controls = { ...PROXIMITY_MORPH_DEFAULTS, renderer: "outline", radius: 517.25, weight: -42, scaleX: 133, skew: 9, lift: -18 };
   const f = await mountPanel(request => request.command === "ae.text.variable-morph.read" ? morphSnapshot(controls, { lockedControls: ["weight"] }) : null);
   f.buttons().find(n => n.id === "library-tool-variableMorph").click(); await setImmediate();
+  f.buttons().find(n=>n.id==='tool-variableMorph-apply').click();await setImmediate();
   const write = f.requests.find(r => r.command === "ae.text.variable-morph");
   assert.equal(write.args.radius, 517.25); assert.equal(write.args.weight, -42); assert.equal(write.args.scaleX, 133);
   assert.equal(write.args.skew, 9); assert.equal(write.args.lift, -18); assert.equal(write.options.preserveSelection, true);
-  assert.equal(f.requests.filter(r => r.command === "ae.text.variable-morph.read").length, 2);
+  assert.equal(f.requests.filter(r => r.command === "ae.text.variable-morph.read").length, 3);
 });
 
 test("AE bundle: Proximity editor hydrates common fonts and puts individual controls in Advanced", async () => {
@@ -358,6 +388,7 @@ test("AE bundle: legacy proximity Quick and Remove use the unchanged six-control
     ? morphSnapshot({ ...PROXIMITY_MORPH_DEFAULTS, ...legacy, renderer: "variable" }, { rigVersion: 1, renderer: "variable" }) : null;
   const quick = await mountPanel(provide);
   quick.buttons().find(n => n.id === "library-tool-variableMorph").click(); await setImmediate();
+  quick.buttons().find(n=>n.id==='tool-variableMorph-apply').click();await setImmediate();
   assert.deepEqual(quick.requests.find(r => r.command === "ae.text.variable-morph").args, legacy);
   const f = await mountPanel(provide); await openMorphEditor(f);
   const operation = morphField(f, "action", "select"); operation.value = "remove"; operation.emit("change");
@@ -406,31 +437,41 @@ test("AE bundle: all 18 FX Studio shortcuts replace the anchor copy and dispatch
   }
 });
 
-test("AE bundle: gallery preview does not call host; named action applies the real preset", async () => {
-  const f = await mountPanel(); f.nav("Presets").click(); await setImmediate();
+test("AE bundle: gallery phase action applies once, keeps Browse while pending and opens Edit on success", async () => {
+  const f = await mountPanel(undefined,{holdCommands:['ae.presets.phase-apply']}); f.nav("Presets").click(); await setImmediate();
   const cards = f.mount.getElementsByTagName("article");
   assert.ok(cards.length > 30, "the default gallery includes every collection");
   assert.ok(!cards.some(card => card.id.startsWith("builtin.ease.")));
   assert.ok(cards.some(card => card.id === "builtin.camera.pushIn"));
   const before = f.requests.length;
   const preview = f.buttons().find(n => n.className === "ch-preset-preview");
-  assert.ok(preview); preview.click(); assert.equal(f.requests.length, before);
-  f.buttons().find(n => n.allText === "Apply preset").click(); await setImmediate();
+  assert.ok(preview); preview.click(); assert.equal(f.requests.length, before, "a click only selects");
+  assert.equal(f.buttons().some(n=>n.allText==='Apply preset'),false);
+  preview.emit('dblclick');await setImmediate();
+  const action=f.buttons().find(n=>n.dataset.phase==='in');
+  const both=f.buttons().find(n=>n.dataset.phase==='both');
+  preview.emit('dblclick');action.click();both.click();action.keydown('Enter');await setImmediate();
   const writes = f.requests.filter(r => r.command === "ae.presets.phase-apply");
-  assert.equal(writes.length, 1); assert.equal(writes[0].args.presetId, "premium-arc-arrival");
-  assert.equal(writes[0].args.phase, "in");
+  assert.equal(writes.length, 1,"a double-click applies once and locks every other apply while pending"); assert.equal(writes[0].args.presetId, "premium-arc-arrival");
+  assert.ok(["in","out","both"].includes(writes[0].args.phase),"the card's own phase setting is applied");
+  f.completeNextWrite();await setImmediate();
+  assert.equal(f.buttons().find(n=>n.dataset.phase==='in')===action,false,'confirmed application opens a fresh editor');
+  assert.equal(f.buttons().find(n=>n.allText==='Edit').getAttribute('aria-selected'),'true');
+  assert.equal(f.requests.some(r=>r.command==='ae.presets.inspect'),true);
+  assert.equal(f.buttons().find(n=>n.allText==='Edit').hidden,false);
+  assert.equal(f.buttons().find(n=>n.allText==='Browse').hidden,false);
 });
 
-test("AE bundle: Parallax Quick sends normalized defaults once without opening another layout", async () => {
+test("AE bundle: Parallax previews a rig-only recipe and applies explicitly", async () => {
   const f = await mountPanel();
   const tile = f.buttons().find(n => n.id === "library-tool-parallax");
   tile.click(); tile.click(); await setImmediate();
-  const writes = f.requests.filter(r => r.command === "ae.animate.parallax.quick");
+  assert.equal(f.requests.some(r=>r.command==='ae.parallax.create'),false);
+  f.buttons().find(n=>n.id==='tool-parallax-apply').click();await setImmediate();
+  const writes = f.requests.filter(r => r.command === "ae.parallax.create");
   assert.equal(writes.length, 1);
-  assert.equal(writes[0].args.depthStep, 0);
   assert.equal(writes[0].args.preserveFraming, true);
   assert.equal(writes[0].options.mode, "quick");
-  assert.ok(f.buttons().some(n => n.id === "library-tool-parallax"));
 });
 
 
@@ -513,42 +554,25 @@ test("AE bundle: Look At exposes six axes and sends the edited orientation offse
 });
 
 
-test("AE bundle: Quick keeps search, tile, dock and shortcuts mounted during execution", async () => {
+test("AE bundle: premium editor keeps its draft and category while Apply is pending", async () => {
   const f = await mountPanel(undefined, { holdWrites: true });
   const byId = id => f.buttons().find(node => node.id === id);
-  byId("library-search-open").click();
-  const search = f.mount.getElementsByTagName("input").find(node => node.id === "library-search");
-  search.value = "wig"; search.emit("input"); search.focus();
-  const tile = byId("library-tool-wiggle");
-  const toggle = byId("quick-dock-toggle");
-  const solid = byId("library-quick-create-solid");
-  const anchor = f.mount.getElementsByRole("radio")[0];
-  const dock = f.mount.getElementsByTagName("section").find(node => node.className === "ch-quick-dock");
-  tile.click();
-  assert.equal(byId("library-tool-wiggle"), tile);
-  assert.equal(byId("quick-dock-toggle"), toggle);
-  assert.equal(byId("library-quick-create-solid"), solid);
-  assert.equal(f.mount.getElementsByRole("radio")[0], anchor);
-  assert.equal(f.mount.getElementsByTagName("section").find(node => node.className === "ch-quick-dock"), dock);
-  assert.equal(f.document.activeElement, search);
-  assert.equal(tile.getAttribute("aria-disabled"), "true");
-  assert.equal(solid.disabled, true);
-  assert.equal(anchor.disabled, true);
-  tile.click(); solid.click();
+  byId('library-category-select').click();byId('library-category-animation').click();
+  const categoryName=byId('library-category-select').allText;
+  byId('library-tool-wiggle').click();await setImmediate();
+  assert.equal(f.pendingWrites.length,0,'Opening an editor must not write to AE');
+  const frequency=f.mount.getElementsByTagName('input').find(n=>n.id==='wiggle-frequency');
+  frequency.value='4.5';frequency.emit('change');
+  byId('tool-wiggle-apply').click();
+  byId('tool-wiggle-apply').click();
   await setImmediate();
   assert.equal(f.pendingWrites.length, 1);
   assert.equal(f.requests.filter(request => request.command === "ae.expression.wiggle").length, 1);
   assert.equal(f.requests.some(request => request.command.startsWith("ae.quick-tools.")), false);
   f.completeNextWrite(); await setImmediate();
-  assert.equal(byId("library-tool-wiggle"), tile);
-  assert.equal(byId("quick-dock-toggle"), toggle);
-  assert.equal(byId("library-quick-create-solid"), solid);
-  assert.equal(f.mount.getElementsByTagName("input").find(node => node.id === "library-search"), search);
-  assert.equal(search.value, "wig");
-  assert.equal(f.document.activeElement, search);
-  assert.equal(solid.disabled, false);
-  assert.equal(anchor.disabled, false);
-  assert.equal(tile.getAttribute("aria-disabled"), "false");
+  assert.equal(byId('library-category-select').allText,categoryName);
+  assert.equal(f.requests.find(request=>request.command==='ae.expression.wiggle').args.frequency,4.5);
+  assert.ok(f.mount.getElementsByTagName('input').find(n=>n.id==='wiggle-frequency'));
 });
 
 test("AE bundle: current context updates existing quick actions after a command without stale closures", async () => {
@@ -558,7 +582,6 @@ test("AE bundle: current context updates existing quick actions after a command 
   const solid = byId("library-quick-create-solid");
   const anchor = f.mount.getElementsByRole("radio")[0];
   const toggle = byId("quick-dock-toggle");
-  const search = f.mount.getElementsByTagName("input").find(node => node.id === "library-search");
   center.click(); center.click(); await setImmediate();
   assert.equal(center.disabled, true); assert.equal(solid.disabled, true);
   assert.equal(f.requests.filter(request => request.command === "ae.quick-tools.apply").length, 1);
@@ -571,7 +594,6 @@ test("AE bundle: current context updates existing quick actions after a command 
   assert.equal(byId("library-quick-center"), center);
   assert.equal(byId("library-quick-create-solid"), solid);
   assert.equal(byId("quick-dock-toggle"), toggle);
-  assert.equal(f.mount.getElementsByTagName("input").find(node => node.id === "library-search"), search);
   assert.equal(center.disabled, true); assert.match(center.title, /Select a layer/);
   assert.equal(anchor.disabled, true);
   assert.equal(solid.disabled, false);
@@ -598,7 +620,7 @@ test("AE bundle: Easing has its own workspace and keyframe actions leave the Qui
   assert.ok(f.mount.querySelectorAll('.ch-ease-editor').length);
   assert.equal(f.mount.querySelectorAll('.ch-ease-modes').length,0);
   assert.equal(f.mount.querySelectorAll('.ch-ease-actions__secondary').length,0);
-  assert.equal(f.buttons().filter(node=>node.id.startsWith('ease-action-')).length,6);
+  assert.equal(f.buttons().filter(node=>node.id.startsWith('ease-action-')).length,11,'six on the first row; copy/paste and align on the second');
   assert.equal(f.requests.filter(r=>r.command.startsWith('ae.keys.')).length,0,'opening does not mutate');
 });
 
@@ -610,6 +632,11 @@ test("AE bundle: Easing toolbar dispatches each operation once and keeps the edi
     ['duplicate-reverse','ae.keys.clone',{mode:'mirror',destination:'after-gap'}],
     ['duplicate-reverse-start','ae.keys.clone',{mode:'mirror',destination:'layer-start'}],
     ['duplicate-reverse-end','ae.keys.clone',{mode:'mirror',destination:'layer-end'}],
+    ['copy-ease','ae.keys.ease-copy',{}],
+    ['paste-ease','ae.keys.ease-paste',{target:'ease'}],
+    ['paste-value','ae.keys.ease-paste',{target:'value'}],
+    ['align-first','ae.keys.send-to-edge',{edge:'start',reference:'playhead'}],
+    ['align-last','ae.keys.send-to-edge',{edge:'end',reference:'playhead'}],
   ];
   for(const [id,command,args] of cases){
     const f=await mountPanel(undefined,{holdWrites:true}); f.nav('Easing').click(); await setImmediate();
@@ -651,3 +678,15 @@ test("AE bundle: Gradients opens a focused editor and reads without mutating the
   assert.equal(writes[0].args.selectionToken, "fixture-1");
   assert.equal(writes[0].args.settings.stops.length, 8);
 });
+
+test("AE bundle: category remains selected when opening a tool editor", async () => {
+  const f = await mountPanel();
+  f.buttons().find(n => n.id === "library-category-select").click();
+  f.buttons().find(n => n.id === "library-category-animation").click();
+  const category = f.buttons().find(n => n.id === "library-category-select").allText;
+  f.buttons().find(n => n.id === "library-tool-wiggle").click(); await setImmediate();
+  assert.equal(f.buttons().find(n => n.id === "library-category-select").allText, category);
+  assert.ok(f.mount.getElementsByTagName("input").some(n => n.id === "wiggle-frequency"));
+  assert.ok(!f.mount.getElementsByTagName("input").some(n => n.type === "search"));
+});
+

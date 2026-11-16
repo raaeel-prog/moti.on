@@ -1,0 +1,118 @@
+/* AE functional polish. Never redefine palette aliases on body or shell:
+ * Tools tiles, icon families and card/popover morphology retain their tokens.
+ * This sheet is appended to the AE build only, after the shared motion sheet.
+ */
+[data-host="after-effects"] .ch-button--primary,
+[data-host="after-effects"] .ch-action-button--primary {
+  --accent: var(--action-fill);
+  --accent-hover: var(--action-fill-hover);
+  --accent-press: var(--action-fill-press);
+  --accent-on: var(--action-on);
+  --ch-accent: var(--action-fill);
+  --ch-accent-hover: var(--action-fill-hover);
+  --ch-accent-pressed: var(--action-fill-press);
+  --ch-accent-contrast: var(--action-on);
+}
+
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-button--primary:not(:disabled):not([aria-disabled="true"]),
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-action-button--primary:not(:disabled):not([aria-disabled="true"]) {
+  color: var(--action-on);
+  background-color: var(--action-fill);
+  border-color: transparent;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-button--primary:hover:not(:disabled):not([aria-disabled="true"]),
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-action-button--primary:hover:not(:disabled):not([aria-disabled="true"]) { background-color:var(--action-fill-hover); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-button--primary:active:not(:disabled):not([aria-disabled="true"]),
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-action-button--primary:active:not(:disabled):not([aria-disabled="true"]) { background-color:var(--action-fill-press); }
+
+[data-host="after-effects"] .ch-shell input.ch-scrubbable-number:not(:disabled):not([readonly]),
+[data-host="after-effects"] .ch-shell input.ch-compact-number:not(:disabled):not([readonly]),
+[data-host="after-effects"] .ch-shell .ch-number:not(:disabled):not([readonly]),
+[data-host="after-effects"] .ch-shell .ch-applied-unit,
+[data-host="after-effects"] .ch-shell .ch-phase-field input:not(:disabled):not([readonly]),
+[data-host="after-effects"] .ch-shell .ch-preset-inspector .ch-preset-field input:not(:disabled):not([readonly]) {
+  --value-editable: var(--action-text);
+  color: var(--action-text);
+}
+
+/* Text actions have explicit affordances, without changing any tile button. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-action-button--quiet:not(:disabled):not([aria-disabled="true"]),
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-button--tertiary:not(:disabled):not([aria-disabled="true"]),
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-phase-link.ch-button:not(.ch-button--destructive),
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-applied-value-reset,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-number-disclosure__reset,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-tool-action-control .ch-action-button--quiet,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-settings-help-action .ch-action-button--quiet {
+  color: var(--action-text);
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-action-button--quiet:hover:not(:disabled):not([aria-disabled="true"]),
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-button--tertiary:hover:not(:disabled):not([aria-disabled="true"]),
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-phase-link.ch-button:hover:not(:disabled):not(.ch-button--destructive),
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-applied-value-reset:hover:not(:disabled),
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-number-disclosure__reset:hover:not(:disabled) {
+  color: var(--action-text-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-phase-link.ch-button:active:not(:disabled):not(.ch-button--destructive),
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-applied-value-reset:active:not(:disabled),
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-number-disclosure__reset:active:not(:disabled) { color:var(--action-text-press); }
+
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item.is-active,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs [aria-selected="true"],
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-filters [aria-pressed="true"],
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-categories .ch-folder-select[aria-pressed="true"],
+[data-host="after-effects"] .ch-select-menu__option[aria-selected="true"] { color:var(--action-text); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs [aria-selected="true"] { border-bottom-color:var(--action-text); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-categories .ch-folder-select:hover,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs .ch-button:hover { color:var(--action-text-hover); }
+
+/* Three execution buttons are distinct from the existing phase selectors. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-applybar[data-phase-actions="true"] { min-height:24px; margin:0; padding:4px 0; border:0; background:transparent; box-shadow:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-applybar[data-floating="true"] { position:absolute; z-index:5; right:4px; bottom:6px; width:calc(100% - 8px); max-width:252px; padding:0; pointer-events:none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-phase-actions="true"] .ch-preset-grid { padding-bottom:42px; scroll-padding-bottom:42px; }
+[data-host="after-effects"] .ch-preset-phase-actions { display:flex; flex:0 1 252px; margin-left:auto; max-width:100%; align-items:stretch; gap:4px; min-width:0; }
+[data-host="after-effects"] .ch-preset-phase-actions > .ch-action { flex:1 1 0; min-width:0; pointer-events:auto; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-phase-actions .ch-action-button { width:100%; min-width:0; height:24px; min-height:24px; padding:2px 8px; font-size:11px; font-weight:500; line-height:16px; border-radius:var(--radius-small); box-shadow:0 4px 18px rgba(0,0,0,.42); }
+[data-host="after-effects"] .ch-preset-phase-actions .ch-component-state { font-size:11px; overflow-wrap:anywhere; }
+[data-host="after-effects"] .ch-preset-phase-actions [aria-busy="true"] { cursor:progress; }
+
+/* Numeric disclosure reuses the existing value and gesture lifecycle. */
+[data-host="after-effects"] .ch-number-disclosure { min-width:0; width:100%; }
+[data-host="after-effects"] .ch-number-disclosure__header { display:flex; align-items:center; gap:6px; min-height:32px; }
+[data-host="after-effects"] .ch-shell .ch-number-disclosure__header > input { max-width:72px; flex:0 0 auto; font-size:11px; text-align:right; text-overflow:ellipsis; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-phase-link.ch-button,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-applied-unit,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-number-disclosure__toggle { font-size:11px; font-weight:400; line-height:16px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-number-disclosure__toggle,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-number-disclosure__toggle:hover,
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-number-disclosure__toggle:focus { justify-content:flex-start; background:transparent; text-decoration:none; }
+[data-host="after-effects"] .ch-number-disclosure__toggle { display:flex; align-items:center; gap:5px; flex:1 1 auto; min-width:0; min-height:24px; padding:0; border:0; background:transparent; color:var(--text-primary); font:inherit; text-align:left; cursor:pointer; }
+[data-host="after-effects"] .ch-number-disclosure__toggle::before { content:""; flex:0 0 auto; width:0; height:0; border-top:4px solid transparent; border-bottom:4px solid transparent; border-left:5px solid currentColor; }
+[data-host="after-effects"] .ch-number-disclosure__toggle[aria-expanded="true"]::before { transform:rotate(90deg); }
+[data-host="after-effects"] .ch-number-disclosure__reset { flex:0 0 auto; min-height:24px; padding:0 2px; border:0; background:transparent; font:inherit; font-size:11px; cursor:pointer; }
+[data-host="after-effects"] .ch-number-disclosure__reset:disabled { color:var(--text-muted); opacity:var(--disabled-opacity); cursor:default; }
+[data-host="after-effects"] .ch-number-disclosure__body { padding:0 4px 6px 16px; }
+[data-host="after-effects"] .ch-number-disclosure__body[hidden] { display:none; }
+[data-host="after-effects"] .ch-number-disclosure__limits { display:flex; justify-content:space-between; gap:8px; color:var(--text-secondary); font-size:11px; font-variant-numeric:tabular-nums; }
+[data-host="after-effects"] .ch-number-disclosure__range { box-sizing:border-box; width:100%; min-width:0; height:24px; margin:0; -webkit-appearance:none; background:transparent; cursor:pointer; }
+[data-host="after-effects"] .ch-number-disclosure__range::-webkit-slider-runnable-track { height:2px; border-radius:1px; background:linear-gradient(to right,var(--action-text) 0%,var(--action-text) var(--ch-slider-progress,0%),var(--line-strong) var(--ch-slider-progress,0%),var(--line-strong) 100%); }
+[data-host="after-effects"] .ch-number-disclosure__range::-webkit-slider-thumb { -webkit-appearance:none; width:10px; height:10px; margin-top:-4px; border:2px solid var(--action-text); border-radius:50%; background:var(--bg-host); }
+[data-host="after-effects"] .ch-number-disclosure__range:disabled { opacity:var(--disabled-opacity); cursor:default; }
+[data-host="after-effects"] .ch-number-disclosure__range:hover:not(:disabled)::-webkit-slider-thumb,
+[data-host="after-effects"] .ch-number-disclosure[data-adjusting="true"] .ch-number-disclosure__range::-webkit-slider-thumb { background:var(--action-text); }
+[data-host="after-effects"] .ch-number-disclosure[data-invalid="true"] .ch-number-disclosure__header > input { outline:1px solid var(--danger); }
+[data-host="after-effects"] .ch-number-disclosure__toggle:hover:not(:disabled) { color:var(--action-text-hover); }
+[data-host="after-effects"] .ch-number-disclosure__toggle:focus,
+[data-host="after-effects"] .ch-number-disclosure__reset:focus,
+[data-host="after-effects"] .ch-number-disclosure__range:focus { outline:var(--focus-ring); outline-offset:1px; }
+
+/* Retain the native checkbox and its label/Space behavior. The mark is compact;
+ * labels and control rows keep a minimum 24px target. No tool-tile rule changes. */
+[data-host="after-effects"] .ch-shell .ch-field--checkbox .ch-field__control { display:flex; align-items:center; justify-content:flex-end; min-width:24px; min-height:24px; }
+[data-host="after-effects"] .ch-shell .ch-field--checkbox .ch-field__label { display:flex; align-items:center; box-sizing:border-box; min-height:24px; padding:4px 0; line-height:16px; cursor:pointer; }
+[data-host="after-effects"] .ch-shell .ch-field--checkbox input.ch-checkbox { flex:0 0 14px; width:14px; height:14px; min-width:14px; min-height:14px; max-width:14px; margin:0 5px; padding:0; accent-color:var(--action-fill); cursor:pointer; }
+[data-host="after-effects"] .ch-shell .ch-field--checkbox input.ch-checkbox:focus { outline:var(--focus-ring); outline-offset:3px; }
+[data-host="after-effects"] .ch-shell .ch-field--checkbox input.ch-checkbox:disabled { cursor:default; opacity:var(--disabled-opacity); }
+[data-host="after-effects"] .ch-shell .ch-phase-field .ch-field__label,
+[data-host="after-effects"] .ch-shell .ch-phase-field > span { font-size:11px; line-height:16px; }
