@@ -425,6 +425,34 @@ test('with no preset chosen the footer asks once, and its status adds only a mis
   assert.notEqual(name(),'Selecione um preset');assert.equal(status(),'2 camadas selecionadas','a chosen preset still reports the selection');
 });
 
+test('phase segments: neutral and explained without a preset, one chosen segment once a preset is picked',t=>{
+  const {gallery,context}=fixture(t,{pick:false}),root=gallery.element;
+  const segments=()=>root.querySelector('.ch-preset-reference-footer').getElementsByTagName('button').filter(node=>node.dataset.phase);
+  gallery.updateContext();
+  assert.equal(segments().length,3);
+  for(const segment of segments()){
+    assert.equal(segment.getAttribute('aria-disabled'),'true',segment.dataset.phase);
+    assert.equal(segment.disabled,true,segment.dataset.phase);
+    assert.equal(segment.title,'Selecione um preset','the reason is the tooltip');
+    assert.notEqual(segment.getAttribute('data-chosen'),'true','"Ambos" is never filled without a preset');
+    assert.ok(segment.getAttribute('aria-describedby'),'the reason is also announced');
+  }
+  assert.equal(root.querySelector('.ch-preset-applybar').getAttribute('data-empty'),'true');
+  root.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-apply')).click();gallery.updateContext();
+  const chosen=segments().filter(node=>node.getAttribute('data-chosen')==='true');
+  assert.equal(chosen.length,1,'one segment carries the chosen phase');
+  assert.notEqual(chosen[0].getAttribute('aria-disabled'),'true','with layers selected the chosen phase can be applied');
+  assert.notEqual(root.querySelector('.ch-preset-applybar').getAttribute('data-empty'),'true');
+  context.selectionCount=0;gallery.updateContext();
+  for(const segment of segments()){assert.equal(segment.getAttribute('aria-disabled'),'true');assert.equal(segment.title,'Nenhuma camada selecionada');}
+});
+
+test('category shortcuts stay hidden while the folder tree is beside the cards',t=>{
+  const {gallery}=fixture(t,{pick:false}),root=gallery.element;
+  assert.equal(root.getAttribute('data-folder-picker'),'false');
+  assert.equal(root.querySelector('.ch-preset-discovery').hidden,true,'the tree already lists Tipografia, Animações and Transições');
+});
+
 /** Narrow docks: the picker above the cards and the tree sheet it opens. */
 function narrow(t, options = {}) {
   const f=fixture(t,{width:280,pick:false,...options}),root=f.gallery.element;

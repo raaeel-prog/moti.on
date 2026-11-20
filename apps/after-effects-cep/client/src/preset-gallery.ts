@@ -1957,7 +1957,10 @@ export function createPresetGallery(doc: Document, options: {
       control.setAttribute("aria-disabled", String(control.disabled));
       control.title = reason ?? "";
     }
+    // O segmento escolhido é a fase do rascunho do preset (padrão do preset ou a última aplicada).
+    const chosenPhase = selected?.motion ? settings(selected).phase : undefined;
     for (const [phase, control] of phaseActions?.controls ?? []) {
+      control.button.setAttribute("data-chosen", String(phase === chosenPhase));
       const feedback = applyFeedback?.presetId === selected?.id && applyFeedback?.phase === phase ? applyFeedback : undefined;
       control.setState(feedback?.state ?? "default", feedback?.message);
       const unavailable = options.busy || applying || Boolean(reason) || Boolean(selected && invalidNumbers.get(selected.id)?.size);
