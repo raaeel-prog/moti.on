@@ -1,6 +1,10 @@
 /**
- * The quick dock's tile strip: two rows that scroll sideways beside the anchor.
+ * Tile strips.
  *
+ * `createFittedStrip` (quick dock, 2026-11-20): whole columns only, measured with a
+ * ResizeObserver; the rest goes behind a "+N" tile. Never scrolls sideways.
+ *
+ * `createQuickStrip` (ease editor key actions): two rows that scroll sideways.
  * No scrollbar. The mouse wheel scrolls it (a wheel notch moves it smoothly), a page
  * button appears on the side that has more tiles, and that side fades out instead of
  * ending in a hard cut. At an end, the wheel goes back to scrolling the panel.
@@ -35,6 +39,76 @@ export function stripOverflow(scrollLeft: number, clientWidth: number, scrollWid
 /** How far a page button moves: the visible width minus one column, so one column stays as context. */
 export function stripPage(clientWidth: number): number {
   return Math.max(STRIP_COLUMN_PX, clientWidth - STRIP_COLUMN_PX);
+}
+
+/**
+ * Whole columns that fit in `width`: `max(2, floor((width + gap) / (tile + gap)))`.
+ * The quick dock never scrolls sideways; what does not fit goes behind a "+N" tile.
+ */
+export function fitColumns(width: number, tile: number, gap = 4): number {
+  if (!(width > 0) || !(tile > 0)) return 2;
+  return Math.max(2, Math.floor((width + gap) / (tile + gap)));
+}
+
+/** Tile edge for a panel `panelWidth` wide: 36 px, 32 px below 340 px (ae-quick-actions.css). */
+export function fitTileSize(panelWidth: number): number {
+  return panelWidth > 0 && panelWidth < 340 ? 32 : 36;
+}
+
+export interface FittedStrip {
+  /** Wrapper measured by the ResizeObserver; holds the grid. */
+  readonly element: HTMLElement;
+  /** Re-measures on the next frame; `onColumns` runs only when the count or tile size changed. */
+  refresh(): void;
+  dispose(): void;
+}
+
+/**
+ * A strip that shows only whole columns: it measures its own width (ResizeObserver,
+ * window resize as a fallback) and reports the column count to `onColumns`. No
+ * scrolling, fades or page buttons.
+ */
+export function createFittedStrip(doc: Document, env: MotionEnv, grid: HTMLElement, onColumns: (columns: number, tile: number) => void): FittedStrip {
+  const element = doc.createElement("div");
+  element.className = "ch-quick-strip";
+  grid.parentNode?.removeChild(grid);
+  element.appendChild(grid);
+  const win = doc.defaultView as (Window & { ResizeObserver?: typeof ResizeObserver }) | null;
+  let frame: number | null = null;
+  let last = "";
+  function measure(): void {
+    const width = element.clientWidth || element.getBoundingClientRect?.().width || 0;
+    // The CSS owns the tile size (media query on the viewport); the JS mirror is the fallback.
+    const css = Number.parseFloat(win?.getComputedStyle?.(grid).getPropertyValue("--qa-tile") ?? "");
+    const tile = css > 0 ? css : fitTileSize(win?.innerWidth || doc.documentElement?.clientWidth || 0);
+    // Unmeasured (hidden dock, test DOM): keep the last layout instead of collapsing to two columns.
+    if (!width && last) return;
+    const columns = width ? fitColumns(width, tile) : Number.POSITIVE_INFINITY;
+    const key = `${columns}|${tile}`;
+    if (key === last) return;
+    last = key;
+    onColumns(columns, tile);
+  }
+  function schedule(): void {
+    if (frame !== null) return;
+    frame = env.frame(() => { frame = null; measure(); });
+    if (frame === null) measure();
+  }
+  const Observer = win?.ResizeObserver;
+  const observer = Observer ? new Observer(schedule) : null;
+  observer?.observe(element);
+  const onResize = (): void => schedule();
+  win?.addEventListener?.("resize", onResize);
+  return {
+    element,
+    refresh: schedule,
+    dispose() {
+      if (frame !== null) env.cancelFrame(frame);
+      frame = null;
+      observer?.disconnect();
+      win?.removeEventListener?.("resize", onResize);
+    }
+  };
 }
 
 export function createQuickStrip(doc: Document, env: MotionEnv, scroller: HTMLElement, labels: QuickStripLabels): QuickStrip {

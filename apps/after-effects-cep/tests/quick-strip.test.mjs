@@ -73,6 +73,37 @@ test('page buttons move by the visible width minus one column; reduced motion ju
   clock.advance(16);
 });
 
+test('the quick dock shows whole columns only: max(2, floor((width + 4) / (tile + 4)))', () => {
+  assert.equal(strip.fitColumns(158, 32), 4, '280 px panel: 158 px beside the anchor');
+  assert.equal(strip.fitColumns(236, 36), 6);
+  assert.equal(strip.fitColumns(355, 36), 8, '355 + 4 = 359 < 360: the ninth column does not fit');
+  assert.equal(strip.fitColumns(356, 36), 9);
+  assert.equal(strip.fitColumns(40, 36), 2, 'never fewer than two columns');
+  assert.equal(strip.fitColumns(0, 36), 2);
+  assert.equal(strip.fitTileSize(280), 32);
+  assert.equal(strip.fitTileSize(339), 32);
+  assert.equal(strip.fitTileSize(340), 36);
+  assert.equal(strip.fitTileSize(720), 36);
+});
+
+test('the fitted strip wraps the grid without page buttons and reports columns once per change', t => {
+  const doc = createFakeDocument();
+  const clock = createManualEnv({ reduced: true });
+  const grid = doc.createElement('div');
+  const seen = [];
+  const fitted = strip.createFittedStrip(doc, clock.env, grid, (columns, tile) => seen.push([columns, tile]));
+  t.after(() => fitted.dispose());
+  assert.equal(grid.parentNode, fitted.element);
+  assert.equal(fitted.element.children.length, 1, 'no pagers, no fades');
+  fitted.element.clientWidth = 196;
+  fitted.refresh(); clock.advance(16);
+  assert.deepEqual(seen.at(-1), [5, 36]);
+  fitted.refresh(); clock.advance(16);
+  fitted.element.clientWidth = 0;
+  fitted.refresh(); clock.advance(16);
+  assert.deepEqual(seen.at(-1), [5, 36], 'an unmeasured strip keeps its last layout');
+});
+
 test('each tile row mirrors its keyboard row at any strip width', () => {
   assert.equal(keys.stripColumns(18), 9);
   assert.equal(keys.stripColumns(6), 3);
