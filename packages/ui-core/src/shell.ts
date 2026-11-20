@@ -1209,7 +1209,7 @@ export function createShell(options: ShellOptions): Shell {
     render();
   }
 
-  let lastPanelWidth = options.initialWidth ?? 360;
+  let lastPanelWidth = options.initialWidth || options.mount.offsetWidth || 360;
 
   function isLibraryPrimary(view: ShellView): boolean {
     return !view.utilityOnly && (!libraryLayout || view.primary || ["home", "presets"].includes(view.id));
@@ -1378,7 +1378,7 @@ export function createShell(options: ShellOptions): Shell {
   options.mount.appendChild(shellNode);
 
   applyActiveState();
-  setWidth(options.initialWidth ?? options.mount.offsetWidth ?? 360);
+  setWidth(options.initialWidth || options.mount.offsetWidth || 360);
   render();
 
   return shell;
