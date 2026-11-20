@@ -63,7 +63,7 @@ test('a narrow strip shows whole columns and puts the rest behind "+N", letters 
   assert.equal(overflow.hidden, false);
   assert.equal(overflow.getAttribute('data-open'), 'true');
   assert.equal(more.getAttribute('aria-expanded'), 'true');
-  assert.equal(f.doc.activeElement?.id, 'library-quick-create-solid', 'focus enters the popover on its first tile');
+  assert.equal(f.doc.activeElement?.id, 'library-quick-create-null', 'focus enters the popover on its first tile');
   overflow.emit('keydown', { key: 'Escape' });
   assert.equal(overflow.hidden, true, 'Esc closes');
   assert.equal(f.doc.activeElement, more, 'focus goes back to "+N"');

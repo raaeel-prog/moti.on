@@ -932,7 +932,7 @@ function fiveTabLibrary() {
   const primary = nav.children.find(n => n.className === 'ch-nav__primary');
   const more = nav.getElementsByTagName('button').find(n => n.className === 'ch-nav__more');
   const overflow = more.parentNode.children.find(n => n.className === 'ch-nav__overflow');
-  const idsIn = node => node.getElementsByTagName('button').filter(n => n.getAttribute('data-view')).map(n => n.getAttribute('data-view'));
+  const idsIn = node => [...node.children].filter(n => n.getAttribute && n.getAttribute('data-view')).map(n => n.getAttribute('data-view'));
   const labelOf = id => {
     const btn = shell.element().getElementsByTagName('button').find(n => n.getAttribute('data-view') === id);
     const span = btn?.getElementsByTagName('span')[0];
@@ -945,8 +945,8 @@ test('library text tabs overflow into Mais at 300 and 360 and show all five from
   const f = fiveTabLibrary();
   const names = ['home','ease','parallax','presets','stock'].map(f.labelOf);
   assert.deepEqual(names, ['Ferramentas','Suavização','Parallax','Presets','Banco de mídia']);
-  assert.match(f.more.allText || f.more.textContent, /Mais/);
-  assert.match(f.more.textContent, /▾/);
+  assert.match(f.more.allText, /Mais/);
+  assert.match(f.more.allText, /▾/);
 
   f.shell.setWidth(300);
   assert.deepEqual(f.idsIn(f.primary), ['home','ease']);
@@ -1013,9 +1013,9 @@ test('Mais opens a keyboard menu of overflowed text tabs and Escape restores foc
 
 test('Mais label follows the locale and is not an icon-only control', () => {
   const f = fiveTabLibrary();
-  assert.match(f.more.textContent, /Mais/);
+  assert.match(f.more.allText, /Mais/);
   f.i18n.setLocale('en-US');
   f.shell.refreshChrome();
-  assert.match(f.more.textContent, /More/);
+  assert.match(f.more.allText, /More/);
   assert.equal(f.more.getAttribute('aria-label'), 'More');
 });

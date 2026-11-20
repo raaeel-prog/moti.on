@@ -969,9 +969,9 @@ export function createShell(options: ShellOptions): Shell {
   if (libraryLayout) {
     primaryNav.setAttribute("role", "tablist");
     nav.appendChild(primaryNav);
+    nav.appendChild(more);
+    nav.appendChild(overflow);
     nav.appendChild(utilities);
-    primaryNav.appendChild(more);
-    primaryNav.appendChild(overflow);
   }
   function closeOverflow(restoreFocus = false): void {
     fieldHidden(overflow, true);
@@ -1229,20 +1229,31 @@ export function createShell(options: ShellOptions): Shell {
     }
     const visibleIds = new Set(visible.map(view => view.id));
     const overflowPrimaries = primaries.filter(view => !visibleIds.has(view.id));
+    const move = (node: Element, parent: Element): void => {
+      if (node.parentNode && node.parentNode !== parent) node.parentNode.removeChild(node);
+      else if (node.parentNode === parent) parent.removeChild(node);
+      parent.appendChild(node);
+    };
     for (const view of visible) {
       const item = buttons.get(view.id);
-      if (item) primaryNav.appendChild(item);
+      if (item) move(item, primaryNav);
     }
-    primaryNav.appendChild(more);
-    primaryNav.appendChild(overflow);
     for (const view of overflowPrimaries) {
       const item = buttons.get(view.id);
-      if (item) overflow.appendChild(item);
+      if (item) move(item, overflow);
     }
     for (const view of leftovers) {
       const item = buttons.get(view.id);
-      if (item) overflow.appendChild(item);
+      if (item) move(item, overflow);
     }
+    // Keep Mais and the menu as siblings of the tablist (never inside it) and
+    // before the utilities, without insertBefore (UXP and the test DOM).
+    if (more.parentNode) more.parentNode.removeChild(more);
+    if (overflow.parentNode) overflow.parentNode.removeChild(overflow);
+    if (utilities.parentNode) utilities.parentNode.removeChild(utilities);
+    nav.appendChild(more);
+    nav.appendChild(overflow);
+    nav.appendChild(utilities);
     const showMore = overflowPrimaries.length + leftovers.length > 0;
     fieldHidden(more, !showMore);
     if (!showMore) closeOverflow();
