@@ -50,9 +50,9 @@ export function fitColumns(width: number, tile: number, gap = 4): number {
   return Math.max(2, Math.floor((width + gap) / (tile + gap)));
 }
 
-/** Tile edge for a panel `panelWidth` wide: 36 px, 32 px below 340 px (ae-quick-actions.css). */
-export function fitTileSize(panelWidth: number): number {
-  return panelWidth > 0 && panelWidth < 340 ? 32 : 36;
+/** Tile edge for the dock (dir. A): always 28 px loose icons (ae-quick-actions.css). */
+export function fitTileSize(_panelWidth: number): number {
+  return 28;
 }
 
 export interface FittedStrip {

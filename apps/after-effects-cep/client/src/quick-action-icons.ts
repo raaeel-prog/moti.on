@@ -1,58 +1,154 @@
 /**
- * Original duotone drawings for the 18 Quick actions (Onyx Vivo icon language).
+ * Ícones Lucide (24 viewBox, stroke 1.5) para cada ação rápida real.
  *
- * Same contract as the shared tool catalog (ui-core icons.ts): an 18-unit grid
- * scaled into the 24 view box, three layers (`fill` soft family area, `base`
- * neutral structure, `accent` the meaningful part) and one gesture from the
- * shared catalog that plays once per hover/focus through `data-motion="icon-gesture"`.
- * Kept beside the Quick actions instead of in the tool catalog because these are
- * host shortcuts, not library tools. Presentation only: no host, no global DOM.
+ * Tabela ação → ícone (nome Lucide, ou custom quando não há equivalente):
+ *
+ *   precompose          copy
+ *   center              crosshair
+ *   fit                 maximize-2
+ *   freeze              snowflake
+ *   mirror              flip-horizontal
+ *   dash-stroke         dashed-line (custom; Lucide não tem traço tracejado)
+ *   trim-to-keys        scissors
+ *   pin-to-null         pin
+ *   create-adjustment   contrast
+ *   create-solid        square
+ *   create-shape        rectangle-horizontal
+ *   create-null         move
+ *   create-camera       camera
+ *   save-frame          image
+ *   effect-hue          palette
+ *   effect-fill         paint-bucket
+ *   effect-tint         droplet
+ *   effect-blur         blend
+ *   effect-lumetri      sun
+ *   effect-curves       spline
+ *
+ * Nenhum ícone se repete. Presentation only: no host, no global DOM.
  */
 import type { QuickAction } from "./quick-actions.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-/** Gestures that already exist in packages/ui-motion/src/motion.css. */
 type QuickGesture = "rise" | "pop" | "dolly" | "spin" | "flip" | "slide" | "flash" | "turn"
   | "morph" | "tick" | "look" | "drop" | "bob" | "spread" | "draw";
 type QuickFamily = "layers" | "project" | "effects";
 
-interface QuickDrawing {
-  readonly fill?: string;
-  readonly base?: string;
-  readonly accent: string;
-  /** Extra stroke pattern for the accent (dashed outlines). */
-  readonly accentDash?: string;
+interface LucideIcon {
+  readonly name: string;
+  readonly markup: string;
   readonly gesture: QuickGesture;
 }
 
-const RING = "M9 2.5a6.5 6.5 0 1 1 0 13a6.5 6.5 0 1 1 0-13z";
-
-export const QUICK_ACTION_DRAWINGS: Readonly<Record<QuickAction, QuickDrawing>> = Object.freeze({
-  // Layer row: transforms the selection.
-  "precompose": { base: "M5.5 5.5V2.5h10v10h-2.5M2.5 5.5h10.5v10H2.5z", fill: "M2.5 5.5h10.5v10H2.5z", accent: "M5 8.5h5.5v4.5H5z", gesture: "rise" },
-  "center": { base: "M2.5 2.5h13v13h-13z", fill: "M7.5 7.5h3v3h-3z", accent: "M9 4.5v9M4.5 9h9", gesture: "pop" },
-  "fit": { base: "M5.5 5.5h7v7h-7z", fill: "M5.5 5.5h7v7h-7z", accent: "M2 6V2h4M12 2h4v4M16 12v4h-4M6 16H2v-4", gesture: "dolly" },
-  "freeze": { base: "M7 3.5L9 5l2-1.5M7 14.5L9 13l2 1.5", accent: "M9 2v14M2.9 5.5l12.2 7M2.9 12.5l12.2-7", gesture: "spin" },
-  "mirror": { base: "M9 1.5v15", fill: "M7 4.5L2.5 13.5H7z", accent: "M11 4.5l4.5 9H11z", gesture: "flip" },
-  "dash-stroke": { base: "M2.5 4h13M2.5 14h13", accent: "M2.5 9h2.5M7.75 9h2.5M13 9h2.5", gesture: "slide" },
-  "trim-to-keys": { base: "M2 9h14", fill: "M5 6.5h8v5H5z", accent: "M5 3v12M13 3v12", gesture: "slide" },
-  "pin-to-null": { base: "M2.5 11.5h6v5h-6z", accent: "M12.5 1.5a2.5 2.5 0 1 1 0 5a2.5 2.5 0 1 1 0-5zM12.5 6.5v4M8.5 12l4-1.5", gesture: "tick" },
-  // Create row: new layers and the PNG export.
-  "create-adjustment": { base: RING, fill: "M9 2.5a6.5 6.5 0 0 1 0 13z", accent: "M9 2.5v13", gesture: "turn" },
-  "create-solid": { base: "M3 3h12v12H3z", fill: "M3 3h12v12H3z", accent: "M6.5 11.5l5-5", gesture: "pop" },
-  "create-shape": { base: "M1.5 3.5h3v3h-3zM13.5 11.5h3v3h-3z", fill: "M3 5h12v8H3z", accent: "M3 5h12v8H3z", gesture: "morph" },
-  "create-null": { base: "M5.5 5.5h7v7h-7z", fill: "M5.5 5.5h7v7h-7z", accent: "M9 1.5V4M9 14v2.5M1.5 9H4M14 9h2.5", gesture: "tick" },
-  "create-camera": { base: "M2 5.5h9.5v7H2z", fill: "M2 5.5h9.5v7H2z", accent: "M11.5 8l4.5-2.5v7L11.5 10", gesture: "look" },
-  "save-frame": { base: "M2 3.5h14v11H2z", fill: "M2 14.5l4.5-5 3 3 2-2 4.5 4z", accent: "M12 5.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3z", gesture: "flash" },
-  // Effects row: one native effect each.
-  "effect-hue": { base: RING, fill: "M9 9V2.5a6.5 6.5 0 0 1 6.5 6.5z", accent: "M9 9l4.6-4.6", gesture: "spin" },
-  "effect-fill": { base: "M3.5 8l5-5 6 6-5 5z", fill: "M3.5 8l5-5 6 6-5 5z", accent: "M15.5 11.5s1.5 1.7 1.5 2.8a1.5 1.5 0 0 1-3 0c0-1.1 1.5-2.8 1.5-2.8z", gesture: "drop" },
-  "effect-tint": { base: "M9 2s5 5.2 5 8.8a5 5 0 0 1-10 0C4 7.2 9 2 9 2z", fill: "M9 2s5 5.2 5 8.8a5 5 0 0 1-10 0C4 7.2 9 2 9 2z", accent: "M6.8 11.5a2.3 2.3 0 0 0 2.2 2.2", gesture: "bob" },
-  "effect-blur": { fill: "M9 6a3 3 0 1 1 0 6a3 3 0 1 1 0-6z", base: "M9 6a3 3 0 1 1 0 6a3 3 0 1 1 0-6z", accent: RING, accentDash: "1 2.4", gesture: "spread" },
-  "effect-lumetri": { base: "M9 6a3 3 0 1 1 0 6a3 3 0 1 1 0-6z", fill: "M9 6a3 3 0 1 1 0 6a3 3 0 1 1 0-6z", accent: "M9 1.5v2M9 14.5v2M1.5 9h2M14.5 9h2M3.7 3.7l1.4 1.4M12.9 12.9l1.4 1.4M3.7 14.3l1.4-1.4M12.9 5.1l1.4-1.4", gesture: "spin" },
-  "effect-curves": { base: "M2.5 2.5v13h13", fill: "M2.5 15.5C8 15.5 7 3 15.5 2.5v13z", accent: "M2.5 15.5C8 15.5 7 3 15.5 2.5", gesture: "draw" }
+/**
+ * Geometria oficial Lucide (0.460), 24 viewBox. `dash-stroke` é o único
+ * desenho custom — uma linha tracejada entre duas sólidas, no mesmo traço.
+ */
+export const QUICK_ACTION_ICONS: Readonly<Record<QuickAction, LucideIcon>> = Object.freeze({
+  precompose: {
+    name: "copy",
+    gesture: "rise",
+    markup: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>'
+  },
+  center: {
+    name: "crosshair",
+    gesture: "pop",
+    markup: '<circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>'
+  },
+  fit: {
+    name: "maximize-2",
+    gesture: "dolly",
+    markup: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/>'
+  },
+  freeze: {
+    name: "snowflake",
+    gesture: "spin",
+    markup: '<path d="m10 20-1.25-2.5-2.5 1.25"/><path d="m14 20 1.25-2.5 2.5 1.25"/><path d="M4 10 2.5 9 4 6.75"/><path d="m20 10 1.5-1-1.5-2.25"/><path d="m4 14-1.5 1 1.5 2.25"/><path d="m20 14 1.5 1-1.5 2.25"/><path d="m10 4-1.25 2.5L6.25 5.25"/><path d="m14 4 1.25 2.5 2.5-1.25"/><path d="M10 10 8.5 8.5"/><path d="m14 14 1.5 1.5"/><path d="m14 10 1.5-1.5"/><path d="m10 14-1.5 1.5"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="m2 12 4 0"/><path d="m18 12 4 0"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/>'
+  },
+  mirror: {
+    name: "flip-horizontal",
+    gesture: "flip",
+    markup: '<path d="M8 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 20v2"/><path d="M12 14v2"/><path d="M12 8v2"/><path d="M12 2v2"/>'
+  },
+  "dash-stroke": {
+    name: "dashed-line",
+    gesture: "slide",
+    markup: '<path d="M5 12h2"/><path d="M11 12h2"/><path d="M17 12h2"/><path d="M4 6h16"/><path d="M4 18h16"/>'
+  },
+  "trim-to-keys": {
+    name: "scissors",
+    gesture: "slide",
+    markup: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.6 8.6 19 19"/><path d="M8.6 15.4 19 5"/>'
+  },
+  "pin-to-null": {
+    name: "pin",
+    gesture: "tick",
+    markup: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1V4H8v2h1z"/>'
+  },
+  "create-adjustment": {
+    name: "contrast",
+    gesture: "turn",
+    markup: '<circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12z"/>'
+  },
+  "create-solid": {
+    name: "square",
+    gesture: "pop",
+    markup: '<rect width="18" height="18" x="3" y="3" rx="2"/>'
+  },
+  "create-shape": {
+    name: "rectangle-horizontal",
+    gesture: "morph",
+    markup: '<rect width="20" height="12" x="2" y="6" rx="2"/>'
+  },
+  "create-null": {
+    name: "move",
+    gesture: "tick",
+    markup: '<path d="M12 2v20"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/>'
+  },
+  "create-camera": {
+    name: "camera",
+    gesture: "look",
+    markup: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3"/>'
+  },
+  "save-frame": {
+    name: "image",
+    gesture: "flash",
+    markup: '<rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>'
+  },
+  "effect-hue": {
+    name: "palette",
+    gesture: "spin",
+    markup: '<circle cx="13.5" cy="6.5" r="2.5"/><circle cx="19" cy="13" r="2.5"/><circle cx="6" cy="11" r="2.5"/><circle cx="8.5" cy="18" r="2.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>'
+  },
+  "effect-fill": {
+    name: "paint-bucket",
+    gesture: "drop",
+    markup: '<path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0Z"/><path d="m5 2 5 5"/><path d="M2 13h15"/><path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4"/>'
+  },
+  "effect-tint": {
+    name: "droplet",
+    gesture: "bob",
+    markup: '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>'
+  },
+  "effect-blur": {
+    name: "blend",
+    gesture: "spread",
+    markup: '<circle cx="9" cy="9" r="7"/><circle cx="15" cy="15" r="7"/>'
+  },
+  "effect-lumetri": {
+    name: "sun",
+    gesture: "spin",
+    markup: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>'
+  },
+  "effect-curves": {
+    name: "spline",
+    gesture: "draw",
+    markup: '<circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><path d="M5 17A12 12 0 0 1 17 5"/>'
+  }
 });
+
+/** Kept so existing imports of the drawings table still resolve to the Lucide set. */
+export const QUICK_ACTION_DRAWINGS = QUICK_ACTION_ICONS;
 
 /** Text fallbacks for runtimes without inline SVG. */
 const FALLBACK: Readonly<Record<QuickAction, string>> = Object.freeze({
@@ -65,9 +161,25 @@ export function quickActionFamily(action: QuickAction): QuickFamily {
   return action.startsWith("effect-") ? "effects" : action.startsWith("create-") || action === "save-frame" ? "project" : "layers";
 }
 
-/** Mirrors ui-core createIcon so the shared CSS (family color, gesture pivots) applies unchanged. */
+const ATTR_RE = /([a-zA-Z_:][\w:.-]*)="([^"]*)"/g;
+const TAG_RE = /<(path|circle|rect|line|polyline|polygon)([^>]*)\/>/g;
+
+function appendLucideMarkup(doc: Document, parent: Element, markup: string): void {
+  TAG_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = TAG_RE.exec(markup))) {
+    const node = doc.createElementNS(SVG_NS, match[1]!);
+    ATTR_RE.lastIndex = 0;
+    let attr: RegExpExecArray | null;
+    const attrs = match[2] ?? "";
+    while ((attr = ATTR_RE.exec(attrs))) node.setAttribute(attr[1]!, attr[2]!);
+    parent.appendChild(node);
+  }
+}
+
+/** Lucide stroke icon, 16 px, same class contract as ui-core createIcon. */
 export function createQuickActionIcon(doc: Document, action: QuickAction): Element {
-  const drawing = QUICK_ACTION_DRAWINGS[action];
+  const icon = QUICK_ACTION_ICONS[action];
   const family = quickActionFamily(action);
   const fallback = (): HTMLElement => {
     const node = doc.createElement("span");
@@ -83,25 +195,18 @@ export function createQuickActionIcon(doc: Document, action: QuickAction): Eleme
     svg.setAttribute("class", "ch-icon ch-quick-action__icon");
     svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("width", "16"); svg.setAttribute("height", "16");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.5");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
     svg.setAttribute("aria-hidden", "true"); svg.setAttribute("focusable", "false");
-    svg.setAttribute("data-icon", `quick-${action}`); svg.setAttribute("data-icon-family", family);
-    svg.setAttribute("data-icon-motion", drawing.gesture);
+    svg.setAttribute("data-icon", `quick-${action}`);
+    svg.setAttribute("data-lucide", icon.name);
+    svg.setAttribute("data-icon-family", family);
+    svg.setAttribute("data-icon-motion", icon.gesture);
     svg.setAttribute("data-motion", "icon-gesture");
-    const geometry = doc.createElementNS(SVG_NS, "g");
-    geometry.setAttribute("transform", "scale(1.3333333333)");
-    geometry.setAttribute("stroke", "currentColor"); geometry.setAttribute("fill", "none");
-    geometry.setAttribute("stroke-width", "1.5");
-    geometry.setAttribute("stroke-linejoin", "round"); geometry.setAttribute("stroke-linecap", "round");
-    for (const [part, path] of [["fill", drawing.fill], ["base", drawing.base], ["detail", drawing.accent]] as const) {
-      if (!path) continue;
-      const group = doc.createElementNS(SVG_NS, "g"); group.setAttribute("class", `ch-icon__${part}`);
-      const shape = doc.createElementNS(SVG_NS, "path"); shape.setAttribute("d", path);
-      if (part === "fill") { shape.setAttribute("fill", "currentColor"); shape.setAttribute("stroke", "none"); }
-      if (part === "detail" && drawing.gesture === "draw") shape.setAttribute("pathLength", "1");
-      if (part === "detail" && drawing.accentDash) shape.setAttribute("stroke-dasharray", drawing.accentDash);
-      group.appendChild(shape); geometry.appendChild(group);
-    }
-    svg.appendChild(geometry);
+    appendLucideMarkup(doc, svg, icon.markup);
     return svg;
   } catch { return fallback(); }
 }
