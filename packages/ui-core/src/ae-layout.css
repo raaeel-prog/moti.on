@@ -249,51 +249,26 @@
 
 /* ---- Wide docks: content uses the whole dock (the 620 px cap left an empty strip on the right);
  * forms keep a readable measure instead. ---- */
-[data-host="after-effects"] .ch-shell--comfort[data-layout="library"] .ch-content,
-[data-host="after-effects"] .ch-shell--wide[data-layout="library"] .ch-content { max-width: none; }
-[data-host="after-effects"] .ch-camera-panel[data-pane="settings"] > .ch-camera-section,
-[data-host="after-effects"] .ch-camera-panel[data-pane="settings"] > .ch-camera-settings-head { max-width: 560px; }
 
 /* ---- Presets: what is selected on top, then the library actions and the thumbnail size at the left
  * and the apply actions at the right; the apply actions drop to their own row only when they do not
  * fit, and from 640 px everything is one row. ---- */
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--lay-space-2) var(--lay-space-3); padding: var(--lay-space-2) var(--lay-space-3);
+  display: flex; flex-wrap: wrap;
 }
 [data-host="after-effects"] .ch-preset-reference-footer > .ch-preset-selection-summary {
-  flex: 1 0 100%; flex-direction: row; flex-wrap: nowrap; align-items: baseline; justify-content: flex-start; gap: var(--lay-space-2); min-width: 0;
+  flex: 1 0 100%;
 }
-[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-selected-name { flex: 0 1 auto; max-width: 60%; }
-[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-selection-status { display: block; flex: 0 1 auto; max-width: none; }
-[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-selection-status:empty { display: none; }
 [data-host="after-effects"] .ch-preset-reference-footer > .ch-preset-library-actions { flex: 0 0 auto; }
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-preview-controls { flex: 0 0 auto; width: auto; min-width: 0; max-width: none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-preview-controls { flex: 0 0 auto; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-applybar { flex: 0 0 auto; margin-left: auto; justify-self: auto; }
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-library-actions > .ch-button {
-  min-height: var(--lay-btn-sm); height: var(--lay-btn-sm); padding: 0 8px; border-radius: 6px;
-}
 /* Thumbnail size reads as one: small square, slider, large square. */
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-size {
-  gap: 6px; width: auto; min-width: 0; max-width: none; flex: 0 0 auto; color: var(--text-secondary);
-}
-[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::before,
-[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::after {
-  content: ""; flex: 0 0 auto; box-sizing: border-box; border: 1.5px solid currentColor; border-radius: 2px; opacity: .8;
-}
-[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::before { width: 8px; height: 8px; }
-[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::after { width: 12px; height: 12px; }
-[data-host="after-effects"] .ch-preset-reference-footer input[type="range"] { flex-basis: 64px; width: 64px; min-width: 64px; max-width: 64px; }
-[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-phase-actions { width: auto; flex: 0 0 auto; gap: var(--lay-space-1); }
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-phase-actions .ch-action-button {
-  height: var(--lay-btn-md); min-height: var(--lay-btn-md); min-width: 64px; padding: 0 var(--lay-space-3);
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-phase-actions .ch-action-button { min-width: 64px;
 }
 @media (min-width: 640px) {
   [data-host="after-effects"] .ch-preset-reference-footer > .ch-preset-selection-summary { flex: 1 1 0; min-width: 120px; }
 }
 @media (max-width: 339px) {
-  [data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::before,
-  [data-host="after-effects"] .ch-preset-reference-footer .ch-preset-size::after { display: none; }
-  [data-host="after-effects"] .ch-preset-reference-footer input[type="range"] { flex-basis: 48px; width: 48px; min-width: 48px; max-width: 48px; }
 }
 
 /* ---- Wide docks: content uses the whole dock (the 620 px cap left an empty strip on the right);
@@ -322,7 +297,7 @@
 [data-host="after-effects"] .ch-preset-reference-footer > .ch-preset-applybar,
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-applybar { grid-area: apply; justify-self: end; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-library-actions > .ch-button {
-  min-height: var(--lay-btn-sm); height: var(--lay-btn-sm); padding: 0 8px; border-radius: 6px;
+  min-height: var(--lay-btn-sm); height: var(--lay-btn-sm); border-radius: 6px;
 }
 /* Thumbnail size reads as one: small square, slider, large square. */
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-size {

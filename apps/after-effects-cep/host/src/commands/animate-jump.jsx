@@ -16,6 +16,15 @@
  * caso comum, e esse funciona exatamente.
  */
 (function () {
+  /**
+   * O Jump grava keyframes; uma expressao ativa que le `value` continua valendo
+   * por cima deles. So a que ignora `value` esconderia o salto.
+   * @param {any} property @returns {boolean}
+   */
+  function hidesKeys(property) {
+    var source = String(property.expression || "");
+    return source !== "" && property.expressionEnabled === true && !/(^|[^\w.$])value\b/.test(source);
+  }
   /* global Property KeyframeInterpolationType */
   var ALLOWED = {
     height: true,
@@ -187,8 +196,8 @@
           { selectionIndex: i }
         );
       }
-      if (position.expression !== "" && position.expressionEnabled === true) {
-        return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "Position contem expressao ativa.", {
+      if (hidesKeys(position)) {
+        return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A expressao de Position nao usa value e esconderia o salto. Some o resultado a value para combinar.", {
           selectionIndex: i
         });
       }
@@ -206,8 +215,8 @@
             selectionIndex: i
           });
         }
-        if (scale.expression !== "" && scale.expressionEnabled === true) {
-          return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "Scale contem expressao ativa.", {
+        if (hidesKeys(scale)) {
+          return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A expressao de Scale nao usa value e esconderia o squash. Some o resultado a value para combinar.", {
             selectionIndex: i
           });
         }

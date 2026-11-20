@@ -48,7 +48,7 @@ function fixture(t,{autoplay=true,focused=true,intersection=true,scroll=0,naviga
 }
 
 test('full catalogue allocates artwork only for visible cards and animates the hovered card through one 30 fps scheduler',async t=>{
-  const f=fixture(t);assert.equal(f.views.length,473,'every offered preset has a card; retired ones have none');assert.ok(f.svgs.every(s=>s.children.length===0));
+  const f=fixture(t);assert.equal(f.views.length,427,'every offered preset has a card; retired ones have none');assert.ok(f.svgs.every(s=>s.children.length===0));
   f.visible([0,1,2,3,4,5]);assert.equal(f.svgs.filter(s=>s.children.length).length,6);
   assert.equal(f.frames.size,0,'resting cards hold their still: a grid of looping entrances blinked in CEP');
   await f.hover(2);assert.equal(f.frames.size,1);
@@ -385,7 +385,7 @@ test('card hover survives CEP re-firing pointer out and over on every repaint',a
 test('every visible text card plays its rendered preview at once over a still that is never hidden',async t=>{
   const f=fixture(t);
   const at=id=>f.views.findIndex(v=>v.dataset.previewId===id);
-  const a=at('builtin.motion.premium-glyph-constellation'),b=at('builtin.motion.premium-typewriter');
+  const a=at('builtin.motion.premium-glyph-constellation'),b=at('builtin.motion.text-v3-characters-typewriter-precise');
   assert.ok(a>=0&&b>=0,'two rendered text presets');
   const surfaces=i=>f.views[i].children.filter(n=>n.tagName==='canvas');
   const stills=i=>f.views[i].children.filter(n=>n.tagName==='img');

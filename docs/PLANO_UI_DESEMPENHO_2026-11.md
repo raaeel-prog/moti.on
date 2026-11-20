@@ -1,7 +1,7 @@
 # Moti.on — Plano de desempenho, design system e acabamento do painel
 
 Projeto: `C:\dev\Moti.on\implementation` (painel CEP do After Effects).
-Data: 2026-11-16. Estado: plano aprovado, nada implementado. Marque cada item com [x] conforme for entregue.
+Data: 2026-11-16. Estado: janela virtual da Fase 1 medida no After Effects. Veja as medições e pendências em "Andamento".
 
 ## 1. Contexto
 
@@ -195,3 +195,102 @@ Fase 0 → 1 (resolve o que trava hoje) → 3 (estudo visual + tokens + cor do u
 - Instalação: copiar `dist/after-effects-cep/client` e `styles`, recarregar o painel com `location.reload()`.
 - Tudo que não for conferido por você no After Effects fica marcado `IMPLEMENTED_NOT_HOST_VERIFIED`.
 - Ao final, remover o `.debug` da pasta de extensões.
+
+## 7. Andamento
+
+### 2026-11-16 — Fase 0 e início da Fase 1
+
+Feito:
+
+- [x] Plano salvo em `docs/` com imagens.
+- [x] Ponto de retorno: commit `6b40d47` no ramo atual (local, sem push).
+- [x] `scripts/panel-perf-audit.mjs <rótulo>`: mede slider, rolagem, favoritar e busca dentro do AE (CDP 8091) e grava `artifacts/perf/<rótulo>.json`.
+- [x] Fase 1.1 — slider de tamanho: atualiza a grade no máximo uma vez por quadro e grava a preferência só ao soltar.
+- [x] Causa raiz do slider e do divisor de pastas: `--preview-size` e `--preset-sidebar-width` eram variáveis CSS herdadas; cada passo recalculava o estilo de todos os descendentes. Agora são registradas sem herança (`registerLayoutProperties` em `preset-gallery.ts`).
+- [x] Fase 1.5 — favoritar atualiza a estrela no lugar (redesenha só no filtro "Favoritos").
+- [x] Dois testes novos em `apps/after-effects-cep/tests/preset-gallery-ui.test.mjs`.
+
+Medições:
+
+| Cenário | Antes | Depois | Onde foi medido |
+|---|---|---|---|
+| Slider, um passo (estilo + layout) | 124 ms | 17 ms | preview local, Chrome 156, 473 cards, mediana de 9 |
+| Slider, quadro por passo | p50 125 ms, 38 de 38 quadros acima de 34 ms | não medido | After Effects (Chromium 99), painel 231×238 |
+| Divisor de pastas, um passo | não medido | 26 ms | preview local |
+| Favoritar (código até devolver) | ~220 ms | 0,6 ms | antes: AE; depois: preview local |
+| Favoritar até pintar | 370–470 ms | não medido | After Effects |
+| Rolagem 9.000 px | p50 24 ms, p90 47 ms, 27 de 150 quadros acima de 34 ms | sem mudança esperada | After Effects |
+| Busca: limpar o termo | quadro mais longo 203 ms | sem mudança | After Effects |
+
+Nesta primeira rodada, a porta de depuração deixou de responder antes da medição do build otimizado no After Effects. A comparação da janela virtual abaixo usa uma nova medição com a correção do slider e dos favoritos já instalada na base.
+
+Aprendizados que mudam o plano:
+
+- O Chromium do painel no AE é o 99 (CEP 12), não o 88: `content-visibility`, `contain-intrinsic-size: auto` e `aspect-ratio` existem.
+- A CSP do painel bloqueia `<style>` injetado; experimento de CSS ao vivo tem de ser por `element.style`.
+- **Qualquer** `style.setProperty("--x")` em um contêiner grande custa ~100 ms por causa da herança. Vale para a Fase 3: tokens que mudam em tempo de uso (cor de destaque, tamanho) devem ser trocados uma vez, nunca durante arraste, ou registrados sem herança.
+- Redesenhar a grade custa 120–220 ms de JavaScript puro (criar 473 cards). `content-visibility` não resolve isso; a janela virtual (Fase 1.3) continua necessária para busca, troca de pasta e rolagem.
+- `content-visibility` nos cards cortou o layout do slider de 17 para 8 ms no preview, mas muda a altura estimada da rolagem. Fica para depois de medir no AE.
+- A skill de desempenho do projeto pede espera de busca entre 250 e 400 ms: o item 1.6 mantém 250 ms (não baixar para 120).
+
+### 2026-11-16 — Janela virtual no After Effects
+
+- [x] Fase 1.3 — monta as linhas visíveis e até duas linhas de margem por lado. A grade CSS preserva a altura total com trilhas de altura fixa. Linhas com foco ou com uma gaveta aberta continuam montadas.
+- [x] Fase 1.4 — cliques, duplo clique e menu de contexto delegados à grade. Os observers de prévia acompanham somente os cards montados.
+- [x] Fase 1.5 — o menu de contexto também atualiza a estrela no lugar. O filtro Favoritos atualiza seus resultados ao desmarcar.
+- [x] Fase 1.6 — texto de busca normalizado uma vez por idioma. O debounce fica em 250 ms e a contagem informa todos os resultados do filtro.
+- [x] Fase 1.7 — reaproveita cards comuns entre pastas e mantém até 32 cards desmontados por galeria para reutilização. Libera a cena e desregistra os observers ao desmontar.
+- [x] Fase 1.8 — cobertura automatizada para limite de nós, busca, reaproveitamento, observers, teclado, gaveta, restauração e revelação de presets fora da janela.
+- [ ] Fase 1.2 — `content-visibility` e `contain` ficaram pendentes. A janela virtual já atingiu a meta de quadros no cenário medido.
+
+As medições têm cinco rodadas após o aquecimento no After Effects 26.5, CEP 12.0.1 (Chromium 99), Windows 11, i7-14700KF e RTX 3080. Nos dois builds, o painel tinha 498 × 698 px (DPR 1), a grade 325 × 467 px em duas colunas, o slider estava em 230 px e o catálogo tinha 473 resultados. O ensaio percorreu 9.000 px e voltou, em passos de 120 px, no projeto vazio. Tempos de resposta visual foram estimados via `requestAnimationFrame`. Os valores da tabela são medianas das cinco rodadas, salvo onde consta o pior caso ou o total.
+
+| Cenário | Antes da janela | Depois da janela |
+|---|---:|---:|
+| Cards montados no topo / a 9.000 px | 473 / 473 | 12 / 18 |
+| Rolagem, tempo por quadro p50 / p90 | 53,4 / 96,3 ms | 6,4 / 8,9 ms |
+| Rolagem, quadros acima de 34 ms (total) | 621 de 750 | 0 de 750 |
+| Rolagem, pior quadro das cinco rodadas | 215,5 ms | 24,8 ms |
+| Slider, tempo por quadro p50 / p90 | 77,4 / 118,8 ms | 5,7 / 11,8 ms |
+| Slider, quadros acima de 34 ms (total) | 152 de 190 | 0 de 190 |
+| Busca por `fade` / limpar (inclui 250 ms de debounce) | 295,0 / 805,9 ms | 271,3 / 273,6 ms |
+| Limpar busca, quadro mais longo por rodada | 205,2 ms | 20,3 ms |
+| Todos → Motion, clique até segundo quadro | 185,7 ms | 16,8 ms |
+| Motion → Todos, clique até segundo quadro | 569,7 ms | 16,7 ms |
+
+Os dois builds retornaram 5 itens para `fade`, 115 em Motion, 473 em Todos e a mesma extensão rolável de 27.659 px. Para repetir, use `node scripts/panel-perf-audit.mjs <rótulo> --compare=antes-janela`. A primeira medição após a alteração usou uma coluna por causa da largura do divisor e ficou fora da comparação.
+
+- [Antes, cinco amostras](../artifacts/perf/antes-janela.json) e [depois, mesma grade](../artifacts/perf/depois-janela-mesma-grade.json).
+- [Smoke no AE](../artifacts/perf/ae-janela-smoke.json), em três colunas. Home/End alcançaram o primeiro e o último preset, a gaveta manteve a âncora na rolagem, Escape devolveu o foco e retornar de Ferramentas para Presets restaurou os 9.000 px.
+- Build medido, SHA-256 de `client/main.js` antes `6BBCAF852ECD544F88204C14F77C1ED8D6957ED0B6D4EBAAB8245FEE70752ACA` e depois `7A21F924D3A89ED5BEEBCFB62510FE924748C55EDDBF36C4135440F04909EBAF`.
+
+### 2026-11-18 — Verificação final no painel instalado
+
+- **PASS no After Effects 26.5.** No painel de 492 × 591 px em duas colunas, a roda do mouse percorreu 5.448 px e voltou ao primeiro card. Na coleção de 473 presets, ficaram montados 10 cards no topo e 16 durante a rolagem.
+- **PASS na busca e nas pastas.** A digitação de `fade` encontrou 5 presets, um termo sem correspondência exibiu o estado vazio e apagar o texto restaurou os 473. A troca para Motion mostrou 115 presets e o retorno a Todos restaurou os 473. [Registro das interações no AE](../artifacts/perf/ae-fase1-interacao-20261118.json).
+- O primeiro `npm run check` teve 3.102 testes aprovados e um seletor CSS sem escopo de host. A correção restringiu a regra ao After Effects. A coleta dirigida posterior passou em 207 testes, incluindo o teste que falhou. Build, lint, validação estrutural, contraste e validação das skills passaram. [Suíte anterior](../artifacts/perf/fase1-check-final.log), [testes após a correção](../artifacts/perf/fase1-focados-20261118.log) e [auditoria visual em 280/360/480/720 px](../artifacts/layout-sprints/fase1-janela-virtual/metrics.json).
+- A instalação CEP foi conferida por SHA-256. `client/main.js` corresponde ao build medido acima. `styles/theme.css` instalado após a correção tem SHA-256 `6E3E8B93EE6AE9FF893CF791242313644506AC00AC9E06E8A9E397ABBD953636`. O arquivo temporário `.debug` foi removido da instalação.
+
+### 2026-11-18 — Fase 3 no painel instalado
+
+- A revisão visual foi aprovada com uma correção de cor. **Seguir o AE** é o padrão. As superfícies usam a paleta do host e os controles conservam as cores originais de ação. As seis amostras e a entrada hexadecimal ficam em Configurações → Aparência para escolha manual.
+- Busca de 24 px com limpar, slider com valor editável e arrastável, atalhos em uma linha no painel compacto e controles secundários dos cards visíveis ao selecionar, passar o mouse ou focar. O desfoque de 7 px fica nos pop-ups cobertos pelo estudo, com uma superfície sólida como fallback.
+- **PASS no After Effects 26.5x89** em 280 × 640, 360 × 720, 480 × 800 e 720 × 900 px da área interna do CEP. A galeria usou o RGB 30/30/30 do host em todas as larguras. Foram verificados rolagem virtual, busca, limpar, troca de pasta, slider, menu do card e seletor de cor. [Resultados e métricas](../artifacts/fase3-validacao-20261118/verificacao-ae.json).
+- **PASS para persistência e contraste**. Violeta voltou após recarregar o painel. O campo rejeitou um valor inválido, manteve o hexadecimal escolhido ao ajustar o contraste e voltou às cores do After Effects com Seguir o AE.
+- Build, lint, validação estrutural, contraste e 124 testes focados passaram. A primeira execução de `npm run check` teve três falhas de busca e Configurações. Os três casos passaram na reexecução focada após as correções. A consolidação do CSS ficou para a rodada seguinte.
+- O build validado ficou instalado e aberto em Presets → Navegar na sessão de teste. SHA-256 de `client/main.js` `367A8E49D946C04473DCB00C879494BCC3E274CCC631C0FBD0849F74D4709AF9` e de `styles/theme.css` `48B69D8272923C3DA5AEA2F3D963FB21D96607E644624C567A646D25CC3B9145`.
+
+### 2026-11-18 — Consolidação do CSS da Fase 3
+
+- O build lê os tokens canônicos antes da folha base. Os controles da biblioteca, as prévias de ferramentas e os estilos da galeria foram reunidos por uso. Foram removidas 88 declarações redundantes, incluindo duas com `!important`. A ordem das folhas está em `scripts/theme-sources.mjs`.
+- A folha distribuída do AE passou de 609.578 para 541.723 bytes (−11,1%). O Chromium 99 do CEP produziu a mesma cascata de apresentação após normalizar as duplicatas. O CSS do Premiere permaneceu idêntico byte a byte. A meta inicial de cortar o arquivo pela metade segue pendente.
+- After Effects 26.5, no painel CEP instalado, em 280×640, 360×720, 480×800 e 720×900 px. Passaram rolagem virtual, busca, troca de pasta, slider, menu do cartão e paleta. O fundo da galeria coincidiu com o do host em todas as larguras (`#1e1e1e` na sessão testada). As capturas estabilizadas da galeria, do menu, da busca e da paleta coincidiram nas quatro larguras. [Registro de roda, digitação e cliques em pasta](../artifacts/fase3-css-20261118/interacao-cep.json).
+- A versão de teste foi instalada atualizando a folha CSS da extensão existente. [Medições no host](../artifacts/fase3-css-20261118/depois/verificacao-ae.json), [comparação visual](../artifacts/fase3-css-20261118/comparativo-mesmo-estado.json) e [SHA-256 da instalação](../artifacts/fase3-css-20261118/instalacao.json).
+- Build, lint, validação estrutural e os 282 pares de contraste passaram. A primeira execução aprovou os 12 testes longos de paridade de prévias e revelou as referências antigas à folha CSS. Após atualizar os testes e reconstruir o pacote, os outros 3.108 testes passaram. [Primeira execução](../artifacts/fase3-css-20261118/check.log) e [revalidação](../artifacts/fase3-css-20261118/testes-final.log).
+
+### 2026-11-18 — Fase 4, botão
+
+- O componente ganhou os tamanhos de 22, 24 e 28 px. A folha do AE usa a paleta já ativa para as variantes, foco, seleção e estados. O indicador de progresso aparece dentro do botão e o texto de estado continua anunciado. No grupo de fases, o indicador ocupa temporariamente o espaço visual do rótulo para manter a largura do botão.
+- **PASS no After Effects 26.5 instalado** em 280×640, 360×720, 480×800 e 720×900 px. Wiggle aplicou a expressão à opacidade e **Ambos** aplicou Arco coreografado. Foram observados foco por teclado, progresso sem deslocamento e uma execução de cada comando por rodada. As quatro composições descartáveis foram removidas ao terminar. [Interações no AE](../artifacts/fase4-botao-implementado-20261118/verificacao-ae.json) e [amostra renderizada pelo CSS instalado](../artifacts/fase4-botao-implementado-20261118/estados-ae.json).
+- A instalação atualiza o cliente e o CSS. O host anterior passou na comparação direta de Arco coreografado. O host recém-gerado registrou `HOST_OPERATION_FAILED` ao avaliar a expressão de fase desse preset. A validação final usou o host que passou. [Comparação de hosts](../artifacts/fase4-botao-implementado-20261118/arco-host.json) e [SHA-256 da instalação](../artifacts/fase4-botao-implementado-20261118/instalacao.json).
+- O build exigiu uma correção pontual na validação dos dois campos decodificados em `expression-compose.jsx`. Build, lint, validação estrutural e contraste passaram. Os 12 testes de paridade passaram na execução longa e os demais 3.115 passaram na revalidação final. [Execução longa](../artifacts/fase4-botao-implementado-20261118/check.log) e [revalidação](../artifacts/fase4-botao-implementado-20261118/testes-revalidacao.log).

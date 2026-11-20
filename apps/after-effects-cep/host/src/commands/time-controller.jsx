@@ -86,8 +86,8 @@
         if (!isSupportedExpressionProperty(prop)) {
           return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "A selecao contem propriedade sem suporte a expressao de tempo.", null);
         }
-        if (prop.expression !== "" && !MotionExpressions.isManagedTimeController(prop.expression)) {
-          return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A selecao contem expressao de usuario.", null);
+        if (!acceptsTool(prop)) {
+          return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A expressao de usuario termina em um bloco (if/for) e nao pode ser combinada. Faca a ultima linha devolver o valor.", null);
         }
       }
       return null;
@@ -104,14 +104,28 @@
       if (layer.locked === true) return failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Desbloqueie a camada antes de aplicar Time Controller.", null);
       if (layer.timeRemapEnabled === true) {
         prop = /** @type {Property} */ (layer.property("ADBE Time Remapping"));
-        if (prop instanceof Property && prop.expression !== "" && !MotionExpressions.isManagedTimeController(prop.expression)) {
-          return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "Time Remap contem expressao de usuario.", null);
+        if (prop instanceof Property && !acceptsTool(prop)) {
+          return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A expressao de usuario termina em um bloco (if/for) e nao pode ser combinada. Faca a ultima linha devolver o valor.", null);
         }
       }
     }
     return null;
   }
 
+  /** @param {string} source @returns {boolean} */
+  function managedSource(source) { return MotionExpressions.isManagedTimeController(source); }
+  /** Expressao do usuario continua valendo por baixo da ferramenta (expression-compose.jsx).
+   * @param {any} property @returns {boolean} */
+  function acceptsTool(property) {
+    var compose = /** @type {any} */ ($.global).MotionExpressionCompose;
+    if (!compose) return String(property.expression || "") === "" || managedSource(String(property.expression));
+    return compose.accepts(property, managedSource);
+  }
+  /** @param {any} property @param {string} expression @returns {string} */
+  function stackedExpression(property, expression) {
+    var compose = /** @type {any} */ ($.global).MotionExpressionCompose;
+    return compose ? compose.stackFor(property, expression, managedSource) : expression;
+  }
   /**
    * O After Effects nao lanca quando recusa uma expressao: ele guarda o motivo em
    * expressionError e deixa a propriedade acesa e quebrada. Sem ler esse campo o
@@ -122,7 +136,7 @@
    * @returns {void}
    */
   function applyExpression(property, expression) {
-    property.expression = expression;
+    property.expression = stackedExpression(property, expression);
     if (typeof property.expressionError === "string" && property.expressionError !== "") {
       throw new Error("After Effects recusou a expressao gerenciada.");
     }

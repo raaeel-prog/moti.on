@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 
 import {
   MOTION_BLUR_BY_DEFAULT,
+  MOTION_LIBRARY_DUPLICATES_RETIRED,
   MOTION_LIBRARY_DEFAULTS,
   MOTION_LIBRARY_PRESETS,
   isMotionLibraryOptions
@@ -14,7 +15,9 @@ const studio = MOTION_LIBRARY_STUDIO_PRESETS;
 
 test("Studio appends an original, complete 32-preset collection", () => {
   assert.equal(studio.length, 32);
-  assert.deepEqual(MOTION_LIBRARY_PRESETS.slice(61, 93), studio);
+  // Curated studio recipes only gain `retired` (2026-11-18); their data is unchanged.
+  const unretired = MOTION_LIBRARY_PRESETS.slice(61, 93).map(preset => { if (!MOTION_LIBRARY_DUPLICATES_RETIRED.has(preset.id)) return preset; const { retired: _retired, ...rest } = preset; return rest; });
+  assert.deepEqual(unretired, studio);
   assert.deepEqual(
     Object.fromEntries(["text-characters", "text-words", "text-lines", "text-effects", "motion-2d", "motion-3d"].map(
       (category) => [category, studio.filter((preset) => preset.category === category).length]
@@ -137,6 +140,8 @@ test("the 56 established recipes preserve all data except the explicit entrance 
       const { motionBlur: _blur, ...rest } = original.defaults;
       original = { ...original, defaults: rest };
     }
+    // 2026-11-18: repeated motions leave the gallery with `retired`; the recipe data is unchanged.
+    if (MOTION_LIBRARY_DUPLICATES_RETIRED.has(preset.id)) { assert.equal(original.retired, true, preset.id); const { retired: _retired, ...rest } = original; original = rest; }
     if (original.defaults && Object.keys(original.defaults).length === 0) { const { defaults: _empty, ...rest } = original; original = rest; }
     if (!correctedIds.has(preset.id)) return original;
     assert.equal(preset.mode, "transition", preset.id);

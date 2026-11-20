@@ -14,6 +14,25 @@
   var CONTROL_KEYS = ["durationFrames", "intensity", "staggerFrames"];
   var CONTROL_LABELS = ["Duração (frames)", "Intensidade (%)", "Intervalo do texto (frames)"];
   var CONTROL_LABELS_EN = ["Duration (frames)", "Intensity (%)", "Text stagger (frames)"];
+  /* Effect Controls organizado (2026-11-18). Instâncias novas levam um rótulo legível
+   * ("Moti.on In", "Moti.on Out", "Moti.on FX", "Moti.on") no lugar do identificador, e
+   * cada controle diz seu grupo: Tempo, Movimento ou Visual. Instâncias antigas, sem
+   * rótulo, mantêm os nomes com que foram criadas. */
+  var OWNED_LABELS = /** @type {any} */ ({"Moti.on": true, "Moti.on In": true, "Moti.on Out": true, "Moti.on FX": true});
+  var GROUPS = ["Tempo", "Movimento", "Visual"], GROUPS_EN = ["Timing", "Motion", "Visual"];
+  /** Grupo (0 Tempo, 1 Movimento) de cada controle numérico do preset. */
+  var CONTROL_GROUP = /** @type {any} */ ({durationFrames: 0, staggerFrames: 0, overlap: 0, speed: 0, intensity: 1, elasticity: 1, settleAmount: 1, settleCount: 1, settleDamping: 1, seed: 1, travel: 1, center: 1});
+  var CONTROL_MATCH = /** @type {any} */ ({"ADBE Slider Control": true, "ADBE Point Control": true, "ADBE Checkbox Control": true, "ADBE Color Control": true, "ADBE Angle Control": true});
+  /** Prefixo de tudo que uma instância cria; rótulo inválido cai no identificador.
+   * @param {any} meta @returns {string} */
+  function ownedPrefix(meta) { return typeof meta.label === "string" && OWNED_LABELS[meta.label] ? meta.label : "Moti.on " + meta.instance; }
+  /** "Tempo · Duração (frames)" para instâncias novas; o rótulo puro nas antigas.
+   * @param {any} plan @param {number} group @param {string} label @returns {string} */
+  function grouped(plan, group, label) {
+    if (!plan.meta.label) return label;
+    var names = plan.locale.indexOf("pt") === 0 ? GROUPS : GROUPS_EN, head = names[group] + " · ";
+    return label.indexOf(head) === 0 ? label : head + label;
+  }
   var EFFECT_RAMP_FRAMES = 6;
   /** @param {string} code @param {string} message @returns {MotionCommandFailure} */
   function fail(code, message) { return {code: code, message: message, recoverable: true, details: null}; }
@@ -149,7 +168,7 @@
     if (at < 0) return null;
     var line = comment.substring(at + TAG.length).split("\n")[0] || "";
     var m = /** @type {any} */ (MotionJson.parse(decodeURIComponent(line)));
-    if (!m || m.version !== 1 || typeof m.instance !== "string" || !/^[0-9-]+$/.test(m.instance) || !definition({presetId:m.presetId}) || !(m.expressions instanceof Array) || !(m.effects instanceof Array) || !(m.animators instanceof Array) || !(m.masks instanceof Array)) throw new Error("Metadados do preset inválidos.");
+    if (!m || m.version !== 1 || typeof m.instance !== "string" || !/^[0-9-]+$/.test(m.instance) || (m.label !== undefined && !OWNED_LABELS[m.label]) || !definition({presetId:m.presetId}) || !(m.expressions instanceof Array) || !(m.effects instanceof Array) || !(m.animators instanceof Array) || !(m.masks instanceof Array)) throw new Error("Metadados do preset inválidos.");
     if(m.markerVersion!==undefined&&((m.markerVersion!==1&&m.markerVersion!==2)||typeof m.markerDurationFrames!=="number"||!isFinite(m.markerDurationFrames)||m.markerDurationFrames<1||m.markerDurationFrames>600))throw new Error("Metadados de timing inválidos.");
     return m;
   }
@@ -370,12 +389,14 @@
         for (var b = 0; action === "bake" && m && b < m.expressions.length; b++) if (locate(l,m.expressions[b].path).numKeys) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"A conversão preserva keyframes existentes: escolha uma camada sem keyframes nas propriedades do preset.");
         continue;
       }
-      if (m && m.presetId !== p.id) return fail(MotionContracts.ERROR.EXPRESSION_CONFLICT,"A camada já tem outro preset. Use Remover da seleção antes de aplicar este.");
-      if (m && !m.expressionVersion && !migration) return fail(MotionContracts.ERROR.EXPRESSION_CONFLICT,"Este preset mantém as expressões da versão anterior. Use Editar e Ajustar para atualizar a animação explicitamente.");
+      // Outro preset na camada é trocado pelo novo no mesmo Desfazer (apply).
+      if (m && m.presetId === p.id && !m.expressionVersion && !migration) return fail(MotionContracts.ERROR.EXPRESSION_CONFLICT,"Este preset mantém as expressões da versão anterior. Use Editar e Ajustar para atualizar a animação explicitamente.");
       if (isText(p) && !l.property(MN_TEXT)) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Este preset precisa de uma camada de texto.");
       if (p.category === "motion-3d" && !l.threeDLayer && (l.parent || /** @type {any} */ (comp).activeCamera || (l.source instanceof CompItem && l.collapseTransformation))) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Converta a camada em 3D antes de usar este preset com câmera, parent ou transformações recolhidas.");
       var tr = l.property(MN_TRANSFORM), pos = tr.property("ADBE Position");
-      if (!isText(p) && (p.position[0] || p.position[1] || p.position[2] || p.pivot !== "anchor") && pos.dimensionsSeparated) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Reúna as dimensões de Position para aplicar presets de motion.");
+      // X/Y separados são reunidos pelo preset (e separados de novo ao remover);
+      // só uma expressão em X/Y/Z impede, porque reunir a descartaria.
+      if (!isText(p) && movesPosition(p) && pos.dimensionsSeparated && separatedExpression(tr)) return fail(MotionContracts.ERROR.EXPRESSION_CONFLICT,"X/Y Position têm expressão. Reúna as dimensões de Position para aplicar presets de motion.");
       // Leaving the frame is measured in the composition plane; a 3D layer or
       // parent would need the camera's projection, which is not modeled.
       if (p.travel === "offscreen") { for (var up = l; up; up = up.parent) if (up.threeDLayer) return fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE,"Este preset sai do quadro em 2D. Use uma camada 2D, sem parent 3D.");
@@ -395,7 +416,10 @@
           var prop = tr.property(names[j]);
           var phaseOwned=false;
           if(phaseOwner&&prop&&prop.expression)for(var pi=0;pi<phaseOwner.prefixes.length;pi++)if(prop.expression.indexOf(phaseOwner.prefixes[pi])===0)phaseOwned=true;
-          if (prop && prop.expression && !phaseOwned && (!m || prop.expression.indexOf(prefix(m)) !== 0)) return fail(MotionContracts.ERROR.EXPRESSION_CONFLICT,"A transformação contém uma expressão existente. Remova o conflito antes de aplicar.");
+          // Expressão do usuário é combinada (o resultado dela vira a base do
+          // preset); só recusa a que não termina em um valor (if/for no fim).
+          var userOwned = prop && prop.expression && prop.expressionEnabled && !phaseOwned && (!m || prop.expression.indexOf(prefix(m)) !== 0);
+          if (userOwned && (!(/** @type {any} */ ($.global)).MotionExpressionCompose || !(/** @type {any} */ ($.global)).MotionExpressionCompose.composable(prop.expression))) return fail(MotionContracts.ERROR.EXPRESSION_CONFLICT,"A expressão existente termina em um bloco (if/for) e não pode ser combinada. Faça a última linha devolver o valor.");
         }
       }
       var effects = requiredEffects(p), parade = l.property(MN_EFFECTS);
@@ -466,18 +490,30 @@
     var prop = locate(plan.layer,path);
     if (!prop || !prop.canSetExpression) throw new Error("A propriedade do preset não aceita expressão: "+path.join("/")+"");
     plan.snapshots.push(snapshot(prop));
-    var known = false;
-    for (var i=0;i<plan.meta.expressions.length;i++) if (MotionJson.stringify(plan.meta.expressions[i].path) === MotionJson.stringify(path)) known=true;
-    if (!known) plan.meta.expressions.push({path:path,original:prop.expression,enabled:prop.expressionEnabled});
-    prop.expression=expression;prop.expressionEnabled=true;
+    var record = null;
+    for (var i=0;i<plan.meta.expressions.length;i++) if (MotionJson.stringify(plan.meta.expressions[i].path) === MotionJson.stringify(path)) record=plan.meta.expressions[i];
+    if (!record) { record={path:path,original:prop.expression,enabled:prop.expressionEnabled}; plan.meta.expressions.push(record); }
+    prop.expression=stacked(plan,record,expression);prop.expressionEnabled=true;
     prop.valueAtTime(Math.max(plan.layer.inPoint,Math.min(plan.layer.outPoint-plan.comp.frameDuration,plan.comp.time)),false);
     if (prop.expressionError) throw new Error("O After Effects recusou a expressão do preset: "+prop.expressionError);
+  }
+  /** Uma expressão ativa do usuário na propriedade continua valendo: o
+   * resultado dela vira o `value` do preset (removido, ela volta sozinha).
+   * @param {any} plan @param {any} record @param {string} expression @returns {string} */
+  function stacked(plan,record,expression){
+    var head=prefix(plan.meta),user=String(record.original||"");
+    if(!user||!record.enabled||expression.indexOf(head)!==0||!(/** @type {any} */ ($.global)).MotionExpressionCompose)return expression;
+    var composed=(/** @type {any} */ ($.global)).MotionExpressionCompose.compose(user,expression.substring(head.length));
+    if(!composed)throw new Error("A expressão existente não pôde ser combinada com o preset.");
+    return head+composed;
   }
   /** @param {any} plan @param {any} property @param {any} value */
   function set(plan,property,value) { if(!property)throw new Error("Parâmetro de efeito nativo ausente.");var before=snapshot(property);plan.snapshots.push(before);if(!property.numKeys&&!property.expression){try{property.setValue(value);}catch(error){var failure=/** @type {any} */ (new Error("Parâmetro "+before.path.join("/")+": "+String(error)));failure.cause=error;throw failure;}} }
   /** @param {any} plan @param {string} key @param {string} matchName @returns {any} */
   function effect(plan,key,matchName) {
-    var name="Moti.on "+plan.meta.instance+" · "+key, parade=plan.layer.property(MN_EFFECTS), e=child(parade,name);
+    // Efeitos que renderizam entram no grupo Visual; controles já chegam agrupados.
+    if(!CONTROL_MATCH[matchName]&&plan.meta.label&&key.indexOf(" · ")<0)key=grouped(plan,2,key);
+    var name=ownedPrefix(plan.meta)+" · "+key, parade=plan.layer.property(MN_EFFECTS), e=child(parade,name);
     if(!e){e=parade.addProperty(matchName);e.name=name;plan.created.push({group:[MN_EFFECTS],name:name});var known=false;for(var n=0;n<plan.meta.effects.length;n++)if(plan.meta.effects[n].name===name)known=true;if(!known)plan.meta.effects.push({name:name,matchName:matchName});}
     if(e.matchName!==matchName)throw new Error("Controle do preset incompatível.");return e;
   }
@@ -565,7 +601,7 @@
   }
   /** @param {any} plan @param {string} role @param {boolean=} characters a selector on characters, whatever the unit @returns {any} */
   function animator(plan,role,characters){
-    var name="Moti.on "+plan.meta.instance+" · "+role, group=plan.layer.property(MN_TEXT).property(MN_ANIMATORS), a=child(group,name);
+    var name=ownedPrefix(plan.meta)+" · "+role, group=plan.layer.property(MN_TEXT).property(MN_ANIMATORS), a=child(group,name);
     if(plan.textUsed)plan.textUsed[name+"|"]=true;
     if(!a){a=group.addProperty("ADBE Text Animator");a.name=name;plan.created.push({group:[MN_TEXT,MN_ANIMATORS],name:name});var record=null;for(var n=0;n<plan.meta.animators.length;n++)if(plan.meta.animators[n].name===name)record=plan.meta.animators[n];if(record)record.properties=[];else plan.meta.animators.push({name:name,matchName:"ADBE Text Animator",properties:[]});}
     var selectors=a.property("ADBE Text Selectors"), sel=child(selectors,"Moti.on Timing");
@@ -712,7 +748,7 @@
     if((p.text.reveal==="resolve"||p.text.reveal==="roll")&&p.mode==="transition"){a=animator(plan,"Glifos");textProperty(plan,a,"ADBE Text Character Offset",30);textSelector(plan,a,"var g=glyph("+MotionJson.stringify(p.text.reveal)+",Math.min(u[0],u[1]),fadeWeight,rawIndex,seed)*(amp>0?100/30:0);[g,g,g];");}
     if(p.text.decode){a=animator(plan,"Decodificação");textProperty(plan,a,"ADBE Text Character Offset",30);textSelector(plan,a,"var amount="+(p.collection==="text"?"decodeGlyph(age,idx,seed)":"Math.round(Math.sin(Math.floor((time-inPoint)*18)*7.7+textIndex*11.3)*30)")+"*"+(p.mode==="transition"?"Math.max(0,Math.min(1,w))":"1")+"*amp;[amount*100/30,amount*100/30,amount*100/30];");}
     if(p.text.mask){
-      var masks=plan.layer.property("ADBE Mask Parade"),name="Moti.on "+plan.meta.instance+" · Janela",mask=child(masks,name);
+      var masks=plan.layer.property("ADBE Mask Parade"),name=ownedPrefix(plan.meta)+" · Janela",mask=child(masks,name);
       if(!mask){
         mask=masks.addProperty("ADBE Mask Atom");mask.name=name;plan.created.push({group:["ADBE Mask Parade"],name:name});plan.meta.masks.push({name:name,matchName:"ADBE Mask Atom"});
         var rect=plan.rect,shape=new Shape(),pad=8;
@@ -777,14 +813,14 @@
     if(p.travel==="offscreen"){
       var measured=offscreenTravel(plan,core.libraryDirection(p.position[0],p.position[1],plan.args.direction)),value=measured.distance;
       if(keep&&typeof keep.travel==="number"&&keep.direction===plan.args.direction&&typeof keep.travelComputed==="number"&&Math.abs(keep.travel-keep.travelComputed)>.01)value=keep.travel;
-      name=m.controls.travel?m.controls.travel.split(" · ").slice(1).join(" · "):(pt?"Distância (px)":"Distance (px)");
+      name=m.controls.travel?m.controls.travel.split(" · ").slice(1).join(" · "):grouped(plan,CONTROL_GROUP.travel,pt?"Distância (px)":"Distance (px)");
       control=effect(plan,name,"ADBE Slider Control");set(plan,control.property(1),value);
       m.controls.travel=control.name;m.travelComputed=measured.distance;plan.travelUnit=measured.unit;
     }
     if(p.pivot==="offset"){
       var tr=plan.layer.property(MN_TRANSFORM),anchor=tr.property("ADBE Anchor Point").valueAtTime(plan.layer.inPoint,true),rect=plan.layer.sourceRectAtTime(plan.layer.inPoint,false),offset=p.pivotOffset||[0,0];
       var center=keep&&keep.center&&keep.center.length>=2?[keep.center[0],keep.center[1]]:[anchor[0]+offset[0]*rect.width,anchor[1]+offset[1]*rect.height];
-      name=m.controls.center?m.controls.center.split(" · ").slice(1).join(" · "):(pt?"Centro da transição":"Transition center");
+      name=m.controls.center?m.controls.center.split(" · ").slice(1).join(" · "):grouped(plan,CONTROL_GROUP.center,pt?"Centro da transição":"Transition center");
       control=effect(plan,name,"ADBE Point Control");set(plan,control.property(1),center);
       m.controls.center=control.name;
     }
@@ -832,13 +868,32 @@
   }
   /** @param {any} layer @param {any} m */
   function restoreTextLayer(layer,m){if(!m.textState)return;var gp=textGrouping(layer);if(gp)gp.setValue(m.textState.grouping);layer.threeDPerChar=m.textState.perChar3D;delete m.textState;}
+  /** Controles do Moti.on (sliders, pontos…) ficam juntos antes do primeiro efeito do
+   * Moti.on na camada, por fase (In → Out → FX) e grupo (Tempo → Movimento). Efeitos que
+   * renderizam não se movem: a ordem de renderização, inclusive entre efeitos do usuário,
+   * fica como estava. Controles de instâncias antigas, sem rótulo, não são tocados.
+   * @param {any} plan */
+  function orderControls(plan){
+    if(!plan.meta.label)return;
+    var parade=plan.layer.property(MN_EFFECTS),labels=/** @type {string[]} */ (["Moti.on In","Moti.on Out","Moti.on FX","Moti.on"]),controls=/** @type {{name:string,rank:number,index:number}[]} */ ([]),first=0,i,j,names=plan.locale.indexOf("pt")===0?GROUPS:GROUPS_EN;
+    for(i=1;i<=parade.numProperties;i++){var e=parade.property(i),n=String(e.name),owner=-1;
+      for(j=0;j<labels.length;j++)if(n.indexOf(labels[j]+" · ")===0){owner=j;break;}
+      if(owner<0)continue;if(!first)first=i;if(!CONTROL_MATCH[e.matchName])continue;
+      var rest=n.substring(String(labels[owner]).length+3),rank=rest.indexOf(names[0]+" · ")===0?0:rest.indexOf(names[1]+" · ")===0?1:2;
+      controls.push({name:n,rank:owner*3+rank,index:i});}
+    if(!controls.length)return;
+    controls.sort(function(a,b){return a.rank-b.rank||a.index-b.index;});
+    for(i=0;i<controls.length;i++){var item=/** @type {{name:string}} */ (controls[i]),c=child(parade,item.name);if(c&&typeof c.moveTo==="function"&&c.propertyIndex!==first+i)c.moveTo(first+i);parade=plan.layer.property(MN_EFFECTS);}
+  }
   /** @param {any} plan */
   function applyLayer(plan){
     var l=plan.layer,m=plan.meta,p=plan.p,labels=plan.locale.indexOf("pt")===0?CONTROL_LABELS:CONTROL_LABELS_EN;
     if(p.category==="motion-3d")l.threeDLayer=true;
+    var position=l.property(MN_TRANSFORM).property("ADBE Position");
+    if(!isText(p)&&movesPosition(p)&&position.dimensionsSeparated){position.dimensionsSeparated=false;m.unitedPosition=true;plan.unitedPosition=true;}
     for(var i=0;i<CONTROL_KEYS.length;i++){
       // Keep control names and order stable when locale changes or Apply repeats.
-      var key=m.effects[i]?m.effects[i].name.split(" · ").slice(1).join(" · "):labels[i];
+      var key=m.effects[i]?m.effects[i].name.split(" · ").slice(1).join(" · "):grouped(plan,CONTROL_GROUP[String(CONTROL_KEYS[i])],String(labels[i]));
       var e=effect(plan,key,"ADBE Slider Control");set(plan,e.property(1),plan.args[CONTROL_KEYS[i] || "durationFrames"]);
     }
     var extras=[],kind=plan.args.easing&&plan.args.easing!=="preset"?plan.args.easing:p.easing;
@@ -857,7 +912,7 @@
     if(extras.length){
       if(!m.controls)m.controls={};
       for(i=0;i<extras.length;i++){
-        var extra=extras[i];if(!extra)continue;var name=m.controls[extra.key]?m.controls[extra.key].split(" · ").slice(1).join(" · "):(plan.locale.indexOf("pt")===0?extra.pt:extra.en);
+        var extra=extras[i];if(!extra)continue;var name=m.controls[extra.key]?m.controls[extra.key].split(" · ").slice(1).join(" · "):grouped(plan,CONTROL_GROUP[extra.key],plan.locale.indexOf("pt")===0?extra.pt:extra.en);
         var control=effect(plan,name,"ADBE Slider Control"),value=typeof plan.args[extra.key]==="number"?plan.args[extra.key]:(p.defaults&&typeof p.defaults[extra.key]==="number"?p.defaults[extra.key]:extra.fallback);
         set(plan,control.property(1),value);m.controls[extra.key]=control.name;
       }
@@ -868,25 +923,33 @@
     if(!plan.deferMarkers)applyMarkers(plan);
     if(isText(p)&&!plan.deferMetadata)configureTextLayer(plan);
     if(isText(p))textAnimation(plan);else layerAnimation(plan);
-    effects(plan);m.options=plan.args;m.expressionVersion=2;if(!plan.deferMetadata)saveMetadata(l,m);
+    effects(plan);orderControls(plan);m.options=plan.args;m.expressionVersion=2;if(!plan.deferMetadata)saveMetadata(l,m);
   }
   /** @param {any} args @param {any} context @param {any=} layerOptions @returns {MotionCommandResult} */
   function apply(args,context,layerOptions){
     var comp=/** @type {any} */ (app.project.activeItem),layers=comp.selectedLayers,p=definition(args),plans=/** @type {any[]} */ ([]),i;
     try{
       for(i=0;i<layers.length;i++){
-        var l=layers[i],m=metadata(l),old=String(l.comment||""),was3D=l.threeDLayer;
-        if(!m)m={version:1,instance:String(new Date().getTime())+"-"+l.id,presetId:p.id,was3D:was3D,expressions:[],effects:[],animators:[],masks:[]};
+        var l=layers[i],m=metadata(l);
+        if(m&&m.presetId!==p.id){removeLayer(l,m);m=null;}
+        var old=String(l.comment||""),was3D=l.threeDLayer;
+        if(!m)m={version:1,instance:String(new Date().getTime())+"-"+l.id,label:"Moti.on",presetId:p.id,was3D:was3D,expressions:[],effects:[],animators:[],masks:[]};
         var plan={layer:l,comp:comp,p:p,args:layerOptions?layerOptions[String(l.id)]:args,meta:m,oldComment:old,was3D:was3D,created:[],snapshots:[],locale:context.locale||"pt-BR",rect:l.sourceRectAtTime(l.inPoint,false)};plans.push(plan);applyLayer(plan);
       }
     }catch(error){
       var rollbackFailed=false;
-      for(i=plans.length-1;i>=0;i--){var q=plans[i];try{if(q.markersTouched)restoreMarkers(q.layer,q.meta,q.markerSnapshots);restore(q.layer,q.snapshots);for(var j=q.created.length-1;j>=0;j--){var item=q.created[j],g=locate(q.layer,item.group),e=child(g,item.name);if(e)e.remove();}if(q.switches){q.layer.motionBlur=q.switches.layer;q.comp.motionBlur=q.switches.comp;}if(q.textBefore){var gq=textGrouping(q.layer);if(gq&&q.textBefore.grouping!==null)gq.setValue(q.textBefore.grouping);if(typeof q.textBefore.perChar3D==="boolean")q.layer.threeDPerChar=q.textBefore.perChar3D;if(q.textBefore.state)q.meta.textState=q.textBefore.state;else delete q.meta.textState;}q.layer.threeDLayer=q.was3D;q.layer.comment=q.oldComment;}catch(rollbackError){rollbackFailed=true;}}
+      for(i=plans.length-1;i>=0;i--){var q=plans[i];try{if(q.markersTouched)restoreMarkers(q.layer,q.meta,q.markerSnapshots);restore(q.layer,q.snapshots);if(q.unitedPosition)q.layer.property(MN_TRANSFORM).property("ADBE Position").dimensionsSeparated=true;for(var j=q.created.length-1;j>=0;j--){var item=q.created[j],g=locate(q.layer,item.group),e=child(g,item.name);if(e)e.remove();}if(q.switches){q.layer.motionBlur=q.switches.layer;q.comp.motionBlur=q.switches.comp;}if(q.textBefore){var gq=textGrouping(q.layer);if(gq&&q.textBefore.grouping!==null)gq.setValue(q.textBefore.grouping);if(typeof q.textBefore.perChar3D==="boolean")q.layer.threeDPerChar=q.textBefore.perChar3D;if(q.textBefore.state)q.meta.textState=q.textBefore.state;else delete q.meta.textState;}q.layer.threeDLayer=q.was3D;q.layer.comment=q.oldComment;}catch(rollbackError){rollbackFailed=true;}}
       if(rollbackFailed){var failure=/** @type {any} */ (new Error("Falha ao restaurar o preset."));failure.motionCode=MotionContracts.ERROR.ROLLBACK_FAILED;failure.cause=error;throw failure;}throw error;
     }
     var warnings=[];if(p.mode==="transition")for(i=0;i<plans.length;i++)if(!markerProperty(plans[i].layer)){warnings.push({code:"CAPABILITY_UNAVAILABLE",message:"Marcadores indisponíveis nesta camada; use o controle Duração do efeito.",details:null});break;}
     return {changed:true,data:{appliedCount:plans.length,presetId:p.id},warnings:warnings};
   }
+  /** @param {any} p @returns {boolean} */
+  function movesPosition(p){return !!(p.position[0]||p.position[1]||p.position[2]||p.pivot!=="anchor");}
+  /** @param {any} tr @returns {boolean} */
+  function separatedExpression(tr){var names=["ADBE Position_0","ADBE Position_1","ADBE Position_2"];for(var i=0;i<names.length;i++){var d=tr.property(names[i]);if(d&&d.expression&&d.expressionEnabled)return true;}return false;}
+  /** @param {any} layer @param {any} m */
+  function resplitPosition(layer,m){if(!m.unitedPosition)return;var position=layer.property(MN_TRANSFORM).property("ADBE Position");if(position&&!position.expression&&!position.dimensionsSeparated)position.dimensionsSeparated=true;delete m.unitedPosition;}
   /** @param {any} layer @param {any} m @param {boolean=} preserveMetadata */
   function removeLayer(layer,m,preserveMetadata){
     removeMarkers(layer,m);
@@ -895,7 +958,7 @@
     for(var i=0;i<m.expressions.length;i++){var r=m.expressions[i],p=locate(layer,r.path);if(!p)continue;p.expression=r.original;p.expressionEnabled=r.enabled;}
     var groups=/** @type {any} */ ([[MN_EFFECTS,m.effects],[MN_TEXT,m.animators],["ADBE Mask Parade",m.masks]]);
     for(i=0;i<groups.length;i++){var group=layer.property(groups[i][0]);if(i===1&&group)group=group.property(MN_ANIMATORS);var records=groups[i][1];for(var j=records.length-1;j>=0;j--){var e=child(group,records[j].name);if(e)e.remove();}}
-    if(!preserveMetadata){if(m.blur)syncMotionBlur(layer,m.blur,false);restoreTextLayer(layer,m);if(!m.was3D&&definition({presetId:m.presetId}).category==="motion-3d")layer.threeDLayer=false;saveMetadata(layer,null);}
+    if(!preserveMetadata){resplitPosition(layer,m);if(m.blur)syncMotionBlur(layer,m.blur,false);restoreTextLayer(layer,m);if(!m.was3D&&definition({presetId:m.presetId}).category==="motion-3d")layer.threeDLayer=false;saveMetadata(layer,null);}
   }
   /** @returns {MotionCommandResult} */
   function remove(){var layers=/** @type {any} */ (app.project.activeItem).selectedLayers,count=0;for(var i=0;i<layers.length;i++){var m=metadata(layers[i]);if(m){removeLayer(layers[i],m);count++;}}return {changed:count>0,data:{appliedCount:count},warnings:[]};}
@@ -1058,5 +1121,5 @@
   }
   MotionRegistry.register("ae.presets.remove",{preflight:function(args){return preflight(args,"remove");},run:function(args){var error=preflight(args,"remove");if(error){var invalid=/** @type {any} */ (new Error(error.message));invalid.motionCode=error.code;throw invalid;}return cameraTransition && cameraTransition.hasSelected(app.project.activeItem)?cameraTransition.remove():remove();}});
   MotionRegistry.register("ae.presets.bake",{preflight:function(args){return preflight(args,"bake");},run:function(){return cameraTransition && cameraTransition.hasSelected(app.project.activeItem)?cameraTransition.bake():bake();}});
-  global.MotionPresetLibrary={validate:validate,metadata:metadata,requiredEffects:requiredEffects,header:header,markerState:markerState,verifyOwnership:verifyOwnership,definition:definition,preflight:preflight,applyLayer:applyLayer,removeLayer:removeLayer,inspectLayer:inspectLayer,locate:locate,child:child,snapshot:snapshot,restore:restore,saveMetadata:saveMetadata,snapshotMarkers:snapshotMarkers,restoreMarkers:restoreMarkers,removeMarkers:removeMarkers,liveValues:liveValues,syncMotionBlur:syncMotionBlur,textGrouping:textGrouping,textDemandFor:textDemandFor,textDemandAllowed:textDemandAllowed};
+  global.MotionPresetLibrary={ownedPrefix:ownedPrefix,ownedLabels:OWNED_LABELS,validate:validate,metadata:metadata,requiredEffects:requiredEffects,header:header,markerState:markerState,verifyOwnership:verifyOwnership,definition:definition,preflight:preflight,applyLayer:applyLayer,removeLayer:removeLayer,inspectLayer:inspectLayer,locate:locate,child:child,snapshot:snapshot,restore:restore,saveMetadata:saveMetadata,snapshotMarkers:snapshotMarkers,restoreMarkers:restoreMarkers,removeMarkers:removeMarkers,liveValues:liveValues,syncMotionBlur:syncMotionBlur,textGrouping:textGrouping,textDemandFor:textDemandFor,textDemandAllowed:textDemandAllowed};
 }($.global));

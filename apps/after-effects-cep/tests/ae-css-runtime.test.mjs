@@ -2,28 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import postcss from 'postcss';
+import { AE_THEME_SOURCES } from '../../../scripts/theme-sources.mjs';
 
 /**
  * Every AE-only CSS layer must render in CEP 12 (Chromium 99), and the AE motion layer
  * must stay neutral and token-driven. Headless Playwright runs a modern Chromium, so
  * browser checks alone would not catch these.
  */
-const AE_LAYERS = [
-  '../../../packages/ui-tokens/src/after-effects.css',
-  '../../../packages/ui-core/src/ae-refinement.css',
-  '../../../packages/ui-core/src/ae-settings.css',
-  '../../../packages/ui-core/src/ae-camera.css',
-  '../../../packages/ui-core/src/ae-workstation.css',
-  '../../../packages/ui-core/src/ae-motion.css',
-  '../../../packages/ui-core/src/ae-quick-actions.css',
-  '../../../packages/ui-core/src/ae-layout.css'
-];
 const read = file => readFile(new URL(file, import.meta.url), 'utf8');
 const stripComments = css => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 test('AE layers use only what Chromium 99 renders', async () => {
-  for (const file of AE_LAYERS) {
-    const code = stripComments(await read(file));
+  for (const file of AE_THEME_SOURCES) {
+    const code = stripComments(await read(`../../../${file}`));
     const name = file.split('/').pop();
     assert.doesNotMatch(code, /color-mix\(/, `${name}: color-mix() needs Chromium 111`);
     assert.doesNotMatch(code, /:has\(/, `${name}: :has() needs Chromium 105`);

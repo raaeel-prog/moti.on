@@ -69,7 +69,7 @@ test('a side mirrors turns, origin, scaled axis, blur axis and order, never the 
 });
 
 test('a motion in place picks the side its sweep starts from', () => {
-  for (const id of ['text-v3-characters-fade-cascade', 'text-v3-characters-rotate-turn', 'text-v3-characters-scale-bloom', 'text-v3-words-tracking-spread']) {
+  for (const id of ['text-v3-words-fade-cascade', 'text-v3-words-rotate-turn', 'text-v3-characters-scale-bloom', 'text-v3-words-tracking-spread']) {
     const p = text.find(item => item.id === id);
     assert.equal(libraryUsesDirection(p), true, id);
     assert.deepEqual(libraryTextSweeps(p), ['left', 'right'], id);

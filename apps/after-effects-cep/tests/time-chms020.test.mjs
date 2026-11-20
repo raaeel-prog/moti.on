@@ -84,6 +84,7 @@ async function fixture(comp = new FakeCompItem()) {
     "src/undo.jsx",
     "src/registry.jsx",
     "src/expression-templates.jsx",
+    "src/expression-compose.jsx",
     "src/commands/time-controller.jsx",
     "src/commands/animate-kinetic.jsx",
     "src/commands/time-marker-loop.jsx",
@@ -141,19 +142,35 @@ test("Time Controller habilita Time Remap e aplica expression gerenciada em um U
   assert.deepEqual(calls, [["begin", "Moti.on: aplicar controlador de tempo"], ["end"]]);
 });
 
-test("Time Controller recusa expressao de usuario antes de abrir Undo", async () => {
+test("Time Controller empilha sobre a expressao do usuario e reaplica sem perde-la", async () => {
   const layer = new FakeLayer({
     timeRemapEnabled: true,
     timeRemap: new FakeProperty({ expression: "loopOut();", expressionEnabled: true })
   });
+  const { scope } = await fixture(new FakeCompItem([layer]));
+
+  const first = JSON.parse(scope.MotionAE.dispatch(request("ae.time.controller", timeArgs)));
+  assert.equal(first.ok, true);
+  const stacked = scope.MotionExpressionCompose.unstack(layer.timeRemap.expression);
+  assert.equal(stacked.user, "loopOut();");
+  assert.ok(scope.MotionExpressions.isManagedTimeController(layer.timeRemap.expression));
+  assert.ok(layer.timeRemap.expression.includes("var motionUserValue = (function () {"));
+
+  const again = JSON.parse(scope.MotionAE.dispatch(request("ae.time.controller", { ...timeArgs, speedPercent: 80 })));
+  assert.equal(again.ok, true);
+  assert.equal(scope.MotionExpressionCompose.userOf(layer.timeRemap.expression), "loopOut();");
+});
+
+test("Time Controller recusa so a expressao que termina em bloco, antes de abrir Undo", async () => {
+  const layer = new FakeLayer({
+    timeRemapEnabled: true,
+    timeRemap: new FakeProperty({ expression: "if (time > 1) { value } else { 0 }", expressionEnabled: true })
+  });
   const { scope, calls } = await fixture(new FakeCompItem([layer]));
-
   const response = JSON.parse(scope.MotionAE.dispatch(request("ae.time.controller", timeArgs)));
-
   assert.equal(response.ok, false);
   assert.equal(response.error.code, "EXPRESSION_CONFLICT");
   assert.deepEqual(calls, []);
-  assert.equal(layer.timeRemap.expression, "loopOut();");
 });
 
 test("Marker Loop escapa nomes de marker na expressao e cria markers faltantes", async () => {

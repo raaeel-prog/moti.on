@@ -947,6 +947,24 @@
 .ch-sounds-option { display:flex; align-items:center; min-height:24px; margin:0 12px 4px 0; color:var(--ch-text-secondary); font-size:11px; }
 .ch-sounds-option > input { margin:0 6px 0 0; }
 .ch-sounds-option input[type="range"] { width:96px; margin:0 6px; }
+/* Barra de áudio (2026-11-18): forma de onda gerada no build, parte tocada em destaque.
+ * Só margens e posições explícitas: a folha também serve ao UXP. */
+.ch-sounds-row__name { flex:1 1 auto; min-width:0; }
+.ch-sounds-row__family { font-variant-numeric:tabular-nums; }
+.ch-wave { position:relative; display:block; flex:0 0 auto; overflow:hidden; }
+.ch-wave--row { width:72px; height:14px; margin-left:8px; opacity:.72; }
+.ch-sounds-row:hover .ch-wave--row, .ch-sounds-row[aria-selected="true"] .ch-wave--row { opacity:1; }
+.ch-wave--inspector { flex:1 1 160px; min-width:96px; height:28px; margin:0 8px; cursor:pointer; border-radius:var(--radius-sm, 2px); background:var(--ch-surface-sunken, rgba(0,0,0,.18)); }
+.ch-wave--inspector:focus { outline:var(--focus-ring); outline-offset:var(--focus-offset); }
+.ch-wave__lane { position:absolute; top:0; right:0; bottom:0; left:0; display:flex; align-items:center; padding:0 1px; }
+.ch-wave--inspector .ch-wave__lane { padding:3px 4px; justify-content:space-between; }
+.ch-wave--inspector .ch-wave__bar { flex:0 0 3px; margin-right:0; border-radius:2px; }
+.ch-wave__bar { flex:1 1 0; min-width:1px; margin-right:1px; border-radius:1px; background:var(--ch-text-secondary); }
+.ch-wave__bar[data-played="true"] { background:var(--ch-accent); }
+.ch-wave__head { position:absolute; top:0; bottom:0; left:0; width:1px; background:var(--ch-text-primary); opacity:0; pointer-events:none; }
+.ch-wave[data-playing="true"] .ch-wave__head { opacity:.9; }
+.ch-sounds-player { display:flex; align-items:center; flex:1 1 100%; min-width:0; margin-bottom:6px; }
+.ch-sounds-player__time { flex:0 0 auto; color:var(--ch-text-secondary); font-size:10px; font-variant-numeric:tabular-nums; }
 .ch-sounds-status, .ch-sounds-empty { min-height:16px; margin-top:6px; color:var(--ch-text-secondary); font-size:11px; }
 .ch-gradient-actions { align-items:flex-start; }
 .ch-gradient-actions .ch-action-button { white-space:normal; }

@@ -1,4 +1,5 @@
 import { syncThemeTokens } from "./sync-theme.mjs";
+import { renderTheme } from "./theme-sources.mjs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -15,7 +16,6 @@ import { renderModule as renderDescriptorsModule, GENERATED_PATH as DESCRIPTORS_
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDir, "..");
 const apps = path.join(root, "apps");
-const packages = path.join(root, "packages");
 const dist = path.join(root, "dist");
 const controlPresetRoot = path.join(apps, "after-effects-cep", "assets", "control-presets");
 const controlCatalog = JSON.parse(await readFile(path.join(controlPresetRoot, "catalog.json"), "utf8"));
@@ -88,18 +88,6 @@ if (process.argv.includes("--clean-only")) {
  */
 await syncThemeTokens();
 
-const SHARED_THEME_SOURCES = [
-  path.join(packages, "ui-core", "src", "theme.css"),
-  path.join(packages, "ui-core", "src", "components.css"),
-  path.join(packages, "ui-core", "src", "control-refinement.css"),
-  path.join(packages, "ui-core", "src", "library-refinement.css"),
-  path.join(packages, "ui-core", "src", "design-system.css"),
-  path.join(packages, "ui-core", "src", "preset-approved.css"),
-  path.join(packages, "ui-core", "src", "scrubbable-number.css"),
-  path.join(packages, "ui-core", "src", "overlay-controls.css"),
-  path.join(packages, "ui-motion", "src", "motion.css")
-];
-
 async function copyAppShell(appName, outputName) {
   const output = path.join(dist, outputName);
   await mkdir(output, { recursive: true });
@@ -121,38 +109,9 @@ async function copyAppShell(appName, outputName) {
   });
 
   const themeDestination = path.join(output, "styles", "theme.css");
-  const themeParts = await Promise.all(
-    SHARED_THEME_SOURCES.map((source) => readFile(source, "utf8"))
-  );
-  // Host-specific polish must never alter Premiere or the shared Onyx palette.
-  if (appName === "after-effects-cep") {
-    themeParts.push(await readFile(path.join(packages, "ui-tokens", "src", "after-effects.css"), "utf8"));
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-refinement.css"), "utf8"));
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-settings.css"), "utf8"));
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-camera.css"), "utf8"));
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-workstation.css"), "utf8"));
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-motion.css"), "utf8"));
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-quick-actions.css"), "utf8"));
-    themeParts.push(await readFile(path.join(apps, "after-effects-cep", "client", "src", "gradient-preview.css"), "utf8"));
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "particles-editor.css"), "utf8"));
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-layout.css"), "utf8"));
-    // Árvore e menu de etiquetas no estilo Composer: por último, para vencer as camadas acima.
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-composer-browse.css"), "utf8"));
-    // Micro-interações de botões, ícones e sliders (motion/micro.ts liga o JS).
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-micro.css"), "utf8"));
-    // Menu "Ações de presets" (Action Deck): depois das micro-interações para vencer o press genérico.
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-preset-actions.css"), "utf8"));
-    // Polimento da aba Presets: divisor aceso, menu de contexto, filtro por etiqueta e busca compacta.
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-browse-polish.css"), "utf8"));
-    // Ajustes do preset como gaveta na grade: por último, para vencer o popover fixo.
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-preset-drawer.css"), "utf8"));
-    // Design system do painel (2026-11-12): escala única de cor, texto, raio e layout por largura. Última camada.
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-design-system.css"), "utf8"));
-    // Ícones vivos (2026-11-16): resposta ao ponteiro em ladrilhos, abas, estrelas e setas. Depois do design system.
-    themeParts.push(await readFile(path.join(packages, "ui-core", "src", "ae-icon-life.css"), "utf8"));
-  }
+  const theme = await renderTheme({ afterEffects: appName === "after-effects-cep" });
   await mkdir(path.dirname(themeDestination), { recursive: true });
-  await writeFile(themeDestination, `${themeParts.join("\n\n").trimEnd()}\n`, "utf8");
+  await writeFile(themeDestination, theme, "utf8");
 }
 
 // Geracao antes da copia: o modulo ES5 do contrato faz parte do host montado, e

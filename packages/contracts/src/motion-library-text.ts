@@ -35,8 +35,63 @@ function maskTravel(config: Config, unit: Unit): Config {
   return { ...config, position: [Math.round(x * k), Math.round(y * k), z] };
 }
 
+/**
+ * Retoque de Tipografia › Caracteres (2026-11-18). A mesma receita servia letras,
+ * palavras e linhas; letra é menor e chega em sequência mais rápida, então pede
+ * outro desenho: desfoque só no eixo do movimento (rastro, não névoa), giros e
+ * escalas pela linha de base, ataque curto e assentamento definido. Só a unidade
+ * Caracteres usa estes ajustes; IDs não mudam. Chave: `família-variante`.
+ */
+export const CHARACTER_TUNING: Readonly<Record<string, Config>> = {
+  // Opacidade: luz que acende letra a letra, com leve rastro vertical.
+  "fade-cascade": { easing: "quad-out", position: [0, 14, 0], text: { blur: 6, blurAxis: "y" } },
+  // Foco: cada letra entra desfocada e um pouco maior, do centro para fora.
+  "fade-focus": { easing: "expo-out", scale: [12, 12, 0], text: { blur: 16, order: "center-out" } },
+  // Posição: o rastro acompanha a direção da viagem.
+  "position-rise": { easing: "expo-out", position: [0, 72, 0], text: { blur: 12, blurAxis: "y" } },
+  "position-slide": { easing: "quint-out", text: { blur: 18, blurAxis: "x" } },
+  "position-ricochet": { text: { blur: 6, blurAxis: "y" } },
+  "position-drop-bounce": { scale: [0, 18, 0], text: { blur: 6, blurAxis: "y", origin: [0, 0.36, 0] } },
+  // Rotação: as letras giram apoiadas na linha de base, como peças tipográficas.
+  "rotate-lean": { easing: "spring", defaults: { elasticity: 35 } },
+  "rotate-turn": { easing: "expo-out", scale: [-45, -45, 0], text: { blur: 4, origin: [0, 0.36, 0] } },
+  "rotate-scatter": { text: { blur: 8 } },
+  "rotate-somersault": { text: { blur: 6, blurAxis: "y" } },
+  // Escala: nascer da base (broto, crescer, leque) e explodir do centro (florescer, impacto).
+  "scale-bloom": { defaults: { elasticity: 45 } },
+  "scale-sprout": { text: { origin: [0, 0.36, 0], blur: 4, blurAxis: "y" } },
+  "scale-grow-base": { easing: "quint-out", text: { origin: [0, 0.36, 0], blur: 3, blurAxis: "y" } },
+  "scale-baseline-fan": { text: { origin: [0, 0.36, 0] } },
+  "scale-width": { easing: "expo-out", text: { blur: 8, blurAxis: "x" } },
+  "scale-impact": { text: { order: "center-out" } },
+  "scale-rubber-slide": { text: { blur: 8, blurAxis: "x" } },
+  // Entreletra: o espaço fecha com rastro horizontal, não névoa.
+  "tracking-converge": { easing: "expo-out", text: { blur: 8, blurAxis: "x" } },
+  "tracking-elastic": { text: { blur: 4, blurAxis: "x" } },
+  // Janelas: corte seco, chegada rápida.
+  "mask-rise-window": { easing: "expo-out", text: { blur: 4, blurAxis: "y" } },
+  "mask-side-window": { easing: "expo-out", text: { blur: 6, blurAxis: "x" } },
+  "mask-slant-window": { easing: "quint-out" },
+  // Combinações: cada uma com um traço só dela.
+  "combination-lift-turn": { text: { origin: [0, 0.36, 0], blur: 6, blurAxis: "y" } },
+  "combination-spiral": { text: { blur: 6 } },
+  "combination-color-rise": { easing: "expo-out", text: { blur: 4, blurAxis: "y" } }
+};
+
+/** Retoque por cima da receita compartilhada: campos de texto e padrões se somam. */
+function tuned(unit: Unit, variant: Variant): Config {
+  const extra = unit === "characters" ? CHARACTER_TUNING[`${variant.family}-${variant.id}`] : undefined;
+  if (!extra) return variant.config;
+  return {
+    ...variant.config, ...extra,
+    text: { ...variant.config.text, ...extra.text },
+    defaults: { ...variant.config.defaults, ...extra.defaults }
+  };
+}
+
 function make(unit: Unit, variant: Variant, continuous = false): MotionLibraryPreset {
-  const config = variant.config.text?.mask ? maskTravel(variant.config, unit) : variant.config;
+  const base = tuned(unit, variant);
+  const config = base.text?.mask ? maskTravel(base, unit) : base;
   const unitTempo: Partial<MotionLibraryOptions> = unit === "characters"
     ? { durationFrames: 30, staggerFrames: 2 }
     : unit === "words" ? { durationFrames: 34, staggerFrames: 4 }

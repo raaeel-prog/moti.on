@@ -98,7 +98,9 @@ function reportHostWarnings(warnings: CommandResponse["warnings"]): void {
   if (text) globalFeedback?.reportWarning(text);
 }
 let feedbackReady = false;
-import { getToolStarterDraft } from "@motion/command-registry";
+import { getQuickProfile, getToolStarterDraft } from "@motion/command-registry";
+import { createAppliedTools, toolClickMode } from "./tool-one-click.js";
+import { FLICKER_PRESETS, WIGGLE_PRESETS, createPresetList, matchFlickerPreset, matchWigglePreset } from "./tool-presets.js";
 import {
   createBrowserReducedMotionController,
   type ReducedMotionController
@@ -106,11 +108,12 @@ import {
 
 import { createAeHostAdapter } from "./host-adapter.js";
 import { createQuickLibrary, type LibraryState, type LibraryItem, type TileFeedback } from "./quick-library.js";
+import { createToolEditButton } from "./tool-edit-button.js";
 import { createQuickActions, isQuickAction, quickActionName, quickActionReason, QUICK_ALL_ACTIONS, type QuickAction } from "./quick-actions.js";
 import { aeMotionMs, attachMicroInteractions, attachReflowGlide, attachReflowGlideTree, browserMotionEnv, frameDriver, playStagger, scrollIntoViewSmooth } from "./motion/index.js";
 import { attachNavIndicator, attachNavShortcuts, attachToastMotion, FEEDBACK_BASE_LIFT, setFeedbackLift, viewDirection } from "./shell-motion.js";
 import { createRichTooltip } from "./rich-tooltip.js";
-import { attachInspectorSheet } from "./inspector-sheet.js";
+import { uiIcon } from "./ui-icons.js";
 import { attachChipGlides } from "./chip-glide.js";
 import { createCommandPalette, isPaletteKey, type CommandPalette } from "./command-palette.js";
 import type { PaletteEntry, PaletteTarget } from "./command-palette-model.js";
@@ -145,6 +148,7 @@ let pointerPresence: PointerPresence | null = null;
 const pointerInPanel = (): boolean => pointerPresence?.inside() ?? false;
 let refreshToolContext: (() => void) | null = null;
 let refreshPresetContext: (() => void) | null = null;
+let applyingEditorTool: ToolId | null = null;
 let orbitAdvancedOpen = false;
 import { createPresetWorkspace, type PresetWorkspaceCache } from "./preset-workspace.js";
 const presetWorkspaceCache: PresetWorkspaceCache = {};
@@ -263,6 +267,10 @@ interface WiggleDraft {
   octaves: number;
   amplitudeMultiplier: number;
   seed: number;
+  /** Balanço em graus quando a camada inteira é o alvo (Flutuação). */
+  rotation: number;
+  /** Eixos do balanço: 1 X · 2 Y · 4 Z. X e Y só existem em camada 3D. */
+  rotationAxes: number;
 }
 
 /**
@@ -1897,7 +1905,7 @@ function start(): void {
   if (adapter) { panelHostLocale = adapter.uiLocale(); logger.setHost("after-effects"); }
   let themeHost: (ThemeHost & CepKeyboardHost) | undefined;
   try { const Constructor = (window as unknown as {CSInterface?: new()=>ThemeHost & CepKeyboardHost}).CSInterface; if(Constructor) themeHost = new Constructor(); } catch { /* Screenshot fallback remains available. */ }
-  hostTheme = createHostTheme(document.documentElement, themeHost, () => panelPreferences.snapshot().theme);
+  hostTheme = createHostTheme(document.documentElement, themeHost, panelPreferences.themeMode, panelPreferences.accentChoice);
   const cepKeyboard = createCepKeyboard(document,window,themeHost,window.navigator?.platform??'');
   window.addEventListener('unload',()=>cepKeyboard.dispose(),{once:true});
 
@@ -2354,6 +2362,40 @@ async function applyQuickPreset(
   } finally {
     setBusy(shell, false);
     if (!selectedPreset) quickTileFeedback?.(tool.id, applied ? "success" : "idle");
+    if (applied && !selectedPreset) onToolApplied?.(tool.id);
+  }
+}
+
+/** One-click tools applied to each selection in this panel session (the Edit button beside the search). */
+const appliedTools = createAppliedTools();
+/** Set by the tool browser while it is mounted. */
+let onToolApplied: ((toolId: ToolId) => void) | null = null;
+function selectionKey(context: ContextData | null | undefined): string {
+  return context?.isComposition && context.selectionLayerCount ? [context.activeItemName, context.selectionSignature].join("|") : "";
+}
+
+/**
+ * Um clique na grade (plano 2026-11-19). Com QuickProfile, o caminho rápido
+ * de sempre; sem ele, o editor da ferramenta volta ao preset padrão e aplica,
+ * como o Aplicar da página faria.
+ */
+async function runToolOneClick(tool: ToolDefinition, shell: Shell, i18n: I18n, logger: MotionLogger, client: Client): Promise<void> {
+  if (state.busy || !("apply" in tool) || !tool.commandId) return;
+  const profile = getQuickProfile(tool.commandId);
+  if (profile) { await applyQuickPreset(tool, tool.commandId, profile, shell, i18n, logger, client); return; }
+  quickTileFeedback?.(tool.id, "loading");
+  let applied = false;
+  try {
+    state.lastError = null;
+    tool.reset();
+    await tool.apply(shell, i18n, logger, client);
+    applied = state.lastError === null;
+  } catch {
+    state.lastError = i18n.t("message.failureWithoutReason");
+    shell.setStatus(state.lastError, "error");
+  } finally {
+    quickTileFeedback?.(tool.id, applied ? "success" : "idle");
+    if (applied) onToolApplied?.(tool.id);
   }
 }
 
@@ -2614,27 +2656,43 @@ function renderToolBrowser(
   });
 
   const icons = ["ease", "reverseOrder", "wiggle", "cameraTransition", "shapeLibrary", "neon", "context"];
+  // Um clique aplica (preset padrão) ou executa; só quem precisa de escolha abre a página (›).
+  const oneClick = (tool: ToolDefinition): boolean => toolClickMode(tool.id) !== "open" && "apply" in tool && Boolean(tool.commandId);
+  const appliedHere = (): readonly string[] => appliedTools.list(selectionKey(state.context));
   const libraryItems = (): LibraryItem[] => TOOLS.filter(tool => !LIBRARY_HIDDEN_TOOLS.includes(tool.id)).map(tool => {
       return {
         id: tool.id, name: i18n.t(tool.nameKey), description: i18n.t(tool.descriptionKey),
         aliases: TOOL_ALIASES[tool.id] ?? tool.id, category: TOOL_CATEGORY[tool.id],
-        interaction: tool.id === "anchor" ? "direct-control" : "configure",
-        reason: state.busy ? state.busyReason : null,
+        interaction: tool.id === "anchor" ? "direct-control" : oneClick(tool) ? "quick" : "configure",
+        applied: appliedHere().includes(tool.id),
+        reason: state.busy ? state.busyReason : oneClick(tool) && "apply" in tool ? tool.disabledReason(i18n) : null,
         edit: () => edit(tool),
         run: () => {
           if (tool.id === "anchor") { dock.expandAndFocus(); return; }
+          if (oneClick(tool)) { void runToolOneClick(tool, shell, i18n, logger, client); return; }
           edit(tool);
         }
       };
     });
+  const editTools = createToolEditButton(document, {
+    locale: i18n.locale(),
+    nameOf: id => { const tool = TOOLS.find(entry => entry.id === id); return tool ? i18n.t(tool.nameKey) : id; },
+    onEdit: id => { const tool = TOOLS.find(entry => entry.id === id); if (tool) { edit(tool); void tool.load?.(); } }
+  });
+  onToolApplied = toolId => {
+    if (toolClickMode(toolId) === "apply") appliedTools.record(selectionKey(state.context), toolId);
+    refreshLibrary?.();
+  };
   const library = createQuickLibrary(document, {
     locale: i18n.locale(), navigation: libraryNavigation, preferences: panelPreferences, anchor: dock.element, quietEntry: quiet,
+    searchAccessory: editTools.element,
     categories: TOOL_CATEGORIES.map((id, index) => ({ id, name: i18n.t(CATEGORY_NAME_KEY[id]), icon: icons[index] ?? "tools" })),
     onNavigate: () => { state.toolQuery = libraryNavigation.query; panelPreferences.setCategory(libraryNavigation.category); },
     items: libraryItems()
   });
   refreshLibrary = () => {
     library.update(libraryItems());
+    editTools.update(appliedHere(), state.busy);
     quickActions.update(quickOptions());
     for (const node of grid.querySelectorAll<HTMLButtonElement>("button")) {
       node.disabled = state.busy || !state.context?.isComposition || !state.context.selectionLayerCount;
@@ -2644,7 +2702,7 @@ function renderToolBrowser(
     shell.refreshChrome();
   };
   quickTileFeedback = library.setFeedback;
-  disposeView = () => { library.dispose(); quickActions.dispose(); dock.dispose(); refreshLibrary = null; quickTileFeedback = null; setFeedbackLift(document.documentElement); };
+  disposeView = () => { library.dispose(); quickActions.dispose(); dock.dispose(); editTools.dispose(); onToolApplied = null; refreshLibrary = null; quickTileFeedback = null; setFeedbackLift(document.documentElement); };
   regions.content.appendChild(library.element);
   refreshLibrary();
 
@@ -2667,12 +2725,11 @@ const TOOL_ALIASES: Partial<Record<ToolId, string>> = {
 
 function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): void {
   const previousView = lastRenderedView;
-  // Views enter from the side of their tab; a rerender of the same view stays still. Home ↔ tools
-  // keeps the library in place: only the inspector moves (sliding sheet below 720 px, column above).
+  // Views enter from the side of their tab; a rerender of the same view stays still. Since 2026-11-19
+  // the tool page replaces the grid (no sliding drawer): home → tools enters forward, back returns.
   if (regions.content.getAttribute?.("data-active") === "true") {
-    const inspectorOnly = (previousView === "home" && viewId === "tools") || (previousView === "tools" && viewId === "home");
-    if (inspectorOnly) regions.content.setAttribute("data-active", "false");
-    else regions.content.setAttribute("data-direction", viewDirection(previousView, viewId));
+    const toolPage = (previousView === "home" && viewId === "tools") || (previousView === "tools" && viewId === "home");
+    regions.content.setAttribute("data-direction", toolPage ? (viewId === "tools" ? "forward" : "back") : viewDirection(previousView, viewId));
   }
   previousRenderedView = previousView;
   lastRenderedView = viewId;
@@ -2684,48 +2741,44 @@ function renderView(viewId: string, regions: RenderRegions, wiring: Wiring): voi
   if (viewId !== "tools" || !state.activeTool || !wiring.adapter) {
     renderViewContent(viewId, regions, wiring); return;
   }
+  // Página da ferramenta (2026-11-19): ocupa o lugar da grade, com Voltar. Sem gaveta por cima.
   regions.content.classList.add("ch-context-body");
   regions.content.parentElement?.setAttribute("data-browser","true");
-  const workspace = createElement(document, "div", "ch-context-workspace");
-  const library = createElement(document, "div", "ch-context-library");
-  const inspector = createElement(document, "aside", "ch-context-inspector");
-  const heading = createElement(document, "div", "ch-context-heading");
+  const pt = wiring.i18n.locale() === "pt-BR";
+  const inspector = createElement(document, "section", "ch-tool-page");
+  const heading = createElement(document, "div", "ch-tool-page__head");
   const title = createElement(document, "strong", ""); title.id = "tool-inspector-title";
   inspector.setAttribute("aria-labelledby", title.id);
-  heading.appendChild(title);
-  // Assigned below, once the sheet exists; the close button, Esc and the scrim all end here.
-  let closeInspector = (): void => {};
-  const close = button(document, {label:wiring.i18n.locale() === "pt-BR" ? "Fechar ajustes" : "Close adjustments", onClick:() => closeInspector()});
-  close.id = "tool-inspector-close"; heading.appendChild(close);
+  const close = createElement(document, "button", "ch-tool-page__back") as HTMLButtonElement;
+  close.type = "button";
+  close.id = "tool-inspector-close";
+  close.title = pt ? "Voltar para Ferramentas (Esc)" : "Back to Tools (Esc)";
+  const backIcon = uiIcon(document, "chevron-left", 14);
+  if (backIcon) close.appendChild(backIcon);
+  close.appendChild(createElement(document, "span", "", pt ? "Ferramentas" : "Tools"));
+  const separator = createElement(document, "span", "ch-tool-page__sep", "·");
+  separator.setAttribute("aria-hidden", "true");
+  heading.appendChild(close); heading.appendChild(separator); heading.appendChild(title);
   const content = createElement(document, "div", "ch-context-content");
   const actions = createElement(document, "div", "ch-context-actions");
   inspector.appendChild(heading); inspector.appendChild(content); inspector.appendChild(actions);
-  workspace.appendChild(library); workspace.appendChild(inspector); regions.content.appendChild(workspace);
-  const sheet = attachInspectorSheet(document, browserMotionEnv(window, document.documentElement), {
-    workspace, library, inspector, swap: previousView === "tools", onDismiss: () => closeInspector()
-  });
-  closeInspector = () => {
+  regions.content.appendChild(inspector);
+  const closeInspector = (): void => {
     const id = state.activeTool;
-    sheet.close(() => {
-      regions.shell.navigate("home");
-      document.getElementById(`library-adjust-${id}`)?.focus();
-    });
+    regions.shell.navigate("home");
+    (document.getElementById(`library-tool-${id}`) ?? document.getElementById("library-search"))?.focus();
   };
-  renderToolBrowser({...regions,content:library},wiring.i18n,regions.shell,wiring.logger,wiring.adapter.client,true);
-  const disposeLibrary = disposeView as (()=>void)|null;
-  const updateLibrary = refreshLibrary;
-  disposeView = null;
+  close.addEventListener("click", closeInspector);
   const contextualShell:Shell = {...regions.shell,setViewTitle:text => {title.textContent=text;}};
   renderViewContent(viewId,{content,actions,shell:contextualShell},wiring);
   const disposeEditor = disposeView as (()=>void)|null;
-  refreshLibrary = updateLibrary;
   const escape = (event:KeyboardEvent):void => {
     if(event.key === "Escape" && !event.defaultPrevented && !isColorPickerOpen(document) && !content.querySelector('[aria-expanded="true"]')) {
       event.preventDefault(); close.click();
     }
   };
   inspector.addEventListener("keydown",escape);
-  disposeView = () => {inspector.removeEventListener?.("keydown",escape);sheet.dispose();disposeEditor?.();disposeLibrary?.();};
+  disposeView = () => {inspector.removeEventListener?.("keydown",escape);disposeEditor?.();};
   close.focus();
 }
 
@@ -2829,7 +2882,8 @@ function renderViewContent(viewId:string, regions:RenderRegions, wiring:Wiring):
         },
         error: response => response.error ? hostFailureMessage(response.error, i18n) : i18n.t("elements.invalid"),
         busy: value => { state.busy = value; shell.setBusy(value); },
-        play: sound => { try { void new Audio(`../assets/sounds/${sound}.wav`).play().catch(() => undefined); } catch { /* No audio device. */ } }
+        // The returned element drives the cursor of the sound's waveform bar.
+        play: sound => { try { const audio = new Audio(`../assets/sounds/${sound}.wav`); void audio.play().catch(() => undefined); return audio; } catch { return undefined; /* No audio device. */ } }
       },
       edit: preset => {
         if (!state.context) return;
@@ -2950,8 +3004,8 @@ function renderViewContent(viewId:string, regions:RenderRegions, wiring:Wiring):
     let actionAreaAlive = true;
     const actionBar = createElement(document, "div", "ch-panel-action-bar ch-tool-action-bar");
     const appendAction = (options: ActionButtonOptions) => {
-      const control = createActionButton(document, { ...options, onPress: () => {
-        if (actionAreaAlive && !state.busy) options.onPress();
+      const control = createActionButton(document, { size: 24, ...options, onPress: () => {
+        if (actionAreaAlive && !state.busy && applyingEditorTool === null) options.onPress();
       } });
       control.element.classList.add("ch-tool-action-control");
       actionBar.appendChild(control.element);
@@ -2961,17 +3015,32 @@ function renderViewContent(viewId:string, regions:RenderRegions, wiring:Wiring):
       || tool.id === "wordReveal" && textEffectArgs("wordReveal").action === "remove"
       || tool.id === "variableMorph" && textEffectArgs("variableMorph").action === "remove"
       || tool.id === "parallax" && state.parallaxFull.operation === "remove";
+    const applyingLabel = i18n.t("status.applyingQuick", { tool: i18n.t(tool.nameKey) });
     const applyControl = appendAction({
       id: `tool-${tool.id}-apply`,
       label: tool.id === "wordReveal" ? wordRevealActionLabel(i18n) : tool.id === "variableMorph" ? variableMorphActionLabel(i18n)
         : tool.id === "verticalPulse" ? verticalPulseActionLabel(i18n, state.context?.compFrameRate ?? null) : removing ? i18n.t("textEffects.remove") : tool.id === "clean"
         ? i18n.t(state.clean.scanToken ? "action.clean.remove" : "action.clean.scan") : i18n.t("action.apply"),
       variant: removing ? "destructive" : "primary",
+      size: 28,
+      ...(applyingEditorTool === tool.id && state.busy
+        ? { state: "loading", stateLabel: state.busyReason ?? applyingLabel }
+        : {}),
       disabled: Boolean(disabledReason), ...(disabledReason ? { disabledReason } : {}),
       onPress: () => {
         const invalid = regions.content.querySelector<HTMLInputElement>("[aria-invalid='true']");
         if (invalid) { invalid.focus(); return; }
-        if (!currentDisabledReason()) void tool.apply(shell, i18n, logger, client);
+        if (currentDisabledReason()) return;
+        applyingEditorTool = tool.id;
+        applyControl.setState("loading", applyingLabel);
+        void tool.apply(shell, i18n, logger, client).catch(() => {
+          state.lastError = i18n.t("message.failureWithoutReason");
+          shell.setStatus(i18n.t("status.failed"), "error");
+          setBusy(shell, false);
+        }).finally(() => {
+          applyingEditorTool = null;
+          if (actionAreaAlive) applyControl.setState("default");
+        });
       }
     });
     applyControl.element.classList.add("ch-panel-action-bar__primary");
@@ -3119,7 +3188,8 @@ function flickerDisabledReason(i18n: I18n): string | null {
   if (!state.context?.isComposition) {
     return i18n.t("message.flickerNoActiveComp");
   }
-  if (state.context.selectionExpressibleCount < 1) {
+  // Camada sem propriedade selecionada vale: o host pisca a Opacidade dela.
+  if (state.context.selectionExpressibleCount < 1 && state.context.selectionLayerCount < 1) {
     return i18n.t("message.quickNeedsExpressible");
   }
   // A faixa invertida ganha mensagem propria: o usuario precisa saber QUAL
@@ -3141,6 +3211,14 @@ function renderFlicker(regions: RenderRegions, i18n: I18n): void {
   if (state.context && !state.context.isComposition) {
     regions.content.appendChild(notice(document, i18n.t("message.flickerNoActiveComp"), "warning"));
   }
+
+  regions.content.appendChild(sectionTitle(document, "Presets"));
+  regions.content.appendChild(createPresetList(document, {
+    presets: FLICKER_PRESETS, kind: "flicker", locale: i18n.locale(), disabled: state.busy,
+    activeId: matchFlickerPreset(draft)?.id ?? null,
+    reducedMotion: browserMotionEnv(window, document.documentElement).reduced(),
+    onPick: preset => { state.flicker = { ...state.flicker, rate: preset.rate, minFactor: preset.minFactor, maxFactor: preset.maxFactor }; shell.rerender(); }
+  }).element);
 
   regions.content.appendChild(sectionTitle(document, i18n.t("flicker.section.main")));
 
@@ -3223,6 +3301,8 @@ function isWiggleDraftValid(draft: WiggleDraft): boolean {
   ) {
     return false;
   }
+  if (!Number.isFinite(draft.rotation) || draft.rotation < 0 || draft.rotation > 45) return false;
+  if (!Number.isInteger(draft.rotationAxes) || draft.rotationAxes < 0 || draft.rotationAxes > 7) return false;
   return Number.isInteger(draft.seed) && draft.seed >= 0 && draft.seed <= 100_000;
 }
 
@@ -3233,7 +3313,7 @@ function wiggleDisabledReason(i18n: I18n): string | null {
   if (!state.context?.isComposition) {
     return i18n.t("message.wiggleNoActiveComp");
   }
-  if (state.context.selectionExpressibleCount < 1) {
+  if (state.context.selectionExpressibleCount < 1 && state.context.selectionLayerCount < 1) {
     return i18n.t("message.quickNeedsExpressible");
   }
   if (!isWiggleDraftValid(state.wiggle)) {
@@ -3250,6 +3330,19 @@ function renderWiggle(regions: RenderRegions, i18n: I18n): void {
   if (state.context && !state.context.isComposition) {
     regions.content.appendChild(notice(document, i18n.t("message.wiggleNoActiveComp"), "warning"));
   }
+
+  const pixelScale = Math.min(state.context?.compWidth ?? 1920, state.context?.compHeight ?? 1080) / 1080;
+  regions.content.appendChild(sectionTitle(document, "Presets"));
+  regions.content.appendChild(createPresetList(document, {
+    presets: WIGGLE_PRESETS, kind: "wiggle", locale: i18n.locale(), disabled: state.busy,
+    activeId: matchWigglePreset(draft, pixelScale)?.id ?? null,
+    reducedMotion: browserMotionEnv(window, document.documentElement).reduced(),
+    onPick: preset => {
+      state.wiggle = { ...state.wiggle, frequency: preset.frequency, amplitude: Math.round(preset.amplitude * pixelScale * 100) / 100,
+        octaves: preset.octaves, amplitudeMultiplier: preset.amplitudeMultiplier, rotation: preset.rotation };
+      shell.rerender();
+    }
+  }).element);
 
   regions.content.appendChild(sectionTitle(document, i18n.t("wiggle.section.main")));
 
@@ -3285,6 +3378,35 @@ function renderWiggle(regions: RenderRegions, i18n: I18n): void {
       }
     })
   );
+
+  // Rotação: balanço em graus nos eixos marcados, quando a camada inteira é o alvo.
+  const pt = i18n.locale() === "pt-BR";
+  regions.content.appendChild(
+    numberField(document, {
+      id: "wiggle-rotation",
+      label: pt ? "Rotação" : "Rotation",
+      description: pt ? "Com a camada selecionada (sem propriedade), balança também a rotação." : "With the layer selected (no property), the rotation sways too.",
+      value: draft.rotation, defaultValue: DEFAULT_WIGGLE.rotation,
+      min: 0, max: 45, step: 0.1, unit: "°",
+      disabled: state.busy,
+      onCommit: (value) => { state.wiggle.rotation = value; shell.rerender(); }
+    })
+  );
+  const axes = createElement(document, "div", "ch-wiggle-axes");
+  axes.setAttribute("role", "group");
+  axes.setAttribute("aria-label", pt ? "Eixos da rotação" : "Rotation axes");
+  axes.appendChild(createElement(document, "span", "ch-wiggle-axes__label", pt ? "Eixos" : "Axes"));
+  for (const [bit, label] of [[1, "X"], [2, "Y"], [4, "Z"]] as const) {
+    const toggle = createElement(document, "button", "ch-wiggle-axes__toggle", label) as HTMLButtonElement;
+    toggle.type = "button";
+    toggle.id = `wiggle-axis-${label.toLowerCase()}`;
+    toggle.disabled = state.busy;
+    toggle.setAttribute("aria-pressed", String((draft.rotationAxes & bit) !== 0));
+    toggle.title = bit === 4 ? (pt ? "Rotação Z (2D e 3D)" : "Z rotation (2D and 3D)") : (pt ? `Rotação ${label} (só camada 3D)` : `${label} rotation (3D layers only)`);
+    toggle.addEventListener("click", () => { state.wiggle.rotationAxes ^= bit; shell.rerender(); });
+    axes.appendChild(toggle);
+  }
+  regions.content.appendChild(axes);
 
   // Oitavas e queda controlam o detalhe do ruido. Ficam numa secao propria
   // porque a maioria dos usos nao os altera.
@@ -6161,6 +6283,8 @@ async function applyWiggle(
       octaves: draft.octaves,
       amplitudeMultiplier: draft.amplitudeMultiplier,
       seed: draft.seed,
+      rotation: draft.rotation,
+      rotationAxes: draft.rotationAxes,
       conflictMode: "skip"
     },
     { mode: "advanced", emitLiveControls: true, preserveSelection: true }

@@ -55,7 +55,8 @@ Mesmo preset, consulta, seleção e viewport de **480 × 420 px CSS**. A coluna 
 | After Effects 26.5 · Troca de camada e clique repetido | **PASS**. Duas camadas com o mesmo nome permitiram verificar que a troca de seleção exige nova confirmação. O clique duplo após reconfirmar Ambos deixou um par de marcadores e um único Undo os retirou. |
 | After Effects 26.5 · Ações rápidas | **PASS**. Criar objeto nulo com composição sem camadas selecionadas. Desfoque na camada descartável. Undo nas duas operações. `Ctrl+K` abriu a paleta com foco no painel e `Shift+Enter` abriu Neon para ajuste. |
 | After Effects 26.5 · Layout e foco | **PASS** na doca de cerca de 210 × 286 e 480 × 420 px externos, incluindo redimensionar com fases abertas. Após o ajuste de CSS, os três rótulos ficaram em uma linha a 210 px. Sem composição, as fases mostraram o motivo de indisponibilidade. A aba Editar foi observada em janela flutuante a cerca de 483 × 453 px externos. |
-| After Effects 26.5 · Critérios ainda sem execução | **NOT RUN** para interação de fase na janela flutuante, demais dimensões exatas no host e matriz de temas, idiomas e movimento reduzido no host. A automação da janela flutuante não conseguiu direcionar o clique ao CEP. O painel foi reencaixado. A sessão do AE mudou entre a rodada nativa e a cópia final, e voltou em projeto sem composição ativa. |
+| After Effects 26.5 · Revisão final em janela flutuante | **PASS** para Entrada, Saída e Ambos com um Undo por aplicação, em 231 × 238 px CSS úteis. Consulte o reteste abaixo. |
+| After Effects 26.5 · Critérios ainda sem execução | **NOT RUN** para as demais dimensões exatas no host e a matriz nativa de temas, idiomas e movimento reduzido. |
 | Navegador · Paleta e descoberta | **PASS** em 210 × 250, 280 × 280, 360 × 335, 480 × 420 e 720 × 580 px CSS, com amostras de Claro, Escuro, Automático, PT-BR, EN e movimento reduzido. Incluiu mudança de camada e composição, erro e reexecução, confirmação única, Escape, destino do editor e as três prévias. [Teste de navegador](../../apps/after-effects-cep/tests/command-palette.browser.mjs) |
 | Navegador · Regressões | **PASS** em 27 verificações de Presets e 33 de barras de ação. [Presets](../../apps/after-effects-cep/tests/preset-folder-picker.browser.mjs) · [Barras de ação](../../apps/after-effects-cep/tests/compact-actions.browser.mjs) |
 | Suíte do repositório · `npm run check` | **PASS**. 3.091 testes, sem falhas ou casos ignorados. Lint, checagem de tipos, build, validação, contraste e validação de skills também passaram. |
@@ -70,4 +71,20 @@ Capturas da matriz do navegador. [210 × 250](2026-11-16-moti-on-paleta-evidenci
 | `styles/theme.css` | `6F58B0953AE2781F43FBAA2F59857E844650ADEAF0E567FE5E66825F56277F37` |
 | `host/index.jsx` | `899DD6229B659AB2F204B3D3128C5627F18337345E28194BB7F3CEB5356BE7CD` |
 
-Os testes de aplicação no AE e os PNGs nativos foram obtidos na integração da paleta. A revisão final no cliente passou pelos testes de navegador e preservou a posição de rolagem ao retornar de Editar. O reteste nativo após recarregar essa última cópia ficou **NOT RUN**.
+As primeiras capturas de doca foram obtidas durante a integração. A revisão final passou pelos testes de navegador e preservou a posição de rolagem ao retornar de Editar. Esta mesma revisão foi recarregada e testada no host na rodada abaixo.
+
+## Reteste no After Effects em janela flutuante
+
+After Effects **26.5x89** no Windows. Conferi os três hashes da instalação acima e fechei e reabri **Moti.on** pelo menu **Janela → Extensões**. Reduzi a doca e desencaixei o painel a **237 × 313 px externos**, com **231 × 238 px CSS úteis** medidos no CEP. Usei **Arco coreografado** em um sólido selecionado numa composição descartável de 2.000 × 2.000 px, 30 fps e 5 s. [Busca após a primeira reabertura](2026-11-16-moti-on-paleta-evidencias/ae-flutuante-busca-recarregada-336x453.jpg)
+
+A automação do Windows reconheceu a janela, mas bloqueou os cliques na área CEP. Usei o inspetor local temporário para digitar, pressionar Enter e clicar nos botões visíveis do Moti.on carregado no AE. Executei **Ctrl+Z** na janela do After Effects e conferi os marcadores e efeitos diretamente na camada pelo host. Removi o arquivo temporário de depuração e reabri a extensão.
+
+![Seletor de fases do Arco coreografado na janela flutuante compacta](2026-11-16-moti-on-paleta-evidencias/ae-flutuante-fases-237x313.jpg)
+
+| Teste | Aplicação no After Effects | Um Ctrl+Z |
+| --- | --- | --- |
+| Entrada | **PASS**. Editar abriu e a camada recebeu `Moti.on In` em 1,267 s e quatro efeitos de controle. [Captura](2026-11-16-moti-on-paleta-evidencias/ae-flutuante-entrada-237x313.jpg) | **PASS**. Zero marcadores e zero efeitos. |
+| Saída | **PASS**. Editar abriu e a camada recebeu `Moti.on Out` em 3,733 s e quatro efeitos de controle. [Captura](2026-11-16-moti-on-paleta-evidencias/ae-flutuante-saida-237x313.jpg) | **PASS**. Zero marcadores e zero efeitos. |
+| Ambos | **PASS**. Editar abriu e a camada recebeu os dois marcadores nos mesmos tempos e oito efeitos de controle. [Captura](2026-11-16-moti-on-paleta-evidencias/ae-flutuante-ambos-237x313.jpg) | **PASS**. O mesmo Undo removeu os dois marcadores e os oito efeitos. [Captura](2026-11-16-moti-on-paleta-evidencias/ae-flutuante-undo-ambos-237x313.jpg) |
+
+**Atualização visual após Undo.** A timeline foi limpa antes de **Editar** remover os dados da aplicação. Após o Undo de Ambos, ainda foi possível ler os dois grupos da aplicação no painel enquanto a camada já tinha zero marcadores e efeitos. O Moti.on voltou sozinho para **Navegar** na observação seguinte. [Captura após a atualização](2026-11-16-moti-on-paleta-evidencias/ae-flutuante-undo-navegar-237x313.jpg)

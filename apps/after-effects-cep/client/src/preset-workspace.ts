@@ -1,4 +1,4 @@
-import { isColorPickerOpen, hasColorDraft, attachScrubbableNumber, createNumberDisclosure, button, createActionButton, type ActionButtonController, clearNode, createElement, createAlert, createBadge, createI18n, selectField, type AlertController } from "@motion/ui-core";
+import { isColorPickerOpen, hasColorDraft, attachScrubbableNumber, createNumberDisclosure, button, createActionButton, type ActionButtonController, clearNode, createElement, createAlert, createI18n, selectField, type AlertController } from "@motion/ui-core";
 import { isMotionLibraryOptions, libraryDirectionAllowed, libraryUsesDiagonals, libraryUsesDirection, MOTION_SETTLE_DEFAULTS, parsePennerEasing, type CommandResponse, type MotionLibraryOptions, type PersonalPresetCatalog, type PersonalPresetPreview, type PresetInspection, type PresetTarget, type PresetTimingArgs } from "@motion/contracts";
 import { createEasingShapeField, motionBlurField, createPresetGallery, createPresetPhaseControl, defaultLibraryOptions, GALLERY_PRESETS, gallerySequenceControls, presetEasingChoices, settleFieldLabels } from "./preset-gallery.js";
 import { focusedPoll } from "./focused-poll.js";
@@ -289,7 +289,12 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
       if(disposed||token!==epoch||isColorPickerOpen(doc)||hasColorDraft(doc)||numberPressed()||(!force&&numberHovered())||nav.view!=="edit")return;
       if(!response.ok||!response.data){showError(hostError(response,pt?"Não foi possível ler a seleção.":"Unable to read selection."));return;}
       acceptInspection(response.data as PresetInspection,force);
-    }catch{if(!disposed&&token===epoch)showError(pt?"A leitura falhou. Tente novamente.":"Reading failed. Try again.");}
+    }catch(failure){
+      // Diz o que falhou: uma falha muda deixava o usuário sem pista e sem como reportar.
+      const cause=failure instanceof Error&&failure.message?failure.message.slice(0,160):"";
+      if(!disposed&&token===epoch)showError(pt?`A leitura falhou${cause?`: ${cause}`:""}. Tente novamente.`:`Reading failed${cause?`: ${cause}`:""}. Try again.`);
+      doc.defaultView?.console?.error?.("[Moti.on] ae.presets.inspect",failure);
+    }
     finally{if(activeRead===readId){activeRead=0;content.setAttribute("aria-busy","false");if(!disposed)updateNotice();}}
   }
   function updateNotice():void {
@@ -567,7 +572,7 @@ export function createPresetWorkspace(doc: Document, options: GalleryOptions & {
     }
     const preset=GALLERY_PRESETS.find(p=>p.motion?.id===data.presetId)?.motion;
     if(!preset){error=pt?"Este preset não está disponível nesta versão do painel.":"This preset is not available in this panel version.";updateNotice();return;}
-    const heading=createElement(doc,"div","ch-applied-heading");heading.appendChild(createElement(doc,"span","ch-applied-layer",data.layerName??""));heading.appendChild(createElement(doc,"h3","",preset.name[options.locale as "pt-BR"|"en-US"]??preset.id));heading.appendChild(createBadge(doc,{label:pt?"Ajustável":"Editable",showIcon:false}).element);content.appendChild(heading);
+    const heading=createElement(doc,"div","ch-applied-heading");heading.appendChild(createElement(doc,"span","ch-applied-layer",data.layerName??""));heading.appendChild(createElement(doc,"h3","",preset.name[options.locale as "pt-BR"|"en-US"]??preset.id));content.appendChild(heading);
     heading.appendChild(button(doc,{label:pt?"Mostrar na biblioteca":"Show in library",disabled:isBusy(),onClick:()=>{
       if(data.presetId)revealPreset(data.presetId);
     }}));

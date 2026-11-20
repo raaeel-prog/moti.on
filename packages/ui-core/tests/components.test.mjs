@@ -797,13 +797,15 @@ test("CSS cobre pseudoestados, todos os estados logicos e os IDs de movimento", 
 });
 
 test("kit nao atravessa a fronteira de apresentacao e entra no tema dos dois hosts", async () => {
-  const [source, build] = await Promise.all([
+  const [source, styles, ae, premiere] = await Promise.all([
     readFile(new URL("packages/ui-core/src/components.ts", ROOT), "utf8"),
-    readFile(new URL("scripts/build.mjs", ROOT), "utf8")
+    readFile(new URL("packages/ui-core/src/components.css", ROOT), "utf8"),
+    readFile(new URL("dist/after-effects-cep/styles/theme.css", ROOT), "utf8"),
+    readFile(new URL("dist/premiere-uxp/styles/theme.css", ROOT), "utf8")
   ]);
 
   assert.doesNotMatch(source, /evalScript|premierepro|require\s*\(|node:fs|fetch\s*\(/);
-  assert.match(build, /ui-core[^\n]+components\.css/s);
+  for (const theme of [ae, premiere]) assert.ok(theme.includes(styles.trimEnd()));
 });
 
 test("construtores recusam ranges, geometrias e estados ambiguos", () => {
