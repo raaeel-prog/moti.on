@@ -31,9 +31,8 @@ Aprovado pelo responsável em 23/10: levar ao painel inteiro o movimento das Aç
 > **Atualização normativa (2026-09-02):** `docs/ADDENDUM_A_QUICK_UX_SPEC.md`
 > substitui os detalhes de interação, acessibilidade, cor e movimento das
 > seções §22.3/§22.4 do MASTER. A fonte executável dos tokens agora é
-> `packages/ui-tokens/src/tokens.css`; `packages/ui-core/src/theme.css` mantém
-> uma cópia autocontida, verificada por teste de drift, para CEP e UXP. O
-> catálogo executável de A6.2 vive em `packages/ui-motion/`.
+> `packages/ui-tokens/src/tokens.css`. O build carrega essa fonte antes da
+> folha base. O catálogo executável de A6.2 vive em `packages/ui-motion/`.
 
 ## Onyx Vivo — 07/10/2026
 
@@ -85,10 +84,12 @@ violeta para espacial, rosa para formas, coral para efeitos e azul acinzentado
 para projeto. Sucesso, aviso e erro têm tokens próprios e informação textual.
 Os dois temas mantêm contraste verificado para texto, controles e famílias.
 
-`packages/ui-tokens/src/tokens.css` é a única origem dos valores visuais.
-O build executa `sync-theme.mjs` para gerar os espelhos CSS/JSON em `shared/`
-e o bloco de tokens de `packages/ui-core/src/theme.css`. Edite a origem,
-nunca os espelhos; geometria e apresentação compartilhadas pertencem ao kit.
+`packages/ui-tokens/src/tokens.css` declara os tokens compartilhados.
+O build executa `sync-theme.mjs` para atualizar os espelhos CSS/JSON em
+`shared/`. A ordem das folhas está em `scripts/theme-sources.mjs`. CEP e UXP
+carregam o mesmo prefixo de tokens, base, controles, telas e movimento.
+O bundle do CEP acrescenta a paleta e a apresentação específicas do AE.
+Edite as folhas de origem. Geometria e apresentação compartilhadas pertencem ao kit.
 Controles têm 28 px, alvos mínimos de 24 px, espaços de 4/8/12/16/24 px,
 raios de 2/4/6 px e fonte de sistema entre 11 e 14 px com números tabulares.
 
