@@ -1,0 +1,1720 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--ch-surface-canvas);
+  color: var(--ch-text-primary);
+  font-family: var(--ch-font-family);
+  font-size: var(--ch-font-md);
+  line-height: 1.4;
+}
+
+/* Minimal Mac-like Webkit Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--txt-3);
+}
+
+.ch-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background-color: var(--ch-surface-canvas);
+}
+
+.ch-header,
+.ch-nav,
+.ch-view-title,
+.ch-actions,
+.ch-status {
+  flex: 0 0 auto;
+}
+
+/* Keep overflow navigation local: focusing a long translated tab must not scroll #root. */
+.ch-shell:not([data-layout="library"]) .ch-nav {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+/* Identificacao discreta. A §22 proibe bloco de marca dentro de painel acoplado. */
+.ch-header {
+  padding: 10px var(--ch-space-3) 6px var(--ch-space-3);
+}
+
+.ch-header__title {
+  font-size: var(--ch-font-lg);
+  font-weight: 600;
+  color: var(--ch-text-primary);
+}
+
+.ch-header__subtitle {
+  margin-top: 2px;
+  font-size: var(--ch-font-sm);
+  color: var(--ch-text-muted);
+}
+
+.ch-nav {
+  display: flex;
+  flex-direction: row;
+  padding: 0 var(--ch-space-2);
+  border-bottom: 1px solid var(--ch-border-subtle);
+}
+
+.ch-nav__item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: var(--ch-size-control);
+  margin-right: 2px;
+  padding: 0 var(--ch-space-2);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background-color: transparent;
+  color: var(--ch-text-secondary);
+  font-family: inherit;
+  font-size: var(--ch-font-md);
+  cursor: pointer;
+  transition: color var(--ch-motion-fast) var(--ease-std),
+    background-color var(--ch-motion-fast) var(--ease-std);
+}
+
+.ch-nav__item:hover {
+  background-color: var(--ch-surface-hover);
+  color: var(--ch-text-primary);
+}
+
+/* Trilho sutil, nao tile aceso: a §22 proibe glow como marcador de selecao. */
+.ch-nav__item.is-active {
+  color: var(--ch-text-primary);
+  border-bottom-color: var(--ch-accent);
+}
+
+.ch-nav__item:focus {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--glow-subtle);
+}
+
+.ch-nav__item:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--glow-subtle);
+}
+
+.ch-nav__item:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.ch-nav__label {
+  margin-left: 6px;
+}
+
+.ch-nav__glyph {
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+  font-size: var(--ch-font-md);
+}
+
+.ch-view-title {
+  padding: 10px var(--ch-space-3) var(--ch-space-1) var(--ch-space-3);
+  font-size: var(--ch-font-md);
+  font-weight: 600;
+  color: var(--ch-text-primary);
+}
+
+/* Só o conteúdo rola. A ação principal continua alcançável em painel baixo. */
+.ch-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 var(--ch-space-3) var(--ch-space-2) var(--ch-space-3);
+}
+
+/* Grade 3x3 do alinhador de ancora. Quadrada por construcao: a posicao do
+   botao e a informacao, e uma celula esticada mentiria sobre a geometria. */
+.ch-anchor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  width: 96px;
+  margin: var(--ch-space-1) 0 var(--ch-space-2) 0;
+}
+
+.ch-anchor-grid__cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid var(--ch-border-default);
+  border-radius: var(--ch-radius-control);
+  background-color: var(--ch-surface-control);
+  cursor: pointer;
+}
+
+.ch-anchor-grid__cell:hover {
+  background-color: var(--ch-surface-hover);
+}
+
+.ch-anchor-grid__cell.is-active {
+  border-color: var(--ch-accent);
+  background-color: var(--ch-surface-pressed);
+}
+
+.ch-anchor-grid__cell:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--glow-subtle);
+}
+
+.ch-anchor-grid__cell[disabled] {
+  cursor: default;
+}
+
+/* O ponto marca o centro da celula; a celula ativa o acende. */
+.ch-anchor-grid__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ch-radius-round);
+  background-color: var(--ch-text-muted);
+}
+
+.ch-anchor-grid__cell.is-active .ch-anchor-grid__dot {
+  background-color: var(--ch-accent);
+}
+
+.ch-anchor-grid__cell[disabled] .ch-anchor-grid__dot {
+  background-color: var(--ch-text-disabled);
+}
+
+/* Rodape de lista: contagem e resumo, sem o peso visual de um aviso. */
+.ch-hint {
+  padding: 4px 0 6px 0;
+  color: var(--ch-text-muted);
+  font-size: var(--ch-font-sm);
+}
+
+.ch-section-title {
+  margin: 10px 0 var(--ch-space-1) 0;
+  font-size: var(--ch-font-sm);
+  font-weight: 600;
+  color: var(--ch-text-secondary);
+}
+
+.ch-field {
+  display: grid;
+  grid-template-columns: minmax(88px, 42%) minmax(0, 1fr);
+  align-items: center;
+  min-height: 32px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--ch-border-subtle);
+}
+
+.ch-field__label {
+  padding-right: var(--ch-space-2);
+  color: var(--ch-text-secondary);
+}
+
+.ch-field__control {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.ch-field__description {
+  grid-column: 1 / -1;
+  padding: 2px 0 4px 0;
+  color: var(--ch-text-muted);
+  font-size: var(--ch-font-sm);
+}
+
+.ch-color,
+.ch-select,
+.ch-number,
+.ch-search,
+.ch-text {
+  width: 100%;
+  min-width: 0;
+  height: var(--ch-size-control);
+  border: 1px solid var(--ch-border-default);
+  border-radius: var(--ch-radius-control);
+  background-color: var(--ch-surface-control);
+  color: var(--ch-text-primary);
+  font: inherit;
+}
+
+.ch-select {
+  padding: 0 24px 0 7px;
+}
+
+.ch-search,
+.ch-text {
+  padding: 0 7px;
+}
+
+.ch-number {
+  padding: 0 7px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* O seletor nativo desenha a amostra na area de conteudo: padding aqui deixaria
+   uma moldura clara em volta da cor, ilegivel sobre o fundo do painel. */
+.ch-color {
+  padding: 2px;
+  cursor: pointer;
+}
+
+.ch-color--text {
+  padding: 0 7px;
+  font-family: Consolas, "SF Mono", Menlo, monospace;
+  cursor: text;
+}
+
+.ch-checkbox {
+  width: var(--target-min);
+  height: var(--target-min);
+  margin: 0;
+  accent-color: var(--ch-accent);
+}
+
+.ch-field__unit {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  color: var(--ch-text-muted);
+  font-size: var(--ch-font-sm);
+}
+
+.ch-color:focus,
+.ch-search:focus,
+.ch-text:focus,
+.ch-select:focus,
+.ch-number:focus,
+.ch-checkbox:focus {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--glow-subtle);
+}
+
+.ch-color[disabled],
+.ch-search[disabled],
+.ch-text[disabled],
+.ch-select[disabled],
+.ch-number[disabled],
+.ch-checkbox[disabled] {
+  color: var(--ch-text-disabled);
+  cursor: default;
+}
+
+/* Separador em vez de card: a §22 proibe card aninhado para cada grupo. */
+.ch-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--ch-border-subtle);
+}
+
+.ch-row__label {
+  flex: 0 0 42%;
+  padding-right: var(--ch-space-2);
+  font-size: var(--ch-font-md);
+  color: var(--ch-text-secondary);
+}
+
+.ch-row__value {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: right;
+  font-size: var(--ch-font-md);
+  color: var(--ch-text-primary);
+}
+
+/*
+ * Estado por cor E por marcador textual.
+ * A §22.4 proibe status que dependa so de cor.
+ */
+.ch-row--ok .ch-row__value {
+  color: var(--ch-accent);
+}
+
+.ch-row--off .ch-row__value {
+  color: var(--ch-text-muted);
+}
+
+.ch-row--unknown .ch-row__value {
+  color: var(--ch-warning);
+}
+
+/*
+ * Grade de ferramentas — §22.
+ *
+ * Ladrilho, e nao card: sem sombra, sem raio grande e sem borda dupla. O
+ * numero de colunas vem da largura disponivel, entao o mesmo markup serve 280 e
+ * 720 px sem media query.
+ */
+.ch-tool-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  margin: var(--ch-space-2) 0 0 0;
+}
+
+/*
+ * `max-width` impede que um ladrilho sozinho na ultima linha estique para a
+ * largura toda: com quatro ferramentas em tres colunas, o quarto ficava tres
+ * vezes maior que os irmaos, e a §22 pede layout previsivel e alinhado a grade.
+ */
+.ch-tool-grid__item {
+  flex: 1 1 132px;
+  max-width: 240px;
+  min-width: 0;
+  padding: 0 var(--ch-space-1) var(--ch-space-2) 0;
+}
+
+.ch-tool {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 100%;
+  min-height: var(--ch-size-tool-tile, 40px);
+  padding: 0 var(--ch-space-2);
+  border: 1px solid var(--ch-border-subtle);
+  border-radius: var(--ch-radius-control);
+  background-color: var(--ch-surface-panel);
+  color: var(--ch-text-primary);
+  font-family: inherit;
+  font-size: var(--ch-font-md);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--ch-motion-fast) var(--ease-std),
+    border-color var(--ch-motion-fast) var(--ease-std);
+}
+
+.ch-tool:not([disabled]):hover {
+  border-color: var(--ch-border-strong);
+  background-color: var(--ch-surface-hover);
+}
+
+.ch-tool:not([disabled]):active {
+  background-color: var(--ch-surface-pressed);
+}
+
+.ch-tool:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--glow-subtle);
+}
+
+/*
+ * Ladrilho indisponivel.
+ *
+ * Apagado, mas ainda legivel e ainda focavel pelo teclado: a §22 pede que o
+ * estado desabilitado EXPLIQUE o que falta, e o `title` carrega a frase. Um
+ * ladrilho que some da grade esconderia a ferramenta; um que fica apagado
+ * mostra que ela existe e o que falta para usa-la.
+ *
+ * A opacidade sozinha nao carrega o significado — a borda tracejada da a forma,
+ * que e o que o §22 exige para nao depender de cor.
+ */
+.ch-tool[disabled] {
+  border-style: dashed;
+  color: var(--ch-text-disabled);
+  background-color: transparent;
+  cursor: default;
+}
+
+.ch-tool[disabled] .ch-tool__icon {
+  opacity: 0.45;
+}
+
+.ch-tool__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-right: var(--ch-space-2);
+  color: var(--ch-text-secondary);
+}
+
+.ch-tool:not([disabled]):hover .ch-tool__icon {
+  color: var(--ch-accent);
+}
+
+/* O rotulo nunca some: icone sozinho exigiria decorar a iconografia. */
+.ch-tool__label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Favorito e ajustes são ações irmãs: nunca um botão dentro de outro. */
+.ch-tool-grid__item--actions {
+  display: flex;
+  align-items: stretch;
+}
+
+.ch-tool-grid__item--actions .ch-tool {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  min-height: 60px;
+}
+
+.ch-tool-grid__item--actions .ch-tool__label {
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.35;
+}
+
+.ch-tool-actions {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 28px;
+  margin-left: var(--ch-space-1);
+}
+
+.ch-tool-action {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--ch-radius-control);
+  background-color: transparent;
+  color: var(--ch-text-secondary);
+  font-family: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.ch-tool-action:hover {
+  background-color: var(--ch-surface-panel);
+  color: var(--ch-text-primary);
+}
+
+.ch-tool-action[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+.ch-tool-action:focus {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--glow-subtle);
+}
+
+.ch-tool-filters {
+  display: flex;
+  flex-wrap: wrap;
+  margin: var(--ch-space-2) 0;
+}
+
+/* Shared action geometry; screen styles only place actions. */
+.ch-action-button,
+.ch-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  min-width: var(--target-min);
+  min-height: var(--control-height);
+  height: auto;
+  margin: 0;
+  padding: var(--space-4) var(--space-8);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-button);
+  background-color: var(--bg-elevated);
+  color: var(--txt-1);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-label);
+  font-weight: var(--weight-medium);
+  line-height: var(--line-label);
+  text-align: center;
+  white-space: normal;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color var(--ch-motion-fast) var(--ease-std),
+    color var(--ch-motion-fast) var(--ease-std);
+}
+.ch-action-button:hover:not([aria-disabled="true"]),
+.ch-button:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--surface-hover);
+}
+.ch-action-button:active:not([aria-disabled="true"]),
+.ch-button:active:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--surface-active);
+}
+.ch-action-button:focus,
+.ch-button:focus {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+.ch-action-button:focus-visible,
+.ch-button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+.ch-action-button:focus:not(:focus-visible),
+.ch-button:focus:not(:focus-visible) {
+  outline: none;
+}
+.ch-action-button--primary,
+.ch-button--primary {
+  border-color: transparent;
+  background-color: var(--accent);
+  color: var(--accent-on);
+}
+.ch-action-button--primary:hover:not([aria-disabled="true"]),
+.ch-button--primary:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--accent-hover);
+  color: var(--accent-on);
+}
+.ch-action-button--primary:active:not([aria-disabled="true"]),
+.ch-button--primary:active:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--accent-press);
+}
+.ch-action-button--quiet,
+.ch-button--tertiary,
+.ch-button--ghost {
+  background-color: transparent;
+  border-color: transparent;
+}
+.ch-action-button--danger,
+.ch-button--destructive {
+  color: var(--danger);
+  background-color: transparent;
+  border-color: var(--danger);
+}
+.ch-action-button[aria-disabled="true"],
+.ch-button[disabled],
+.ch-button[aria-disabled="true"] {
+  border-color: var(--border-muted);
+  background-color: var(--bg-elevated);
+  color: var(--txt-3);
+  opacity: var(--disabled-opacity);
+  cursor: default;
+}
+.ch-button svg,
+.ch-action-button svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
+.ch-status {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 6px var(--ch-space-3) var(--ch-space-2) var(--ch-space-3);
+  font-size: var(--ch-font-sm);
+  color: var(--ch-text-secondary);
+}
+
+.ch-status__dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: var(--ch-radius-round);
+  background-color: var(--ch-text-muted);
+}
+
+.ch-status__dot.is-ok {
+  background-color: var(--ch-success);
+}
+
+.ch-status__dot.is-error {
+  background-color: var(--ch-danger);
+}
+
+.ch-status__dot.is-busy {
+  background-color: var(--ch-info);
+}
+
+.ch-status__text {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/*
+ * Compact, 280–339 px: navegacao por icone, respiro reduzido, botao em largura
+ * total. O rotulo some, mas o `title` permanece — a §22.4 exige nome acessivel.
+ *
+ * A faixa ia ate 359 px enquanto as fronteiras do codigo estavam erradas; o
+ * Addendum A encerra Compact em 339.
+ */
+.ch-shell--compact .ch-header,
+.ch-shell--compact .ch-view-title,
+.ch-shell--compact .ch-content,
+.ch-shell--compact .ch-actions,
+.ch-shell--compact .ch-status {
+  padding-left: var(--ch-space-2);
+  padding-right: var(--ch-space-2);
+}
+
+.ch-shell--compact .ch-nav {
+  padding: 0 var(--ch-space-1);
+}
+
+.ch-shell--compact .ch-nav__label {
+  display: none;
+}
+
+.ch-shell--compact .ch-nav__item {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.ch-shell--compact .ch-row__label {
+  flex: 0 0 50%;
+}
+
+.ch-shell--compact .ch-field {
+  grid-template-columns: minmax(100px, 50%) minmax(0, 1fr);
+}
+
+.ch-shell--compact .ch-button {
+  flex: 1 1 100%;
+  margin: 0 0 6px 0;
+}
+
+/*
+ * Comfort (480–719 px) e Wide (720 px+): largura de leitura limitada.
+ * A §22.3 proibe esticar controle pela largura inteira do painel, e a regra
+ * passa a valer desde 480 px — antes ela so entrava em 560, porque era ali que
+ * a faixa "wide" errada comecava.
+ */
+.ch-shell--comfort .ch-header,
+.ch-shell--comfort .ch-view-title,
+.ch-shell--comfort .ch-content,
+.ch-shell--comfort .ch-actions,
+.ch-shell--comfort .ch-status,
+.ch-shell--wide .ch-header,
+.ch-shell--wide .ch-view-title,
+.ch-shell--wide .ch-content,
+.ch-shell--wide .ch-actions,
+.ch-shell--wide .ch-status {
+  max-width: 620px;
+}
+
+.ch-shell--comfort .ch-row__label,
+.ch-shell--wide .ch-row__label {
+  flex: 0 0 32%;
+}
+
+.ch-shell--comfort .ch-field,
+.ch-shell--wide .ch-field {
+  grid-template-columns: minmax(120px, 32%) minmax(0, 1fr);
+}
+
+/*
+ * Editor de curva Bezier (CHMS-018).
+ *
+ * O grafico e quadrado e acompanha a largura da coluna, entao ele encolhe junto
+ * com o painel em 280 px em vez de forcar rolagem horizontal.
+ */
+.ch-bezier {
+  display: flex;
+  justify-content: center;
+  padding: var(--ch-space-2) 0;
+}
+
+.ch-bezier__grafico {
+  width: 100%;
+  max-width: 248px;
+  height: auto;
+  background-color: var(--ch-surface-control);
+  border: 1px solid var(--ch-border-subtle);
+  border-radius: var(--ch-radius-control);
+}
+
+.ch-bezier__moldura {
+  fill: none;
+  stroke: var(--ch-border-default);
+  stroke-width: 1;
+}
+
+.ch-bezier__haste {
+  stroke: var(--ch-text-muted);
+  stroke-width: 1;
+}
+
+.ch-bezier__curva {
+  fill: none;
+  stroke: var(--ch-accent);
+  stroke-width: 2.5;
+}
+
+.ch-bezier__alca {
+  fill: var(--ch-accent);
+  stroke: var(--ch-surface-canvas);
+  stroke-width: 1.5;
+  cursor: grab;
+}
+
+.ch-bezier__alca:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--glow-subtle);
+}
+
+/* Preferencia interna OR preferencia do SO, conforme Addendum A A6.5. */
+[data-reduced-motion="true"] {
+  --dur-1: 1ms;
+  --dur-2: 1ms;
+  --dur-3: 1ms;
+  --dur-4: 1ms;
+  --dur-5: 1ms;
+  --stagger: 0ms;
+  --motion-instant: 1ms;
+  --motion-fast: 1ms;
+  --ch-motion-fast: 1ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 1ms;
+    --dur-2: 1ms;
+    --dur-3: 1ms;
+    --dur-4: 1ms;
+    --dur-5: 1ms;
+    --stagger: 0ms;
+    --motion-instant: 1ms;
+    --motion-fast: 1ms;
+    --ch-motion-fast: 1ms;
+  }
+}
+
+/* Moti.on — AE workspace. Motion comes from the shared A6.2 catalog. */
+.ch-shell[data-layout="library"] .ch-header { display: none; }
+.ch-shell[data-layout="library"] .ch-nav {
+  flex-wrap: nowrap; align-items: center; gap: 0; padding: 0 6px;
+  min-height: 36px; background: var(--bg-host); border-bottom: 1px solid var(--line-hairline);
+}
+.ch-shell[data-layout="library"] .ch-nav__item {
+  position: relative; flex: 0 0 auto; width: 28px; min-width: 0;
+  height: 34px; justify-content: center; padding: 6px; border-radius: 0;
+  border: 0; color: var(--txt-2);
+}
+.ch-shell[data-layout="library"] .ch-nav__item::after {
+  content: ""; position: absolute; bottom: 0; left: 6px; right: 6px;
+  height: 2px; background: var(--accent); transform: scaleX(0); opacity: 0;
+  transition: transform var(--ch-motion-fast) var(--ease-out), opacity var(--ch-motion-fast) var(--ease-out);
+}
+.ch-shell[data-layout="library"] .ch-nav__item.is-active::after { transform: scaleX(1); opacity: 1; }
+.ch-shell[data-layout="library"] .ch-nav__label { display: none; }
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="home"],
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="tools"] { width: auto; padding: 6px 10px; }
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="home"] .ch-nav__label,
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="tools"] .ch-nav__label { display: inline; }
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="home"] svg,
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="tools"] svg { display: none; }
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="context"] { margin-left: auto; }
+.ch-shell[data-layout="library"] .ch-nav__item.is-active { background: transparent; color: var(--txt-1); }
+.ch-shell[data-layout="library"][data-view="home"] > .ch-view-title { display: none; }
+.ch-shell[data-layout="library"][data-view="home"] > .ch-content {
+  padding: 0; display: flex; flex-direction: column; overflow: hidden;
+}
+.ch-shell[data-layout="library"][data-view="home"] .ch-view-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.ch-shell[data-layout="library"] .ch-view-title { padding-top: 12px; padding-bottom: 10px; font-weight: 600; }
+.ch-shell[data-layout="library"] .ch-actions { display: flex; align-items: center; gap: 6px; padding: 8px; background: var(--bg-host); }
+.ch-shell[data-layout="library"] .ch-actions:empty { display: none; }
+.ch-shell[data-layout="library"] .ch-actions .ch-button { min-height: 28px; border-radius: 4px; }
+.ch-shell[data-layout="library"] .ch-actions .ch-button--primary { margin-left: auto; min-width: 76px; font-weight: 600; }
+.ch-shell[data-layout="library"] .ch-status { padding: 5px 8px; background: var(--bg-host); }
+/* Compact AE library: fixed-size icons reflow; anchor never scrolls away. */
+.ch-shell[data-layout="library"][data-view="home"] .ch-content,
+.ch-shell[data-layout="library"][data-view="presets"] .ch-content { padding: 0; overflow: hidden; display: flex; }
+.ch-shell[data-layout="library"] .ch-browser-body { display: flex; flex: 1; min-height: 0; }
+.ch-shell[data-layout="library"] .ch-content[data-browser="true"] { padding: 0; overflow: hidden; display: flex; }
+.ch-shell[data-layout="library"][data-view="presets"] .ch-view-body { display: flex; flex: 1; min-height: 0; }
+.ch-shell[data-layout="library"][data-view="presets"] > .ch-view-title { display: none; }
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="presets"] { width: auto; padding: 6px 8px; }
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="presets"] .ch-nav__label { display: inline; }
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="presets"] svg { display: none; }
+.ch-quick-library { position: relative; display: flex; flex-direction: column; flex: 1; height: 100%; min-width: 0; min-height: 0; background: var(--bg-host); }
+.ch-preset-gallery { display: flex; flex-direction: column; flex: 1; height: 100%; min-height: 0; min-width: 0; background: var(--bg-host); }
+.ch-preset-browser { position: relative; display: flex; flex: 1; min-height: 120px; min-width: 0; overflow: hidden; }
+.ch-preset-categories { flex: 0 0 auto; width: 132px; max-width: calc(100% - 156px); min-width: 88px; overflow-y: auto; overflow-x: hidden; padding: 4px; box-sizing: border-box; }
+.ch-preset-categories .ch-button { display: block; width: 100%; border-color: transparent; padding: 6px; min-height: 30px; text-align: left; font-size: 11px; white-space: normal; overflow-wrap: anywhere; }
+.ch-preset-divider { flex: 0 0 8px; cursor: col-resize; position: relative; touch-action: none; }
+.ch-preset-divider::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: var(--line-hairline); }
+.ch-preset-divider:hover::after, .ch-preset-divider[data-dragging]::after { background: var(--accent); }
+.ch-preset-stage { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.ch-preset-stage .ch-preset-grid { padding: 4px 8px 8px; }
+.ch-preset-editor { position: static; width: 100%; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; background: var(--bg-host); border: 1px solid var(--line-hairline); border-radius: 2px; }
+.ch-preset-editor[hidden] { display: none; }
+.ch-preset-editor-header { display: none; }
+.ch-preset-editor-header .ch-button { font-size: 11px; min-height: 26px; padding: 3px 6px; }
+.ch-preset-editor .ch-preset-inspector { flex: 1; min-height: 0; max-height: none; border: 0; padding: 4px; overflow: visible; }
+.ch-preset-directions { display: flex; flex-direction: column; gap: 1px; margin: 0; }
+.ch-preset-directions .ch-button { font-size: 11px; padding: 4px 6px; min-height: 26px; white-space: normal; text-align: left; border: 0; background: transparent; }
+.ch-preset-directions .ch-button::before { content: ""; display: inline-block; width: 14px; margin-right: 4px; }
+.ch-preset-directions .ch-button[aria-pressed="true"]::before { content: "✓"; }
+.ch-preset-adjustments { margin: 2px 0 0; }
+.ch-preset-adjustments > summary { padding: 5px 6px; }
+.ch-preset-adjustments .ch-preset-fields { grid-template-columns: repeat(auto-fit,minmax(105px,1fr)); }
+.ch-preset-filters { display: flex; gap: 4px; flex-wrap: wrap; padding: 0 10px 8px; align-items: center; }
+.ch-preset-filters select { flex: 1 1 160px; min-width: 0; }
+.ch-preset-gallery select, .ch-preset-gallery input[type="number"] { min-height: 28px; background: var(--bg-1); color: var(--txt-1); border: 1px solid var(--line-hairline); border-radius: 3px; padding: 3px 6px; font: inherit; }
+.ch-preset-filters .ch-button { min-height: 28px; padding: 3px 7px; font-size: 11px; }
+.ch-preset-gallery [aria-pressed="true"] { color: var(--accent-hover); background: var(--accent-wash); }
+.ch-preset-grid { display: grid; grid-auto-rows: max-content; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; padding: 4px 10px 12px; overflow: auto; min-height: 80px; flex: 1; align-content: start; }
+.ch-preset-card { min-width: 0; border: 1px solid var(--line-hairline); border-radius: 3px; overflow: hidden; background: var(--bg-host); }
+.ch-preset-card[data-selected="true"] { border-color: var(--accent); }
+.ch-preset-preview { display: block; border: 0; padding: 0; width: 100%; background: var(--bg-1); color: var(--accent-hover); cursor: pointer; }
+.ch-preset-preview svg { pointer-events: none; display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
+.ch-preset-gallery :focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ch-preset-guide { fill: none; stroke: var(--line-hairline); stroke-width: 2; }
+.ch-preset-curve { fill: none; stroke: var(--accent-hover); stroke-width: 3; }
+.ch-preset-dot, .ch-preset-subject { fill: var(--accent-hover); stroke: var(--accent-hover); stroke-width: 2; }
+.ch-preset-depth { fill: var(--accent-wash); stroke: var(--txt-2); stroke-width: 2; }
+.ch-preset-card .ch-preset-apply { width: 100%; min-height: 30px; border: 0; border-radius: 0; background: transparent; padding: 7px 8px 2px; text-align: left; white-space: normal; font-size: 12px; }
+.ch-preset-actions { display: flex; justify-content: space-between; align-items: center; padding: 2px 5px 5px 8px; gap: 2px; }
+.ch-preset-actions .ch-preset-kind { flex: 1; min-width: 0; }
+.ch-preset-kind { font-size: 11px; color: var(--txt-2); }
+.ch-preset-actions .ch-button { min-height: 26px; padding: 3px 6px; border-color: transparent; }
+.ch-preset-actions svg { width: 14px; height: 14px; }
+.ch-preset-inspector { border-top: 1px solid var(--line-hairline); padding: 10px; overflow: auto; flex: 0 0 auto; max-height: 48%; }
+.ch-preset-title { font-size: 13px; font-weight: 600; margin: 0 0 10px; color: var(--txt-1); }
+.ch-preset-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ch-preset-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 11px; color: var(--txt-2); }
+.ch-preset-field input, .ch-preset-field select { width: 100%; min-width: 0; box-sizing: border-box; }
+.ch-preset-refine { margin-top: 10px; color: var(--txt-2); font-size: 11px; }
+.ch-preset-refine summary { cursor: pointer; padding: 4px 0; }
+.ch-preset-refine[open] summary { margin-bottom: 6px; }
+.ch-preset-hint { color: var(--txt-2); font-size: 11px; margin: 8px 0; }
+.ch-preset-applybar { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 6px; padding: 6px 10px; }
+.ch-preset-applybar:empty { display: none; }
+.ch-preset-footer { display: flex; gap: 4px; padding: 4px 8px 8px; flex-wrap: wrap; }
+.ch-preset-footer .ch-button { font-size: 11px; min-height: 28px; padding: 3px 6px; }
+@media (max-width: 339px) { .ch-preset-grid { grid-template-columns: 1fr; } }
+
+.ch-quick-toolbar { display: flex; align-items: center; gap: 6px; padding: 10px 10px 6px; flex-shrink: 0; }
+.ch-quick-toolbar input { flex: 1; min-width: 40px; height: 30px; padding: 4px 8px; border: 1px solid var(--line-hairline); border-radius: 4px; background: var(--bg-1); color: var(--txt-1); font: inherit; }
+.ch-quick-scopes { display: flex; gap: 2px; }
+.ch-quick-scopes .ch-button, .ch-quick-categories .ch-button { min-width: 28px; width: 28px; height: 28px; min-height: 28px; padding: 5px; border-color: transparent; background: transparent; }
+.ch-quick-categories { display: flex; gap: 3px; padding: 4px 10px 7px; flex-wrap: wrap; flex-shrink: 0; border-bottom: 1px solid var(--line-hairline); }
+.ch-quick-categories .ch-button[aria-pressed="true"] { box-shadow: inset 0 -2px var(--accent); }
+.ch-quick-library button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent-hover); }
+.ch-quick-heading { display: flex; justify-content: space-between; padding: 7px 12px 5px; color: var(--txt-2); font-size: 11px; flex-shrink: 0; }
+.ch-tool-grid { display: grid; grid-template-columns: repeat(auto-fill, 56px); grid-auto-rows: 56px; gap: 8px; align-content: start; padding: 12px 14px 16px; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.ch-tool-tile { position: relative; width: 56px; height: 56px; }
+.ch-tool-tile > .ch-button:first-child {
+  padding: 0; min-width: 0; width: 56px; height: 56px; min-height: 56px;
+  border-radius: var(--radius-medium);
+  border: 1px solid var(--line-hairline);
+  background: var(--bg-host);
+  color: var(--txt-1);
+  box-shadow: none;
+}
+.ch-tool-tile > .ch-button:first-child[aria-disabled="true"] { color: var(--txt-3); }
+.ch-tool-tile > .ch-button:first-child:hover { background:var(--surface-hover); border-color:var(--ch-border-default); }
+.ch-tool-tile > .ch-button:first-child:active { background:var(--surface-active); }
+.ch-tool-tile svg { width: 26px; height: 26px; }
+.ch-tool-tile > .ch-quick-options { position: absolute; right: -1px; top: -1px; min-width: 24px; width: 24px; height: 24px; min-height: 24px; padding: 4px; border-radius: 3px; background: var(--bg-3); opacity: 0; }
+.ch-quick-options svg { width: 13px; height: 13px; }
+.ch-tool-tile:hover .ch-quick-options, .ch-tool-tile:focus-within .ch-quick-options { opacity: 1; }
+.ch-quick-anchor { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-top: 1px solid var(--line-hairline); flex-shrink: 0; }
+.ch-quick-anchor .ch-anchor-grid { width: 94px; flex: 0 0 94px; gap: 3px; margin: 0; }
+.ch-quick-anchor .ch-anchor-grid__cell { flex-basis: calc((100% - 6px) / 3); height: 28px; min-height: 28px; padding: 3px; }
+.ch-quick-actions { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; flex: 1; min-width: 0; max-width: 390px; }
+.ch-quick-actions .ch-quick-action { width: 100%; min-width: 0; height: 28px; min-height: 28px; margin: 0; padding: 0 2px; border-radius: 3px; font-size: 11px; font-weight: 500; color: var(--txt-2); background: var(--bg-2); }
+.ch-quick-actions .ch-quick-action--main { color: var(--txt-1); }
+.ch-quick-actions .ch-quick-action:hover:not(:disabled) { color: var(--txt-1); background: var(--bg-3); }
+.ch-quick-actions .ch-quick-action:disabled { opacity: 0.45; }
+@media (max-width: 479px) {
+  .ch-shell[data-layout="library"] .ch-quick-actions { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+@media (max-width: 319px) {
+  .ch-shell[data-layout="library"] .ch-quick-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.ch-quick-tooltip, .ch-quick-menu { position: absolute; z-index: 100; max-width: min(230px, calc(100% - 12px)); padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--bg-3); color: var(--txt-1); box-shadow: 0 4px 16px #0006; font-size: 12px; line-height: 1.4; }
+.ch-quick-tooltip { pointer-events: none; }
+.ch-quick-tooltip strong, .ch-quick-tooltip span { display: block; }
+.ch-quick-tooltip span { margin-top: 4px; font-size: 11px; color: var(--txt-2); }
+.ch-quick-menu { display: flex; flex-direction: column; gap: 4px; min-width: 150px; }
+.ch-quick-menu .ch-button { justify-content: flex-start; }
+.ch-quick-menu[hidden], .ch-quick-tooltip[hidden] { display: none; }
+.ch-quick-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--ch-space-6) var(--ch-space-4);
+  margin: var(--ch-space-4) 0;
+  color: var(--ch-text-secondary);
+  background: var(--ch-surface-panel);
+  border: 1px dashed var(--ch-border-subtle);
+  border-radius: var(--ch-radius-panel);
+  font-size: var(--ch-font-sm);
+  line-height: 1.5;
+}
+.ch-quick-library button:focus-visible, .ch-quick-library input:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ch-tool-grid::-webkit-scrollbar { width: 5px; }
+.ch-tool-grid::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
+[data-density="compact"] .ch-tool-grid { grid-template-columns: repeat(auto-fill, 44px); grid-auto-rows: 44px; gap: 6px; }
+[data-density="compact"] .ch-tool-tile, [data-density="compact"] .ch-tool-tile > .ch-button:first-child { width: 44px; height: 44px; min-height: 44px; }
+[data-density="compact"] .ch-tool-tile > .ch-button:first-child { padding: 10px; border-radius: var(--radius-small); }
+@media (max-width: 339px) {
+  .ch-shell[data-layout="library"] .ch-nav__item { width: 24px; padding: 4px; }
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="home"], .ch-shell[data-layout="library"] .ch-nav__item[data-view="tools"], .ch-shell[data-layout="library"] .ch-nav__item[data-view="presets"] { padding: 6px; }
+  .ch-quick-anchor { gap: 10px; }
+}
+
+/* AE library sizing: compact form buttons must not expand icon filter rows.
+   Keep identical controls, hierarchy, colours and icon sizes across dock sizes. */
+.ch-shell[data-layout="library"] .ch-quick-scopes > .ch-button,
+.ch-shell[data-layout="library"] .ch-quick-categories > .ch-button {
+  flex: 0 0 28px;
+  margin: 0;
+}
+.ch-shell[data-layout="library"] .ch-tool-tile > .ch-button,
+.ch-shell[data-layout="library"] .ch-quick-anchor-info > .ch-button {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.ch-shell[data-layout="library"] .ch-quick-categories {
+  align-items: center;
+  align-content: flex-start;
+}
+.ch-shell[data-layout="library"] .ch-quick-scopes { flex: 0 0 auto; }
+.ch-shell[data-layout="library"] .ch-tool-grid { margin: 0; }
+.ch-shell[data-layout="library"] .ch-content[data-browser="true"],
+.ch-shell[data-layout="library"][data-view="presets"] .ch-content {
+  width: 100%;
+  max-width: none;
+}
+.ch-shell[data-layout="library"] .ch-status,
+.ch-shell[data-layout="library"] .ch-actions { max-width: none; }
+.ch-shell[data-layout="library"] .ch-quick-anchor-info .ch-button {
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+@media (max-width: 339px) {
+  .ch-shell[data-layout="library"] .ch-quick-toolbar { gap: 4px; padding: 8px 8px 5px; }
+  .ch-shell[data-layout="library"] .ch-quick-categories { gap: 2px; padding: 3px 8px 5px; }
+  .ch-shell[data-layout="library"] .ch-quick-heading { padding: 6px 10px 4px; }
+  .ch-shell[data-layout="library"] .ch-tool-grid { padding: 4px 8px 8px; gap: 5px; }
+  .ch-shell[data-layout="library"] .ch-quick-anchor { padding: 8px 10px; gap: 10px; }
+}
+@media (max-height: 420px) {
+  .ch-shell[data-layout="library"] .ch-quick-toolbar { padding-top: 5px; padding-bottom: 3px; }
+  .ch-shell[data-layout="library"] .ch-quick-categories { padding-top: 2px; padding-bottom: 3px; }
+  .ch-shell[data-layout="library"] .ch-quick-heading { padding-top: 3px; padding-bottom: 3px; }
+  .ch-shell[data-layout="library"] .ch-tool-grid { padding-top: 3px; padding-bottom: 5px; }
+  .ch-shell[data-layout="library"] .ch-quick-anchor { padding-top: 5px; padding-bottom: 5px; }
+  .ch-shell[data-layout="library"] .ch-quick-anchor-info > :first-child { margin-bottom: 3px; }
+  .ch-shell[data-layout="library"] .ch-quick-anchor-info .ch-hint { margin-bottom: 3px; }
+  .ch-shell[data-layout="library"] .ch-status { padding-top: 3px; padding-bottom: 3px; }
+}
+@media (max-height: 300px) {
+  /* Below the space needed by the fixed controls, scroll the existing body.
+     This preserves access to tools and anchor without overlap or hidden actions. */
+  .ch-shell[data-layout="library"] .ch-content[data-browser="true"] { overflow-y: auto; }
+  /* Fill the body: the quick dock stays collapsed here (quick-dock.ts), so its
+     header remains reachable at the bottom; opening it scrolls the body. */
+  .ch-shell[data-layout="library"] .ch-quick-library { flex: 0 0 auto; height: auto; min-height: 100%; width: 100%; }
+  .ch-shell[data-layout="library"] .ch-tool-grid { min-height: 44px; flex-basis: 44px; }
+}
+@media (max-width: 299px) {
+  .ch-shell[data-layout="library"] .ch-nav { padding-left: 3px; padding-right: 3px; }
+  .ch-shell[data-layout="library"] .ch-nav__item { width: 21px; padding-left: 2px; padding-right: 2px; }
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="home"],
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="tools"],
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="presets"] { padding-left: 2px; padding-right: 2px; }
+}
+
+/* FxFlow adapted to the Motion workstation; previews are bounded and local. */
+.ch-bezier__grafico { display: block; aspect-ratio: 1; touch-action: none; user-select: none; overflow: visible; }
+.ch-bezier__alca { pointer-events: all; touch-action: none; stroke-width: 5; stroke: transparent; paint-order: stroke fill; }
+.ch-bezier__grid { stroke: var(--ch-border-subtle); stroke-width: 0.6; }
+.ch-ease-editor { min-width: 0; }
+.ch-ease-modes, .ch-ease-sides, .ch-ease-save, .ch-ease-library-toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
+.ch-ease-modes > button { flex: 1; white-space: normal; }
+.ch-ease-editor [aria-pressed="true"] { border-color: var(--ch-accent); }
+.ch-ease-columns { display: flex; gap: 12px; flex-wrap: wrap; }
+.ch-ease-main { flex: 1 1 240px; min-width: 0; }
+.ch-ease-library { flex: 1 1 240px; min-width: 0; }
+.ch-ease-values { display: flex; gap: 4px; margin: 4px 0 8px; }
+.ch-ease-values label { flex: 1; min-width: 0; font-size: 11px; color: var(--ch-text-muted); }
+.ch-ease-editor input { box-sizing: border-box; min-width: 0; width: 100%; color: var(--ch-text-primary); background: var(--ch-surface-control); border: 1px solid var(--ch-border-default); border-radius: var(--ch-radius-control); padding: 5px; }
+.ch-ease-preview { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; width: 100%; margin-bottom: 8px; }
+.ch-ease-track { display: block; position: relative; width: 154px; height: 16px; margin: 0 auto; }
+.ch-ease-track::before { content: ""; position: absolute; left: 0; right: 0; top: 7px; border-top: 1px solid var(--ch-border-default); }
+.ch-ease-dot { display: block; position: relative; width: 10px; height: 10px; top: 2px; border-radius: 50%; background: var(--ch-accent); }
+.ch-ease-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: 5px; max-height: 340px; overflow-y: auto; padding: 2px; }
+.ch-ease-tile { position: relative; min-width: 0; }
+.ch-ease-preset { display: flex; flex-direction: column; align-items: center; width: 100%; height: 94px; padding: 4px 2px; font-size: 11px; white-space: normal; }
+.ch-ease-preset svg { width: 54px; height: 60px; overflow: visible; }
+.ch-ease-preset path { stroke: var(--ch-accent); stroke-width: 1.8; fill: none; }
+.ch-ease-preset circle { fill: var(--ch-text-primary); }
+.ch-ease-star, .ch-ease-delete { position: absolute; top: 2px; right: 2px; min-width: 22px; width: 22px; min-height: 22px; height: 22px; padding: 0; background: var(--ch-surface-control); }
+.ch-ease-delete { top: 27px; }
+.ch-ease-sides > * { flex: 1; }
+.ch-ease-build-values { display: flex; flex-wrap: wrap; gap: 4px; }
+.ch-ease-build-values[hidden] { display: none; }
+.ch-ease-build-values > * { flex: 1 1 100px; }
+
+.ch-bezier__curva, .ch-bezier__haste { cursor: grab; pointer-events: stroke; }
+.ch-bezier[data-dragging] { cursor: grabbing; }
+.ch-bezier__alca { stroke-width: 8; }
+
+/* Preset workspace: folder browser, applied controls and local library. */
+.ch-preset-workspace { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; height: 100%; background: var(--bg-host); }
+.ch-preset-tabs { display: flex; gap: var(--ch-space-4); padding: 0 var(--ch-space-4); border-bottom: 1px solid var(--ch-border-subtle); flex: 0 0 auto; }
+.ch-preset-tabs .ch-button { background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0; min-height: 36px; padding: 4px 0; margin-bottom: -1px; color: var(--ch-text-secondary); font-size: var(--ch-font-md); font-weight: 500; cursor: pointer; transition: color var(--ch-motion-fast) var(--ease-standard); }
+.ch-preset-tabs [aria-selected="true"] { border-bottom-color: var(--ch-text-primary); color: var(--ch-text-primary); }
+.ch-preset-filters[hidden] { display: none; }
+.ch-preset-workspace-content { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+.ch-preset-workspace .ch-quick-toolbar { padding: 8px 8px 5px; }
+.ch-preset-workspace .ch-quick-toolbar input { height: var(--ch-size-control); border-radius: var(--ch-radius-control); }
+.ch-preset-workspace .ch-preset-filters { padding: 0 8px 5px; gap: 6px; }
+.ch-preset-workspace .ch-preset-filters .ch-button { min-height: 24px; border: 0; background: transparent; padding: 2px 4px; color: var(--txt-2); }
+.ch-preset-workspace .ch-preset-filters [aria-pressed="true"] { color: var(--accent-hover); }
+.ch-preset-categories { background: transparent; padding: var(--ch-space-2) 0 var(--ch-space-4); }
+.ch-folder-row { display: flex; align-items: center; min-height: 24px; position: relative; border-left: 2px solid transparent; }
+.ch-folder-row[data-color] { border-left-color: var(--folder-color); }
+.ch-folder-row[data-color]::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: var(--folder-color); opacity: .04; }
+.ch-folder-row:hover { background: var(--bg-3); }
+.ch-preset-categories .ch-folder-toggle, .ch-preset-categories .ch-folder-more, .ch-preset-categories .ch-folder-select, .ch-preset-categories .ch-folder-add { border: 0; border-radius: 0; background: transparent; color: var(--txt-2); font: inherit; font-size: 11px; padding: 0; min-width: 0; cursor: pointer; }
+.ch-preset-categories .ch-folder-toggle { flex: 0 0 16px; width: 16px; min-height: 24px; margin-right: 0; }
+.ch-preset-categories .ch-folder-toggle:disabled { visibility: hidden; }
+.ch-preset-categories .ch-folder-select { display: flex; align-items: center; gap: 4px; flex: 1; text-align: left; padding: 2px 0; min-width: 0; margin-left: -4px; }
+.ch-preset-categories .ch-folder-select[aria-pressed="true"] { color: var(--txt-1); background: var(--bg-4); }
+.ch-folder-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+.ch-folder-icon { width: 10px; height: 7px; flex: 0 0 10px; background: currentColor; opacity: .7; border-radius: 1px; position: relative; }
+.ch-folder-icon::before { content: ""; position: absolute; left: 0; top: -2px; width: 5px; height: 3px; background: currentColor; border-radius: 1px; }
+.ch-preset-categories .ch-folder-more { flex: 0 0 20px; width: 20px; min-height: 24px; opacity: 0; }
+.ch-folder-row:hover .ch-folder-more, .ch-folder-row:focus-within .ch-folder-more, .ch-folder-more[aria-expanded="true"] { opacity: 1; }
+.ch-preset-categories .ch-folder-add { text-align: left; width: 100%; min-height: 24px; padding: 4px 8px; color: var(--accent-hover); }
+.ch-folder-palette { display: flex; flex-wrap: wrap; gap: 4px; padding: 7px; background: var(--bg-3); }
+.ch-preset-categories .ch-folder-palette .ch-button { width: auto; padding: 2px 4px; min-height: 24px; }
+.ch-preset-categories .ch-folder-palette [data-color] { width: 24px; height: 24px; padding: 2px; background: var(--folder-color); color: #101010; border: 1px solid transparent; border-radius: 50%; }
+.ch-preset-categories .ch-folder-palette [aria-pressed="true"] { border-color: var(--txt-1); }
+[data-color="red"] { --folder-color: #e77f82; } [data-color="orange"] { --folder-color: #e9a66c; }
+[data-color="yellow"] { --folder-color: #d6bf68; } [data-color="green"] { --folder-color: #81bd92; }
+[data-color="cyan"] { --folder-color: #74bcc9; } [data-color="blue"] { --folder-color: #80a7e3; }
+[data-color="purple"] { --folder-color: #b99ade; } [data-color="pink"] { --folder-color: #d58dbd; }
+.ch-preset-divider { flex-basis: 6px; }
+.ch-preset-divider::after { left: 2px; }
+.ch-preset-stage { background: var(--bg-1); }
+.ch-preset-stage .ch-preset-grid { grid-template-columns: repeat(auto-fill,minmax(min(100%,var(--preview-size,200px)),1fr)); gap: 6px; padding: 5px; }
+.ch-preset-card { border: 0; border-radius: 0; background: transparent; align-self: start; }
+.ch-preset-card[data-selected="true"] > .ch-preset-preview { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ch-preset-card[data-selected="true"] > .ch-preset-actions { background: var(--accent-wash); }
+.ch-preset-preview { background: var(--bg-0); border-radius: 3px; }
+.ch-preset-card .ch-preset-apply { flex: 1; width: auto; min-width: 0; font-size: 11px; padding: 4px 2px; min-height: 28px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-preset-actions { padding: 0; gap: 2px; background: transparent; }
+.ch-preset-kind { font-size: 11px; }
+.ch-preset-actions .ch-button { padding: 2px 4px; min-height: 28px; background: transparent; border: 0; box-shadow: none; }
+.ch-preset-actions .ch-button:not(.ch-preset-apply) { flex: 0 0 24px; width: 24px; color: var(--txt-3); }
+.ch-preset-actions .ch-preset-favorite[aria-pressed="true"] { color: var(--accent-hover); }
+.ch-preset-actions .ch-button:hover, .ch-preset-actions .ch-button:focus-visible { color: var(--txt-1); background: var(--bg-2); }
+.ch-preset-applybar { align-items: center; border-top: 1px solid var(--line-hairline); padding: 6px 8px; gap: 4px; }
+.ch-preset-applybar .ch-button { min-height: 27px; padding: 3px 10px; border-radius: 2px; font-size: 11px; }
+.ch-preset-selection-name { flex: 1 1 90px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--txt-2); }
+.ch-preset-footer { align-items: center; padding: 4px 8px 6px; gap: 8px; }
+.ch-preset-footer .ch-button { background: transparent; border-color: transparent; }
+.ch-preset-size { display: flex; align-items: center; margin-left: auto; gap: 6px; color: var(--txt-2); font-size: 11px; min-width: 0; }
+.ch-preset-size input { width: 64px; height: 24px; min-width: 40px; accent-color: var(--txt-2); }
+.ch-preset-grid--personal { display: flex; flex-direction: column; }
+.ch-personal-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px; font-size: 11px; color: var(--txt-2); }
+.ch-personal-heading .ch-button { font-size: 11px; padding: 4px; }
+.ch-personal-item { border-bottom: 1px solid var(--line-hairline); padding: 5px; }
+.ch-personal-item[data-selected="true"] { background: var(--accent-wash); box-shadow: inset 2px 0 var(--accent); }
+.ch-personal-item .ch-button { display: block; text-align: left; width: 100%; background: transparent; border: 0; padding: 4px 0; white-space: normal; overflow-wrap: anywhere; }
+.ch-personal-item .ch-preset-hint { display: block; margin: 0; overflow-wrap: anywhere; }
+.ch-preset-empty { margin: auto; max-width: 320px; padding: 24px 20px; color: var(--txt-2); font-size: 12px; line-height: 1.6; text-align: center; }
+.ch-preset-empty h3 { font-size: 13px; color: var(--txt-1); }
+.ch-workspace-notice { flex: 0 0 auto; max-height: 30%; overflow: auto; overflow-wrap: anywhere; border-left: 2px solid var(--warn); color: var(--txt-2); font-size: 11px; line-height: 1.5; padding: 8px 10px; margin: 0; }
+.ch-workspace-notice:empty { display: none; }
+.ch-workspace-notice .ch-button { margin: 6px 0 0 6px; }
+.ch-applied-heading { flex: 0 0 auto; padding: 10px 12px 6px; border-bottom: 1px solid var(--line-hairline); }
+.ch-applied-heading h3 { margin: 2px 0 0; font-size: 12px; }
+.ch-applied-layer { color: var(--txt-2); font-size: 11px; overflow-wrap: anywhere; }
+.ch-applied-fields { flex: 1; min-height: 0; overflow: auto; padding: 4px 12px 12px; }
+.ch-applied-field { display: flex; flex-direction: column; gap: 4px; padding: 6px 0; border-bottom: 1px solid var(--line-hairline); color: var(--txt-2); font-size: 11px; }
+.ch-applied-number { display: flex; align-items: center; gap: 8px; }
+.ch-applied-number input[type="range"] { flex: 1; min-width: 40px; -webkit-appearance: none; background: transparent; cursor: pointer; }
+.ch-applied-number input[type="range"]:focus { outline: var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--glow-subtle); }
+.ch-applied-number input[type="range"]::-webkit-slider-runnable-track { height: 4px; background: var(--bg-3); border-radius: 2px; }
+.ch-applied-number input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 12px; width: 12px; border-radius: 50%; background: var(--accent); margin-top: -4px; box-shadow: 0 0 0 1px var(--bg-1); }
+.ch-applied-number input[type="range"]:focus::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--bg-1), 0 0 0 4px var(--accent-glow); }
+.ch-applied-number input[type="number"] { width: 56px; }
+.ch-applied-field input[type="number"], .ch-applied-field select { min-height: 24px; color: var(--txt-1); background: var(--bg-1); border: 1px solid var(--line-strong); border-radius: 2px; padding: 2px 4px; font: inherit; }
+.ch-applied-actions { display: flex; gap: 6px; justify-content: flex-end; flex: 0 0 auto; padding: 6px 10px; border-top: 1px solid var(--line-hairline); }
+.ch-applied-actions .ch-button { font-size: 11px; padding: 4px 8px; min-height: 24px; }
+.ch-preset-workspace :focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Same compact controls as the browser; existing tool/anchor actions are kept. */
+.ch-quick-library .ch-quick-categories { background: var(--bg-host); border-bottom-color: var(--line-hairline); }
+.ch-quick-library .ch-quick-heading { padding-top: 10px; padding-bottom: 7px; }
+ .ch-quick-library .ch-tool-tile > .ch-button:first-child:hover {}
+.ch-quick-library .ch-quick-anchor { background: var(--bg-host); }
+.ch-quick-library .ch-quick-action { border-radius: 2px; border-color: transparent; }
+@media (max-width: 339px) { .ch-preset-size > span { display: none; } .ch-preset-applybar .ch-button { padding: 3px 8px; } }
+
+/*
+ * Revisao de espacamento 2026-09-17.
+ *
+ * Reaproveita a area vertical do painel sem alterar a hierarquia, os controles
+ * ou os limites de acessibilidade. A reducao fica em padding/margens e gaps;
+ * alturas de alvos interativos permanecem proximas do grid de 4 px.
+ */
+.ch-header { padding-top: 7px; padding-bottom: 4px; }
+.ch-view-title { padding-top: 7px; padding-bottom: 3px; }
+.ch-content { padding-bottom: 5px; }
+.ch-notice { margin-top: 5px; margin-bottom: 7px; }
+.ch-tool-grid { margin-top: 6px; }
+.ch-tool-grid__item { padding-bottom: 6px; }
+.ch-tool-filters { margin-top: 6px; margin-bottom: 6px; }
+.ch-actions { padding-top: 6px; padding-bottom: 6px; }
+.ch-status { padding-top: 4px; padding-bottom: 4px; }
+
+/* Navegacao e browser de ferramentas: menos respiro entre acoes relacionadas. */
+.ch-shell[data-layout="library"] .ch-nav { min-height: 32px; }
+.ch-shell[data-layout="library"] .ch-nav__item { height: 30px; padding-top: 4px; padding-bottom: 4px; }
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="home"],
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="tools"],
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="presets"] { padding-top: 4px; padding-bottom: 4px; }
+.ch-shell[data-layout="library"] .ch-quick-toolbar { gap: 4px; padding: 4px 8px 2px; }
+.ch-shell[data-layout="library"] .ch-quick-toolbar input { height: 26px; padding-top: 3px; padding-bottom: 3px; }
+.ch-shell[data-layout="library"] .ch-quick-categories { gap: 2px; padding: 2px 8px 4px; }
+.ch-shell[data-layout="library"] .ch-quick-heading { padding: 4px 8px 3px; }
+.ch-shell[data-layout="library"] .ch-tool-grid { gap: 5px; padding: 4px 8px 6px; }
+.ch-shell[data-layout="library"] .ch-quick-anchor { gap: 8px; padding: 5px 8px; }
+
+/* Presets: search, categorias, miniaturas e barra de aplicacao ficam proximos. */
+.ch-preset-tabs { gap: 12px; padding-left: 8px; padding-right: 8px; }
+.ch-preset-tabs .ch-button { min-height: 28px; padding-top: 2px; padding-bottom: 2px; }
+.ch-preset-workspace .ch-preset-filters { gap: 4px; padding: 0 8px 2px; }
+.ch-preset-workspace .ch-preset-filters .ch-button { min-height: 24px; padding-top: 1px; padding-bottom: 1px; }
+.ch-preset-categories { padding-top: 2px; padding-bottom: 4px; }
+.ch-folder-row { min-height: 24px; }
+.ch-preset-categories .ch-folder-select { gap: 4px; padding-top: 2px; padding-bottom: 2px; }
+.ch-preset-categories .ch-folder-add { min-height: 24px; padding-top: 2px; padding-bottom: 2px; }
+.ch-preset-stage .ch-preset-grid { gap: 5px; padding: 4px; }
+.ch-preset-actions { gap: 2px; }
+.ch-preset-actions .ch-button { min-height: 26px; padding-top: 2px; padding-bottom: 2px; }
+.ch-preset-inspector { padding: 6px; }
+.ch-preset-title { margin-bottom: 6px; }
+.ch-preset-fields { gap: 6px; }
+.ch-preset-field { gap: 3px; }
+.ch-preset-refine { margin-top: 6px; }
+.ch-preset-hint { margin-top: 5px; margin-bottom: 5px; }
+.ch-preset-applybar { gap: 3px; padding: 3px 6px; }
+.ch-preset-applybar .ch-button { min-height: 25px; padding-top: 2px; padding-bottom: 2px; }
+.ch-preset-footer { gap: 6px; padding: 2px 6px 3px; }
+.ch-preset-footer .ch-button { min-height: 25px; padding-top: 2px; padding-bottom: 2px; }
+.ch-preset-size { gap: 4px; }
+
+/* Presets no dock compacto: a regra global de botoes em linha inteira nao se
+   aplica aos filtros, a arvore, aos cards ou as barras de aplicacao e rodape. */
+.ch-shell--compact[data-layout="library"] .ch-preset-gallery .ch-preset-filters,
+.ch-shell--compact[data-layout="library"] .ch-preset-gallery > .ch-preset-applybar,
+.ch-shell--compact[data-layout="library"] .ch-preset-gallery > .ch-preset-footer { flex-wrap: nowrap; }
+.ch-shell--compact[data-layout="library"] .ch-preset-gallery .ch-preset-filters > .ch-button,
+.ch-shell--compact[data-layout="library"] .ch-preset-gallery > .ch-preset-applybar > .ch-button,
+.ch-shell--compact[data-layout="library"] .ch-preset-gallery > .ch-preset-footer > .ch-preset-autoplay { flex: 0 0 auto; }
+.ch-shell--compact[data-layout="library"] .ch-preset-tabs > .ch-button,
+.ch-shell--compact[data-layout="library"] .ch-preset-gallery .ch-preset-filters > .ch-button,
+.ch-shell--compact[data-layout="library"] .ch-preset-gallery > .ch-preset-applybar > .ch-button,
+.ch-shell--compact[data-layout="library"] .ch-preset-gallery > .ch-preset-footer > .ch-preset-autoplay,
+.ch-shell--compact[data-layout="library"] .ch-preset-gallery .ch-folder-row > .ch-button,
+.ch-shell--compact[data-layout="library"] .ch-preset-gallery .ch-preset-actions > .ch-button,
+.ch-shell--compact[data-layout="library"] .ch-preset-gallery .ch-preset-categories > .ch-folder-add { margin: 0; }
+.ch-shell--compact[data-layout="library"] .ch-preset-gallery > .ch-preset-applybar > .ch-button {
+  height: 28px;
+  min-height: 28px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+/* Ferramentas rapidas e ancoragem: reducao periferica, mantendo alvos iguais. */
+.ch-quick-library .ch-quick-heading { padding-top: 4px; padding-bottom: 3px; }
+.ch-quick-library .ch-quick-categories { padding-top: 2px; padding-bottom: 4px; }
+.ch-quick-library .ch-tool-grid { padding-top: 4px; padding-bottom: 6px; }
+.ch-quick-library .ch-quick-anchor { padding-top: 5px; padding-bottom: 5px; }
+/* Keyframe curve workspace — video review, 2026-09-17. */
+.ch-ease-modes { gap: 0; margin-bottom: 8px; border-bottom: 1px solid var(--ch-border-subtle); }
+.ch-ease-modes > .ch-button { min-height: 28px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--ch-text-secondary); padding: 4px 6px; }
+.ch-ease-modes > .ch-button[aria-pressed="true"] { border-bottom-color: var(--ch-accent); color: var(--ch-text-primary); }
+.ch-ease-columns { gap: 12px; }
+.ch-ease-main, .ch-ease-library { flex-basis: 280px; }
+.ch-ease-graph-header { display: flex; justify-content: space-between; align-items: center; min-height: 22px; gap: 8px; font-size: 11px; }
+.ch-ease-curve-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ch-text-primary); font-weight: 600; }
+.ch-ease-graph-kind { color: var(--ch-text-muted); }
+.ch-ease-editor .ch-bezier { padding: 0; background:var(--surface-deep); }
+.ch-ease-editor .ch-bezier__grafico { width: 100%; max-width: 480px; aspect-ratio: 328 / 192; background: transparent; border: 0; border-radius: 0; }
+.ch-bezier__grafico { aspect-ratio: 328 / 192; max-width: 480px; }
+.ch-bezier__grafico * { vector-effect: non-scaling-stroke; }
+.ch-bezier__moldura { stroke: var(--ch-border-subtle); stroke-width: 0.6; }
+.ch-bezier__grid { stroke: var(--ch-border-subtle); stroke-width: 0.5; opacity: 0.5; }
+
+/*
+ * Flow-style easing curve editor (`createCurveEditor`). The plot dominates the
+ * view; the header and the parameter rows stay compact so the whole editor
+ * fits a 280 px dock without horizontal scroll.
+ */
+.ch-curve {
+  --curve-path: var(--ch-info, #4da3ff);
+  --curve-faint: var(--ch-text-muted);
+  --curve-handle: var(--ch-success, #3dbb5a);
+  --curve-ring: var(--ch-warning, #ffb74d);
+  --curve-axis: var(--ch-warning, #ffb74d);
+  --curve-ghost: var(--ch-warning, #d9a441);
+  --curve-in: var(--ch-info, #81d4fa);
+  --curve-out: var(--ch-warning, #ffb74d);
+  display: flex; flex-direction: column; gap: 6px; min-width: 0; container-type: inline-size;
+}
+.ch-curve__header { display: flex; gap: 8px; align-items: center; min-height: 28px; min-width: 0; }
+.ch-curve__header-end { margin-left: auto; display: flex; align-items: center; min-width: 0; }
+.ch-curve__mode { position: relative; flex: 0 0 auto; }
+.ch-curve__mode-button { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 8px; font-size: var(--ch-font-sm); }
+.ch-curve__mode-text { max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-curve__icon { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; color: currentColor; }
+.ch-curve__icon-path { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.ch-curve__caret { width: 12px; height: 12px; opacity: 0.7; }
+.ch-curve__menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; margin: 0; padding: 4px; list-style: none; min-width: 148px;
+  background: var(--ch-surface-control); border: 1px solid var(--ch-border-default); border-radius: var(--ch-radius-control); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+.ch-curve__menu[hidden] { display: none; }
+.ch-curve__menu { animation: ch-curve-menu var(--ch-motion-fast) var(--ease-out); }
+@keyframes ch-curve-menu { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.ch-curve__option { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 8px; border-radius: var(--ch-radius-control); color: var(--ch-text-primary); font-size: var(--ch-font-sm); cursor: pointer; }
+.ch-curve__option:hover { background: var(--ch-surface-hover, rgba(255, 255, 255, 0.06)); }
+.ch-curve__option[aria-selected="true"] { color: var(--ch-accent); }
+.ch-curve__option:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+/* Direction dots: ○─●─○ joined by a hairline. */
+.ch-curve__directions { display: flex; align-items: center; gap: 0; flex: 0 0 auto; }
+.ch-curve__directions[hidden] { display: none; }
+.ch-curve__direction { position: relative; width: 22px; height: 28px; padding: 0; margin: 0; border: 0; background: transparent; color: var(--ch-text-muted); cursor: pointer; }
+.ch-curve__direction::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--ch-border-default); }
+.ch-curve__direction:first-child::before { left: 50%; }
+.ch-curve__direction:last-child::before { right: 50%; }
+.ch-curve__direction::after { content: ""; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -5px 0 0 -5px; border-radius: 50%; border: 1px solid currentColor; background: var(--ch-surface-canvas); box-sizing: content-box; }
+.ch-curve__direction[aria-checked="true"] { color: var(--ch-accent); }
+.ch-curve__direction[aria-checked="true"]::after { background: currentColor; }
+.ch-curve__direction:focus-visible { outline: var(--focus-ring); outline-offset: -2px; border-radius: var(--ch-radius-control); }
+/* Plot. */
+.ch-curve__plot { position: relative; width: 100%; max-width: 560px; aspect-ratio: 1; min-width: 0; background: var(--surface-deep); border: 1px solid var(--ch-border-subtle); border-radius: var(--ch-radius-control); overflow: hidden; }
+.ch-curve__svg { display: block; width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; overflow: visible; }
+.ch-curve__svg path, .ch-curve__svg line { vector-effect: non-scaling-stroke; }
+.ch-curve__bg { fill: var(--surface-deep); }
+.ch-curve__grid { stroke: var(--ch-border-subtle); stroke-width: 1; }
+.ch-curve__axis { fill: none; stroke: var(--curve-axis); stroke-width: 1.5; }
+.ch-curve__reference { stroke: var(--ch-text-muted); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.5; }
+/* The visible path never animates: it follows the pointer directly. Presses land on the invisible hit band. */
+.ch-curve__value { fill: none; stroke: var(--curve-path); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; transition-property: none; }
+.ch-curve__hit { fill: none; stroke: transparent; stroke-width: 20; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: crosshair; touch-action: none; }
+/* Speed view: the whole plot is one vertical control. */
+.ch-curve[data-view="speed"] .ch-curve__svg, .ch-curve[data-view="speed"] .ch-curve__hit, .ch-curve[data-view="speed"] .ch-curve__marker { cursor: ns-resize; }
+.ch-curve[data-mode="back"] .ch-curve__hit, .ch-curve[data-mode="elastic"] .ch-curve__hit, .ch-curve[data-mode="bounce"] .ch-curve__hit { pointer-events: none; }
+.ch-curve__value--faint { stroke: var(--curve-faint); stroke-width: 1.5; opacity: 0.45; pointer-events: none; cursor: default; }
+.ch-curve__value--hidden { stroke: transparent; }
+.ch-curve__ghost { fill: none; stroke: var(--curve-ghost); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: 0.85; pointer-events: none; }
+.ch-curve__half { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.ch-curve__half--in { stroke: var(--curve-in); }
+.ch-curve__half--out { stroke: var(--curve-out); }
+.ch-curve__join { fill: none; stroke-width: 3; stroke-linecap: round; pointer-events: none; }
+.ch-curve__stop--in { stop-color: var(--curve-in); }
+.ch-curve__stop--out { stop-color: var(--curve-out); }
+.ch-curve__chip-bg { fill: var(--ch-surface-control); stroke: var(--ch-border-default); stroke-width: 1; }
+.ch-curve__chip-path { fill: none; stroke: var(--curve-path); stroke-width: 1.5; }
+.ch-curve__stem { stroke: var(--curve-handle); stroke-width: 1; opacity: 0.8; }
+/* Dots: r=5 plus a 16 px transparent stroke; a press up to HANDLE_CAPTURE_PX (24 px) away still grabs the nearest dot. */
+.ch-curve__handle, .ch-curve__point, .ch-curve__marker { fill: var(--curve-handle); stroke: transparent; stroke-width: 16; vector-effect: non-scaling-stroke; paint-order: stroke fill; cursor: grab; pointer-events: all; touch-action: none; transition: fill var(--ch-motion-fast) var(--ease-std); }
+.ch-curve__marker { fill: var(--surface-deep); }
+.ch-curve__handle:hover, .ch-curve__point:hover, .ch-curve__marker:hover { fill: var(--ch-text-primary); }
+.ch-curve__point[data-active="true"] { fill: var(--ch-accent); }
+/* Decorative rings sit just before their dot and never take the pointer. */
+.ch-curve__ring { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
+.ch-curve__ring--point { stroke: var(--curve-ring); }
+.ch-curve__ring--marker { stroke: var(--curve-path); }
+.ch-curve__ring[data-active="true"] { stroke: var(--ch-accent); }
+.ch-curve__point[data-pop="true"], .ch-curve__ring[data-pop="true"] { transform-box: fill-box; transform-origin: center; animation: ch-curve-pop var(--motion-instant) var(--ease-pop); }
+@keyframes ch-curve-pop { from { transform: scale(0.4); } to { transform: scale(1); } }
+.ch-curve__handle:focus-visible, .ch-curve__point:focus-visible, .ch-curve__marker:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
+.ch-curve[data-dragging] .ch-curve__svg, .ch-curve[data-dragging] .ch-curve__handle, .ch-curve[data-dragging] .ch-curve__point, .ch-curve[data-dragging] .ch-curve__marker, .ch-curve[data-dragging] .ch-curve__hit { cursor: grabbing; }
+.ch-curve__peak { fill: var(--curve-axis); font-size: 13px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.ch-curve__overlay { position: absolute; top: 6px; right: 6px; width: 28px; min-width: 28px; height: 28px; min-height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: var(--ch-surface-control); border: 1px solid var(--ch-border-subtle); color: var(--ch-text-secondary); }
+.ch-curve__overlay[aria-pressed="true"] { color: var(--ch-accent); border-color: var(--ch-accent); }
+.ch-curve__overlay:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.ch-curve__reset-glyph { font-size: 15px; line-height: 1; }
+.ch-curve__hint { position: absolute; left: 8px; bottom: 6px; max-width: calc(100% - 16px); font-size: 10px; line-height: 1.3; color: var(--ch-text-muted); pointer-events: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-curve__hint[hidden] { display: none; }
+/* Parameter rows: label above value, 28 px tall, auto-fit so 280 px gets two columns. */
+.ch-curve__fields { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ch-curve__fields[hidden] { display: none; }
+.ch-curve__params { min-width: 0; }
+.ch-curve__params-title { font-size: var(--ch-font-sm); color: var(--ch-text-muted); margin-bottom: 2px; }
+.ch-curve__params--in .ch-curve__params-title { color: var(--curve-in); }
+.ch-curve__params--out .ch-curve__params-title { color: var(--curve-out); }
+.ch-curve__params-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr)); gap: 4px; }
+.ch-curve__field { display: flex; flex-direction: column; gap: 2px; min-width: 0; cursor: ew-resize; }
+.ch-curve__field-label { font-size: 10px; line-height: 1.2; color: var(--ch-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-curve__input { width: 100%; min-width: 0; height: 28px; min-height: 28px; padding: 0 6px; box-sizing: border-box; font-size: var(--ch-font-sm); }
+.ch-curve__input:focus-visible { outline: var(--focus-ring); outline-offset: -1px; }
+/* Wide docks: parameter groups sit in the plot corners instead of below it. */
+@container (min-width: 480px) {
+  .ch-curve[data-mode="elastic"] .ch-curve__fields, .ch-curve[data-mode="bounce"] .ch-curve__fields { flex-direction: row; gap: 8px; }
+  .ch-curve[data-mode="elastic"] .ch-curve__params, .ch-curve[data-mode="bounce"] .ch-curve__params { flex: 1 1 0; }
+}
+.ch-bezier__reference { stroke: var(--ch-border-default); stroke-width: 0.6; stroke-dasharray: 2 4; pointer-events: none; }
+.ch-bezier__haste { stroke: var(--ch-accent); stroke-width: 1; }
+.ch-bezier__curva { stroke: var(--ch-text-primary); stroke-width: 1.75; stroke-linecap: round; }
+.ch-bezier__endpoint { fill: var(--ch-text-secondary); stroke: none; pointer-events: none; }
+.ch-bezier__alca { fill: var(--ch-accent); stroke: transparent; stroke-width: 20; paint-order: stroke fill; }
+.ch-bezier__alca:hover, .ch-bezier__alca:focus-visible, .ch-bezier[data-dragging] .ch-bezier__alca { fill: var(--ch-text-primary); }
+.ch-bezier__alca:focus-visible { outline: var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--glow-subtle); }
+.ch-ease-axis-labels { display: flex; justify-content: space-between; color: var(--ch-text-muted); font-size: 11px; margin: -8px 7% 4px; }
+.ch-ease-values { gap: 6px; margin: 6px 0; }
+.ch-ease-values label { display: flex; align-items: center; gap: 4px; font-size: 11px; }
+.ch-ease-editor input { height: 28px; padding: 3px 6px; font-variant-numeric: tabular-nums; }
+.ch-ease-values input { height: 26px; padding: 2px 3px; appearance: textfield; -moz-appearance: textfield; }
+.ch-ease-values input::-webkit-inner-spin-button, .ch-ease-values input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.ch-ease-preview { min-height: 28px; margin-bottom: 6px; padding: 3px 0; border: 0; border-radius: 0; background: transparent; color: var(--ch-text-secondary); font-size: 11px; gap: 4px; }
+.ch-ease-preview:hover { background: var(--ch-surface-hover); }
+.ch-ease-track { margin: 0; height: 14px; }
+.ch-ease-dot { width: 6px; height: 6px; top: 4px; }
+.ch-ease-save { gap: 4px; margin-bottom: 0; }
+.ch-ease-save .ch-button { min-height: 28px; padding: 3px 8px; }
+.ch-ease-feedback:empty { display: none; }
+.ch-ease-section-title { margin: 0 0 6px; font-size: 11px; font-weight: 600; color: var(--ch-text-secondary); }
+.ch-ease-library-toolbar { gap: 4px; margin-bottom: 4px; }
+.ch-ease-library-toolbar .ch-button { width: 28px; min-width: 28px; min-height: 28px; padding: 0; border: 0; background: transparent; }
+.ch-ease-grid { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 4px; max-height: 300px; padding: 2px; }
+.ch-ease-preset { height: 82px; padding: 6px 2px 4px; gap: 0; border: 0; border-radius: 2px; background: transparent; box-shadow: none; color: var(--ch-text-secondary); font-size: 11px; }
+.ch-ease-preset svg { width: 100%; max-width: 84px; height: 54px; overflow: hidden; }
+.ch-ease-preset path { stroke: var(--ch-text-secondary); stroke-width: 1.5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.ch-ease-preset circle { fill: var(--ch-text-muted); }
+.ch-ease-preset:hover, .ch-ease-preset[aria-pressed="true"] { background: var(--ch-surface-hover); color: var(--ch-text-primary); }
+.ch-ease-preset[aria-pressed="true"] path, .ch-ease-preset:hover path { stroke: var(--ch-text-primary); }
+.ch-ease-preset[aria-pressed="true"] circle { fill: var(--ch-text-primary); }
+.ch-ease-star, .ch-ease-delete { top: 0; right: 0; width: 24px; min-width: 24px; height: 24px; min-height: 24px; border: 0; background: transparent; color: var(--ch-text-muted); opacity: 0; }
+.ch-ease-delete { top: 25px; }
+.ch-ease-tile:hover .ch-ease-star, .ch-ease-tile:hover .ch-ease-delete, .ch-ease-tile:focus-within .ch-ease-star, .ch-ease-tile:focus-within .ch-ease-delete, .ch-ease-star[aria-pressed="true"] { opacity: 1; }
+.ch-ease-star[aria-pressed="true"] { color: var(--ch-accent); }
+.ch-ease-library > .ch-hint { margin: 6px 0 0; font-size: 11px; }
+@media (max-width: 339px) {
+  .ch-ease-values { gap: 4px; }
+  .ch-ease-values label { display: block; }
+  .ch-ease-values input { margin-top: 2px; }
+  .ch-ease-preview { justify-content: center; }
+}
+
+/* Preset controls — compact native rows from the 12:42 video review. */
+.ch-applied-heading { padding: 8px 10px; }
+.ch-applied-layer { font-size: 11px; }
+.ch-applied-heading h3 { margin-top: 4px; font-weight: 600; }
+.ch-applied-fields { padding: 2px 10px 8px; }
+.ch-applied-field { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; min-height: 28px; }
+.ch-applied-field > span { min-width: 0; padding-left: 16px; }
+.ch-applied-field select { width: 48%; max-width: 180px; min-width: 0; background: transparent; border-color: transparent; color: var(--value-editable); }
+.ch-applied-field select:hover, .ch-applied-field select:focus { background: var(--bg-2); border-color: var(--line-hairline); }
+.ch-applied-field select option { color: var(--txt-1); background: var(--bg-host); }
+.ch-applied-field--numeric { display: block; }
+.ch-applied-control { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+.ch-applied-disclosure { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 28px; padding: 2px 0; color: var(--txt-2); background: transparent; border: 0; text-align: left; font: inherit; cursor: pointer; }
+.ch-applied-disclosure::before { content: ''; flex: 0 0 auto; width: 0; height: 0; border-top: 3px solid transparent; border-bottom: 3px solid transparent; border-left: 4px solid currentColor; margin: 0 3px; }
+.ch-applied-disclosure[aria-expanded="true"]::before { transform: rotate(90deg); }
+.ch-applied-disclosure:hover { color: var(--txt-1); }
+.ch-applied-value { display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; gap: 3px; width: 104px; }
+.ch-applied-value input[type="number"] { width: 62px; min-height: 26px; border-color: transparent; background: transparent; color: var(--value-editable); text-align: right; font-variant-numeric: tabular-nums; -webkit-appearance: none; appearance: textfield; }
+.ch-applied-value input[type="number"]:hover, .ch-applied-value input[type="number"]:focus { background: var(--bg-2); border-color: var(--line-hairline); }
+.ch-applied-value input::-webkit-inner-spin-button, .ch-applied-value input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.ch-applied-unit { min-width: 34px; color: var(--value-editable); font-size: 11px; }
+.ch-applied-number { padding: 0 4px 4px 16px; }
+.ch-applied-number[hidden], .ch-preset-applybar[hidden] { display: none; }
+.ch-applied-number input[type="range"] { width: 100%; height: 24px; margin: 0; }
+.ch-applied-number input[type="range"]::-webkit-slider-runnable-track { height: 2px; background: var(--line-strong); }
+.ch-applied-number input[type="range"]::-webkit-slider-thumb { width: 8px; height: 8px; margin-top: -3px; background: var(--value-editable); box-shadow: none; }
+.ch-applied-field :disabled { opacity: .5; cursor: default; }
+.ch-applied-actions { flex-wrap: wrap; padding: 4px 6px; }
+.ch-applied-actions .ch-button { font-size: 11px; min-height: 28px; }
+.ch-preset-inspector .ch-preset-fields { display: flex; flex-direction: column; gap: 0; }
+.ch-preset-inspector .ch-preset-field { display: flex; flex-direction: row; justify-content: space-between; align-items: center; gap: 6px; min-height: 28px; padding: 2px 0; border-bottom: 1px solid var(--line-hairline); }
+.ch-preset-inspector .ch-preset-field > span { min-width: 0; }
+.ch-preset-inspector .ch-preset-field input, .ch-preset-inspector .ch-preset-field select { width: 48%; min-width: 0; min-height: 26px; background: transparent; border-color: transparent; color: var(--value-editable); font-variant-numeric: tabular-nums; }
+.ch-preset-inspector .ch-preset-field input { text-align: right; }
+.ch-preset-inspector .ch-preset-field input:hover, .ch-preset-inspector .ch-preset-field input:focus, .ch-preset-inspector .ch-preset-field select:hover, .ch-preset-inspector .ch-preset-field select:focus { background: var(--bg-2); border-color: var(--line-hairline); }
+.ch-preset-inspector .ch-preset-field option { color: var(--txt-1); background: var(--bg-host); }
+.ch-preset-footer { border-top: 1px solid var(--line-hairline); }
+.ch-preset-footer .ch-preset-autoplay { display: inline-flex; align-items: center; gap: 5px; padding-left: 2px; color: var(--txt-2); font-size: 11px; }
+.ch-preset-autoplay::before { content: ''; width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 5px solid currentColor; }
+.ch-preset-footer .ch-preset-autoplay[aria-pressed="true"] { color: var(--value-editable); background: transparent; }
+.ch-preset-size { gap: 5px; }
+.ch-preset-size input { -webkit-appearance: none; appearance: none; background: transparent; height: 24px; margin: 0; cursor: pointer; }
+.ch-preset-size input::-webkit-slider-runnable-track { height: 2px; border-radius: 1px; background: var(--line-strong); }
+.ch-preset-size input::-webkit-slider-thumb { -webkit-appearance: none; width: 7px; height: 10px; margin-top: -4px; border-radius: 1px; background: var(--txt-2); }
+.ch-preset-size input:hover::-webkit-slider-thumb { background: var(--txt-1); }
+.ch-preset-categories .ch-folder-select { margin-left: 0; min-height: 24px; padding-right: 4px; }
+.ch-preset-categories .ch-folder-select[aria-pressed="true"] { background: transparent; }
+.ch-folder-row[data-selected="true"] { background: var(--accent-wash); box-shadow: inset 2px 0 var(--accent); }
+
+/* Notices are rows above a browser, never a second full-height column. */
+.ch-shell[data-layout="library"][data-view="home"] .ch-content,
+.ch-shell[data-layout="library"][data-view="presets"] .ch-content,
+.ch-shell[data-layout="library"] .ch-content[data-browser="true"] { flex-direction: column; }
+.ch-shell[data-layout="library"] .ch-content > .ch-notice { flex: 0 0 auto; align-self: stretch; min-width: 0; max-height: 30%; overflow: auto; overflow-wrap: anywhere; margin: 4px 6px; padding: 6px 8px; border: 0; border-left: 2px solid var(--ch-border-default); border-radius: 0; font-size: 11px; line-height: 1.5; }
+.ch-shell[data-layout="library"] .ch-content > .ch-notice--error { border-left-color: var(--danger); }
+.ch-shell[data-layout="library"] .ch-content > .ch-notice--warning { border-left-color: var(--warn); }
+
+/* Local loading indicators, synchronized with the motion preference. */
+@keyframes ch-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ch-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: .5;
+  }
+}
+
+/* Empty States */
+.ch-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: var(--space-24) var(--space-16);
+  min-width: 0;
+  width: 100%;
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--txt-2);
+}
+.ch-empty-state__icon {
+  margin-bottom: var(--space-12);
+  color: var(--txt-2);
+}
+.ch-empty-state__icon svg {
+  width: 24px;
+  height: 24px;
+}
+.ch-empty-state__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--txt-1);
+  margin: 0 0 8px;
+}
+.ch-empty-state__description {
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0 0 16px;
+  max-width: 260px;
+}
+.ch-empty-state__actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* View Animations */
+@keyframes ch-view-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.ch-view-body {
+  animation: ch-view-enter var(--dur-2) var(--ease-out) both;
+}
+
+/* Approved header refinement, 2026-09-23. Tool tiles and grid geometry stay intact. */
+.ch-shell[data-layout="library"] .ch-nav {
+  position: relative; z-index: 110; flex-wrap: nowrap; gap: 8px;
+  min-height: 44px; padding: 8px 8px 5px; border-bottom: 0;
+}
+.ch-shell[data-layout="library"] .ch-nav__primary {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 3px; min-width: 0;
+}
+.ch-shell[data-layout="library"] .ch-nav__item,
+.ch-shell[data-layout="library"] .ch-nav__more {
+  display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  width: 30px; height: 30px; min-width: 0; min-height: 30px; margin: 0;
+  padding: 6px; border: 0; border-radius: 5px;
+  background: transparent; color: var(--txt-2); font: inherit; cursor: pointer;
+}
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="home"],
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="presets"],
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="tools"] {
+  width: auto; padding: 5px 10px; font-size: 12px; font-weight: 500;
+}
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="tools"] { max-width: 100%; }
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="tools"] .ch-nav__label {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ch-shell[data-layout="library"] .ch-nav__item::after { display: none; }
+.ch-shell[data-layout="library"] .ch-nav__item.is-active {
+  background: var(--accent-wash); color: var(--txt-1);
+  box-shadow: inset 0 1px 0 var(--border-muted), 0 1px 3px #0002;
+}
+.ch-shell[data-layout="library"] .ch-nav__item:hover,
+.ch-shell[data-layout="library"] .ch-nav__more:hover { background: var(--accent-wash); color: var(--txt-1); }
+.ch-shell[data-layout="library"] .ch-nav__utilities {
+  display: flex; position: relative; flex: 0 0 auto; align-self: flex-start;
+  margin-left: auto; gap: 2px;
+}
+.ch-shell[data-layout="library"] .ch-nav__more svg { width: 16px; height: 16px; }
+.ch-shell[data-layout="library"] .ch-nav__overflow {
+  position: absolute; top: 36px; right: 0; width: 204px; max-width: calc(100vw - 16px);
+  display: flex; flex-direction: column; gap: 2px; padding: 5px;
+  background: var(--bg-host); border: 1px solid var(--border-muted);
+  border-radius: 6px; box-shadow: 0 6px 20px #0005;
+}
+.ch-shell[data-layout="library"] .ch-nav__overflow .ch-nav__item {
+  width: 100%; margin: 0; gap: 8px; justify-content: flex-start; font-size: 12px;
+}
+.ch-shell[data-layout="library"] .ch-nav__overflow .ch-nav__label { display: inline; }
+.ch-shell[data-layout="library"] .ch-nav__overflow[hidden],
+.ch-shell[data-layout="library"] .ch-nav__item[hidden] { display: none; }
+.ch-shell[data-layout="library"] .ch-quick-toolbar { padding: 5px 8px 8px; gap: 8px; }
+.ch-quick-search {
+  display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+  height: 32px; padding: 0 9px; border: 1px solid transparent;
+  border-radius: 5px; background: var(--accent-wash); color: var(--txt-2);
+}
+.ch-quick-search > svg { width: 15px; height: 15px; flex: 0 0 15px; }
+.ch-quick-search:focus-within { border-color: var(--txt-2); }
+.ch-shell[data-layout="library"] .ch-quick-search input {
+  width: 100%; min-width: 0; height: 28px; padding: 4px 0; border: 0;
+  background: transparent; font-size: 12px;
+}
+.ch-quick-search input::placeholder { color: var(--txt-2); opacity: 1; }
+.ch-quick-collection, .ch-quick-category-select, .ch-quick-category-more {
+  border: 0; border-radius: 4px; min-height: 28px; padding: 4px;
+  color: var(--txt-2); background: var(--bg-host); font: inherit; font-size: 12px;
+  cursor: pointer;
+}
+.ch-quick-collection { flex: 0 0 auto; max-width: 105px; }
+.ch-shell[data-layout="library"] .ch-quick-categories {
+  flex-wrap: nowrap; gap: 4px; padding: 0 8px 8px; border-bottom-color: var(--border-muted);
+}
+.ch-quick-category-tabs { display: flex; gap: 3px; min-width: 0; }
+.ch-shell[data-layout="library"] .ch-quick-category-tabs .ch-button {
+  flex: 0 0 auto; width: auto; min-height: 28px; height: 28px; margin: 0;
+  padding: 4px 8px; gap: 6px; font-size: 12px; border-radius: 4px;
+  white-space: nowrap; color: var(--txt-2);
+}
+.ch-shell[data-layout="library"] .ch-quick-category-tabs .ch-button[aria-pressed="true"] {
+  color: var(--txt-1); background: var(--accent-wash); box-shadow: none;
+}
+.ch-quick-category-tabs svg { width: 15px; height: 15px; }
+.ch-quick-category-more { max-width: 148px; min-width: 0; }
+.ch-quick-category-select { display: none; min-width: 0; width: 100%; }
+.ch-quick-library select:focus-visible, .ch-nav__more:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+/* Hints live outside the icon tile and are positioned by the library. */
+.ch-quick-tooltip { position:fixed; z-index:1500; box-sizing:border-box; width:max-content; max-width:min(260px, calc(100vw - 16px)); padding:8px 10px; border:1px solid var(--border-subtle); border-radius:var(--radius-medium); background:var(--surface-raised); color:var(--text-secondary); box-shadow:var(--e2); font-size:var(--font-caption); line-height:var(--line-body); text-align:left; overflow-wrap:break-word; }
+.ch-quick-tooltip strong { display:block; margin-bottom:3px; color:var(--text-primary); font-size:var(--font-label); font-weight:var(--weight-strong); }
+.ch-quick-tooltip span { display:block; }
+.ch-quick-tooltip[hidden],.ch-quick-tooltip[data-hidden="true"] { display:none; }
+@media (max-width: 639px) {
+  .ch-quick-category-tabs, .ch-quick-category-more { display: none; }
+  .ch-quick-category-select { display: block; }
+}
+@media (max-width: 339px) {
+  .ch-shell[data-layout="library"] .ch-nav { gap: 4px; }
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="home"],
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="presets"] { padding: 5px 8px; }
+  .ch-shell[data-layout="library"] .ch-quick-toolbar { gap: 5px; }
+  .ch-quick-collection { max-width: 98px; }
+}
+
+/* Fallback focus also works in the UXP runtime without :focus-visible. */
+.ch-shell button:focus,
+.ch-shell summary:focus,
+.ch-shell textarea:focus,
+.ch-nav__more:focus {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+.ch-shell button:focus:not(:focus-visible),
+.ch-shell summary:focus:not(:focus-visible) { outline: none; }
+.ch-shell input[aria-invalid="true"]:focus {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+.ch-field--checkbox .ch-field__label { min-height: var(--control-height); display: flex; align-items: center; }
+
+/* Keyframe actions belong to the focused easing tool, above its curve editor. */
+.ch-ease-actions { min-width: 0; max-width: 480px; margin: 0 0 var(--ch-space-3); }
+.ch-ease-actions__primary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ch-space-1); }
+.ch-ease-actions .ch-ease-action { display:flex; width:100%; align-items:center; justify-content:center; min-width:0; min-height:36px; height:36px; padding:var(--ch-space-1); border-radius:var(--radius-small); }
+.ch-ease-action-control { display:flex; min-width:0; width:100%; }
+.ch-ease-action-control > .ch-component-state { display:none; }
+.ch-ease-actions .ch-ease-action svg { display: block; width: 76px; max-width: 100%; height: 28px; }
+.ch-ease-action svg path { stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.ch-ease-action__source, .ch-ease-action__direction, .ch-ease-action__boundary { fill: none; }
+.ch-ease-action__source { color: var(--ch-text-secondary); }
+.ch-ease-action__result { fill:currentColor; color:var(--icon-keyframes); }
+.ch-ease-action__boundary { stroke-dasharray: 3 3; }
+.ch-ease-actions__secondary { display: flex; align-items: center; gap: var(--ch-space-1); margin-top: var(--ch-space-1); }
+.ch-ease-actions__move-label { margin-right: auto; color: var(--ch-text-secondary); font-size: 11px; }
+.ch-ease-actions__secondary .ch-ease-action { min-height: var(--control-height); padding: 2px 6px; gap: 2px; }
+.ch-ease-actions__secondary .ch-ease-action svg { width: 28px; height: 20px; }
+.ch-ease-actions__status { margin: var(--ch-space-1) 0 0; }
+.ch-ease-actions__status[hidden] { display:none; }
+.ch-ease-action-tooltip { max-width:min(300px, calc(100vw - 16px)); }
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="ease"] { width: auto; padding: 5px 10px; font-size: 12px; font-weight: 500; }
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="ease"] .ch-nav__label { display: inline; }
+.ch-shell[data-layout="library"] .ch-nav__item[data-view="ease"] svg { display: none; }
+@media (max-width: 399px) {
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="ease"] { width: 30px; padding: 6px; }
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="ease"] .ch-nav__label { display: none; }
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="ease"] svg { display: block; }
+}
+
+/* Local preferences share the same restrained section rhythm as tool editors. */
+.ch-settings { display:flex; flex-direction:column; min-width:0; gap:var(--ch-space-4); }
+.ch-settings-section { min-width:0; padding-bottom:var(--ch-space-3); border-bottom:1px solid var(--border-muted); }
+.ch-settings-section:last-child { border-bottom:0; }
+.ch-settings-help { display:flex; flex-wrap:wrap; gap:var(--ch-space-2); }
+.ch-settings-help > .ch-section-title { flex:0 0 100%; }
+.ch-settings-help-action { min-width:0; }

@@ -5,12 +5,12 @@ import {motionLibraryRequirements} from '../dist/motion-library-requirements.js'
 import {libraryWave} from '../dist/motion-library-math.js';
 
 const text=MOTION_LIBRARY_PRESETS.filter(p=>p.collection==='text'),offered=text.filter(p=>!p.retired);
-test('original text collection offers 196 stable variants, three segmentation units and ten useful families',()=>{
-  assert.equal(text.length,208);assert.equal(new Set(text.map(p=>p.id)).size,208);assert.equal(offered.length,196);
-  assert.equal(offered.filter(p=>p.mode==='transition').length,175);assert.equal(offered.filter(p=>p.mode==='continuous').length,21);
+test('original text collection offers 169 stable variants, three segmentation units and ten useful families',()=>{
+  assert.equal(text.length,208);assert.equal(new Set(text.map(p=>p.id)).size,208);assert.equal(offered.length,169);
+  assert.equal(offered.filter(p=>p.mode==='transition').length,149);assert.equal(offered.filter(p=>p.mode==='continuous').length,20);
   assert.deepEqual([...new Set(text.map(p=>p.textFamily))].sort(),['combination','decode','fade','loop','mask','position','rotate','scale','tracking','typewriter']);
   const transitions=unit=>offered.filter(p=>p.text.unit===unit&&p.mode==='transition');
-  assert.deepEqual(['characters','words','lines','all'].map(unit=>transitions(unit).length),[62,61,51,1]);
+  assert.deepEqual(['characters','words','lines','all'].map(unit=>transitions(unit).length),[44,57,47,1]);
   for(const unit of ['characters','words','lines'])
     for(const family of ['fade','position','rotate','scale','tracking','mask','typewriter','decode','combination'])assert.ok(transitions(unit).some(p=>p.textFamily===family),`${unit} ${family}`);
   for(const p of text){assert.match(p.id,/^text-v3-(characters|words|lines)-/);assert.ok(p.textVariant.id);assert.ok(isMotionLibraryOptions({...MOTION_LIBRARY_DEFAULTS,...p.defaults}));assert.equal(p.referenceIndex,null);}
@@ -53,11 +53,25 @@ test('distances are drawn for the unit sample: windows hide a whole line, origin
 });
 test('duplicates are retired, not deleted: layers that use them keep working, and each has an offered replacement',()=>{
   const retired=text.filter(p=>p.retired).map(p=>p.id).sort();
-  assert.deepEqual(retired,['text-v3-characters-rotate-arc-top','text-v3-characters-scale-grow-base-spring','text-v3-characters-scale-grow-top','text-v3-characters-scale-stretch',
-    'text-v3-characters-tracking-converge-spring','text-v3-lines-decode-scan-reverse','text-v3-lines-tracking-converge-spring','text-v3-words-rotate-arc-top',
-    'text-v3-words-scale-grow-base-spring','text-v3-words-scale-grow-top','text-v3-words-scale-stretch','text-v3-words-tracking-converge-spring']);
+  // 2026-11-18: the uniqueness audit and the Characters curation retired more (same concept from another collection).
+  assert.deepEqual(retired,['text-v3-characters-combination-gather','text-v3-characters-combination-spark-scale','text-v3-characters-combination-wiggly-lift','text-v3-characters-decode-resolve','text-v3-characters-decode-roll','text-v3-characters-fade-center','text-v3-characters-mask-window-settle','text-v3-characters-position-block','text-v3-characters-position-drop','text-v3-characters-position-zipper','text-v3-characters-rotate-arc','text-v3-characters-rotate-arc-top','text-v3-characters-rotate-swing-settle','text-v3-characters-scale-drop-settle','text-v3-characters-scale-grow-base-spring','text-v3-characters-scale-grow-top','text-v3-characters-scale-height','text-v3-characters-scale-near','text-v3-characters-scale-stretch','text-v3-characters-tracking-converge-spring','text-v3-characters-tracking-spread','text-v3-characters-tracking-tighten','text-v3-characters-typewriter-reverse','text-v3-lines-decode-scan-reverse','text-v3-lines-fade-center','text-v3-lines-loop-jitter','text-v3-lines-rotate-swing-settle','text-v3-lines-scale-drop-settle','text-v3-lines-tracking-converge-spring','text-v3-lines-typewriter-reverse','text-v3-words-fade-center','text-v3-words-rotate-arc-top','text-v3-words-rotate-swing-settle','text-v3-words-scale-drop-settle','text-v3-words-scale-grow-base-spring','text-v3-words-scale-grow-top','text-v3-words-scale-stretch','text-v3-words-tracking-converge-spring','text-v3-words-typewriter-reverse']);
   const ids=new Set(offered.map(p=>p.id));
   // What replaces each: the same motion from a side or with a Character, and a new motion beside it.
-  for(const unit of ['characters','words'])for(const id of [`rotate-arc`,`scale-grow-base`,`scale-height`,`tracking-converge`,`rotate-somersault`,`scale-squash-landing`,`scale-baseline-fan`,`scale-rubber-slide`,`tracking-magnetic`])assert.ok(ids.has(`text-v3-${unit}-${id}`),`${unit} ${id}`);
+  for(const unit of ['characters','words'])for(const id of [...(unit==='words'?['rotate-arc','scale-height']:['scale-baseline-fan','scale-sprout']),`scale-grow-base`,`tracking-converge`,`rotate-somersault`,`scale-squash-landing`,`scale-baseline-fan`,`scale-rubber-slide`,`tracking-magnetic`])assert.ok(ids.has(`text-v3-${unit}-${id}`),`${unit} ${id}`);
   for(const id of ['decode-scan','decode-closing-code','tracking-magnetic','tracking-converge'])assert.ok(ids.has(`text-v3-lines-${id}`),id);
+});
+
+import {CHARACTER_TUNING} from '../dist/motion-library-text.js';
+test('Characters have their own retouch: same ids, letter-specific blur, pivots and curves',()=>{
+  const byId=id=>MOTION_LIBRARY_PRESETS.find(p=>p.id===id);
+  for(const key of Object.keys(CHARACTER_TUNING)){
+    const chars=byId(`text-v3-characters-${key}`),words=byId(`text-v3-words-${key}`);
+    assert.ok(chars&&!chars.retired,key);
+    assert.ok(isMotionLibraryOptions({...MOTION_LIBRARY_DEFAULTS,...chars.defaults}),key);
+    if(words)assert.notDeepEqual({easing:chars.easing,position:chars.position,scale:chars.scale,text:{...chars.text,unit:''},defaults:chars.defaults},{easing:words.easing,position:words.position,scale:words.scale,text:{...words.text,unit:''},defaults:words.defaults},`${key} differs from Words`);
+  }
+  // Travel streaks along its own axis; baseline pivots stay on the baseline.
+  assert.equal(byId('text-v3-characters-position-slide').text.blurAxis,'x');
+  assert.equal(byId('text-v3-characters-position-rise').text.blurAxis,'y');
+  for(const key of ['scale-sprout','scale-grow-base','scale-baseline-fan','rotate-turn'])assert.deepEqual(byId(`text-v3-characters-${key}`).text.origin,[0,.36,0],key);
 });

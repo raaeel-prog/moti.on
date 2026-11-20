@@ -26,10 +26,14 @@ test("os dois painéis inicializam, exibem e descartam a preferência compartilh
 });
 
 test("a folha de movimento entra no único CSS distribuído aos dois hosts", async () => {
-  const build = await source("scripts/build.mjs");
-  assert.match(build, /ui-motion/);
-  assert.match(build, /motion\.css/);
-  assert.match(build, /writeFile\([^)]*theme/s);
+  const [motion, ae, premiere] = await Promise.all([
+    source("packages/ui-motion/src/motion.css"),
+    source("dist/after-effects-cep/styles/theme.css"),
+    source("dist/premiere-uxp/styles/theme.css")
+  ]);
+  for (const theme of [ae, premiere]) {
+    assert.equal(theme.split(motion.trimEnd()).length, 2);
+  }
 });
 
 test("os dois catálogos de idioma possuem os rótulos do toggle", async () => {

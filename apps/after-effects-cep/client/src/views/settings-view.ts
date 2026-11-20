@@ -3,6 +3,7 @@ import {
   type I18n, type PanelPreferences
 } from "@motion/ui-core";
 import type { ReducedMotionController } from "@motion/ui-motion";
+import { createAccentSetting } from "./accent-setting.js";
 
 /** Local preferences and explicit support navigation; no host calls or account placeholders. */
 export function createAeSettingsView(doc: Document, options: {
@@ -28,6 +29,7 @@ export function createAeSettingsView(doc: Document, options: {
     return group;
   };
   const appearance = section("settings.interface.title");
+  appearance.getElementsByTagName("h3")[0]!.textContent = i18n.t("settings.appearance.title");
   appearance.appendChild(selectField(doc, {
     id: "settings-language", label: i18n.t("settings.language.label"), value: preferences.snapshot().locale,
     options: [
@@ -38,6 +40,8 @@ export function createAeSettingsView(doc: Document, options: {
     onChange: value => { if (alive) options.onLocale(value); }
   }));
   for (const field of appearanceSettings(doc, i18n, preferences, () => { if (alive) options.onRefresh(); }).slice(0, 2)) appearance.appendChild(field);
+  const accent = createAccentSetting(doc, i18n, preferences);
+  appearance.appendChild(accent.element);
   appearance.appendChild(checkboxField(doc, {
     id: "settings-pin-dock", label: i18n.t("settings.pinDock"), checked: preferences.snapshot().quickDockPinned,
     onChange: checked => { if (alive) { preferences.setQuickDockPinned(checked); options.onRefresh(); } }
@@ -102,5 +106,5 @@ export function createAeSettingsView(doc: Document, options: {
     action.element.classList.add("ch-settings-help-action");
     helpActions.appendChild(action.element);
   }
-  return { element, dispose: () => { alive = false; } };
+  return { element, dispose: () => { alive = false; accent.dispose(); } };
 }

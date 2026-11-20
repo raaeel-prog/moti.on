@@ -1,3 +1,5 @@
+import { MOTION_BLUE_ACCENT, normalizeHexColor } from "@motion/ui-core";
+
 /** CEP appearance adapter. Theme changes update root tokens, never the view tree. */
 export interface ThemeHost {
   getHostEnvironment(): {appSkinInfo?: {panelBackgroundColorSRGB?: {color?: unknown}; panelBackgroundColor?: {color?: unknown}; systemHighlightColor?: unknown}};
@@ -18,6 +20,37 @@ function luminance(color:string):number {
   return channels[0]!*.2126+channels[1]!*.7152+channels[2]!*.0722;
 }
 export const themeContrast=(a:string,b:string):number=>(Math.max(luminance(a),luminance(b))+.05)/(Math.min(luminance(a),luminance(b))+.05);
+export const AE_HIGHLIGHT_FALLBACK = "#c8ccd3";
+
+function mixHex(a: string, b: string, portion: number): string {
+  const rgb = [1, 3, 5].map(start => {
+    const from = parseInt(a.slice(start, start + 2), 16), to = parseInt(b.slice(start, start + 2), 16);
+    return Math.round(from + (to - from) * portion);
+  });
+  return hex({ red: rgb[0]!, green: rgb[1]!, blue: rgb[2]! });
+}
+
+export function accentTokens(choice: string, native: unknown, surfaces: readonly string[]): Record<string, string> {
+  const highlight = rgb(native);
+  const source = choice === "host" ? highlight ? hex(highlight) : AE_HIGHLIGHT_FALLBACK : normalizeHexColor(choice) ?? MOTION_BLUE_ACCENT;
+  const over = (tone: string): number => Math.min(...surfaces.map(bg => themeContrast(tone, bg)));
+  const direction = over("#ffffff") >= over("#000000") ? "#ffffff" : "#000000";
+  let accent = source;
+  for (let step = 1; step <= 100 && over(accent) < 4.5; step++) accent = mixHex(source, direction, step / 100);
+  const ink = themeContrast("#111a27", accent) >= 4.5 ? "#111a27" : themeContrast("#000000", accent) >= 4.5 ? "#000000" : "#ffffff";
+  const state = (candidate: string): string => over(candidate) >= 4.5 && themeContrast(ink, candidate) >= 4.5 ? candidate : accent;
+  const hover = state(mixHex(accent, direction, .2)), press = state(mixHex(accent, ink, .13));
+  const tint = [1, 3, 5].map(start => parseInt(accent.slice(start, start + 2), 16)).join(", ");
+  return {
+    "ae-accent": accent, "ae-accent-source": source,
+    "ae-accent-on": ink, "ae-accent-wash": `rgba(${tint}, .13)`, "ae-nav-selection": `rgba(${tint}, .13)`, "ae-selected-text": accent,
+    "ae-host-accent": highlight ? hex(highlight) : AE_HIGHLIGHT_FALLBACK,
+    "action-fill": accent, "action-fill-hover": hover, "action-fill-press": press, "action-on": ink,
+    "action-text": accent, "action-text-hover": hover, "action-text-press": press,
+    "value-editable": accent, "value-editable-hover": hover,
+    "focus-ring": `1px solid ${accent}`, "ch-border-focus": accent
+  };
+}
 export function hostThemeTokens(color:unknown,highlight?:unknown):{theme:"dark"|"light";tokens:Record<string,string>} {
   const c=rgb(color)??{red:50,green:50,blue:50},base=hex(c),light=themeContrast("#000000",base)>themeContrast("#ffffff",base);
   const ink=light?"#000000":"#ffffff";
@@ -44,19 +77,48 @@ export function hostThemeTokens(color:unknown,highlight?:unknown):{theme:"dark"|
   for(const [name,tones] of Object.entries(families)){tokens[`icon-${name}`]=text;tokens[`fam-${name}`]=family(tones[0],tones[1]);}
   return {theme:light?"light":"dark",tokens};
 }
-export function createHostTheme(root:HTMLElement,host:ThemeHost|undefined,mode:()=>string):{refresh():void;dispose():void} {
-  let owned:string[]=[],disposed=false;
+export function createHostTheme(root:HTMLElement,host:ThemeHost|undefined,mode:()=>string,accent?:()=>string):{refresh():void;dispose():void} {
+  let owned: Record<string, string> = {}, disposed = false;
+  let signature = "";
   const refresh=():void=>{
     if(disposed)return;
-    for(const key of owned)root.style.removeProperty(`--${key}`);owned=[];
-    if(mode()!=="host")return;
+    const selectedMode = mode();
     let skin:ReturnType<ThemeHost["getHostEnvironment"]>["appSkinInfo"];
     try{skin=host?.getHostEnvironment()?.appSkinInfo;}catch{/* Canonical screenshot fallback. */}
-    const palette=hostThemeTokens(rgb(skin?.panelBackgroundColorSRGB?.color)??rgb(skin?.panelBackgroundColor?.color),skin?.systemHighlightColor);
-    root.setAttribute("data-host-theme",palette.theme);root.setAttribute("data-theme",palette.theme);
-    for(const [key,value] of Object.entries(palette.tokens))root.style.setProperty(`--${key}`,value);
-    owned=Object.keys(palette.tokens);
+    const background = rgb(skin?.panelBackgroundColorSRGB?.color) ?? rgb(skin?.panelBackgroundColor?.color);
+    const highlight = rgb(skin?.systemHighlightColor);
+    const choice = accent?.();
+    const next = [selectedMode, choice, background && hex(background), highlight && hex(highlight)].join("|");
+    if (next === signature) return;
+    signature = next;
+    const palette=hostThemeTokens(background, highlight);
+    const tokens = selectedMode === "host" ? palette.tokens : {};
+    const light = selectedMode === "light" || (selectedMode === "host" && palette.theme === "light");
+    if (selectedMode === "host") {
+      root.setAttribute("data-host-theme", palette.theme);
+      root.setAttribute("data-theme", palette.theme);
+    }
+    if (selectedMode === "host") {
+      const surface = tokens["surface-raised"]!;
+      const channels = [1, 3, 5].map(start => parseInt(surface.slice(start, start + 2), 16)).join(", ");
+      tokens["ae-overlay-tint"] = `rgba(${channels}, .93)`;
+    }
+    if (choice) {
+      const hostAccent = highlight ? hex(highlight) : AE_HIGHLIGHT_FALLBACK;
+      tokens["ae-host-accent"] = hostAccent;
+      if (choice === "host") {
+        tokens["ae-accent-source"] = hostAccent;
+      } else {
+        const surfaces = selectedMode === "host"
+          ? ["bg-host", "surface-deep", "surface-raised", "surface-active"].map(key => tokens[key]!)
+          : light ? ["#e8e8e8", "#f2f2f2", "#dcdcdc"] : ["#262626", "#323232", "#3a3a3a", "#4c4c4c"];
+        Object.assign(tokens, accentTokens(choice, highlight, surfaces));
+      }
+    }
+    for (const key of Object.keys(owned)) if (!(key in tokens)) root.style.removeProperty(`--${key}`);
+    for (const [key, value] of Object.entries(tokens)) if (value !== owned[key]) root.style.setProperty(`--${key}`, value);
+    owned = tokens;
   };
   refresh();host?.addEventListener?.(EVENT,refresh);
-  return {refresh,dispose(){if(disposed)return;disposed=true;host?.removeEventListener?.(EVENT,refresh);for(const key of owned)root.style.removeProperty(`--${key}`);owned=[];}};
+  return {refresh,dispose(){if(disposed)return;disposed=true;host?.removeEventListener?.(EVENT,refresh);for(const key of Object.keys(owned))root.style.removeProperty(`--${key}`);owned={};}};
 }

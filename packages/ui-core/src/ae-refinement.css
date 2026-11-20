@@ -63,7 +63,6 @@
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-filters [aria-pressed="true"],
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-categories .ch-folder-select[aria-pressed="true"],
 [data-host="after-effects"] .ch-select-menu__option[aria-selected="true"] { color:var(--action-text); }
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs [aria-selected="true"] { border-bottom-color:var(--action-text); }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-categories .ch-folder-select:hover,
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs .ch-button:hover { color:var(--action-text-hover); }
 

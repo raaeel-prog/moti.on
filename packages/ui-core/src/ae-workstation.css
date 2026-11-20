@@ -32,7 +32,7 @@
 [data-host="after-effects"] .ch-context-actions { flex:0 0 auto; min-width:0; padding:8px 12px; background:var(--bg-host); }
 [data-host="after-effects"] .ch-context-actions:empty { display:none; }
 [data-host="after-effects"] .ch-context-content .ch-field { min-width:0; }
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto auto; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr) auto auto; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery>.ch-preset-toolbar-approved { grid-column:1/-1; grid-row:1; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery>.ch-preset-scroll { grid-column:1; grid-row:2; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery>.ch-preset-applybar { grid-column:1; grid-row:3; position:static; width:auto; max-width:none; padding:4px 0; }
@@ -68,7 +68,7 @@
 }
 
 /* Persistent Browse/Edit navigation; the wide library is supplemental. */
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs { justify-content:flex-start; min-height:28px; padding:0 12px; border:0; gap:16px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs { justify-content:flex-start; min-height:28px; border:0; gap:16px; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs [hidden] { display:none; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-tabs>.ch-button { flex:0 1 auto; min-height:28px; padding:0; border:0; border-bottom:2px solid transparent; border-radius:0; background:transparent; color:var(--text-secondary); font-size:12px; }
 [data-host="after-effects"] .ch-preset-workspace-content[hidden] { display:none !important; }
@@ -124,7 +124,6 @@
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar>.ch-preset-toolbar-approved { display:flex; flex:0 0 auto; flex-wrap:nowrap; min-height:24px; gap:4px; margin:0 0 8px; padding:0; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar .ch-preset-search { display:flex; flex:1; min-width:0; min-height:24px; }
 [data-host="after-effects"] .ch-preset-sidebar .ch-preset-search>.ch-field__label { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
-[data-host="after-effects"] .ch-preset-sidebar .ch-preset-search { order:-1; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-narrow-tree="true"] .ch-preset-sidebar>.ch-preset-toolbar-approved { flex-wrap:wrap; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-narrow-tree="true"] .ch-preset-sidebar .ch-preset-search { flex:0 0 100%; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-sidebar .ch-preset-search input { width:100%; min-width:0; height:24px; min-height:24px; padding:2px 6px; border:1px solid var(--border-muted); border-radius:0; background:var(--bg-elevated); box-sizing:border-box; }
@@ -141,7 +140,7 @@
 [data-host="after-effects"] .ch-preset-splitter::after { content:"⋮"; position:absolute; top:50%; left:0; width:100%; color:var(--text-secondary); text-align:center; }
 [data-host="after-effects"] .ch-preset-splitter:focus-visible { outline:var(--focus-ring); outline-offset:-2px; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery>.ch-preset-scroll { grid-column:3; grid-row:1; min-width:0; padding:4px 4px 0 0; }
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-grid { gap:8px; padding:0 0 4px; scroll-padding-bottom:4px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-grid { padding:0 0 4px; scroll-padding-bottom:4px; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card { border:0; border-radius:0; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-preview { display:block; width:100%; height:auto; min-height:0; aspect-ratio:16/9; margin:0; padding:0; border:0; border-radius:0; background:#000; }
 [data-host="after-effects"] .ch-preset-gallery .ch-preset-preview>svg { width:100%; height:100%; background:#000; }
@@ -149,16 +148,16 @@
 [data-host="after-effects"] .ch-preset-gallery .ch-preset-preview { background:#000; }
 [data-host="after-effects"] .ch-preset-gallery .ch-preset-preview>.ch-preset-media { background:#000; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-preview:disabled { opacity:1; color:var(--text-primary); }
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card .ch-preset-apply { display:block; -webkit-line-clamp:1; height:24px; min-height:24px; max-height:24px; padding:3px 4px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; line-height:18px; font-size:11px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card .ch-preset-apply { -webkit-line-clamp:1; height:24px; min-height:24px; max-height:24px; padding:3px 4px; line-height:18px; font-size:11px; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card .ch-preset-actions>.ch-preset-favorite { position:static; flex:0 0 20px; width:20px; height:24px; min-height:24px; padding:3px; opacity:1; pointer-events:auto; background:transparent; }
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer { grid-column:1/-1; grid-row:2; display:grid; grid-template-columns:max-content 88px minmax(0,1fr); align-items:center; gap:8px; min-width:0; padding:4px; border-top:1px solid var(--border-muted); background:var(--bg-host); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer { grid-column:1/-1; grid-row:2; display:grid; grid-template-columns:max-content 88px minmax(0,1fr); gap:8px; min-width:0; padding:4px; border-top:1px solid var(--border-muted); background:var(--bg-host); }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-applybar { position:static; display:flex; width:auto; min-width:0; max-width:none; margin:0; padding:0; border:0; transform:none; background:transparent; box-shadow:none; }
 [data-host="after-effects"] .ch-preset-reference-footer .ch-preset-phase-actions { width:220px; max-width:100%; margin:0; flex:1; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-preview-controls { display:flex; width:88px; min-width:88px; max-width:88px; height:24px; min-height:24px; max-height:24px; margin:0; padding:0; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-size { display:flex; align-items:center; flex:0 0 88px; width:88px; min-width:88px; max-width:88px; height:24px; min-height:24px; max-height:24px; margin:0; padding:0; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-size>span { display:none; }
 [data-host="after-effects"] .ch-preset-reference-footer input[type="range"] { flex:0 0 88px; width:88px; min-width:88px; max-width:88px; height:24px; margin:0; padding:0; border:0; background:transparent; -webkit-appearance:none; cursor:pointer; }
-[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]::-webkit-slider-runnable-track { height:2px; border-radius:1px; background:var(--line-strong); }
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]::-webkit-slider-runnable-track { border-radius:1px; background:var(--line-strong); }
 [data-host="after-effects"] .ch-preset-reference-footer input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:8px; height:10px; margin-top:-4px; border:1px solid var(--action-text); border-radius:2px; background:var(--action-text); }
 [data-host="after-effects"] .ch-preset-reference-footer input[type="range"]:focus-visible { outline:var(--focus-ring); outline-offset:1px; }
 [data-host="after-effects"] .ch-preset-reference-footer .ch-preset-applybar { justify-self:end; }
@@ -183,7 +182,6 @@
 [data-host="after-effects"] .ch-preset-gallery .ch-preset-actions { transition:background-color var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out); }
 [data-host="after-effects"] .ch-preset-gallery .ch-preset-card[data-selected="true"]>.ch-preset-actions { box-shadow:inset 2px 0 var(--action-text); }
 [data-host="after-effects"] .ch-preset-gallery .ch-preset-card[data-selected="true"] .ch-preset-settings-trigger { color:var(--action-text); }
-[data-host="after-effects"] .ch-preset-sidebar .ch-folder-row[data-selected="true"] { box-shadow:inset 2px 0 var(--action-text); }
 [data-host="after-effects"] .ch-preset-gallery .ch-preset-splitter { transition:background-color var(--dur-2) var(--ease-out); }
 [data-host="after-effects"] .ch-preset-gallery .ch-preset-splitter:hover,
 [data-host="after-effects"] .ch-preset-gallery .ch-preset-splitter:focus-visible { background:var(--surface-hover); }
@@ -242,15 +240,10 @@
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-selected="true"][data-hover="true"] { border-color:var(--action-text); }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-card[data-hover="true"] .ch-preset-apply { color:var(--text-primary); }
 [data-host="after-effects"][data-reduced-motion="true"] .ch-preset-gallery .ch-preset-card { transition:none; }
-}
-}
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer { row-gap:6px; padding:6px; }
 [data-host="after-effects"] .ch-preset-selection-summary { grid-column:1/-1; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:2px 12px; min-width:0; font-size:11px; line-height:16px; }
 [data-host="after-effects"] .ch-preset-selected-name { flex:1 1 120px; min-width:0; font-weight:600; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 [data-host="after-effects"] .ch-preset-selection-status { flex:0 1 auto; min-width:0; color:var(--text-secondary); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]::-webkit-slider-thumb { width:12px; height:12px; margin-top:-5px; border:2px solid var(--action-text); border-radius:50%; background:var(--bg-elevated); }
-[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]:hover::-webkit-slider-thumb,
-[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]:active::-webkit-slider-thumb { border-width:4px; }
+[data-host="after-effects"] .ch-preset-reference-footer input[type="range"]::-webkit-slider-thumb { width:12px; height:12px; margin-top:-5px; border:2px solid var(--action-text); background:var(--bg-elevated); }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-settings-header { display:flex; align-items:center; min-height:28px; padding:4px 8px; gap:8px; border-bottom:1px solid var(--border-muted); font-size:11px; }
 [data-host="after-effects"] .ch-preset-settings-header>span { flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 [data-host="after-effects"] .ch-preset-settings-header>.ch-button { width:24px; min-height:24px; padding:0; border:0; background:transparent; }
@@ -317,7 +310,6 @@
  * and every icon keeps its tooltip and accessible name. The command search shows at
  * every width now that the icons leave room for it. */
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] { width: 32px; min-width: 32px; height: 28px; min-height: 28px; padding: 0; justify-content: center; }
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] > svg { display: block; width: 16px; height: 16px; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] > .ch-nav__label { display: none; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__utilities > .ch-nav__search { display: inline-flex; }
 @media (min-width: 440px) {
@@ -362,7 +354,7 @@
 [data-host="after-effects"] .ch-curve__header-tools .ch-curve__overlay[aria-pressed="true"],
 [data-host="after-effects"] .ch-shell .ch-ease-live[aria-pressed="true"] { color: var(--value-editable); background: var(--accent-wash); }
 [data-host="after-effects"] .ch-ease-live svg { width: 16px; height: 16px; }
-[data-host="after-effects"] .ch-ease-actions .ch-ease-action { border-color: transparent; background: var(--surface-deep); box-shadow: none; }
+[data-host="after-effects"] .ch-ease-actions .ch-ease-action { border-color: transparent; background: var(--surface-deep); }
 [data-host="after-effects"] .ch-ease-actions .ch-ease-action:hover:not(:disabled) { border-color: var(--border-subtle); background: var(--surface-raised); }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-values { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 6px 0 4px; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-values label { position: relative; display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: flex-start; gap: 4px; min-width: 0; height: 28px; padding: 0 0 0 7px; border-radius: var(--radius-input); background: var(--surface-deep); color: var(--text-secondary); font-size: 10px; cursor: text; }
@@ -378,7 +370,7 @@
 [data-host="after-effects"] .ch-curve__marker:focus-visible { outline: none; stroke: rgba(179, 212, 255, .3); }
 /* Entrada · Saída · Converter Hold: box then label on one line each, wrapping as whole
  * options — not three columns with the label broken over three lines above its box. */
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-sides { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 16px; margin: 8px 0 0; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-sides { gap: 2px 16px; margin: 8px 0 0; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-sides > .ch-field { flex: 0 0 auto; display: flex; flex-direction: row-reverse; flex-wrap: nowrap; justify-content: flex-end; align-items: center; gap: 6px; min-height: 28px; margin: 0; }
 [data-host="after-effects"] .ch-ease-sides .ch-field__label { flex: 0 0 auto; margin: 0; color: var(--text-secondary); font-size: 12px; white-space: nowrap; cursor: pointer; }
 [data-host="after-effects"] .ch-ease-sides .ch-field__control { flex: none; display: flex; }
@@ -443,7 +435,7 @@
 [data-host="after-effects"] .ch-ease-action__guide { fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
 [data-host="after-effects"] .ch-ease-action__guide--dashed { stroke-dasharray: 1.6 1.6; }
 [data-host="after-effects"] .ch-ease-action__head { fill: currentColor; stroke: none; opacity: .7; }
-[data-host="after-effects"] .ch-ease-action__label { display: none; font-size: 10px; line-height: 1; white-space: nowrap; }
+[data-host="after-effects"] .ch-ease-action__label { line-height: 1; white-space: nowrap; }
 @media (min-width: 480px) {
   [data-host="after-effects"] .ch-ease-actions .ch-ease-action { height: 46px; min-height: 46px; }
   [data-host="after-effects"] .ch-ease-action__label { display: block; }
@@ -460,7 +452,7 @@
   [data-host="after-effects"] .ch-ease-editor .ch-curve__mode-text { display: none; }
 }
 [data-host="after-effects"] .ch-ease-library { margin-top: 12px; }
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-library-header { display: flex; align-items: center; gap: 2px; min-height: 28px; margin: 0 0 4px; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-ease-library-header { gap: 2px; margin: 0 0 4px; }
 [data-host="after-effects"] .ch-ease-library-header .ch-ease-section-title { flex: 1 1 auto; margin: 0; color: var(--text-primary); font-size: 12px; font-weight: 600; }
 [data-host="after-effects"] .ch-shell .ch-ease-library-tool { flex: none; width: 28px; min-width: 28px; height: 28px; min-height: 28px; margin: 0; padding: 0; display: inline-grid; place-items: center; border: 0; border-radius: var(--radius-input); background: transparent; box-shadow: none; color: var(--text-secondary); }
 [data-host="after-effects"] .ch-shell .ch-ease-library-tool:hover { background: var(--surface-hover); color: var(--text-primary); }

@@ -46,10 +46,9 @@ export function createPresetPhaseEditor(doc:Document, options:{
   doc.addEventListener("pointerdown",press,true);doc.addEventListener("pointerup",release,true);doc.addEventListener("pointercancel",cancelPress,true);
   cleanups.push(()=>{cancelPress();doc.removeEventListener("pointerdown",press,true);doc.removeEventListener("pointerup",release,true);doc.removeEventListener("pointercancel",cancelPress,true);});
   const selected=createElement(doc,"div","ch-phase-layer");
-  selected.appendChild(createElement(doc,"span","",pt?"Camada: ":"Layer: "));
-  selected.appendChild(createElement(doc,"strong","",data.layerName??""));element.appendChild(selected);
-  const section=doc.createElement("details");section.className="ch-edit-section";section.open=true;
-  section.appendChild(createElement(doc,"summary","",pt?"Presets":"Presets"));element.appendChild(section);
+  // Aba Editar enxuta (2026-11-18): o nome da camada basta; nada de rótulo nem seção "Presets".
+  selected.appendChild(createElement(doc,"strong","",data.layerName??""));selected.title=pt?"Camada selecionada":"Selected layer";element.appendChild(selected);
+  const section=createElement(doc,"div","ch-edit-section ch-edit-section--phases");element.appendChild(section);
   for(const phase of data.phases??[]){
     const preset=GALLERY_PRESETS.find(item=>item.motion?.id===phase.presetId)?.motion;if(!preset)continue;
     const row=doc.createElement("details");row.className="ch-phase-instance";row.open=true;row.dataset.phase=phase.phase;
@@ -59,13 +58,20 @@ export function createPresetPhaseEditor(doc:Document, options:{
     row.appendChild(title);section.appendChild(row);
     const actions=createElement(doc,"div","ch-phase-actions");row.appendChild(actions);
     const command=(action:"remove"|"reset"):void=>{if(!disposed&&!options.busy&&!blocked)options.execute("ae.presets.phase-action",{target:data.target,phase:phase.phase,action});};
-    for(const [label,variant,onClick] of [
-      [pt?"Revelar":"Reveal","tertiary",()=>options.reveal(phase.presetId)],
-      [pt?"Copiar":"Copy","tertiary",()=>options.copy(phase)],
-      [pt?"Remover":"Remove","destructive",()=>command("remove")],
-      [pt?"Restaurar":"Reset","tertiary",()=>command("reset")]
-    ] as const){const action=button(doc,{label,variant,disabled:options.busy,onClick});action.classList.add("ch-phase-link");actions.appendChild(action);if(variant==="destructive"||label===(pt?"Restaurar":"Reset"))hostActions.push(action);}
     const body=createElement(doc,"div","ch-phase-parameters");row.appendChild(body);
+    // Só o essencial fica aberto; o resto do preset mora em "Mais ajustes", recolhido.
+    const moreKey=`more:${phase.phase}`,more=doc.createElement("details");more.className="ch-phase-more";more.open=options.disclosures?.has(moreKey)??false;
+    more.addEventListener("toggle",()=>{if(more.open)options.disclosures?.add(moreKey);else options.disclosures?.delete(moreKey);});
+    more.appendChild(createElement(doc,"summary","ch-phase-more__summary",pt?"Mais ajustes":"More settings"));
+    const moreBody=createElement(doc,"div","ch-phase-more__body");more.appendChild(moreBody);
+    const moreActions=createElement(doc,"div","ch-phase-actions ch-phase-more__actions");
+    for(const [label,variant,onClick,target] of [
+      [pt?"Restaurar":"Reset","tertiary",()=>command("reset"),actions],
+      [pt?"Remover":"Remove","destructive",()=>command("remove"),actions],
+      [pt?"Mostrar na biblioteca":"Show in library","tertiary",()=>options.reveal(phase.presetId),moreActions],
+      [pt?"Copiar ajustes":"Copy settings","tertiary",()=>options.copy(phase),moreActions]
+    ] as const){const action=button(doc,{label,variant,disabled:options.busy,onClick});action.classList.add("ch-phase-link");target.appendChild(action);if(variant==="destructive"||label===(pt?"Restaurar":"Reset"))hostActions.push(action);}
+    let host:HTMLElement=body;
     const dragHint=createElement(doc,"p","ch-preset-hint");dragHint.hidden=true;body.appendChild(dragHint);
     const saved=options.drafts?.[phase.phase],baseline={...phase.options},draft={...(saved?.options??phase.options)},valid=new Map<string,boolean>(),numberInputs=new Map<string,HTMLInputElement>();let dirty=false;
     let submitting=false,submitted:string|undefined;
@@ -114,17 +120,17 @@ export function createPresetPhaseEditor(doc:Document, options:{
         if(ok){input.removeAttribute("aria-describedby");const original=baseline[key];draft[key]=typeof original==="number"&&value===display(original)?original:value;}else input.setAttribute("aria-describedby",error.id);
         update();
       };
-      input.addEventListener("input",validate);input.addEventListener("change",()=>{validate();if(!nativeDragging)commit();});field.appendChild(input);body.appendChild(field);body.appendChild(error);
+      input.addEventListener("input",validate);input.addEventListener("change",()=>{validate();if(!nativeDragging)commit();});field.appendChild(input);host.appendChild(field);host.appendChild(error);
       if(key!=="seed"){
         const defaults=defaultLibraryOptions(preset,data.frameRate),curve=draft.easing&&draft.easing!=="preset"?draft.easing:preset.easing;
         const settle=curve==="settle-wave"||curve==="settle-hop"?MOTION_SETTLE_DEFAULTS[curve]:undefined;
         const original=defaults[key]??settle?.[key as keyof typeof settle]??draft[key]??min;
-        field.removeChild(input);body.removeChild(field);
+        field.removeChild(input);host.removeChild(field);
         const disclosureKey=`${phase.instance}:${phase.phase}:${key}`;
         const slider=createNumberDisclosure(doc,input,{label,resetLabel:pt?"Restaurar":"Reset",defaultValue:Number(original),min,max,step:integer?1:.1,blocked:()=>options.busy||blocked||disposed,
           expanded:options.disclosures?.has(disclosureKey)??false,onExpandedChange:expanded=>{if(expanded){options.disclosures?.add(disclosureKey);if(options.disclosures&&options.disclosures.size>100)options.disclosures.delete(options.disclosures.values().next().value!);}else options.disclosures?.delete(disclosureKey);},
           ...(live?{gesture:{start:beginNative,update:(value:number)=>options.live!.update(value),finish:finishNative}}:{})});
-        body.removeChild(error);body.appendChild(slider.element);body.appendChild(error);sliders.push(slider);cleanups.push(()=>slider.dispose());
+        host.removeChild(error);host.appendChild(slider.element);host.appendChild(error);sliders.push(slider);cleanups.push(()=>slider.dispose());
       }
       if(saved)validate();
       if(live){field.classList.add("ch-phase-scrub-row");cleanups.push(attachScrubbableNumber(input,{hitTarget:key==="seed"?field:input,onGestureStart:value=>{numberDragging=beginNative(value);return numberDragging;},onInput:value=>{if(numberDragging)options.live!.update(value);},onGestureEnd:(value,canceled)=>finishNative(canceled,value)}));}
@@ -132,18 +138,19 @@ export function createPresetPhaseEditor(doc:Document, options:{
     };
     let shapeField:ReturnType<typeof createEasingShapeField>|undefined;
     const choice=(key:"direction"|"easing"|"unit"|"order"|"exitOrder",label:string,choices:[string,string][]):void=>{
-      const field=selectField(doc,{id:`phase-${phase.instance}-${phase.phase}-${key}`,label,value:String(draft[key]??(key==="exitOrder"?"mirror":"preset")),disabled:options.busy,options:choices.map(([value,label])=>({value,label})),onChange:value=>{draft[key]=value as never;if(key==="easing")shapeField?.sync(value);update();commit();}});field.className+=" ch-phase-field";body.appendChild(field);
+      const field=selectField(doc,{id:`phase-${phase.instance}-${phase.phase}-${key}`,label,value:String(draft[key]??(key==="exitOrder"?"mirror":"preset")),disabled:options.busy,options:choices.map(([value,label])=>({value,label})),onChange:value=>{draft[key]=value as never;if(key==="easing")shapeField?.sync(value);update();commit();}});field.className+=" ch-phase-field";host.appendChild(field);
     };
     // A loop or look has no transition length or curve: its marker sets the window.
     if(!effect)numeric("durationFrames",pt?"Duração · frames":"Duration · frames",1,600);
     numeric("intensity",pt?"Intensidade · %":"Intensity · %",0,300,false);
     if(preset.position.some(value=>value!==0)||libraryUsesDirection(preset))choice("direction",pt?"Direção":"Direction",([["preset",pt?"Original":"Original"],["bottom",pt?"Inferior":"Bottom"],["left",pt?"Esquerda":"Left"],["right",pt?"Direita":"Right"],["top",pt?"Superior":"Top"],
       ...(libraryUsesDiagonals(preset)?[["top-left",pt?"Superior esquerda":"Top left"],["top-right",pt?"Superior direita":"Top right"],["bottom-left",pt?"Inferior esquerda":"Bottom left"],["bottom-right",pt?"Inferior direita":"Bottom right"]] as [string,string][]:[])] as [string,string][]).filter(([value])=>libraryDirectionAllowed(preset,value)));
-    if(!effect){choice("easing",pt?"Curva":"Curve",presetEasingChoices(options.locale,draft.easing));
-      shapeField=createEasingShapeField(doc,{id:`phase-${phase.instance}-${phase.phase}-easing-shape`,locale:options.locale,easing:draft.easing,disabled:options.busy,className:"ch-phase-field",onChange:easing=>{draft.easing=easing;update();commit();}});body.appendChild(shapeField.element);}
+    if(!effect)choice("easing",pt?"Curva":"Curve",presetEasingChoices(options.locale,draft.easing));
+    if(!effect&&preset.category.startsWith("text-"))numeric("staggerFrames",pt?"Intervalo · frames":"Stagger · frames",0,60);
+    host=moreBody;
+    if(!effect){shapeField=createEasingShapeField(doc,{id:`phase-${phase.instance}-${phase.phase}-easing-shape`,locale:options.locale,easing:draft.easing,disabled:options.busy,className:"ch-phase-field",onChange:easing=>{draft.easing=easing;update();commit();}});host.appendChild(shapeField.element);}
     if(preset.category.startsWith("text-")){
       choice("unit",pt?"Animar por":"Animate by",[["preset",pt?"Original":"Original"],["characters",pt?"Caracteres":"Characters"],["words",pt?"Palavras":"Words"],["lines",pt?"Linhas":"Lines"],["all",pt?"Tudo":"All"]]);
-      if(!effect)numeric("staggerFrames",pt?"Intervalo · frames":"Stagger · frames",0,60);
       choice("order",pt?"Ordem":"Order",[["preset",pt?"Original":"Original"],["forward",pt?"Em sequência":"Forward"],["reverse",pt?"Reversa":"Reverse"],["center-out",pt?"Centro para bordas":"Center out"],["edges-in",pt?"Bordas para centro":"Edges in"],["random",pt?"Aleatória":"Random"]]);
       // Exit sequence relative to the entrance: mirrored (last in, first out) or the same order.
       if(phase.phase==="out")choice("exitOrder",pt?"Saída":"Exit",[["mirror",pt?"Espelhada":"Mirrored"],["repeat",pt?"Na mesma ordem":"Same order"]]);
@@ -155,10 +162,10 @@ export function createPresetPhaseEditor(doc:Document, options:{
     if(!effect&&(curve==="settle-wave"||curve==="settle-hop"))for(const [key,label,min,max] of settleFieldLabels(curve,options.locale)){draft[key]??=MOTION_SETTLE_DEFAULTS[curve][key];numeric(key,label,min,max,false);}
     if(gallerySequenceControls(preset,draft).seed)numeric("seed",pt?"Variação":"Variation",0,9999);
     // The layer uses motion blur while any phase asks for it.
-    const blur=motionBlurField(doc,{id:`phase-${phase.instance}-${phase.phase}-motion-blur`,locale:options.locale,checked:draft.motionBlur===true,disabled:options.busy,onChange:checked=>{draft.motionBlur=checked;update();commit();}});blur.classList.add("ch-phase-field");body.appendChild(blur);
+    const blur=motionBlurField(doc,{id:`phase-${phase.instance}-${phase.phase}-motion-blur`,locale:options.locale,checked:draft.motionBlur===true,disabled:options.busy,onChange:checked=>{draft.motionBlur=checked;update();commit();}});blur.classList.add("ch-phase-field");host.appendChild(blur);
     if(effect&&typeof phase.markerDuration==="number"&&typeof data.frameRate==="number"){
       const frames=Math.round(phase.markerDuration*data.frameRate);
-      body.appendChild(createElement(doc,"p","ch-preset-hint",pt?`Janela de ${frames} frames, entre rampas suaves. Arraste o marcador “Moti.on Efeito” ou a duração dele no After Effects para mudar.`:`${frames}-frame window between smooth ramps. Drag the “Moti.on Effect” marker or its duration in After Effects to change it.`));
+      host.appendChild(createElement(doc,"p","ch-preset-hint",pt?`Janela de ${frames} frames, entre rampas suaves. Arraste o marcador “Moti.on Efeito” ou a duração dele no After Effects para mudar.`:`${frames}-frame window between smooth ramps. Drag the “Moti.on Effect” marker or its duration in After Effects to change it.`));
     }
     const timing=createElement(doc,"div","ch-phase-field ch-phase-shift");timing.appendChild(createElement(doc,"span","",effect?(pt?"Deslocar efeito":"Shift effect"):(pt?"Deslocar transição":"Shift transition")));
     const controls=createElement(doc,"div","ch-phase-shift-controls");timing.appendChild(controls);
@@ -193,7 +200,8 @@ export function createPresetPhaseEditor(doc:Document, options:{
       }
       if(event.key==="Escape"){event.preventDefault();amount.value=zero;validateOffset();amount.blur();}
     });cleanups.push(attachCompactNumberEditing(amount));controls.appendChild(amount);
-    controls.appendChild(shiftButton(1));body.appendChild(timing);body.appendChild(offsetError);
+    controls.appendChild(shiftButton(1));host.appendChild(timing);host.appendChild(offsetError);
+    moreBody.appendChild(moreActions);body.appendChild(more);
     const footer=createElement(doc,"div","ch-phase-adjust-actions");footer.appendChild(button(doc,{label:pt?"Descartar":"Discard",variant:"tertiary",disabled:options.busy,onClick:()=>{options.onDirty(false);options.execute("ae.presets.inspect",{});}}));body.appendChild(footer);update();
   }
   return {element,drafts:()=>Object.fromEntries(draftReaders.map(read=>read())),setBlocked(value,busy=false){if(value)for(const slider of sliders)slider.cancel();blocked=value;for(const action of hostActions){action.disabled=options.busy||blocked;action.title=blocked?(busy?i18n.t("phaseEditor.wait"):i18n.t("phaseEditor.reloadSelection")):action.getAttribute("aria-label")??action.textContent??"";}for(const input of Array.from(element.getElementsByTagName("input")))input.disabled=options.busy||blocked;for(const select of Array.from(element.getElementsByTagName("select")))select.disabled=options.busy||blocked;for(const slider of sliders)slider.sync();for(const refresh of refreshers)refresh();},dispose(){disposed=true;for(const cleanup of cleanups)cleanup();}};

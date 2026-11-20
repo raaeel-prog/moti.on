@@ -106,6 +106,8 @@ try{
  const field=page.locator('.ch-tool-number-field').filter({has:page.locator('#wiggle-frequency')});
  await field.locator('.ch-number-disclosure__toggle').click();
  await page.locator('#wiggle-frequency-slider').waitFor({state:'visible'});
+ assert.equal(await field.locator('.ch-slider-value-group #wiggle-frequency').count(),1);
+ assert.equal(await field.locator('.ch-slider-value-group .ch-field__unit').textContent(),'/s');
  const initialFrequency=await page.locator('#wiggle-frequency').inputValue();
  await page.locator('#wiggle-frequency-slider').evaluate(el=>{el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0}));el.value='9.5';el.dispatchEvent(new Event('input',{bubbles:true}));});
  assert.equal(await page.locator('#wiggle-frequency').inputValue(),'9.51');
@@ -114,8 +116,10 @@ try{
  assert.equal(await page.evaluate(()=>window.fixtureCalls.filter(c=>c.command==='ae.expression.wiggle').length),0);
  await page.locator('#wiggle-frequency').fill('9.5');await page.locator('#wiggle-frequency').press('Tab');
  await page.locator('#wiggle-frequency-slider').waitFor({state:'visible'});
- await field.locator('.ch-number-disclosure__reset').click();
+ await page.locator('#wiggle-frequency').dblclick();
  assert.equal(await page.locator('#wiggle-frequency').inputValue(),'2');
+ await field.locator('.ch-number-disclosure__toggle').click();
+ assert.equal(await field.locator('.ch-number-disclosure__header #wiggle-frequency').count(),1);
  await page.locator('#wiggle-frequency').fill('4.5');
  await page.evaluate(()=>{window.themeInput=document.querySelector('#wiggle-frequency');window.fixtureTheme.panelBackgroundColorSRGB.color={red:220,green:220,blue:220};window.themeListeners.forEach(fn=>fn());});
  assert.equal(await page.locator('html').evaluate(el=>getComputedStyle(el).getPropertyValue('--bg-host').trim()),'#dcdcdc');

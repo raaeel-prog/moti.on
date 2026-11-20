@@ -209,7 +209,10 @@ test("clicar cria controles nativos por propriedade e liga a expressão", async 
   assert.equal(camada.efeitos.filhos[0].property(1).name, "Frequência");
   assert.equal(camada.efeitos.filhos[0].property(5).name, "Ativo");
   assert.match(propriedade.expression, /effect\("Moti\.on · Wiggle"\)\(1\)/);
-  assert.match(propriedade.expression, /var w = wiggle\(f, a,/);
+  // Wiggle v3 (Flutuação, 2026-11-19): ruído contínuo em vez de wiggle(), mesmos controles.
+  assert.match(propriedade.expression, /"version":3/);
+  assert.match(propriedade.expression, /noise\(\[t \* q/);
+  assert.doesNotMatch(propriedade.expression, /wiggle\(/);
   assert.equal(propriedade.expressionEnabled, true);
 });
 

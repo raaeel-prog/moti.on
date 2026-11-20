@@ -35,11 +35,10 @@
 [data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-depth="0"] { background: #0e0e0e !important; }
 [data-host="after-effects"] .ch-preset-categories > .ch-folder-row:hover { background: #262626 !important; }
 [data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-depth="0"]:hover { background: #161616 !important; }
-[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-selected="true"] { background: #303030 !important; box-shadow: inset 0 -1px #000 !important; }
+[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-selected="true"] { box-shadow: inset 0 -1px #000 !important; }
 [data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-selected="true"] .ch-folder-name { color: #ebebeb; font-weight: 400; }
 [data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-color] { border-left-color: var(--folder-color); }
 [data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-color]::before { opacity: .1; }
-[data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-color][data-selected="true"] { background: #1d1d1d !important; }
 [data-host="after-effects"] .ch-preset-categories > .ch-folder-row[data-color][data-selected="true"]::after {
   content: ""; position: absolute; inset: 0; pointer-events: none; background: #fff; opacity: .1;
 }

@@ -168,6 +168,7 @@ async function fixture(comp) {
       "src/undo.jsx",
       "src/registry.jsx",
       "src/expression-templates.jsx",
+      "src/expression-compose.jsx",
       "src/keyframe-operations.jsx",
       "src/effect-operations.jsx",
       "src/rig-meta.jsx",
@@ -357,9 +358,24 @@ test("todas as intensidades em zero e recusado, e nenhum controller e criado", a
   assert.deepEqual(calls, []);
 });
 
-test("expressao de usuario e preservada", async () => {
+test("expressao de usuario continua valendo por baixo do effector", async () => {
   const camada = new FakeLayer({ name: "A" });
   camada.position.expression = "wiggle(2, 30);";
+  camada.position.expressionEnabled = true;
+  const comp = new FakeCompItem([camada]);
+  const { scope } = await fixture(comp);
+
+  const resposta = JSON.parse(scope.MotionAE.dispatch(request(baseArgs)));
+
+  assert.equal(resposta.ok, true);
+  assert.equal(scope.MotionExpressionCompose.userOf(camada.position.expression), "wiggle(2, 30);");
+  assert.ok(scope.MotionExpressions.isManagedEffector(camada.position.expression));
+  assert.ok(camada.position.expression.includes("return (\nwiggle(2, 30)\n);"));
+});
+
+test("expressao que termina em bloco continua protegida", async () => {
+  const camada = new FakeLayer({ name: "A" });
+  camada.position.expression = "if (time > 1) { value } else { value }";
   camada.position.expressionEnabled = true;
   const comp = new FakeCompItem([camada]);
   const { scope, calls } = await fixture(comp);
@@ -368,7 +384,7 @@ test("expressao de usuario e preservada", async () => {
 
   assert.equal(resposta.ok, false);
   assert.equal(resposta.error.code, "EXPRESSION_CONFLICT");
-  assert.equal(camada.position.expression, "wiggle(2, 30);");
+  assert.equal(camada.position.expression, "if (time > 1) { value } else { value }");
   assert.deepEqual(calls, []);
 });
 

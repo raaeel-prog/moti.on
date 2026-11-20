@@ -82,6 +82,9 @@ export async function fixture({ fps = 30, height = 1080, width = 1920, text = fa
       for (const [key, value] of Object.entries(values)) this.children.push(new Property(key, value, this));
     }
     get numProperties() { return this.children.length; }
+    // As AE: an indexed member knows its index and can move inside its group.
+    get propertyIndex() { const list = this.parentProperty?.children; return Array.isArray(list) ? list.indexOf(this) + 1 : 0; }
+    moveTo(index) { const list = this.parentProperty.children; list.splice(list.indexOf(this), 1); list.splice(index - 1, 0, this); mutations++; }
     property(key) { return typeof key === 'number' ? this.children[key - 1] : this.children.find(p => p.name === key || p.matchName === key); }
     canAddProperty(name) { return name === 'ADBE Slider Control' || name === 'ADBE Gaussian Blur 2' || name === 'ADBE Point Control' || Object.hasOwn(NATIVE_EFFECTS, name); }
     addProperty(name) {

@@ -7,14 +7,41 @@ const assert = domSafeAssert(strictAssert);
 import { createFakeWindow } from '../../../packages/ui-core/tests/fake-dom.mjs';
 
 const built=await build({entryPoints:[fileURLToPath(new URL('../client/src/preset-gallery.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
-const {createPresetGallery,GALLERY_PRESETS}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+const {createPresetGallery,GALLERY_PRESETS,galleryCategoryMatches}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
-function fixture(t, { category = 'all', scope = 'all', query = '', locale = 'pt-BR', context = {hasComp:true, selectionCount:2, selectedKeys:4}, busy = false, personal, personalAction, onApply, pick = true, elements, width = 360, observer } = {}) {
-  const saved={window:globalThis.window,requestAnimationFrame:globalThis.requestAnimationFrame,cancelAnimationFrame:globalThis.cancelAnimationFrame,IntersectionObserver:globalThis.IntersectionObserver};
+function fixture(t, { category = 'all', scope = 'all', query = '', locale = 'pt-BR', context = {hasComp:true, selectionCount:2, selectedKeys:4}, busy = false, personal, personalAction, onApply, pick = true, elements, width = 360, observer, layout, scroll = 0, revealId } = {}) {
+  const saved={window:globalThis.window,requestAnimationFrame:globalThis.requestAnimationFrame,cancelAnimationFrame:globalThis.cancelAnimationFrame,IntersectionObserver:globalThis.IntersectionObserver,ResizeObserver:globalThis.ResizeObserver};
   globalThis.window=createFakeWindow(width);globalThis.window.setTimeout=setTimeout;
   globalThis.requestAnimationFrame=()=>1;globalThis.cancelAnimationFrame=()=>{};
-  globalThis.IntersectionObserver=observer??class {observe(){} disconnect(){}};
+  globalThis.IntersectionObserver=observer??class {observe(){} unobserve(){} disconnect(){}};
   const doc=createCepDocument(),applied=[];
+  const scheduled = new Map();
+  const resizeDeliveries = new Map();
+  let nextFrame = 1;
+  const flushFrame = () => {
+    const callbacks = [...scheduled.values()];
+    scheduled.clear();
+    for (const callback of callbacks) callback(performance.now());
+  };
+  const rowHeight = 110, gap = 8, padding = 2;
+  const viewport = () => layout.height ?? 240;
+  const columns = () => layout.columns ?? 2;
+  if (layout) {
+    globalThis.requestAnimationFrame = callback => { const id = nextFrame++; scheduled.set(id, callback); return id; };
+    globalThis.cancelAnimationFrame = id => scheduled.delete(id);
+    globalThis.window.getComputedStyle = () => ({
+      gridTemplateColumns: Array(columns()).fill('150px').join(' '), gap: `${gap}px`, rowGap: `${gap}px`,
+      paddingTop: `${padding}px`, paddingBottom: `${padding}px`,
+    });
+    globalThis.ResizeObserver = class {
+      constructor(callback) { this.callback = callback; }
+      observe(target) { resizeDeliveries.set(target, this.callback); }
+      disconnect() {
+        for (const [target, callback] of resizeDeliveries) if (callback === this.callback) resizeDeliveries.delete(target);
+      }
+    };
+    doc.defaultView = globalThis.window;
+  }
   const events=new Map();
   doc.addEventListener=(type,handler)=>events.set(type,[...(events.get(type)??[]),handler]);
   doc.removeEventListener=(type,handler)=>events.set(type,(events.get(type)??[]).filter(item=>item!==handler));
@@ -35,30 +62,72 @@ function fixture(t, { category = 'all', scope = 'all', query = '', locale = 'pt-
     node.querySelector=selector=>node.querySelectorAll(selector)[0]??null;
     node.getBoundingClientRect=()=>({left:10,right:170,top:10,bottom:54,width:160,height:44});
     node.contains=target=>{for(let current=target;current;current=current.parentNode)if(current===node)return true;return false;};
+    if (layout && tag === 'div') {
+      const isGrid = () => node.classList.contains('ch-preset-grid');
+      Object.defineProperties(node, {
+        clientHeight: { get: () => isGrid() ? viewport() : node.classList.contains('ch-preset-stage') ? viewport() + 44 : 0 },
+        clientWidth: { get: () => isGrid() ? columns() * (150 + gap) - gap : 0 },
+        scrollHeight: { get: () => {
+          if (!isGrid()) return 0;
+          const virtualRows = /^repeat\(\s*(\d+)/.exec(node.style['grid-template-rows'] ?? '');
+          const rows = virtualRows ? Number(virtualRows[1]) : Math.ceil(node.querySelectorAll('.ch-preset-card').length / columns());
+          return Math.max(viewport(), rows * (rowHeight + gap) - gap + 2 * padding);
+        }},
+      });
+      const bounds = node.getBoundingClientRect;
+      node.getBoundingClientRect = () => isGrid()
+        ? {left:10, right:10 + node.clientWidth, top:10, bottom:10 + viewport(), width:node.clientWidth, height:viewport()}
+        : bounds();
+    }
+    if (layout && tag === 'article') {
+      node.getBoundingClientRect = () => {
+        const grid = node.parentNode;
+        const itemIndex = grid?.querySelectorAll('.ch-preset-card').indexOf(node) ?? 0;
+        const row = Number(node.style['grid-row-start'] ?? Math.floor(itemIndex / columns()) + 1);
+        const column = itemIndex % columns() + 1;
+        const top = 10 + padding + (row - 1) * (rowHeight + gap) - (grid?.scrollTop ?? 0);
+        const left = 10 + (column - 1) * (150 + gap);
+        return {left, right:left + 150, top, bottom:top + rowHeight, width:150, height:rowHeight};
+      };
+      node.scrollIntoView = () => {
+        const grid = node.parentNode;
+        const card = node.getBoundingClientRect(), frame = grid.getBoundingClientRect();
+        const delta = card.top < frame.top ? card.top - frame.top : Math.max(0, card.bottom - frame.bottom);
+        grid.scrollTop = Math.max(0, Math.min(grid.scrollHeight - grid.clientHeight, grid.scrollTop + delta));
+      };
+    }
     return node;
   };
   doc.getElementById=id=>{
     const walk=node=>{if(node.id===id)return node;for(const child of node.children){const match=walk(child);if(match)return match;}return null;};
     return walk(doc.documentElement);
   };
-  const navigation={query,category,scope,scroll:0};
+  const navigation={query,category,scope,scroll};
   const preferences={favorites:[],recent:[],folderColors:{},collapsedFolders:[],presetAutoplay:false,presetSize:200};
-  const gallery=createPresetGallery(doc,{locale,navigation,busy,context:()=>context,openApplied(){},personal,personalAction,...(elements?{elements}:{}),
+  const gallery=createPresetGallery(doc,{locale,navigation,busy,context:()=>context,openApplied(){},personal,personalAction,revealId,...(elements?{elements}:{}),
     preferences:{snapshot:()=>preferences,toggleFolder(id){preferences.collapsedFolders=preferences.collapsedFolders.includes(id)?preferences.collapsedFolders.filter(item=>item!==id):[...preferences.collapsedFolders,id];},toggleFavorite(id){preferences.favorites=preferences.favorites.includes(id)?preferences.favorites.filter(item=>item!==id):[...preferences.favorites,id];},
-      setFolderColor(id,color){const next={...preferences.folderColors};if(color)next[id]=color;else delete next[id];preferences.folderColors=next;},clearFolderColors(){preferences.folderColors={};}},
+      setFolderColor(id,color){const next={...preferences.folderColors};if(color)next[id]=color;else delete next[id];preferences.folderColors=next;},clearFolderColors(){preferences.folderColors={};},setPresetSize(value){preferences.presetSize=value;preferences.sizeWrites=(preferences.sizeWrites??0)+1;}},
     apply(preset,settings,mode){applied.push({preset,settings,mode});return onApply?.(preset,navigation);},edit(){}});
   doc.documentElement.appendChild(gallery.element);
+  if (layout) { flushFrame(); flushFrame(); flushFrame(); }
   // Details appear only after a choice; most tests start from the user picking the first card.
   if(pick){gallery.element.getElementsByTagName('button').find(node=>node.className.includes('ch-preset-apply'))?.click();doc.documentElement.setAttribute('data-reduced-motion','true');doc.emit('keydown',{key:'Escape'});doc.documentElement.removeAttribute('data-reduced-motion');}
   t.after(()=>{gallery.dispose();Object.assign(globalThis,saved);});
-  return {doc,navigation,gallery,applied,context,preferences};
+  return {doc,navigation,gallery,applied,context,preferences,flushFrame,resizeGrid() {
+    const target = gallery.element.querySelector('.ch-preset-grid');
+    resizeDeliveries.get(target)?.([{target}]);
+  }};
 }
 
 test('gallery search is always visible and retains its query without recreating the control',t=>{
  const f=fixture(t),control=f.gallery.element.querySelector('.ch-preset-search'),input=control.getElementsByTagName('input')[0];
- assert.deepEqual(control.getElementsByTagName('button').map(node=>node.className),['ch-label-filter__button'],'only the filter lives inside the field; no expand trigger');input.focus();input.value='arco';input.emit('input');input.emit('blur');
+ const buttons=control.getElementsByTagName('button'),clear=buttons.find(node=>node.classList.contains('ch-preset-search-clear'));
+ assert.equal(buttons.length,2,'only clear and the label filter live inside the field');
+ assert.equal(clear.hidden,true);
+ input.focus();input.value='arco';input.emit('input');input.emit('blur');
  assert.equal(f.navigation.query,'arco');assert.equal(control.getElementsByTagName('input')[0]===input,true);
- input.value='';input.emit('input');assert.equal(f.navigation.query,'');
+ assert.equal(clear.hidden,false);clear.click();
+ assert.equal(f.navigation.query,'');assert.equal(input.value,'');assert.equal(clear.hidden,true);assert.equal(f.doc.activeElement,input);
 });
 
 test('collection path and count follow folders; clearing filters preserves the folder',t=>{
@@ -147,12 +216,12 @@ test('thumbnail size lives in the fixed footer and the tree exposes a splitter',
 test('category menu supports arrow, Home/End and fold keys',t=>{
   const {gallery,doc,preferences}=fixture(t),root=gallery.element;
   const menu=root.getElementsByTagName('div').find(node=>node.className==='ch-preset-filter-menu');
-  menu.getElementsByTagName('button').find(node=>node.dataset.category==='signature').focus();
+  menu.getElementsByTagName('button').find(node=>node.dataset.category==='elements').focus();
   const key=name=>menu.emit('keydown',{key:name,target:doc.activeElement});
-  assert.equal(doc.activeElement.dataset.category,'signature');
-  key('ArrowDown');assert.equal(doc.activeElement.dataset.category,'signature-essentials');
-  key('ArrowLeft');assert.equal(doc.activeElement.dataset.category,'signature','Left on a child returns to its group');
-  key('ArrowLeft');assert.deepEqual(preferences.collapsedFolders,['signature']);
+  assert.equal(doc.activeElement.dataset.category,'elements');
+  key('ArrowDown');assert.equal(doc.activeElement.dataset.category,'elements-shape');
+  key('ArrowLeft');assert.equal(doc.activeElement.dataset.category,'elements','Left on a child returns to its group');
+  key('ArrowLeft');assert.deepEqual(preferences.collapsedFolders,['elements']);
   key('ArrowRight');assert.deepEqual(preferences.collapsedFolders,[]);
   key('End');assert.equal(doc.activeElement.dataset.category,'personal','a disabled Add folder is skipped');
   key('Home');assert.equal(doc.activeElement.dataset.category,'all','Todos os presets opens the tree (design system 2026-11)');
@@ -363,13 +432,13 @@ function narrow(t, options = {}) {
 }
 
 test('below 360 px the folder tree folds into a picker above the cards',t=>{
-  const {root,picker,menu,navigation}=narrow(t,{category:'signature-cinema'});
+  const {root,picker,menu,navigation}=narrow(t,{category:'text-words'});
   assert.equal(root.getAttribute('data-folder-picker'),'true');
   assert.equal(root.querySelector('.ch-preset-browser-heading').contains(picker),true,'the picker takes the breadcrumb row above the grid');
   assert.equal(menu.hidden,true);assert.equal(menu.getAttribute('aria-hidden'),'true');
   assert.equal(picker.getAttribute('aria-expanded'),'false');assert.equal(picker.getAttribute('aria-controls'),menu.id);
-  assert.equal(picker.getAttribute('aria-label'),'Pasta: Signature › Cinema');assert.equal(picker.title,'Signature › Cinema');
-  assert.match(picker.allText,/Signature.*›.*Cinema/);
+  assert.equal(picker.getAttribute('aria-label'),'Pasta: Tipografia › Palavras');assert.equal(picker.title,'Tipografia › Palavras');
+  assert.match(picker.allText,/Tipografia.*›.*Palavras/);
   assert.equal(navigation.sidebarWidth,undefined,'a narrow dock leaves the saved tree width alone');
 });
 
@@ -378,21 +447,21 @@ test('the picker opens the same tree on the current folder and closes on a choic
   picker.click();
   assert.equal(picker.getAttribute('aria-expanded'),'true');assert.equal(menu.hidden,false);assert.equal(menu.getAttribute('data-open'),'true');
   assert.equal(doc.activeElement,folder('all'),'the current folder takes focus');
-  menu.emit('keydown',{key:'ArrowDown',target:doc.activeElement});assert.equal(doc.activeElement,folder('emulsion'),'arrow keys walk the same tree');
-  folder('signature-cinema').click();
-  assert.equal(navigation.category,'signature-cinema');assert.equal(menu.hidden,true);assert.equal(picker.getAttribute('aria-expanded'),'false');
+  menu.emit('keydown',{key:'ArrowDown',target:doc.activeElement});assert.equal(doc.activeElement,folder('motion'),'arrow keys walk the same tree');
+  folder('text-words').click();
+  assert.equal(navigation.category,'text-words');assert.equal(menu.hidden,true);assert.equal(picker.getAttribute('aria-expanded'),'false');
   assert.equal(doc.activeElement,picker,'focus returns to the picker');
-  assert.equal(picker.getAttribute('aria-label'),'Pasta: Signature › Cinema');
-  picker.click();assert.equal(doc.activeElement,folder('signature-cinema'));
+  assert.equal(picker.getAttribute('aria-label'),'Pasta: Tipografia › Palavras');
+  picker.click();assert.equal(doc.activeElement,folder('text-words'));
 });
 
 test('the tree sheet keeps folding and labels; Escape and focus leaving close it',t=>{
   const {doc,root,picker,menu,preferences}=narrow(t);
   picker.click();
   menu.getElementsByTagName('button').find(node=>node.className==='ch-folder-toggle'&&node.getAttribute('aria-expanded')==='true').click();
-  assert.deepEqual(preferences.collapsedFolders,['emulsion'],'folding is the same preference as the sidebar');
+  assert.deepEqual(preferences.collapsedFolders,['motion'],'folding is the same preference as the sidebar');
   menu.emit('focusout',{relatedTarget:null});assert.equal(menu.hidden,false,'a redraw inside the sheet does not close it');
-  menu.getElementsByTagName('button').find(node=>node.getAttribute('aria-label')==='Etiqueta e opções: Impulso').click();
+  menu.getElementsByTagName('button').find(node=>node.getAttribute('aria-label')==='Etiqueta e opções: Animações').click();
   doc.emit('keydown',{key:'Escape'});
   assert.equal(menu.getElementsByTagName('div').some(node=>node.className==='ch-folder-palette'),false,'Escape closes the label palette first');
   assert.equal(menu.hidden,false);
@@ -487,6 +556,8 @@ test('transition double-click applies once and shares one real operation lock wi
   const {gallery,applied}=fixture(t,{onApply:()=>new Promise(done=>{resolve=done;})}),root=gallery.element;
   const phase=value=>root.getElementsByTagName('button').find(node=>node.dataset.phase===value);
   root.querySelector('.ch-preset-preview').emit('dblclick');assert.equal(applied.length,1);
+  assert.equal(phase(applied[0].settings.phase).getAttribute('aria-busy'),'true');
+  assert.equal(phase('both').getAttribute('data-button-size'),'24');
   root.querySelector('.ch-preset-preview').emit('dblclick');phase('both').click();phase('in').keydown('Enter');
   assert.equal(applied.length,1,'nothing else starts while the double-click apply runs');
   resolve({ok:false,message:'Host refused the target'});await Promise.resolve();
@@ -738,26 +809,26 @@ test('folder "…" menu follows the Composer: Focus Folder, eight labels with No
   const buttons=()=>root.getElementsByTagName('button');
   const more=label=>buttons().find(node=>node.getAttribute('aria-label')===`Etiqueta e opções: ${label}`);
   const row=id=>buttons().find(node=>node.className==='ch-folder-select'&&node.dataset.category===id)?.parentNode;
-  more('Impulso').click();
+  more('Animações').click();
   const menu=root.getElementsByTagName('div').find(node=>node.className==='ch-folder-palette');
   assert.ok(menu,'the menu opens under the folder');
   const swatches=menu.getElementsByTagName('button').filter(node=>node.className==='ch-folder-swatch');
   assert.deepEqual(swatches.map(node=>node.getAttribute('aria-label')),['Sem etiqueta','Vermelho','Amarelo','Verde','Verde-água','Azul','Roxo','Magenta']);
   assert.equal(swatches[0].getAttribute('aria-checked'),'true','folders ship without a label');
   swatches[1].click();
-  assert.deepEqual(f.preferences.folderColors,{momentum:'red'});
-  assert.equal(row('momentum').dataset.color,'red');assert.equal(row('momentum-2d').dataset.color,'red','children inherit the label');
+  assert.deepEqual(f.preferences.folderColors,{motion:'red'});
+  assert.equal(row('motion').dataset.color,'red');assert.equal(row('motion-2d').dataset.color,'red','children inherit the label');
   assert.equal(root.getElementsByTagName('div').some(node=>node.className==='ch-folder-palette'),false,'choosing a label closes the menu');
-  more('Signature').click();
+  more('Tipografia').click();
   root.getElementsByTagName('button').find(node=>node.className==='ch-folder-menu-item'&&node.textContent==='Limpar todas as etiquetas').click();
-  assert.deepEqual(f.preferences.folderColors,{});assert.equal(row('momentum').dataset.color,undefined);
-  more('Impulso').click();
+  assert.deepEqual(f.preferences.folderColors,{});assert.equal(row('motion').dataset.color,undefined);
+  more('Animações').click();
   root.getElementsByTagName('button').find(node=>node.className==='ch-folder-menu-item'&&node.textContent==='Focar pasta').click();
-  assert.equal(f.navigation.focusFolder,'momentum');assert.equal(f.navigation.category,'momentum');
-  assert.equal(root.querySelector('.ch-folder-focus-path').textContent,'Impulso');
-  assert.ok(row('momentum-3d'),'the focused folder lists its children');assert.equal(row('signature'),undefined,'other roots are hidden');
+  assert.equal(f.navigation.focusFolder,'motion');assert.equal(f.navigation.category,'motion');
+  assert.equal(root.querySelector('.ch-folder-focus-path').textContent,'Animações');
+  assert.ok(row('motion-3d'),'the focused folder lists its children');assert.equal(row('text'),undefined,'other roots are hidden');
   buttons().find(node=>node.getAttribute('aria-label')==='Mostrar todos os itens').click();
-  assert.equal(f.navigation.focusFolder,undefined);assert.ok(row('signature'),'Show all items restores the tree');
+  assert.equal(f.navigation.focusFolder,undefined);assert.ok(row('text'),'Show all items restores the tree');
 });
 
 test('autoplay starts a rendered preview only once its card is in view, always from the first frame of its cycle',async t=>{
@@ -780,4 +851,247 @@ test('autoplay starts a rendered preview only once its card is in view, always f
  fire(view_,0);await new Promise(done=>setTimeout(done,1000));
  assert.equal(player(),undefined,'once it has really left it is rewound to its still');
  fire(view_,1);const again=player();assert.ok(again,'back in view it plays again');assert.notEqual(again,first,'from a fresh start, not where it stopped');
+});
+
+test('thumbnail size slider resizes the grid while dragging and saves the preference only on release',t=>{
+  const f=fixture(t),root=f.gallery.element;
+  const size=root.getElementsByTagName('input').find(node=>node.type==='range');
+  const grid=root.querySelector('.ch-preset-grid');
+  const frames=[];globalThis.requestAnimationFrame=callback=>{frames.push(callback);return frames.length;};
+  for(const value of ['220','260','300']){size.value=value;size.emit('input');}
+  assert.equal(frames.length,1,'three drag steps in one frame schedule a single grid update');
+  assert.equal(Number(size.style['--ch-slider-fraction']), (300-140)/(320-140));
+  assert.equal(f.preferences.sizeWrites??0,0,'dragging never writes the preference');
+  frames.shift()();
+  assert.equal(grid.style['--preview-size'],'300px');
+  assert.equal(root.style['--preview-size'],undefined,'the size lives on the grid only, so the gallery subtree is not restyled');
+  size.emit('change');
+  assert.equal(f.preferences.sizeWrites,1);assert.equal(f.preferences.presetSize,300);
+  size.emit('change');
+  assert.equal(f.preferences.sizeWrites,1,'a release without a new drag does not write again');
+});
+
+test('favorite toggle outside the favorites filter updates the star in place without rebuilding cards',t=>{
+  const {gallery,navigation}=fixture(t),root=gallery.element;
+  const id=navigation.selectedId;
+  const card=()=>root.getElementsByTagName('article').find(node=>node.id===id);
+  const before=card(),star=before.getElementsByTagName('button').find(node=>node.dataset.focusKey==='favorite.'+id);
+  star.click();
+  assert.equal(card()===before,true,'the card node survives the toggle');
+  assert.equal(star.getAttribute('aria-pressed'),'true');assert.equal(star.dataset.pop,'true');
+  star.click();
+  assert.equal(card()===before,true);assert.equal(star.getAttribute('aria-pressed'),'false');assert.equal(star.dataset.pop,undefined);
+});
+
+const browsablePresets = GALLERY_PRESETS.filter(preset => !preset.motion?.retired);
+
+test('only nearby rows mount across large scrolls, while Home and End reach the logical catalog bounds', t => {
+  const observers = [];
+  class Observer {
+    constructor() { this.targets = new Set(); observers.push(this); }
+    observe(target) { this.targets.add(target); }
+    unobserve(target) { this.targets.delete(target); }
+    disconnect() { this.targets.clear(); }
+  }
+  const {gallery, doc, navigation, flushFrame} = fixture(t, {layout: {}, pick: false, observer: Observer});
+  const root = gallery.element, grid = root.querySelector('.ch-preset-grid');
+  const cards = () => grid.querySelectorAll('.ch-preset-card');
+  const visibleAt = top => cards().find(card => card.id === browsablePresets[Math.floor(top / 118) * 2].id);
+  assert.equal(root.querySelector('.ch-preset-result-count').textContent, `${browsablePresets.length} itens`);
+  assert.ok(cards().length >= 4 && cards().length <= 18, 'DOM follows the viewport, not the catalog');
+  const first = cards()[0];
+  const firstPreview = first.querySelector('.ch-preset-preview');
+  assert.equal(first.id, browsablePresets[0].id);
+  assert.ok(grid.scrollHeight > 20000, 'distant unmounted rows still contribute to the scroll extent');
+  assert.ok(observers.every(observer => observer.targets.has(firstPreview)));
+
+  grid.scrollTop = 4000;
+  grid.emit('scroll');
+  grid.scrollTop = 9000;
+  grid.emit('scroll');
+  flushFrame();
+  assert.equal(navigation.scroll, 9000);
+  assert.ok(visibleAt(9000), 'the frame mounts the last requested position');
+  assert.ok(!visibleAt(4000) && !cards().includes(first));
+  assert.ok(cards().length <= 18);
+  assert.ok(observers.every(observer => !observer.targets.has(firstPreview)), 'detached views leave both preview observers');
+
+  const middle = visibleAt(9000).querySelector('.ch-preset-preview');
+  middle.focus();
+  middle.keydown('End');
+  flushFrame();
+  const last = browsablePresets.at(-1);
+  assert.equal(navigation.selectedId, last.id);
+  assert.equal(doc.activeElement.closest('.ch-preset-card').id, last.id);
+  assert.ok(cards().length <= 18);
+  assert.ok(grid.scrollTop > 20000);
+
+  doc.activeElement.keydown('Home');
+  flushFrame();
+  assert.equal(navigation.selectedId, first.id);
+  assert.equal(doc.activeElement.closest('.ch-preset-card').id, first.id);
+  assert.ok(grid.scrollTop <= 2);
+});
+
+test('changing the number of columns updates vertical keyboard navigation', t => {
+  const layout = {columns: 2};
+  const {gallery, doc, navigation, flushFrame, resizeGrid} = fixture(t, {layout, pick: false});
+  const grid = gallery.element.querySelector('.ch-preset-grid');
+  const first = grid.querySelector('.ch-preset-preview');
+  const oldExtent = grid.scrollHeight;
+  first.focus();
+  first.keydown('ArrowDown');
+  assert.equal(navigation.selectedId, browsablePresets[2].id);
+
+  layout.columns = 1;
+  resizeGrid();
+  flushFrame();
+  assert.ok(grid.scrollHeight > oldExtent, 'each card now takes its own row');
+  doc.activeElement.keydown('ArrowDown');
+  assert.equal(navigation.selectedId, browsablePresets[3].id);
+});
+
+test('Tab and Shift+Tab follow the catalog when the neighboring card is unmounted', t => {
+  const {gallery, doc, navigation, flushFrame} = fixture(t, {layout: {}, pick: false});
+  const grid = gallery.element.querySelector('.ch-preset-grid');
+  const cards = () => grid.querySelectorAll('.ch-preset-card');
+  grid.scrollTop = 9000;
+  grid.emit('scroll');
+  flushFrame();
+
+  const first = cards()[0], last = cards().at(-1);
+  const indexOf = card => browsablePresets.findIndex(preset => preset.id === card.id);
+  for (const [card, shiftKey, current, next, direction] of [
+    [last, false, '.ch-preset-favorite', '.ch-preset-preview', 1],
+    [first, true, '.ch-preset-preview', '.ch-preset-favorite', -1],
+  ]) {
+    const expected = browsablePresets[indexOf(card) + direction].id;
+    const control = card.querySelector(current);
+    control.focus();
+    assert.ok(!cards().some(item => item.id === expected));
+    assert.equal(control.keydown('Tab', {shiftKey}).defaultPrevented, true);
+    assert.equal(doc.activeElement.closest('.ch-preset-card').id, expected);
+    assert.equal(doc.activeElement.classList.contains(next.slice(1)), true);
+    assert.equal(navigation.selectedId, undefined, 'Tab moves focus without selecting');
+  }
+});
+
+test('the virtual search retains its input and shows the full filtered count after the debounce', async t => {
+  const {gallery, doc, navigation, flushFrame} = fixture(t, {layout: {}, pick: false});
+  const root = gallery.element, grid = root.querySelector('.ch-preset-grid');
+  const count = () => root.querySelector('.ch-preset-result-count').textContent;
+  const cards = () => grid.querySelectorAll('.ch-preset-card');
+  const search = root.querySelector('.ch-preset-search').getElementsByTagName('input')[0];
+  const text = preset => `${preset.displayName['pt-BR'] ?? preset.id} ${preset.tags}`;
+  const matching = browsablePresets.filter(preset => text(preset).normalize('NFD').toLowerCase().includes('a'));
+  search.focus();
+  search.value = 'A';
+  search.emit('input');
+  assert.equal(navigation.query, 'A');
+  assert.equal(count(), `${browsablePresets.length} itens`, 'the old results stay mounted during the debounce');
+  await new Promise(resolve => setTimeout(resolve, 275));
+  flushFrame();
+  assert.equal(count(), `${matching.length} itens`);
+  assert.ok(cards().length < matching.length);
+  assert.deepEqual(cards().map(card => card.id), matching.slice(0, cards().length).map(preset => preset.id));
+  assert.equal(doc.activeElement, search);
+
+  root.querySelector('.ch-preset-clear-filters').click();
+  flushFrame();
+  assert.equal(count(), `${browsablePresets.length} itens`);
+  assert.ok(cards().length <= 18);
+  assert.equal(doc.activeElement, search);
+});
+
+test('changing to a folder reuses overlapping preset cards and preserves their state', t => {
+  const {gallery, navigation, flushFrame} = fixture(t, {layout: {}, pick: false});
+  const root = gallery.element, grid = root.querySelector('.ch-preset-grid');
+  const first = grid.querySelector('.ch-preset-card');
+  const firstPreset = browsablePresets[0];
+  const category = ['text', 'motion', 'transitions'].find(id => galleryCategoryMatches(id, firstPreset));
+  assert.ok(category, 'the leading preset belongs to a folder in the tree');
+  const folder = id => root.querySelectorAll('.ch-folder-select').find(item => item.dataset.category === id);
+  const star = first.querySelector('.ch-preset-favorite');
+  star.click();
+  folder(category).click();
+  flushFrame();
+  const results = browsablePresets.filter(preset => galleryCategoryMatches(category, preset));
+  assert.equal(navigation.category, category);
+  assert.equal(root.querySelector('.ch-preset-result-count').textContent, `${results.length} itens`);
+  assert.equal(grid.querySelector('.ch-preset-card'), first);
+  assert.equal(star.getAttribute('aria-pressed'), 'true');
+
+  folder(category === 'text' ? 'motion' : 'text').click();
+  flushFrame();
+  assert.ok(!grid.contains(first), 'a disjoint folder detaches the card');
+  folder('all').click();
+  flushFrame();
+  assert.equal(grid.querySelector('.ch-preset-card'), first, 'returning remounts its cached node');
+  assert.equal(star.getAttribute('aria-pressed'), 'true');
+});
+
+test('the delegated card menu toggles a favorite in place and returns focus to its star', t => {
+  const {gallery, doc, preferences} = fixture(t, {layout: {}, pick: false});
+  const grid = gallery.element.querySelector('.ch-preset-grid');
+  const card = grid.querySelector('.ch-preset-card');
+  const star = card.querySelector('.ch-preset-favorite');
+  const event = card.querySelector('.ch-preset-preview').emit('contextmenu', {clientX: 60, clientY: 40});
+  assert.equal(event.defaultPrevented, true);
+  const menu = doc.body.querySelectorAll('.ch-context-menu')[0];
+  assert.ok(menu, 'right-click reaches the grid and opens the preset actions');
+  menu.getElementsByTagName('button').find(node => node.dataset.id === 'favorite').click();
+  assert.deepEqual(preferences.favorites, [card.id]);
+  assert.equal(grid.querySelector('.ch-preset-card'), card);
+  assert.equal(star.getAttribute('aria-pressed'), 'true');
+  assert.equal(doc.activeElement, star);
+});
+
+test('a virtual scroll keeps the open variations drawer attached and returns focus on Escape', t => {
+  const {gallery, doc, navigation, flushFrame} = fixture(t, {layout: {}, pick: false});
+  const root = gallery.element, grid = root.querySelector('.ch-preset-grid');
+  const cards = () => grid.querySelectorAll('.ch-preset-card');
+  const anchor = cards().find(card => !card.querySelector('.ch-preset-settings-trigger').hidden);
+  assert.ok(anchor, 'at least one visible preset has variations');
+  const trigger = anchor.querySelector('.ch-preset-settings-trigger');
+  trigger.click();
+  const drawer = root.querySelector('.ch-preset-settings-panel');
+  assert.equal(drawer.hidden, false);
+  assert.equal(drawer.parentNode, grid);
+  assert.equal(trigger.getAttribute('aria-expanded'), 'true');
+  assert.ok(drawer.contains(doc.activeElement));
+  const selected = doc.activeElement;
+
+  grid.scrollTop = 9000;
+  grid.emit('scroll');
+  flushFrame();
+  assert.equal(navigation.scroll, 9000);
+  assert.ok(cards().includes(anchor) && cards().length <= 18);
+  assert.equal(root.querySelector('.ch-preset-settings-panel'), drawer);
+  assert.equal(doc.activeElement, selected);
+  assert.equal(trigger.getAttribute('aria-expanded'), 'true');
+
+  doc.emit('keydown', {key: 'Escape'});
+  assert.equal(doc.activeElement, trigger);
+  assert.equal(trigger.getAttribute('aria-expanded'), 'false');
+});
+
+test('a virtual remount restores its saved offset and can reveal a preset outside that window', async t => {
+  await t.test('restores the saved offset', child => {
+    const {gallery, navigation} = fixture(child, {layout: {}, pick: false, scroll: 9000});
+    const grid = gallery.element.querySelector('.ch-preset-grid');
+    assert.equal(navigation.scroll, 9000);
+    assert.equal(grid.scrollTop, 9000);
+    assert.ok(grid.querySelectorAll('.ch-preset-card').some(card => card.id === browsablePresets[Math.floor(9000 / 118) * 2].id));
+    assert.ok(grid.querySelectorAll('.ch-preset-card').length <= 18);
+  });
+  await t.test('reveal reaches the last preset', child => {
+    const revealId = browsablePresets.at(-1).id;
+    const {gallery, navigation} = fixture(child, {layout: {}, pick: false, scroll: 9000, revealId});
+    const grid = gallery.element.querySelector('.ch-preset-grid');
+    assert.equal(navigation.selectedId, revealId);
+    assert.equal(navigation.pendingRevealId, undefined);
+    assert.ok(grid.scrollTop > 20000);
+    assert.ok(grid.querySelectorAll('.ch-preset-card').some(card => card.id === revealId));
+    assert.ok(grid.querySelectorAll('.ch-preset-card').length <= 18);
+  });
 });

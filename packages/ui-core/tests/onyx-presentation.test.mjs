@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import postcss from 'postcss';
 
 const root = new URL('../../../', import.meta.url);
-const filenames = ['packages/ui-tokens/src/tokens.css', 'packages/ui-core/src/theme.css', 'packages/ui-core/src/components.css', 'packages/ui-core/src/control-refinement.css', 'packages/ui-core/src/library-refinement.css', 'packages/ui-core/src/design-system.css', 'packages/ui-core/src/preset-approved.css', 'packages/ui-core/src/scrubbable-number.css', 'packages/ui-motion/src/motion.css'];
+const filenames = ['packages/ui-tokens/src/tokens.css', 'packages/ui-core/src/base.css', 'packages/ui-core/src/components.css', 'packages/ui-core/src/control-library.css', 'packages/ui-core/src/design-system.css', 'packages/ui-core/src/preset-approved.css', 'packages/ui-core/src/scrubbable-number.css', 'packages/ui-motion/src/motion.css'];
 const sources = await Promise.all(filenames.map(filename => readFile(new URL(filename, root), 'utf8')));
 const parsed = sources.map((source, index) => postcss.parse(source, { from: filenames[index] }));
 

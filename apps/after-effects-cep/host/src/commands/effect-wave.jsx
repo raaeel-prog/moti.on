@@ -4,6 +4,20 @@
  * nao ha substituicao silenciosa do renderizador de um rig legado.
  */
 (function () {
+  /** @param {string} source @returns {boolean} */
+  function managedSource(source) { return MotionExpressions.isManagedWave(source); }
+  /** Expressao do usuario continua valendo por baixo da ferramenta (expression-compose.jsx).
+   * @param {any} property @returns {boolean} */
+  function acceptsTool(property) {
+    var compose = /** @type {any} */ ($.global).MotionExpressionCompose;
+    if (!compose) return String(property.expression || "") === "" || managedSource(String(property.expression));
+    return compose.accepts(property, managedSource);
+  }
+  /** @param {any} property @param {string} expression @returns {string} */
+  function stackedExpression(property, expression) {
+    var compose = /** @type {any} */ ($.global).MotionExpressionCompose;
+    return compose ? compose.stackFor(property, expression, managedSource) : expression;
+  }
   /* global Property */
   var ALLOWED = {
     mode: true,
@@ -181,8 +195,8 @@
           selectionIndex: i
         });
       }
-      if (posicao.expression !== "" && !MotionExpressions.isManagedWave(posicao.expression)) {
-        return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "Position contem expressao de usuario.", {
+      if (!acceptsTool(posicao)) {
+        return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A expressao de usuario em Position termina em um bloco (if/for) e nao pode ser combinada. Faca a ultima linha devolver o valor.", {
           selectionIndex: i
         });
       }
@@ -289,7 +303,7 @@
           expression: posicao.expression,
           expressionEnabled: posicao.expressionEnabled
         });
-        posicao.expression = expr;
+        posicao.expression = stackedExpression(posicao, expr);
         if (typeof posicao.expressionError === "string" && posicao.expressionError !== "") {
           throw new Error("After Effects recusou a expressao de onda.");
         }

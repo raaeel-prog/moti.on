@@ -34,7 +34,8 @@ var context = { hostVersion: "26.5", projectName: "Preview", projectPath: null, 
   averageLayerDurationSeconds: 10, selectionTruncated: false, selectionSignature: "preview" };
 function answer(command) {
   if (command === "ae.context.read") return context;
-  if (command === "ae.presets.inspect") return { state: "unmanaged", message: "", phases: [] };
+  // A page script may set window.__motionInspect to preview the Edit tab with an applied preset.
+  if (command === "ae.presets.inspect") return window.__motionInspect || { state: "unmanaged", message: "", phases: [] };
   if (command === "ae.presets.personal-list") return { roots: [], folders: [], items: [] };
   return { appliedCount: 1, unchangedCount: 0 };
 }

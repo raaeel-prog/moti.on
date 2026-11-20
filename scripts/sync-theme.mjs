@@ -4,8 +4,6 @@ import path from 'node:path';
 import { themeDeclarations, resolveColorToken, afterEffectsDeclarations } from '../packages/ui-tokens/scripts/check-contrast.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const start = '/* @generated tokens:start */';
-const end = '/* @generated tokens:end */';
 
 export function renderTokenMirror(css) {
   const themes = {};
@@ -22,11 +20,7 @@ export function renderTokenMirror(css) {
 
 export async function syncThemeTokens() {
   const css = await readFile(path.join(root, 'packages/ui-tokens/src/tokens.css'), 'utf8');
-  const themePath = path.join(root, 'packages/ui-core/src/theme.css');
-  const current = await readFile(themePath, 'utf8');
-  if (!current.startsWith(start) || !current.includes(end)) throw new Error('Theme token markers are missing; refusing to replace component CSS.');
-  const theme = `${start}\n${css.trimEnd()}\n${end}${current.slice(current.indexOf(end) + end.length)}`;
-  const outputs = [[themePath, theme], [path.join(root, 'shared/crosshost.tokens.css'), css], [path.join(root, 'shared/crosshost.tokens.json'), renderTokenMirror(css)]];
+  const outputs = [[path.join(root, 'shared/crosshost.tokens.css'), css], [path.join(root, 'shared/crosshost.tokens.json'), renderTokenMirror(css)]];
   const aeCss = await readFile(path.join(root, 'packages/ui-tokens/src/after-effects.css'), 'utf8');
   const aeThemes = Object.fromEntries(['dark','light'].map(theme => [theme,Object.fromEntries([...afterEffectsDeclarations(css,aeCss,theme)].map(([name,raw]) => {
     let value=raw;try{value=resolveColorToken(afterEffectsDeclarations(css,aeCss,theme),name);}catch{/* Composite token. */}

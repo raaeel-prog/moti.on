@@ -1,0 +1,96 @@
+/* Keep the hit area larger than the track and place the fill at the thumb centre. */
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-slider-track {
+  --slider-thumb-size: 8px;
+  --slider-stop: calc(4px + (100% - 8px) * var(--ch-slider-fraction, 0));
+  box-sizing: border-box;
+  height: var(--ae-control-sm);
+  min-height: var(--ae-control-sm);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-slider-track::-webkit-slider-runnable-track {
+  height: 2px;
+  border: 0;
+  border-radius: 1px;
+  background: linear-gradient(to right, var(--ae-accent) 0 var(--slider-stop), var(--line-2) var(--slider-stop) 100%);
+}
+
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-slider-track::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  margin-top: -3px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ae-accent);
+  box-shadow: none;
+}
+
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-slider-track:hover:enabled::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--ae-surface-control);
+}
+
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-slider-track:active:enabled::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--ae-accent);
+}
+
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-slider-track:focus-visible,
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-slider-value:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-slider-track:disabled {
+  opacity: var(--disabled-opacity);
+  cursor: default;
+}
+
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] :is(.ch-preset-size, .ch-slider-value-group) .ch-slider-value:enabled {
+  box-sizing: border-box;
+  align-self: center;
+  height: 22px;
+  min-height: 22px;
+  color: var(--ae-accent);
+  font: 600 11px/1 system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding: 0 5px;
+}
+
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-size .ch-slider-value {
+  min-width: 35px;
+  max-width: 35px;
+  flex: 0 0 35px;
+}
+
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-number-disclosure--inline .ch-number-disclosure__body:not([hidden]) {
+  display: grid;
+  grid-template-columns: minmax(44px, 1fr) auto;
+  grid-template-areas: "slider value" "limits .";
+  align-items: center;
+  column-gap: 8px;
+  padding: 0 0 4px;
+}
+
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-number-disclosure--inline .ch-slider-track {
+  grid-area: slider;
+  min-width: 44px;
+}
+
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-number-disclosure--inline .ch-number-disclosure__limits {
+  grid-area: limits;
+  margin: 0 4px;
+}
+
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-slider-value-group {
+  grid-area: value;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-slider-value-group .ch-slider-value {
+  min-width: 44px;
+}

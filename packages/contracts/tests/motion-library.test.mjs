@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import {
+  MOTION_LIBRARY_DUPLICATES_RETIRED,
   MOTION_LIBRARY_DEFAULTS,
   MOTION_LIBRARY_PRESETS,
   isMotionLibraryOptions
@@ -38,7 +39,9 @@ test("reveals start hidden by their transition effect and looks only stylize", (
 test("entrance fade correction preserves every continuous and static recipe", () => {
   const nonTransitions = MOTION_LIBRARY_PRESETS.filter((preset) => preset.mode !== "transition" && preset.collection !== "gemini" && preset.collection !== "native" && preset.collection !== "premium" && preset.collection !== "signature" && preset.collection !== "momentum" && preset.collection !== "reveal" && preset.collection !== "looks" && preset.collection !== "text");
   assert.equal(nonTransitions.length, 29);
-  const digest = createHash("sha256").update(JSON.stringify(nonTransitions)).digest("hex");
+  // 2026-11-18: retiring a repeated motion only adds `retired`; the recipe data must not change.
+  const original = nonTransitions.map(preset => { if (!MOTION_LIBRARY_DUPLICATES_RETIRED.has(preset.id)) return preset; const { retired: _retired, ...rest } = preset; return rest; });
+  const digest = createHash("sha256").update(JSON.stringify(original)).digest("hex");
   assert.equal(digest, "f13a7ba199e261272ef9e6021fba59579047092f01a62548c50141cd80d430de");
 });
 

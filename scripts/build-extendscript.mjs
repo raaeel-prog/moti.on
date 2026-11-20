@@ -97,6 +97,8 @@ export const HOST_SOURCE_ORDER = [
   "keyframe-operations.jsx",
   "selection-signature.jsx",
   "effect-operations.jsx",
+  "layer-look.jsx",
+  "expression-compose.jsx",
   "grouped-controls.jsx",
   "live-controls.jsx",
   "live-preset.jsx",

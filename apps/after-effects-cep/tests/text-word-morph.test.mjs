@@ -26,6 +26,7 @@ class Prop {
   get value() {return this.matchName === "ADBE Text Document" ? cloneDoc(this._value) : copy(this._value);}
   setValue(value) {if (this.matchName === "ADBE Position" && this.dimensionsSeparated) throw Error("separated Position leader cannot accept a value");if (this.rejectOnce) {this.rejectOnce = false; throw Error("injected property write failure");} this._value = this.matchName === "ADBE Text Document" ? cloneDoc(value) : copy(value);}
   get numProperties() {return this.children.length;}
+  canAddProperty() {return true;}
   get canSetExpression() {return !this.numProperties;}
   get numKeys() {return this.keys.length;}
   property(k) {return typeof k === "number" ? this.children[k-1] : this.children.find(p => p.name === k || p.matchName === k);}
@@ -60,7 +61,7 @@ class Comp {
 const args = overrides => ({action:"apply",renderer:"morph",durationFrames:24,staggerFrames:4,paddingX:10,paddingY:8,roundness:4,revealPoint:50,boxGap:3,fillColor:[.8,.1,.2],direction:"bottom",smoothness:75,formationPercent:25,holdPercent:10,travelPercent:10,order:"normal",automatic:true,progress:0,useSourceColor:true,textColor:[1,1,1],...overrides});
 async function fixture(text="BO box") {
   const comp=new Comp(),source=comp.layers.addText(text); source.comment="User notes"; const app={project:{activeItem:comp},findMenuCommandId:() => 1,executeCommand:() => comp.convert()};
-  const scope=await loadHostModules(["generated/motion-contracts.jsx","src/json.jsx","src/registry.jsx","src/keyframe-operations.jsx","src/menu-command.jsx","src/morph-geometry.jsx","src/text-glyph-outlines.jsx","src/commands/text-word-morph.jsx","src/commands/text-word-reveal.jsx"],{app,CompItem:Comp,TextLayer,Shape:class Shape {},ParagraphJustification:{LEFT_JUSTIFY:0},KeyframeInterpolationType:{LINEAR:1},PropertyType:{PROPERTY:1},PropertyValueType:{OneD:1,COLOR:2},KeyframeEase:class KeyframeEase {constructor(speed,influence) {this.speed=speed;this.influence=influence;}}});
+  const scope=await loadHostModules(["generated/motion-contracts.jsx","src/json.jsx","src/registry.jsx","src/keyframe-operations.jsx","src/layer-look.jsx","src/menu-command.jsx","src/morph-geometry.jsx","src/text-glyph-outlines.jsx","src/commands/text-word-morph.jsx","src/commands/text-word-reveal.jsx"],{app,CompItem:Comp,TextLayer,Shape:class Shape {},ParagraphJustification:{LEFT_JUSTIFY:0},KeyframeInterpolationType:{LINEAR:1},PropertyType:{PROPERTY:1},PropertyValueType:{OneD:1,COLOR:2},KeyframeEase:class KeyframeEase {constructor(speed,influence) {this.speed=speed;this.influence=influence;}}});
   const command=scope.MotionRegistry.get("ae.text.word-reveal"),readCommand=scope.MotionRegistry.get("ae.text.word-reveal.read");
   const run=a => {const e=command.preflight(a); if(e) return {error:e}; return command.run(a);}; const read=() => {const e=readCommand.preflight({}); return e?{error:e}:readCommand.run({}).data;};
   const meta=l => scope.MotionWordMorph.meta(l); const rig=() => comp.list.find(l => meta(l)?.role === "controller"); const words=() => comp.list.filter(l => meta(l)?.role === "word").sort((a,b) => meta(a).order-meta(b).order);
@@ -235,4 +236,18 @@ test("shared extraction enforces the existing total native vertex budget and cle
   };
   assert.throws(() => f.scope.MotionTextGlyphOutlines.extract(f.comp,f.source,created),/Morph geometry exceeds bounded host budget/);
   assert.deepEqual(created,[]);assert.deepEqual(f.comp.list,[f.source]);assert.deepEqual(f.comp.selectedLayers,[f.source]);assert.equal(f.source.enabled,true);
+});
+
+test("text with another tool's effect and animator still morphs; words inherit the effect",async () => {
+  const f=await fixture(),parade=f.source.property("ADBE Effect Parade");
+  parade.addProperty("ADBE Slider Control").name="Moti.on Gradiente"; cp(f.source,"Moti.on Gradiente").setValue(7); cp(f.source,"Moti.on Gradiente").expression="value*2"; cp(f.source,"Moti.on Gradiente").expressionEnabled=true;
+  f.source.property("ADBE Text Properties").property("ADBE Text Animators").addProperty("ADBE Text Animator").name="Moti.on Text";
+  const r=f.run(args()); assert.equal(r.error,undefined); assert.equal(r.changed,true);
+  for (const w of f.words()) {const e=cp(w,"Moti.on Gradiente"); assert.equal(e.value,7); assert.equal(e.expression,"value*2");}
+  assert.equal(parade.numProperties,1); f.run(args({action:"remove"})); assert.deepEqual(f.comp.list,[f.source]); assert.equal(cp(f.source,"Moti.on Gradiente").value,7);
+});
+test("trailing empty lines that the host does not measure do not block the morph",async () => {
+  const f=await fixture("BO box\r"),p=f.source.property("ADBE Text Properties").property("ADBE Text Document"),d=p.value;
+  Object.defineProperty(d,"baselineLocs",{get() {return [0,0,240,0];}}); Object.defineProperty(p,"value",{get() {return d;}});
+  assert.equal(f.command.preflight(args()),null);
 });
