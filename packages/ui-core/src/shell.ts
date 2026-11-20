@@ -958,6 +958,7 @@ export function createShell(options: ShellOptions): Shell {
   fieldHidden(overflow, true);
   overflow.setAttribute("data-motion", "surface-morph");
   overflow.setAttribute("data-open", "false");
+  overflow.setAttribute("role", "menu");
   const more = createElement(doc, "button", "ch-nav__more");
   more.setAttribute("type", "button");
   more.setAttribute("aria-controls", overflow.id);
@@ -1236,11 +1237,16 @@ export function createShell(options: ShellOptions): Shell {
     };
     for (const view of visible) {
       const item = buttons.get(view.id);
-      if (item) move(item, primaryNav);
+      if (!item) continue;
+      move(item, primaryNav);
+      item.setAttribute("role", "tab");
     }
     for (const view of overflowPrimaries) {
       const item = buttons.get(view.id);
-      if (item) move(item, overflow);
+      if (!item) continue;
+      move(item, overflow);
+      item.setAttribute("role", "menuitem");
+      item.removeAttribute("aria-selected");
     }
     for (const view of leftovers) {
       const item = buttons.get(view.id);
