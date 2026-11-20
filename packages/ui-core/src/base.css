@@ -1718,3 +1718,78 @@ body,
 .ch-settings-help { display:flex; flex-wrap:wrap; gap:var(--ch-space-2); }
 .ch-settings-help > .ch-section-title { flex:0 0 100%; }
 .ch-settings-help-action { min-width:0; }
+
+
+/* ── Library nav, dir. A + Mais (2026-11-20): full tab names, never icon-only.
+ *    Overflow of the five primary tabs is handled in shell.ts (data-nav-tabs).
+ *    Search and Settings in .ch-nav__utilities keep their icons. ─────────── */
+.ch-shell[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view],
+.ch-shell[data-layout="library"] .ch-nav__overflow .ch-nav__item[data-view],
+.ch-shell[data-layout="library"] .ch-nav__more {
+  width: auto;
+  min-width: 0;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 28px;
+  color: #9A9A9A;
+  background: transparent;
+  box-shadow: none;
+}
+.ch-shell[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view] .ch-nav__label,
+.ch-shell[data-layout="library"] .ch-nav__overflow .ch-nav__item[data-view] .ch-nav__label,
+.ch-shell[data-layout="library"] .ch-nav__more .ch-nav__more-label {
+  display: inline;
+  font-size: 11px;
+  line-height: 28px;
+  white-space: nowrap;
+}
+.ch-shell[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view] svg,
+.ch-shell[data-layout="library"] .ch-nav__overflow .ch-nav__item[data-view] svg {
+  display: none;
+}
+.ch-shell[data-layout="library"] .ch-nav__more svg { display: none; }
+.ch-shell[data-layout="library"] .ch-nav__more-caret { font-size: 9px; margin-left: 4px; }
+.ch-shell[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view]:hover,
+.ch-shell[data-layout="library"] .ch-nav__more:hover,
+.ch-shell[data-layout="library"] .ch-nav__overflow .ch-nav__item[data-view]:hover {
+  color: #DEDEDE;
+  background: transparent;
+}
+.ch-shell[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view].is-active {
+  color: #DEDEDE;
+  background: transparent;
+  box-shadow: inset 0 -2px 0 #54A3F6;
+}
+.ch-shell[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view]:focus-visible,
+.ch-shell[data-layout="library"] .ch-nav__more:focus-visible,
+.ch-shell[data-layout="library"] .ch-nav__overflow .ch-nav__item[data-view]:focus-visible {
+  outline: 2px solid #4096F3;
+  outline-offset: -2px;
+  color: #DEDEDE;
+}
+.ch-shell--compact[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view] .ch-nav__label,
+.ch-shell--compact[data-layout="library"] .ch-nav__overflow .ch-nav__item[data-view] .ch-nav__label {
+  display: inline;
+}
+@media (max-width: 339px) {
+  .ch-shell[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view],
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="home"],
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="presets"],
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="tools"],
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="ease"] {
+    width: auto;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+  .ch-shell[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view] .ch-nav__label,
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="ease"] .ch-nav__label {
+    display: inline;
+  }
+  .ch-shell[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view] svg,
+  .ch-shell[data-layout="library"] .ch-nav__item[data-view="ease"] svg {
+    display: none;
+  }
+}

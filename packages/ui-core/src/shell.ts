@@ -38,6 +38,13 @@ export const COMPACT_MAX = 339;
 export const DEFAULT_MAX = 479;
 export const COMFORT_MAX = 719;
 
+/** How many primary library tabs stay visible as text: 2 below 360, 3 below 440, all from 440. */
+export function visibleLibraryTabCount(width: number | undefined): number {
+  if (!width || width < 360) return 2;
+  if (width < 440) return 3;
+  return Number.POSITIVE_INFINITY;
+}
+
 let shellSequence = 0;
 
 function fieldEnglish(doc: Document): boolean {
@@ -955,13 +962,16 @@ export function createShell(options: ShellOptions): Shell {
   more.setAttribute("type", "button");
   more.setAttribute("aria-controls", overflow.id);
   more.setAttribute("aria-expanded", "false");
-  more.appendChild(createIcon(doc, "more"));
+  more.appendChild(createElement(doc, "span", "ch-nav__more-label", i18n.t("nav.more")));
+  more.appendChild(createElement(doc, "span", "ch-nav__more-caret", "▾"));
+  more.setAttribute("aria-label", i18n.t("nav.more"));
+  more.setAttribute("title", i18n.t("nav.more"));
   if (libraryLayout) {
     primaryNav.setAttribute("role", "tablist");
     nav.appendChild(primaryNav);
     nav.appendChild(utilities);
-    utilities.appendChild(more);
-    utilities.appendChild(overflow);
+    primaryNav.appendChild(more);
+    primaryNav.appendChild(overflow);
   }
   function closeOverflow(restoreFocus = false): void {
     fieldHidden(overflow, true);
@@ -984,9 +994,28 @@ export function createShell(options: ShellOptions): Shell {
   shellNode.addEventListener("click", event => {
     if (!overflow.hidden && event.target !== more && !contem(more, event.target as Element) && !contem(overflow, event.target as Element)) closeOverflow();
   });
-  utilities.addEventListener("focusout", event => {
+  nav.addEventListener("focusout", event => {
     const next = (event as FocusEvent).relatedTarget as Element | null;
-    if (!next || !contem(utilities, next)) closeOverflow();
+    if (!next || !contem(nav, next)) closeOverflow();
+  });
+  overflow.addEventListener("keydown", event => {
+    const key = (event as KeyboardEvent).key;
+    const items: HTMLElement[] = [];
+    const children = overflow.children;
+    for (let index = 0; index < children.length; index += 1) {
+      const node = children[index] as HTMLElement | undefined;
+      if (node && (node.tagName || "").toLowerCase() === "button") items.push(node);
+    }
+    if (!items.length) return;
+    const current = items.findIndex(node => node === doc.activeElement);
+    let nextIndex: number;
+    if (key === "ArrowDown" || key === "ArrowRight") nextIndex = (Math.max(current, 0) + 1) % items.length;
+    else if (key === "ArrowUp" || key === "ArrowLeft") nextIndex = (current <= 0 ? items.length : current) - 1;
+    else if (key === "Home") nextIndex = 0;
+    else if (key === "End") nextIndex = items.length - 1;
+    else return;
+    event.preventDefault();
+    items[nextIndex]?.focus();
   });
 
   const toolContextRow = createElement(doc, "div", "ch-tool-context");
@@ -1108,8 +1137,10 @@ export function createShell(options: ShellOptions): Shell {
       node.setAttribute("aria-label", label);
     }
     if (libraryLayout) {
-      more.setAttribute("aria-label", i18n.t("library.more"));
-      more.setAttribute("title", i18n.t("library.more"));
+      const moreLabel = more.getElementsByTagName("span")[0];
+      if (moreLabel) moreLabel.textContent = i18n.t("nav.more");
+      more.setAttribute("aria-label", i18n.t("nav.more"));
+      more.setAttribute("title", i18n.t("nav.more"));
       primaryNav.setAttribute("aria-label", i18n.t("library.navigation"));
       backLabel.textContent = i18n.t(views.find(entry => entry.id === "home")!.labelKey);
       fieldHidden(toolContextRow, activeId !== "tools" || !options.toolContext?.());
@@ -1121,6 +1152,7 @@ export function createShell(options: ShellOptions): Shell {
     }
 
     applyActiveState();
+    if (libraryLayout) layoutLibraryTabs(lastPanelWidth);
     updateIndicator();
   }
 
@@ -1172,20 +1204,62 @@ export function createShell(options: ShellOptions): Shell {
     }
     closeOverflow();
     activeId = viewId;
+    if (libraryLayout) layoutLibraryTabs(lastPanelWidth);
     applyActiveState();
     render();
   }
 
-  function setWidth(width: number): WidthClass {
-    const next = resolveWidthClass(width);
-    if (next === widthClass) {
-      updateIndicator();
-      return next;
-    }
+  let lastPanelWidth = options.initialWidth ?? 360;
 
-    widthClass = next;
-    shellNode.className = `ch-shell ch-shell--${next}`;
-    shellNode.setAttribute("data-width-class", next);
+  function isLibraryPrimary(view: ShellView): boolean {
+    return !view.utilityOnly && (!libraryLayout || view.primary || ["home", "presets"].includes(view.id));
+  }
+
+  function layoutLibraryTabs(width: number = lastPanelWidth): void {
+    if (!libraryLayout) return;
+    lastPanelWidth = width;
+    const primaries = views.filter(isLibraryPrimary);
+    const leftovers = views.filter(view => !view.utilityOnly && !isLibraryPrimary(view) && view.id !== "settings" && view.id !== "tools");
+    const maxVisible = visibleLibraryTabCount(width);
+    const visibleCount = Math.min(maxVisible === Number.POSITIVE_INFINITY ? primaries.length : maxVisible, primaries.length);
+    const activeIndex = primaries.findIndex(view => view.id === activeId);
+    let visible = primaries.slice(0, visibleCount);
+    if (activeIndex >= visibleCount && activeIndex >= 0) {
+      visible = primaries.slice(0, Math.max(0, visibleCount - 1)).concat(primaries[activeIndex]!);
+    }
+    const visibleIds = new Set(visible.map(view => view.id));
+    const overflowPrimaries = primaries.filter(view => !visibleIds.has(view.id));
+    for (const view of visible) {
+      const item = buttons.get(view.id);
+      if (item) primaryNav.appendChild(item);
+    }
+    primaryNav.appendChild(more);
+    primaryNav.appendChild(overflow);
+    for (const view of overflowPrimaries) {
+      const item = buttons.get(view.id);
+      if (item) overflow.appendChild(item);
+    }
+    for (const view of leftovers) {
+      const item = buttons.get(view.id);
+      if (item) overflow.appendChild(item);
+    }
+    const showMore = overflowPrimaries.length + leftovers.length > 0;
+    fieldHidden(more, !showMore);
+    if (!showMore) closeOverflow();
+    const tabAttr = maxVisible === Number.POSITIVE_INFINITY ? String(primaries.length) : String(visibleCount);
+    shellNode.setAttribute("data-nav-tabs", tabAttr);
+    updateIndicator();
+  }
+
+  function setWidth(width: number): WidthClass {
+    lastPanelWidth = width;
+    const next = resolveWidthClass(width);
+    if (next !== widthClass) {
+      widthClass = next;
+      shellNode.className = `ch-shell ch-shell--${next}`;
+      shellNode.setAttribute("data-width-class", next);
+    }
+    layoutLibraryTabs(width);
     updateIndicator();
     return next;
   }
@@ -1210,7 +1284,7 @@ export function createShell(options: ShellOptions): Shell {
     item.addEventListener("keydown", (event) => {
       const key = (event as KeyboardEvent).key;
       if (!isPrimary) return;
-      const keyboardViews = libraryLayout ? views.filter(candidate => (candidate.primary || ["home", "presets"].includes(candidate.id)) && !buttons.get(candidate.id)?.hidden) : views;
+      const keyboardViews = libraryLayout ? views.filter(candidate => isLibraryPrimary(candidate) && buttons.get(candidate.id)?.parentNode === primaryNav) : views;
       const currentIndex = keyboardViews.findIndex((candidate) => candidate.id === view.id);
       let nextIndex: number;
 
@@ -1244,16 +1318,11 @@ export function createShell(options: ShellOptions): Shell {
     else if (isPrimary) primaryNav.appendChild(item);
     else if (view.id === "tools") toolContextRow.appendChild(item);
     else if (view.id === "settings") {
-      // Append before the overflow trigger without requiring insertBefore in UXP.
-      utilities.removeChild(more);
-      utilities.removeChild(overflow);
       utilities.appendChild(item);
-      utilities.appendChild(more);
-      utilities.appendChild(overflow);
     } else overflow.appendChild(item);
   }
 
-  if (libraryLayout) fieldHidden(more, !views.some(view => !view.utilityOnly && !view.primary && !["home", "presets", "tools", "settings"].includes(view.id)));
+  if (libraryLayout) layoutLibraryTabs(lastPanelWidth);
 
   const shell: Shell = {
     element: () => shellNode,

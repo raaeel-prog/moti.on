@@ -1156,6 +1156,7 @@ const ptBR = {
   "nav.system": "Sistema",
   "nav.diagnostics": "Diagnóstico",
   "nav.settings": "Configurações",
+  "nav.more": "Mais",
 
   "view.context.title": "Contexto do projeto",
   "view.tools.title": "Ferramentas",
@@ -2381,6 +2382,7 @@ const enUS: Record<MessageKey, string> = {
   "nav.system": "System",
   "nav.diagnostics": "Diagnostics",
   "nav.settings": "Settings",
+  "nav.more": "More",
 
   "view.context.title": "Project context",
   "view.tools.title": "Tools",
