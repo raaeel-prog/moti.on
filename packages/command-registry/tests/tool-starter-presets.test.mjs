@@ -67,7 +67,7 @@ test("context-aware presets scale resolution and durations without mutating thei
   assert.equal(registry.getToolStarterDraft("wordReveal", source).durationFrames, 72);
   assert.equal(registry.getToolStarterDraft("styleSwap", source).durationFrames, 48);
   assert.equal(registry.getToolStarterDraft("variableMorph", source).radius, 500);
-  assert.equal(registry.getToolStarterDraft("wiggle", source).amplitude, 40);
+  assert.equal(registry.getToolStarterDraft("wiggle", source).amplitude, 28); // Flutuar: 14 px em 1080p
   assert.equal(registry.getToolStarterDraft("createNull", source).parentSelected, true);
   assert.equal(registry.getToolStarterDraft("createNull", source).dimension, "3d");
   assert.equal(registry.getToolStarterDraft("orbit", source).radius, 540);

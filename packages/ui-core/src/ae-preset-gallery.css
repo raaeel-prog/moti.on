@@ -1,5 +1,5 @@
 /*
- * Polimento da aba Presets e da busca (2026-11-04). Por último no tema do AE.
+ * Galeria de Presets: árvore, busca, menu e ajustes do cartão.
  * Referência estática: browser.css do Animation Composer 4.2.6 (lido pelo REA):
  *   .split-pane__resizer:hover { background: --background-panel-selected (#303030) }
  *   .popover-menu-container { radius 5; 0 10px 30px #0000004d, inset 0 0 1px #fff9; padding 2px }
@@ -60,12 +60,12 @@
   box-shadow: 0 10px 30px 0 #0000004d, inset 0 0 1px 0 #fff9;
   animation: ch-menu-pop 130ms cubic-bezier(.16, 1, .3, 1);
 }
-[data-host="after-effects"] .ch-context-menu__section { padding: 4px 12px 4px 30px; color: #8d8d8d; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-host="after-effects"] .ch-context-menu__section { padding: 4px 12px 4px 30px; color: #8d8d8d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-host="after-effects"] .ch-context-menu__separator { flex-shrink: 0; padding: 6px 5px 5px; }
 [data-host="after-effects"] .ch-context-menu__separator::before { content: ""; display: block; height: 1px; background: #4b4b4b; }
 [data-host="after-effects"] .ch-context-menu__item {
-  display: flex; align-items: center; gap: 6px; width: 100%; min-height: 24px; padding: 0 12px 0 8px; box-sizing: border-box;
-  border: 0; border-radius: 3px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: default;
+  display: flex; align-items: center; width: 100%; padding: 0 12px 0 8px; box-sizing: border-box;
+  border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: default;
   transition: background-color 90ms var(--ease-std, ease), color 90ms var(--ease-std, ease);
 }
 [data-host="after-effects"] .ch-context-menu__item:hover,
@@ -187,3 +187,161 @@
 /* ▶ e o slider de miniaturas na mesma linha: o slider não pode quebrar para baixo do botão. */
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer > .ch-preset-preview-controls { display: flex; flex: 0 1 128px; flex-wrap: nowrap; align-items: center; min-width: 64px; max-width: 128px; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-reference-footer .ch-preset-preview-controls > .ch-preset-size { flex: 1 1 0 !important; width: auto !important; min-width: 40px !important; }
+
+
+/* Variações do preset como popover compacto (2026-11-08): pendurado no card que
+   o abriu, com a largura do card, logo abaixo do rótulo e por cima dos cards de
+   baixo. Não empurra a grade. Só a lista de direções, em linhas de 23 px; o
+   resto (curva, duração, diagonais) fica em Editar.
+   O posicionamento se sobrepõe ao popover de preset-approved.css e ae-workstation.css. */
+
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery .ch-preset-grid { position: relative; }
+
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-grid>.ch-preset-settings-panel[data-layout="popover"] {
+  position: absolute; right: auto; bottom: auto; z-index: 3; box-sizing: border-box;
+  width: 240px; max-width: 100%; max-height: none; min-width: 0; margin: 0; overflow: visible;
+  border: 1px solid var(--ch-border-focus); border-top: 0; border-radius: 0 0 var(--radius-small) var(--radius-small);
+  background: var(--ch-surface-raised); box-shadow: 0 8px 18px rgb(0 0 0 / .45);
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-grid>.ch-preset-settings-panel[data-layout="popover"][hidden] { display: none; }
+
+/* O card de origem e o popover formam uma peça só. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-grid>.ch-preset-card[data-attached] {
+  z-index: 3; border-color: var(--ch-border-focus); border-bottom-color: transparent;
+  border-radius: var(--radius-small) var(--radius-small) 0 0; background: var(--ch-surface-raised);
+}
+
+/* Sem cabeçalho: Esc, um clique fora ou o próprio botão ≡ fecham. */
+[data-host="after-effects"] .ch-preset-settings-panel[data-layout="popover"] .ch-preset-settings-header { display: none; }
+[data-host="after-effects"] .ch-preset-settings-panel[data-layout="popover"] .ch-preset-settings-body { padding: 5px 5px 8px; overflow: visible; }
+[data-host="after-effects"] .ch-preset-settings-panel[data-layout="popover"] .ch-preset-adjustments { display: flex; flex-direction: column; gap: 8px; }
+[data-host="after-effects"] .ch-preset-settings-panel[data-layout="popover"] .ch-preset-directions { display: flex; flex-direction: column; gap: 0; margin: 0; }
+
+/* Lista: linhas finas separadas por 1 px, rola depois de quatro linhas e meia. */
+[data-host="after-effects"] .ch-preset-settings-panel[data-layout="popover"] .ch-preset-direction-list {
+  display: flex; flex-direction: column; gap: 1px; padding: 1px; max-height: 117px; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--ch-border-subtle, #2a2a2a); scrollbar-width: thin;
+}
+[data-host="after-effects"] .ch-preset-settings-panel:is([data-layout="popover"], [data-layout="sheet"]) .ch-preset-direction-option {
+  display: block; flex: 0 0 auto; width: 100%; height: 23px; min-height: 0; margin: 0; padding: 3px 9px; box-sizing: border-box;
+  border: 0; border-radius: 0; background: var(--ch-surface-base, #232323); color: var(--ch-text-secondary);
+  font-size: 11px; line-height: 17px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+[data-host="after-effects"] .ch-preset-settings-panel:is([data-layout="popover"], [data-layout="sheet"]) .ch-preset-direction-option::before { display: none; }
+[data-host="after-effects"] .ch-preset-settings-panel:is([data-layout="popover"], [data-layout="sheet"]) .ch-preset-direction-option:hover { background: var(--surface-hover); color: var(--ch-text-primary); }
+[data-host="after-effects"] .ch-preset-settings-panel:is([data-layout="popover"], [data-layout="sheet"]) .ch-preset-direction-option[aria-pressed="true"] { background: var(--ch-surface-raised); color: var(--ch-text-primary); font-weight: 600; }
+[data-host="after-effects"] .ch-preset-settings-panel:is([data-layout="popover"], [data-layout="sheet"]) .ch-preset-direction-option:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+
+/* Abre descendo um pouco a partir do card: só opacidade e transform. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-grid>.ch-preset-settings-panel[data-layout="popover"][data-motion~="surface-morph"] {
+  transform-origin: top center; transition: opacity var(--dur-popover-out, 120ms) var(--ease-in, ease-in), transform var(--dur-popover-out, 120ms) var(--ease-in, ease-in);
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-grid>.ch-preset-settings-panel[data-layout="popover"][data-motion~="surface-morph"]:not([data-open="true"]) { opacity: 0; transform: translateY(-3px); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-grid>.ch-preset-settings-panel[data-layout="popover"][data-open="true"][data-motion~="surface-morph"] {
+  opacity: 1; transform: none; transition: opacity var(--dur-2, 140ms) var(--ease-out, ease-out), transform var(--dur-2, 140ms) var(--ease-out, ease-out);
+}
+[data-host="after-effects"][data-reduced-motion="true"] .ch-preset-grid>.ch-preset-settings-panel[data-layout="popover"] { transition: none; }
+
+/* A doca baixa usa o corpo do catálogo, com a barra de aplicação fora da ficha. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-stage { position: relative; }
+[data-host="after-effects"] .ch-preset-stage[data-settings-sheet="true"] > .ch-preset-browser-heading,
+[data-host="after-effects"] .ch-preset-stage[data-settings-sheet="true"] > .ch-preset-grid { visibility: hidden; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-stage>.ch-preset-settings-panel[data-layout="sheet"] {
+  position: absolute; inset: 0; z-index: 4; border-radius: var(--radius-small);
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-settings-panel[data-layout="sheet"] .ch-preset-settings-header {
+  flex: 0 0 auto; justify-content: space-between; height: auto; min-height: 28px; box-sizing: border-box; padding: 0 4px 0 8px;
+}
+[data-host="after-effects"] .ch-preset-settings-panel[data-layout="sheet"] .ch-preset-settings-header>span {
+  position: static; width: auto; height: auto; margin: 0; clip: auto;
+}
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-settings-panel[data-layout="sheet"] .ch-preset-settings-body {
+  flex: 1 1 auto; min-height: 0; padding: 4px; overflow: auto; overscroll-behavior: contain;
+}
+[data-host="after-effects"] .ch-preset-settings-panel[data-layout="sheet"] .ch-preset-direction-list {
+  display: flex; flex-direction: column; gap: 2px;
+}
+[data-host="after-effects"] .ch-preset-settings-panel[data-layout="sheet"] .ch-preset-direction-option {
+  min-height: 24px; border-radius: var(--radius-small);
+}
+[data-host="after-effects"] .ch-preset-settings-panel[data-layout="sheet"][data-short="true"] { flex-direction: row-reverse; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-settings-panel[data-layout="sheet"][data-short="true"] .ch-preset-settings-header {
+  flex-direction: column; justify-content: flex-start; min-height: 0; border: 0; padding: 2px;
+}
+[data-host="after-effects"] .ch-preset-settings-panel[data-layout="sheet"][data-short="true"] .ch-preset-settings-header>span {
+  position: absolute; width: 1px; height: 1px; clip: rect(0, 0, 0, 0);
+}
+[data-host="after-effects"] .ch-preset-settings-panel[data-layout="sheet"][data-short="true"] .ch-preset-settings-body {
+  padding: 2px;
+}
+
+/* Botão ≡ das variações: não gira no hover; aberto, fica na cor de ação. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-settings-trigger:hover:not(:disabled) > svg { transform: none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-card .ch-preset-settings-trigger[aria-expanded="true"] { color: var(--action-text); }
+
+/* Editar: o contexto, os parâmetros e a barra de ação seguem o espaçamento do painel. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-workspace-content[data-browse="false"] {
+  padding-inline: var(--lay-space-3);
+  overscroll-behavior: contain;
+}
+[data-host="after-effects"] .ch-preset-edit-context {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--lay-space-2);
+  padding-block: var(--lay-space-2);
+}
+[data-host="after-effects"] .ch-preset-edit-context > .ch-preset-hint {
+  flex: 1 1 120px; min-width: 0; margin: 0;
+  color: var(--ds-text-2); overflow-wrap: anywhere;
+}
+[data-host="after-effects"] .ch-preset-edit-context > .ch-action { flex: 0 0 auto; max-width: 100%; margin: 0; }
+[data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-edit-section > summary {
+  min-height: var(--lay-btn-md); box-sizing: border-box; margin: 0;
+  padding: var(--lay-space-1) var(--lay-space-2); overflow-wrap: anywhere;
+}
+[data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-phase-actions {
+  justify-content: flex-start; gap: var(--lay-space-1) var(--lay-space-2);
+}
+[data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-phase-actions > .ch-phase-link.ch-button {
+  flex: 0 1 auto; width: auto; min-width: 0; min-height: var(--lay-btn-sm); margin: 0;
+  padding-inline: var(--lay-space-1); white-space: normal;
+}
+[data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-phase-parameters { padding-left: var(--lay-space-2); }
+[data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-number-disclosure__header > input {
+  flex: 0 0 6ch; width: 6ch; min-width: 0;
+}
+[data-host="after-effects"] .ch-phase-parameters .ch-phase-shift-controls { max-width: 100%; }
+[data-host="after-effects"] .ch-phase-parameters .ch-phase-shift-controls input { width: 12ch; min-width: 0; }
+[data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-layer-sections { margin-top: var(--lay-space-2); }
+[data-host="after-effects"] .ch-applied-edit-body { overscroll-behavior: contain; }
+[data-host="after-effects"] .ch-applied-edit-body .ch-applied-heading,
+[data-host="after-effects"] .ch-applied-edit-body .ch-applied-fields { padding-inline: 0; }
+[data-host="after-effects"] .ch-preset-workspace-content[data-editor="legacy"] > .ch-applied-actions {
+  flex: 0 0 auto; gap: var(--lay-space-2); align-items: center;
+  margin: 0; padding: var(--lay-space-1) 0;
+  min-height: var(--lay-footer-h); box-sizing: border-box; border-color: var(--ds-line);
+}
+[data-host="after-effects"] .ch-preset-workspace-content[data-editor="legacy"] .ch-applied-actions > .ch-action {
+  flex: 0 1 auto; min-width: 0; margin: 0;
+}
+[data-host="after-effects"] .ch-preset-workspace-content[data-editor="legacy"] .ch-applied-actions > .ch-panel-action-bar__primary { margin-left: auto; }
+[data-host="after-effects"] .ch-preset-workspace-content[data-editor="legacy"] .ch-applied-actions .ch-action-button,
+[data-host="after-effects"] .ch-preset-edit-context > .ch-action .ch-action-button {
+  width: auto; min-width: 0; min-height: var(--lay-btn-md); padding: var(--lay-space-1) var(--lay-space-2);
+  font-size: 12px; line-height: 16px; white-space: normal;
+}
+
+@media (max-width: 339px) {
+  [data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-phase-parameters { padding-left: 0; }
+  [data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-number-disclosure__toggle {
+    white-space: normal; overflow-wrap: anywhere;
+  }
+  [data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-number-disclosure__body { padding-left: var(--lay-space-2); }
+  [data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-phase-field.ch-field--select:not([hidden]),
+  [data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-applied-field--select:not([hidden]) {
+    flex-direction: column; align-items: stretch; gap: var(--lay-space-1);
+    padding-block: var(--lay-space-1);
+  }
+  [data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-phase-field select,
+  [data-host="after-effects"] .ch-preset-workspace-content[data-browse="false"] .ch-applied-field--select select {
+    width: 100%; max-width: none; min-width: 0;
+  }
+}

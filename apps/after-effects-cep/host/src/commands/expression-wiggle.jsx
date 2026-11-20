@@ -19,6 +19,8 @@
     seed: true,
     conflictMode: true
   };
+  /** Opcionais da Flutuacao: graus de balanco e eixos X/Y/Z (bits 1/2/4) quando a camada inteira e o alvo. */
+  var OPTIONAL_ARGS = { rotation: true, rotationAxes: true };
 
   /** @param {string} code @param {string} message @param {unknown} details @returns {MotionCommandFailure} */
   function failure(code, message, details) {
@@ -56,7 +58,8 @@
     for (key in args) {
       if (
         Object.prototype.hasOwnProperty.call(args, key) &&
-        !Object.prototype.hasOwnProperty.call(REQUIRED_ARGS, key)
+        !Object.prototype.hasOwnProperty.call(REQUIRED_ARGS, key) &&
+        !Object.prototype.hasOwnProperty.call(OPTIONAL_ARGS, key)
       ) {
         return failure(MotionContracts.ERROR.INVALID_PRESET, "Argumento Wiggle desconhecido.", {
           field: key
@@ -110,6 +113,15 @@
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Semente Wiggle invalida.", {
         field: "seed"
       });
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(args, "rotation") &&
+      (!isFiniteNumber(args.rotation) || /** @type {number} */ (args.rotation) < 0 || /** @type {number} */ (args.rotation) > 45)
+    ) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Rotacao Wiggle invalida.", { field: "rotation" });
+    }
+    if (Object.prototype.hasOwnProperty.call(args, "rotationAxes") && !isIntegerInRange(args.rotationAxes, 0, 7)) {
+      return failure(MotionContracts.ERROR.INVALID_PRESET, "Eixos de rotacao invalidos.", { field: "rotationAxes" });
     }
     if (args.conflictMode !== "skip") {
       return failure(MotionContracts.ERROR.INVALID_PRESET, "Modo de conflito nao permitido.", {

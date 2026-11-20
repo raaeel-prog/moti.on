@@ -179,7 +179,7 @@
       if (!(layer instanceof TextLayer) || (/** @type {any} */ (layer)).parent !== source || (/** @type {any} */ (layer)).locked || !(/** @type {any} */ (layer)).enabled || !text ||
           String(text.expression || "").indexOf(prefix) !== 0 || !transform ||
           String(transform.property("ADBE Scale").expression || "").indexOf(prefix) !== 0 ||
-          !parade || parade.numProperties !== (meta.version >= 2 && ROLES[i] === "glow" ? 2 : 1))
+          !parade || parade.numProperties < (meta.version >= 2 && ROLES[i] === "glow" ? 2 : 1))
         return { echoes: null, error: fail(MotionContracts.ERROR.TRACK_CONFLICT, "Um eco foi editado. Preserve-o antes de remover ou ajustar.") };
       if (ROLES[i] === "glow" && parade.property(1).matchName !== "ADBE Gaussian Blur 2" ||
           ROLES[i] !== "glow" && parade.property(1).matchName !== "ADBE Turbulent Displace")
@@ -204,7 +204,7 @@
           return { echoes: null, error: fail(MotionContracts.ERROR.TRACK_CONFLICT, "A cor do brilho foi editada. Preserve-a antes de ajustar.") };
       }
       var groups = animators(layer);
-      if (!groups || groups.numProperties !== (meta.version === 3 ? 1 : 0))
+      if (!groups || groups.numProperties < (meta.version === 3 ? 1 : 0))
         return { echoes: null, error: fail(MotionContracts.ERROR.TRACK_CONFLICT, "Os animadores do eco foram editados. Preserve-os antes de ajustar.") };
       if (meta.version === 3) {
         var animator = groups.property(1), selectors = animator.property("ADBE Text Selectors"), props = animator.property("ADBE Text Animator Properties");
@@ -268,9 +268,8 @@
     var textGroup = source.property("ADBE Text Properties"), masks = source.property("ADBE Mask Parade");
     if (source.locked || !source.enabled || source.threeDLayer || source.solo || source.guideLayer || source.hasTrackMatte || source.isTrackMatte ||
         !text || !parade || !transform || !textGroup || !masks ||
-        parade.numProperties > 0 || masks.numProperties > 0 || textGroup.property("ADBE Text Animators").numProperties > 0 ||
-        transform.property("ADBE Position").dimensionsSeparated)
-      return { error: fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Use texto 2D visível, sem efeitos, máscaras, animadores ou posição separada."), comp: comp, source: source, meta: null, echoes: null };
+        (parade.numProperties > 0 || textGroup.property("ADBE Text Animators").numProperties > 0) && !(/** @type {any} */ ($.global)).MotionLayerLook)
+      return { error: fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Use texto 2D visível, desbloqueado e fora de matte, solo ou camada guia."), comp: comp, source: source, meta: null, echoes: null };
     if (typeof source.id !== "number" || !source.sourceRectAtTime || typeof source.moveBefore !== "function" ||
         !parade.canAddProperty || !parade.canAddProperty("ADBE Slider Control") || !parade.canAddProperty("ADBE Color Control") ||
         !parade.canAddProperty("ADBE Gaussian Blur 2") || !parade.canAddProperty("ADBE Turbulent Displace") || !parade.canAddProperty("ADBE Glo2"))
@@ -286,6 +285,8 @@
   function resetProperty(layer, matchName, value) {
     var prop = layer.property("ADBE Transform Group").property(matchName);
     if (!prop) throw new Error("Missing transform property");
+    // Duplicata de um texto com X/Y separados: o eco usa Position unida.
+    if (prop.dimensionsSeparated) prop.dimensionsSeparated = false;
     if (prop.expression) { prop.expressionEnabled = false; prop.expression = ""; }
     while (prop.numKeys > 0) prop.removeKey(prop.numKeys);
     prop.setValue(value);
@@ -534,6 +535,10 @@
   }
   /** @param {any} layer @param {string} role @param {any} meta @returns {void} */
   function configureEcho(layer, role, meta) {
+    var look = /** @type {any} */ ($.global).MotionLayerLook;
+    // O eco nasce de uma duplicata: tira efeitos e animadores herdados para os
+    // do pulso ocuparem as primeiras posicoes; os do usuario voltam no nucleo.
+    if (look) look.clearCopiedLook(layer);
     layer.parent = meta.source;
     var sourceText = textProperty(layer);
     if (sourceText.expression) { sourceText.expressionEnabled = false; sourceText.expression = ""; }
@@ -546,6 +551,7 @@
     resetProperty(layer, "ADBE Opacity", 100);
     effects(layer).addProperty(role === "glow" ? "ADBE Gaussian Blur 2" : "ADBE Turbulent Displace");
     configureEchoExpressions(layer, role, meta);
+    if (look && role === "core") look.copyEffects(meta.source, layer, function (/** @type {any} */ effect) { return String(effect.name).indexOf("Moti.on Pulse · ") !== 0; });
   }
   /** @param {any} comp @param {any} layer @param {string} role @param {number} version @returns {any} */
   function snapshotEcho(comp, layer, role, version) {

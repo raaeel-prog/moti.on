@@ -8,6 +8,8 @@ import { createIcon } from "../icons.js";
 
 type InteractiveOptions = ComponentStateOptions & DisableableOptions;
 
+export type ActionButtonSize = 22 | 24 | 28;
+
 export interface ActionButtonOptions extends InteractiveOptions {
   id?: string;
   label: string;
@@ -15,6 +17,7 @@ export interface ActionButtonOptions extends InteractiveOptions {
   icon?: string;
   /** Hides the visible label; also supports consumer-provided SVG content. */
   compact?: boolean;
+  size?: ActionButtonSize;
   variant?: "default" | "primary" | "danger" | "quiet" | "secondary" | "tertiary" | "ghost" | "destructive";
   title?: string;
   onPress(): void;
@@ -107,8 +110,13 @@ export function mountActionButton(
     button.setAttribute("data-compact", String(value));
     setHidden(labelNode, value);
   }
+  function setSize(value: ActionButtonSize | undefined): void {
+    if (value === undefined) removeAttribute(button, "data-button-size");
+    else button.setAttribute("data-button-size", String(value));
+  }
   setIcon(options.icon);
   setCompact(options.compact ?? false);
+  setSize(options.size);
   refresh();
 
   return {
@@ -121,6 +129,7 @@ export function mountActionButton(
     },
     setIcon,
     setCompact,
+    setSize,
     setConnected(value) { connected = value; },
     setVariant(value) {
       button.className = `ch-action-button ch-action-button--${canonicalVariant(value)}`;
@@ -154,6 +163,7 @@ export interface ActionButtonView extends ActionButtonController {
   setLabel(value: string): void;
   setIcon(value: string | undefined): void;
   setCompact(value: boolean): void;
+  setSize(value: ActionButtonSize | undefined): void;
   setConnected(value: boolean): void;
   setVariant(value: ActionButtonVariant): void;
   setTitle(value: string | undefined): void;
@@ -163,6 +173,7 @@ export function validateActionButtonOptions(options: ActionButtonOptions): void 
   requireText(options.label, "label");
   if (options.icon !== undefined) requireText(options.icon, "icon");
   if (options.compact !== undefined && typeof options.compact !== "boolean") throw new Error("compact must be boolean.");
+  if (options.size !== undefined && ![22, 24, 28].includes(options.size)) throw new Error("size must be 22, 24 or 28.");
   if (options.id !== undefined) requireText(options.id, "id");
   if (options.variant !== undefined && !["default", "primary", "danger", "quiet", "secondary", "tertiary", "ghost", "destructive"].includes(options.variant)) {
     throw new Error("variant must be default, primary, danger, quiet, secondary, tertiary, ghost or destructive.");

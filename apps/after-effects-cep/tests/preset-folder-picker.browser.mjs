@@ -77,7 +77,7 @@ async function narrowChecks(page,width,height,scale){
  if(scale===2)await page.screenshot({path:resolve(output,`presets-${name}-folders@2x.png`)});
  // Keyboard: arrows walk the tree, Escape returns to the picker, Enter reopens, Enter chooses.
  await page.keyboard.press('Home');await page.keyboard.press('ArrowDown');
- assert.equal(await page.evaluate(()=>document.activeElement?.dataset?.category),'emulsion');
+ assert.equal(await page.evaluate(()=>document.activeElement?.dataset?.category),'motion');
  await page.keyboard.press('Escape');await page.waitForTimeout(50);
  assert.equal(await shown(page,'.ch-preset-filter-menu'),false,'Escape closes the sheet');
  assert.equal(await page.evaluate(()=>document.activeElement?.classList.contains('ch-preset-folder-picker')),true,'and focus returns to the picker');
@@ -85,7 +85,7 @@ async function narrowChecks(page,width,height,scale){
  assert.equal(await shown(page,'.ch-preset-filter-menu'),true,'Enter reopens it');
  await page.keyboard.press('Home');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');await page.waitForTimeout(400);
  assert.equal(await shown(page,'.ch-preset-filter-menu'),false,'choosing a folder closes the sheet');
- assert.equal(await page.locator('.ch-preset-folder-picker').getAttribute('aria-label'),'Pasta: Emulsion · Film Transitions');
+ assert.equal(await page.locator('.ch-preset-folder-picker').getAttribute('aria-label'),'Pasta: Animações');
  assert.deepEqual(await cutNames(page,'.ch-preset-folder-picker__name'),[],'the chosen folder reads in full on the picker');
  checks.push(`${tag}: keyboard opens, walks, closes and chooses`);
  if(scale===1)await page.screenshot({path:resolve(output,`presets-${name}-chosen.png`)});

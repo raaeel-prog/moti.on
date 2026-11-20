@@ -61,6 +61,37 @@
   --focus-ring: 2px solid var(--action-text);
   --ch-border-focus: var(--action-text);
   --e2: 0 4px 16px rgba(0,0,0,.24);
+  --ae-overlay-tint: rgba(58,58,58,.93);
+}
+
+:root[data-host="after-effects"][data-theme="light"] {
+  --ae-overlay-tint: rgba(242,242,242,.93);
+}
+
+:root[data-host="after-effects"] {
+  --ae-surface-panel: var(--bg-host);
+  --ae-surface-control: var(--surface-raised);
+  --ae-surface-inset: var(--surface-deep);
+  --ae-surface-hover: var(--surface-hover);
+  --ae-surface-selection: var(--surface-active);
+  --ae-text-main: var(--text-primary);
+  --ae-text-secondary: var(--text-secondary);
+  --ae-text-muted: var(--text-muted);
+  --ae-line: var(--line-hairline);
+  --ae-overlay-solid: var(--overlay-surface);
+  --ae-overlay-line: var(--line-2);
+  --ae-accent: var(--value-editable);
+  --ae-accent-on: var(--action-on);
+  --ae-accent-wash: var(--surface-active);
+  --ae-selected-text: var(--text-primary);
+  --ae-control-sm: 24px;
+  --ae-control-md: 28px;
+  --ae-shadow-popover: 0 9px 24px rgba(0,0,0,.42), 0 2px 4px rgba(0,0,0,.22);
+}
+
+:root[data-host="after-effects"]:not([data-reduced-motion="true"]) {
+  --motion-fast: 90ms;
+  --motion-standard: 140ms;
 }
 
 /* AE motion (2026-10-23), both themes. Read by apps/after-effects-cep/client/src/motion/catalog.ts,

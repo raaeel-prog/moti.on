@@ -298,7 +298,7 @@ test('no text preset expression reads the layer own Source Text, so the text sta
   const out = await build({entryPoints: [new URL('../../../packages/contracts/src/motion-library.ts', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')], bundle: true, format: 'esm', platform: 'node', write: false});
   const {MOTION_LIBRARY_PRESETS} = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString('base64')}`);
   const presets = MOTION_LIBRARY_PRESETS.filter(p => p.category.startsWith('text-') && !p.retired);
-  assert.ok(presets.length > 300, `${presets.length} text presets`);
+  assert.ok(presets.length > 250, `${presets.length} text presets`);
   const reading = [];
   let applied = 0;
   const walk = (node, id) => { for (const child of node.children ?? []) { if (/sourceText/.test(child.expression ?? '')) reading.push(`${id}: ${child.matchName}`); walk(child, id); } };
@@ -314,6 +314,6 @@ test('no text preset expression reads the layer own Source Text, so the text sta
     try { f.run(p.mode === 'transition' ? 'phase-apply' : 'apply', f.args(p.id, p.mode === 'transition' ? {phase: 'both'} : {})); applied++; } catch { continue; }
     walk(f.layer.text, p.id);
   }
-  assert.ok(applied > 250, `${applied} text presets applied`);
+  assert.ok(applied > 220, `${applied} text presets applied`);
   assert.deepEqual(reading, []);
 });

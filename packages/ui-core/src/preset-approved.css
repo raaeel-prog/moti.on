@@ -277,3 +277,14 @@
    and folds back into it on close (transform and opacity only). */
 .ch-shell[data-layout="library"] .ch-preset-settings-panel[data-attached="below"][data-motion~="surface-morph"]:not([data-open="true"]) { transform:translateY(-6px) scaleY(.6); }
 .ch-shell[data-layout="library"] .ch-preset-settings-panel[data-attached="above"][data-motion~="surface-morph"]:not([data-open="true"]) { transform:translateY(6px) scaleY(.6); }
+
+/* Aba Editar enxuta (2026-11-18): essenciais abertos, o resto em "Mais ajustes". */
+.ch-edit-section--phases { display:block; }
+.ch-phase-more { margin:2px 0 4px; }
+.ch-phase-more__summary { display:flex; align-items:center; min-height:24px; color:var(--ch-text-secondary); font-size:11px; cursor:pointer; list-style:none; }
+.ch-phase-more__summary::-webkit-details-marker { display:none; }
+.ch-phase-more__summary::before { content:"▸"; width:12px; color:var(--ch-text-secondary); }
+.ch-phase-more[open] > .ch-phase-more__summary::before { content:"▾"; }
+.ch-phase-more__summary:hover { color:var(--ch-text-primary); }
+.ch-phase-more__body { padding:2px 0 4px 12px; border-left:1px solid var(--border-muted); }
+.ch-phase-more__actions { margin-top:4px; }

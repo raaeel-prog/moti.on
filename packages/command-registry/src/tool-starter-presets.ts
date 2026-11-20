@@ -19,16 +19,20 @@ const drafts = {
   reference: "current",
   referenceTime: 0
 },
+  // Preset Flutuar (2026-11-19): deriva suave em todas as direções + balanço de 0,6° em X/Y/Z.
   wiggle: {
-  frequency: 2,
-  amplitude: 20,
-  octaves: 1,
+  frequency: 0.35,
+  amplitude: 14,
+  octaves: 2,
   amplitudeMultiplier: 0.5,
-  seed: 0
+  seed: 0,
+  rotation: 0.6,
+  rotationAxes: 7
 },
+  // Preset Lâmpada falhando.
   flicker: {
-  rate: 6,
-  minFactor: 0.7,
+  rate: 9,
+  minFactor: 0.55,
   maxFactor: 1,
   seed: 0
 },
@@ -355,7 +359,7 @@ export function getToolStarterDraft<T extends object = Record<string, unknown>>(
   const result = copy(TOOL_STARTER_DRAFTS[toolId as ToolStarterId]) as Record<string, unknown>;
   if (!context) return result as T;
   switch (toolId) {
-    case "wiggle": result["amplitude"] = scaleQuickPixelsFrom1080(20, context); break;
+    case "wiggle": result["amplitude"] = scaleQuickPixelsFrom1080(14, context); break;
     case "createNull":
       result["placement"] = context.selectionLayerCount > 0 ? "averageAnchor" : "compCenter";
       result["parentSelected"] = context.selectionLayerCount > 0;

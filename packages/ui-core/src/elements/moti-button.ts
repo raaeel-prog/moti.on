@@ -4,7 +4,7 @@ import {
 } from "../component-dom.js";
 import {
   mountActionButton, validateActionButtonOptions,
-  type ActionButtonOptions, type ActionButtonVariant, type ActionButtonView
+  type ActionButtonOptions, type ActionButtonSize, type ActionButtonVariant, type ActionButtonView
 } from "./action-button-view.js";
 
 export type ButtonVariant = ActionButtonVariant;
@@ -15,6 +15,7 @@ export interface MotiButton extends HTMLElement {
   label: string;
   icon: string | undefined;
   compact: boolean;
+  size: ActionButtonSize | undefined;
   variant: ButtonVariant;
   state: ComponentState;
   stateLabel: string;
@@ -57,7 +58,7 @@ export function registerMotiButton(doc: Document): MotiButtonConstructor | undef
     private renderedTitle: string | undefined;
 
     static get observedAttributes(): string[] {
-      return ["label", "icon", "compact", "variant", "state", "state-label", "disabled", "disabled-reason", "title"];
+      return ["label", "icon", "compact", "size", "variant", "state", "state-label", "disabled", "disabled-reason", "title"];
     }
 
     connectedCallback(): void { this.ensureView().setConnected(true); }
@@ -77,6 +78,13 @@ export function registerMotiButton(doc: Document): MotiButtonConstructor | undef
       if (typeof value !== "boolean") throw new Error("compact must be boolean.");
       if (value) this.setAttribute("compact", "");
       else this.removeAttribute("compact");
+    }
+    get size(): ActionButtonSize | undefined {
+      if (!this.hasAttribute("size")) return undefined;
+      return Number(this.getAttribute("size")) as ActionButtonSize;
+    }
+    set size(value: ActionButtonSize | undefined) {
+      this.optionalAttribute("size", value === undefined ? undefined : String(value));
     }
     get variant(): ButtonVariant { return (this.getAttribute("variant") ?? "default") as ButtonVariant; }
     set variant(value: ButtonVariant) { this.setAttribute("variant", value); }
@@ -116,6 +124,7 @@ export function registerMotiButton(doc: Document): MotiButtonConstructor | undef
         this.label = options.label;
         this.icon = options.icon;
         this.compact = options.compact ?? false;
+        this.size = options.size;
         this.variant = options.variant ?? "default";
         this.setAttribute("state", options.state ?? "default");
         this.optionalAttribute("state-label", options.stateLabel);
@@ -166,6 +175,7 @@ export function registerMotiButton(doc: Document): MotiButtonConstructor | undef
       const options: ActionButtonOptions = {
         label: this.label, variant: this.variant, state: this.state,
         ...(this.icon === undefined ? {} : { icon: this.icon }), compact: this.compact,
+        ...(this.size === undefined ? {} : { size: this.size }),
         stateLabel: this.stateLabel, disabled: this.disabled,
         disabledReason: this.disabledReason, onPress: () => undefined
       };
@@ -189,6 +199,7 @@ export function registerMotiButton(doc: Document): MotiButtonConstructor | undef
       if (force || options.label !== previous?.label) view.setLabel(this.label);
       if (force || options.icon !== previous?.icon) view.setIcon(this.icon);
       if (force || options.compact !== previous?.compact) view.setCompact(this.compact);
+      if (force || options.size !== previous?.size) view.setSize(options.size);
       if (force || options.variant !== previous?.variant) view.setVariant(this.variant);
       if (force || title !== this.renderedTitle) view.setTitle(title);
       if (force || options.state !== previous?.state || options.stateLabel !== previous?.stateLabel) {

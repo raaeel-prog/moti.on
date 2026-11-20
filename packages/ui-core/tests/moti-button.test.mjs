@@ -102,6 +102,7 @@ test("registro sem capacidade e repetivel e conserva o fallback DOM do host", ()
     const control = createActionButton(doc, {
       id: "fallback-apply",
       label: "Aplicar",
+      size: 28,
       onPress() {}
     });
 
@@ -115,6 +116,7 @@ test("registro sem capacidade e repetivel e conserva o fallback DOM do host", ()
     assert.equal(control.button.id, "fallback-apply");
     assert.equal(control.button.allText, "Aplicar");
     assert.equal(control.button.getAttribute("type"), "button");
+    assert.equal(control.button.getAttribute("data-button-size"), "28");
     assert.equal(typeof control.setState, "function");
     assert.equal(typeof control.setDisabled, "function");
   }
@@ -189,6 +191,13 @@ test("atributos e propriedades do Web Component atualizam apresentacao sem subst
   assert.equal(component.tagName, "moti-button");
   assert.equal(component.icon, "ease");
   assert.equal(component.compact, true);
+  component.size = 24;
+  assert.equal(native.getAttribute("data-button-size"), "24");
+  component.setAttribute("size", "23");
+  assert.equal(component.getAttribute("data-invalid"), "true");
+  component.removeAttribute("size");
+  assert.equal(component.getAttribute("data-invalid"), undefined);
+  assert.equal(native.getAttribute("data-button-size"), undefined);
   component.label = "Aplicar curva";
   component.variant = "secondary";
   component.compact = false;

@@ -1,4 +1,4 @@
-import { selectField, hint } from "./shell.js";
+import { selectField, hint, normalizeHexColor } from "./shell.js";
 import type { I18n } from "./i18n.js";
 
 type Theme = "dark" | "light" | "host";
@@ -17,6 +17,10 @@ export const PREFERENCES_BACKUP_KEY = "motion.panel.preferences.v1.unreadable";
 const RESTORABLE_VIEWS = ["home", "ease", "presets", "settings"];
 const GALLERY_SCOPES = ["all", "favorites", "recent"];
 const MAX_DRAFTS = 24;
+export const DEFAULT_AE_ACCENT = "host";
+export const MOTION_BLUE_ACCENT = "#60a5ff";
+const accentValue = (value: unknown): string | undefined =>
+  value === "host" ? value : typeof value === "string" ? normalizeHexColor(value) ?? undefined : undefined;
 
 export interface GalleryMemory { category: string; scope: string; query: string; presetId: string; sidebarWidth?: number; treeSeeded?: boolean }
 type DraftValue = string | number | boolean;
@@ -24,6 +28,7 @@ type DraftValue = string | number | boolean;
 /** Guarda somente preferências e IDs de ferramentas, nunca dados do projeto. */
 export function createPanelPreferences(root: HTMLElement, storage?: PreferenceStorage, options: { hostTheme?: boolean; onThemeChange?(): void } = {}) {
   let theme: Theme = options.hostTheme ? "host" : "dark";
+  let accent = DEFAULT_AE_ACCENT;
   let locale: PanelLocale = "host";
   let density: Density = "default";
   let category = "all";
@@ -93,7 +98,10 @@ export function createPanelPreferences(root: HTMLElement, storage?: PreferenceSt
         readable = true;
         const data = saved as Record<string, unknown>;
         if (data["locale"] === "pt-BR" || data["locale"] === "en-US") locale = data["locale"];
-        if (options.hostTheme) { if (data["aeTheme"] === "dark" || data["aeTheme"] === "light") theme = data["aeTheme"]; }
+        if (options.hostTheme) {
+          if (data["aeTheme"] === "dark" || data["aeTheme"] === "light") theme = data["aeTheme"];
+          accent = accentValue(data["aeAccentChoice"]) ?? DEFAULT_AE_ACCENT;
+        }
         else if (data["theme"] === "light") theme = "light";
         if (data["density"] === "compact") density = "compact";
         if (typeof data["category"] === "string" && ["all", "keyframes", "layers", "animation", "spatial", "shapes", "effects", "project"].includes(data["category"])) category = data["category"];
@@ -141,7 +149,7 @@ export function createPanelPreferences(root: HTMLElement, storage?: PreferenceSt
     apply();
     if (!storage || (!readable && !recovered)) return;
     try {
-      const base = { version: 1, theme: theme === "host" ? "dark" : theme, ...(options.hostTheme ? { aeTheme: theme } : {}), locale, density, category, favorites, recent, recentColors, presetAutoplay, presetSize, quickDockPinned, ...(quickFavorites ? { quickFavorites } : {}), quickRecent, folderColors, collapsedFolders, collapsedToolGroups, lastView, gallery };
+      const base = { version: 1, theme: theme === "host" ? "dark" : theme, ...(options.hostTheme ? { aeTheme: theme, aeAccentChoice: accent } : {}), locale, density, category, favorites, recent, recentColors, presetAutoplay, presetSize, quickDockPinned, ...(quickFavorites ? { quickFavorites } : {}), quickRecent, folderColors, collapsedFolders, collapsedToolGroups, lastView, gallery };
       let serialized = JSON.stringify({ ...base, drafts });
       // Rascunhos são o primeiro a ceder: preferências e favoritos sempre cabem.
       if (serialized.length > 32_768) serialized = JSON.stringify({ ...base, drafts: {} });
@@ -152,6 +160,14 @@ export function createPanelPreferences(root: HTMLElement, storage?: PreferenceSt
   apply();
   return {
     supportsHostTheme: Boolean(options.hostTheme),
+    themeMode: () => theme,
+    accentChoice: () => accent,
+    setAccent(value: string) {
+      const next = accentValue(value);
+      if (!options.hostTheme || !next || next === accent) return;
+      accent = next;
+      save();
+    },
     snapshot: () => ({ theme, locale, density, category, favorites: [...favorites], recent: [...recent], recentColors: [...recentColors], persistent, recovered, presetAutoplay, presetSize, quickDockPinned, quickFavorites: quickFavorites ? [...quickFavorites] : null, quickRecent: [...quickRecent], folderColors: { ...folderColors }, collapsedFolders: [...collapsedFolders], collapsedToolGroups: [...collapsedToolGroups], lastView, gallery: { ...gallery }, drafts: JSON.parse(JSON.stringify(drafts)) as Record<string, Record<string, DraftValue>> }),
     /** Só as abas principais; não grava se nada mudou (é chamado a cada render). */
     setLastView(value: string) { if (RESTORABLE_VIEWS.includes(value) && value !== lastView) { lastView = value; save(); } },
@@ -199,7 +215,7 @@ export function createPanelPreferences(root: HTMLElement, storage?: PreferenceSt
     clearFavorites() { favorites = []; save(); },
     clearDrafts() { drafts = {}; save(); },
     /** Presentation only: libraries, saved recipes, account and favorites remain. */
-    resetInterface() { theme = options.hostTheme ? "host" : "dark"; density = "default"; locale = "host"; quickDockPinned = false; apply(); save(); },
+    resetInterface() { theme = options.hostTheme ? "host" : "dark"; accent = DEFAULT_AE_ACCENT; density = "default"; locale = "host"; quickDockPinned = false; save(); },
     resetPreviews() { presetAutoplay = true; presetSize = 200; save(); }
   };
 }

@@ -135,7 +135,9 @@
     if (source.locked || !d || !existing && source.enabled === false) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Use texto visivel e desbloqueado.");
     if (d.boxText || source.threeDLayer || source.hasTrackMatte || source.isTrackMatte || source.solo || source.guideLayer) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Use texto de ponto 2D, sem matte, solo ou camada guia.");
     if (p.numKeys > 0 || p.expression) return fail(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Use conteudo de texto estatico.");
-    if (source.property("ADBE Text Properties").property("ADBE Text Animators").numProperties || source.property("ADBE Effect Parade").numProperties || source.property("ADBE Mask Parade").numProperties) return fail(MotionContracts.ERROR.TRACK_CONFLICT, "Use texto sem animadores, efeitos ou mascaras.");
+    // Animadores do texto sao substituidos pelo morph (o original fica oculto e
+    // volta intacto ao remover); efeitos sao copiados para as palavras geradas.
+    if (source.property("ADBE Effect Parade").numProperties && !host.MotionLayerLook) return fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "Atualize o Moti.on para copiar os efeitos do texto.");
     if (!d.applyFill || d.applyStroke) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "O morph preciso requer preenchimento solido, sem contorno.");
     if (typeof d.characterRange !== "function" || !d.baselineLocs || typeof source.id !== "number") return fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "O host nao expoe os estilos e identificadores necessarios.");
     var text = String(d.text), words = text.match(/\S+/g);
@@ -143,8 +145,8 @@
     var style = d.characterRange(0, text.length), attrs = ["font", "fontSize", "tracking", "horizontalScale", "verticalScale", "baselineShift", "fauxBold", "fauxItalic", "applyFill", "applyStroke", "fillColor"];
     for (var i = 0; i < attrs.length; i += 1) if (typeof style[String(attrs[i])] === "undefined") return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Use um estilo uniforme em toda a camada.");
     var lines = text.replace(/\r\n/g, "\r").replace(/\n/g, "\r").split("\r");
-    if (d.baselineLocs.length !== lines.length * 4) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Use linhas horizontais com quebras manuais.");
-    for (i = 0; i < lines.length; i += 1) if (/\S/.test(String(lines[i])) && (!range(d.baselineLocs[i * 4], -100000, 100000) || !range(d.baselineLocs[i * 4 + 1], -100000, 100000) || Math.abs(d.baselineLocs[i * 4 + 3] - d.baselineLocs[i * 4 + 1]) > 0.01)) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Use linhas horizontais.");
+    // O host pode omitir linhas vazias no fim; so as linhas medidas sao conferidas.
+    for (i = 0; i < lines.length && i * 4 + 3 < d.baselineLocs.length; i += 1) if (/\S/.test(String(lines[i])) && d.baselineLocs[i * 4 + 2] !== d.baselineLocs[i * 4] && (!range(d.baselineLocs[i * 4], -100000, 100000) || !range(d.baselineLocs[i * 4 + 1], -100000, 100000) || Math.abs(d.baselineLocs[i * 4 + 3] - d.baselineLocs[i * 4 + 1]) > 0.01)) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Use linhas horizontais.");
     return null;
   }
   /** @param {any} comp @param {any} rig @returns {MotionCommandFailure|null} */
@@ -343,6 +345,7 @@
       for (p = 0; p < specs.length; p += 1) expression(root.property(1).property("ADBE Vectors Group").property(specs[p].index).property("ADBE Vector Shape"), specs[p].code);
       expression(layer.property("ADBE Transform Group").property("ADBE Opacity"), "parent.parent.transform.opacity;");
       writeMeta(layer, {schemaVersion: 2, rigType: TYPE, rigId: rigId, sourceId: source.id, role: "word", order: order, key: word.key, signature: signature(layer, false)});
+      if (host.MotionLayerLook) host.MotionLayerLook.copyEffects(source, layer);
       layer.moveBefore(source);
     }
     return layers;

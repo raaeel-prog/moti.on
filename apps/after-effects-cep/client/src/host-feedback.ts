@@ -16,6 +16,8 @@ const MESSAGES: Record<string, [string, string]> = {
   "O morph preciso requer preenchimento solido, sem contorno.": ["Use texto com preenchimento sólido e sem contorno.", "Use solid-filled text without a stroke."],
   "O host nao expoe os estilos e identificadores necessarios.": ["Esta versão do After Effects não expõe os estilos e identificadores necessários.", "This After Effects version does not expose the required styles and identifiers."],
   "Use de 1 a 60 palavras horizontais, da esquerda para a direita, ate 2000 caracteres.": ["Use de 1 a 60 palavras horizontais, da esquerda para a direita, até 2.000 caracteres.", "Use 1 to 60 horizontal, left-to-right words, up to 2,000 characters."],
+  "Atualize o Moti.on para copiar os efeitos do texto.": ["Atualize o Moti.on para copiar os efeitos do texto.", "Update Moti.on to copy the text effects."],
+  "Use texto sem matte, solo ou camada guia.": ["Use texto sem matte, solo ou camada guia.", "Use text without a matte, solo or guide layer."],
   "Use linhas horizontais com quebras manuais.": ["Use linhas horizontais com quebras manuais.", "Use horizontal lines with manual breaks."],
   "Use linhas horizontais.": ["Use linhas de texto horizontais.", "Use horizontal lines of text."],
   "A estrutura do morph foi alterada.": ["A montagem do morph foi alterada. Desfaça a mudança antes de continuar.", "The morph structure changed. Undo the structural edit before continuing."],

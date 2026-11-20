@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import postcss from "postcss";
 import { resolveColorToken, themeDeclarations } from "../scripts/check-contrast.mjs";
 
 const TOKENS_URL = new URL("../src/tokens.css", import.meta.url);
-const HOST_THEME_URL = new URL("../../ui-core/src/theme.css", import.meta.url);
+const HOST_THEME_URL = new URL("../../ui-core/src/base.css", import.meta.url);
+const THEME_ENTRY_URL = new URL("../../ui-core/src/theme.css", import.meta.url);
 const SHARED_TOKENS_URL = new URL("../../../shared/crosshost.tokens.css", import.meta.url);
 const SHARED_TOKENS_JSON_URL = new URL("../../../shared/crosshost.tokens.json", import.meta.url);
 
@@ -75,29 +77,35 @@ test("ui-tokens declara os temas escuro e claro da direção aprovada", async ()
   assert.equal(resolveColorToken(light, "accent"), "#212529");
 });
 
-test("o tema embarcado nos dois hosts permanece sincronizado com ui-tokens", async () => {
-  const [tokensCss, hostCss, sharedCss] = await Promise.all([
+test("os dois hosts usam os tokens canônicos sem uma cópia na folha base", async () => {
+  const [tokensCss, baseCss, entryCss, sharedCss, aeCss, premiereCss] = await Promise.all([
     readFile(TOKENS_URL, "utf8"),
     readFile(HOST_THEME_URL, "utf8"),
-    readFile(SHARED_TOKENS_URL, "utf8")
+    readFile(THEME_ENTRY_URL, "utf8"),
+    readFile(SHARED_TOKENS_URL, "utf8"),
+    readFile(new URL("../../../dist/after-effects-cep/styles/theme.css", import.meta.url), "utf8"),
+    readFile(new URL("../../../dist/premiere-uxp/styles/theme.css", import.meta.url), "utf8")
   ]);
-  const tokenDark = declarations(selectorBlock(tokensCss, ":root"));
-  const tokenLight = declarations(selectorBlock(tokensCss, '[data-theme="light"]'));
-  const hostDark = declarations(selectorBlock(hostCss, ":root"));
-  const hostLight = declarations(selectorBlock(hostCss, '[data-theme="light"]'));
-  const sharedDark = declarations(selectorBlock(sharedCss, ":root"));
-  const sharedLight = declarations(selectorBlock(sharedCss, '[data-theme="light"]'));
-
-  for (const [token, value] of tokenDark) {
-    assert.equal(hostDark.get(token), value, `drift no tema embarcado --${token}`);
-    assert.equal(sharedDark.get(token), value, `drift no token compartilhado --${token}`);
+  assert.equal(sharedCss, tokensCss, "o espelho CSS é gerado da fonte canônica");
+  const imports = postcss.parse(entryCss).nodes.filter(node => node.type === "atrule" && node.name === "import");
+  assert.deepEqual(imports.map(node => new URL(JSON.parse(node.params), THEME_ENTRY_URL)), [TOKENS_URL, HOST_THEME_URL]);
+  const canonicalSelectors = new Map();
+  for (const rule of postcss.parse(tokensCss).nodes.filter(node => node.type === "rule")) {
+    const names = canonicalSelectors.get(rule.selector) ?? new Set();
+    for (const decl of rule.nodes.filter(node => node.type === "decl" && node.prop.startsWith("--"))) {
+      assert.ok(!names.has(decl.prop), `token duplicado em ${rule.selector}: ${decl.prop}`);
+      names.add(decl.prop);
+    }
+    canonicalSelectors.set(rule.selector, names);
   }
-  for (const [token, value] of tokenLight) {
-    assert.equal(hostLight.get(token), value, `drift no tema claro embarcado --${token}`);
-    assert.equal(sharedLight.get(token), value, `drift no token claro compartilhado --${token}`);
+  for (const rule of postcss.parse(baseCss).nodes.filter(node => node.type === "rule")) {
+    const names = canonicalSelectors.get(rule.selector);
+    if (names) rule.walkDecls(/^--/, decl => assert.ok(!names.has(decl.prop), `token copiado na base: ${decl.prop}`));
   }
-
-  assert.equal(resolveColorToken(hostDark, "ch-surface-canvas"), "#121212", "a base Onyx precisa permanecer #121212");
+  for (const theme of [aeCss, premiereCss]) {
+    assert.equal(theme.split(tokensCss.trimEnd()).length, 2, "cada bundle carrega os tokens uma vez");
+  }
+  assert.equal(resolveColorToken(themeDeclarations(tokensCss), "ch-surface-canvas"), "#121212", "a base Onyx precisa permanecer #121212");
 });
 
 test("movimento usa tokens, nunca transition all, e aceita reducao interna", async () => {
@@ -106,7 +114,7 @@ test("movimento usa tokens, nunca transition all, e aceita reducao interna", asy
   assert.doesNotMatch(css, /transition\s*:\s*all\b/i);
   assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
   assert.match(css, /\[data-reduced-motion="true"\]/);
-  const tokens = declarations(selectorBlock(css, ":root"));
+  const tokens = declarations(selectorBlock(await readFile(TOKENS_URL, "utf8"), ":root"));
   assert.equal(tokens.get("ch-motion-fast"), "var(--motion-fast)");
   assert.equal(tokens.get("motion-fast"), "200ms");
 });
