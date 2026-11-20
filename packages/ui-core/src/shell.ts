@@ -951,6 +951,17 @@ export function createShell(options: ShellOptions): Shell {
   nav.setAttribute("role", options.layout === "library" ? "navigation" : "tablist");
   shellNode.appendChild(nav);
   const libraryLayout = options.layout === "library";
+  if (libraryLayout) {
+    const styleId = "ch-nav-text-tabs-style";
+    const host = doc.head || doc.documentElement || shellNode;
+    if (host && !(doc.getElementById && doc.getElementById(styleId))) {
+      const style = createElement(doc, "style");
+      style.id = styleId;
+      style.textContent = '.ch-shell[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view]{width:auto;min-width:0;height:28px;padding:0 8px;font-size:11px;font-weight:500;color:#9A9A9A;background:transparent;box-shadow:none}.ch-shell[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view] .ch-nav__label,.ch-shell[data-layout="library"] .ch-nav__overflow .ch-nav__item[data-view] .ch-nav__label,.ch-shell[data-layout="library"] .ch-nav__more .ch-nav__more-label{display:inline;font-size:11px;line-height:28px;white-space:nowrap}.ch-shell[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view] svg,.ch-shell[data-layout="library"] .ch-nav__overflow .ch-nav__item[data-view] svg,.ch-shell[data-layout="library"] .ch-nav__more svg{display:none}.ch-shell[data-layout="library"] .ch-nav__more{width:auto;min-width:0;height:28px;padding:0 8px;font-size:11px;color:#9A9A9A;background:transparent}.ch-shell[data-layout="library"] .ch-nav__primary .ch-nav__item[data-view].is-active{color:#DEDEDE;background:transparent;box-shadow:inset 0 -2px 0 #54A3F6}';
+      host.appendChild(style);
+    }
+  }
+
   const primaryNav = libraryLayout ? createElement(doc, "div", "ch-nav__primary") : nav;
   const utilities = createElement(doc, "div", "ch-nav__utilities");
   const overflow = createElement(doc, "div", "ch-nav__overflow");
