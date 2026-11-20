@@ -1111,6 +1111,38 @@ export function createPresetGallery(doc: Document, options: {
   const splitter=createElement(doc,"div","ch-preset-splitter");splitter.setAttribute("role","separator");splitter.setAttribute("aria-orientation","vertical");splitter.setAttribute("aria-label",pt?"Largura das pastas":"Folder width");splitter.setAttribute("tabindex","0");
   element.removeChild(toolbar);sidebar.appendChild(toolbar);
   element.removeChild(filterMenu);sidebar.appendChild(filterMenu);folderPicker.setOpen(false);
+  // Navegar/Editar (preset-workspace.ts) entra na linha da busca enquanto a galeria
+  // existe: uma linha a menos acima dos cards. Volta para a área de trabalho no dispose,
+  // antes de Editar ou de um redesenho limpar o conteúdo da biblioteca.
+  let adoptedTabs: { tabs: HTMLElement; home: HTMLElement; next: Node | null } | undefined;
+  const childElements = (node: Node): HTMLElement[] => Array.from(node.childNodes ?? []).filter((child): child is HTMLElement => Boolean((child as HTMLElement).classList));
+  function syncTabsGlide(tabs: HTMLElement): void {
+    const children = childElements(tabs);
+    const glide = children.find(child => child.classList.contains("ch-preset-tabs__glide"));
+    const selected = children.find(child => child.getAttribute("aria-selected") === "true");
+    if (!glide || !selected || !selected.offsetWidth) return;
+    glide.style.width = `${selected.offsetWidth}px`; glide.style.transform = `translateX(${selected.offsetLeft}px)`;
+  }
+  function adoptWorkspaceTabs(): void {
+    if (disposed) return;
+    if (adoptedTabs) { syncTabsGlide(adoptedTabs.tabs); return; }
+    let home = element.parentNode as HTMLElement | null;
+    while (home && !home.classList?.contains("ch-preset-workspace")) home = home.parentNode as HTMLElement | null;
+    const tabs = home ? childElements(home).find(child => child.classList.contains("ch-preset-tabs")) : undefined;
+    if (!home || !tabs) return;
+    adoptedTabs = { tabs, home, next: tabs.nextSibling };
+    tabs.classList.add("ch-preset-tabs--inline");
+    toolbar.insertBefore(tabs, toolbar.firstChild);
+    syncTabsGlide(tabs);
+  }
+  function releaseWorkspaceTabs(): void {
+    if (!adoptedTabs) return;
+    const { tabs, home, next } = adoptedTabs; adoptedTabs = undefined;
+    tabs.classList.remove("ch-preset-tabs--inline");
+    home.insertBefore(tabs, next && next.parentNode === home ? next : home.firstChild);
+  }
+  // A área de trabalho insere a galeria logo depois de criá-la.
+  void Promise.resolve().then(adoptWorkspaceTabs);
   const selectionSummary = createElement(doc, "div", "ch-preset-selection-summary");
   const selectedName = createElement(doc, "span", "ch-preset-selected-name");
   const selectionStatus = createElement(doc, "span", "ch-preset-selection-status");
@@ -1503,7 +1535,7 @@ export function createPresetGallery(doc: Document, options: {
     previewPlayers.get(preset.id)?.();
   }
   // Categories live in the anchored menu, which sizes itself to its labels.
-  const resize = (): void => { cardPixels = 0; folderPicker.update();if(!folderPicker.active())setSidebar(sidebarWidth());syncDiscovery();queueCardWindow(true);if(categories.offsetHeight>0)folderGlide.refresh(false); };
+  const resize = (): void => { cardPixels = 0; adoptWorkspaceTabs(); folderPicker.update();if(!folderPicker.active())setSidebar(sidebarWidth());syncDiscovery();queueCardWindow(true);if(categories.offsetHeight>0)folderGlide.refresh(false); };
   const outside = (event: MouseEvent): void => { const target = event.target as Node;
     if(settingsOpen && !settingsPanel.contains(target) && !editorTrigger?.contains(target) && !(target as HTMLElement).closest?.(".ch-select-menu"))closeEditor();
     if(openPalette && !openPalette.contains(target) && !(target as HTMLElement).closest?.(".ch-folder-more"))closeFolderMenu();
@@ -2430,5 +2462,5 @@ export function createPresetGallery(doc: Document, options: {
   scroll.addEventListener("scroll", () => { if(filterButton.getAttribute("aria-expanded")==="true")setFilters(false); });
   const visibility = (): void => { if(doc.hidden)pausePreviews();else if(pointerInside)resumePreviews(); }; doc.addEventListener("visibilitychange", visibility);
   draw();
-  return { element, updateContext, dispose() { if(disposed)return;stopSizeScrub();commitSize();rememberScroll();personalPreview?.dispose();personalPreview=undefined;elementsView?.dispose();elementsView=undefined;disposeNumbers();clearTimeout(settingsTimer); libraryActions.dispose(); stopGridGlide(); stopSplitter(); gridObserver?.disconnect(); if(windowFrame)cancelAnimationFrame(windowFrame); cachedCards.clear(); savedTabStops.clear(); searchObserver?.disconnect(); disposed = true; scrollRestoreRevision++;if(scrollRestoreFrame)cancelAnimationFrame(scrollRestoreFrame);scrollRestoreFrame=0; cancelAnimationFrame(animationFrame);animationFrame=0;for(const scene of scenes.values())scene.release();scenes.clear();visible.clear();near.clear();prepQueue.length=0;cancelAnimationFrame(prepFrame);prepFrame=0;clearTimeout(leaveTimer);clearTimeout(mediaTimer);clearTimeout(hoverTimer);clearTimeout(intentTimer);clearTimeout(scrollTimer);frameCache.hold(false);cardWall.dispose();cancelDeselect();hoverCard=null;for(const timer of cueTimers.values())clearTimeout(timer);cueTimers.clear();leftAt.clear();previewPlayers.clear();window.removeEventListener("blur",pausePreviews);window.removeEventListener("focus",windowFocus);intersections?.disconnect();ahead?.disconnect();motionObserver?.disconnect(); clearTimeout(debounce); observer?.disconnect(); window.removeEventListener("resize", resize);window.removeEventListener("resize", closeFolderMenu); closeContextMenu(); doc.removeEventListener("mousedown", outside); doc.removeEventListener("keydown", escape); doc.removeEventListener("visibilitychange", visibility); } };
+  return { element, updateContext, dispose() { if(disposed)return;releaseWorkspaceTabs();stopSizeScrub();commitSize();rememberScroll();personalPreview?.dispose();personalPreview=undefined;elementsView?.dispose();elementsView=undefined;disposeNumbers();clearTimeout(settingsTimer); libraryActions.dispose(); stopGridGlide(); stopSplitter(); gridObserver?.disconnect(); if(windowFrame)cancelAnimationFrame(windowFrame); cachedCards.clear(); savedTabStops.clear(); searchObserver?.disconnect(); disposed = true; scrollRestoreRevision++;if(scrollRestoreFrame)cancelAnimationFrame(scrollRestoreFrame);scrollRestoreFrame=0; cancelAnimationFrame(animationFrame);animationFrame=0;for(const scene of scenes.values())scene.release();scenes.clear();visible.clear();near.clear();prepQueue.length=0;cancelAnimationFrame(prepFrame);prepFrame=0;clearTimeout(leaveTimer);clearTimeout(mediaTimer);clearTimeout(hoverTimer);clearTimeout(intentTimer);clearTimeout(scrollTimer);frameCache.hold(false);cardWall.dispose();cancelDeselect();hoverCard=null;for(const timer of cueTimers.values())clearTimeout(timer);cueTimers.clear();leftAt.clear();previewPlayers.clear();window.removeEventListener("blur",pausePreviews);window.removeEventListener("focus",windowFocus);intersections?.disconnect();ahead?.disconnect();motionObserver?.disconnect(); clearTimeout(debounce); observer?.disconnect(); window.removeEventListener("resize", resize);window.removeEventListener("resize", closeFolderMenu); closeContextMenu(); doc.removeEventListener("mousedown", outside); doc.removeEventListener("keydown", escape); doc.removeEventListener("visibilitychange", visibility); } };
 }
