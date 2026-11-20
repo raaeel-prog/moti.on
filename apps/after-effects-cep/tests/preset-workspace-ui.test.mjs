@@ -8,7 +8,7 @@ import { createFakeWindow } from '../../../packages/ui-core/tests/fake-dom.mjs';
 const built=await build({entryPoints:[fileURLToPath(new URL('../client/src/preset-workspace.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
 const {createPresetWorkspace}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 const options={phase:'in',direction:'bottom',durationFrames:40,intensity:100,staggerFrames:2,unit:'preset',elasticity:35,overlap:70,speed:100};
-async function fixture(t,{failRead=false,holdAdjust=false,storage,locale='pt-BR',inspectionState='ready',phases=0,phaseActionFailure=false,favorites=[],recent=[],cache={personal:{roots:[],folders:[],items:[]}},navigation={view:'edit',category:'studio',query:'',scope:'all',scroll:0},watchInspection}={}){
+async function fixture(t,{failRead=false,holdAdjust=false,storage,locale='pt-BR',inspectionState='ready',phases=0,phaseActionFailure=false,favorites=[],recent=[],cache={personal:{roots:[],folders:[],items:[]}},navigation={view:'edit',category:'text',query:'',scope:'all',scroll:0},watchInspection}={}){
   const saved={window:globalThis.window,requestAnimationFrame:globalThis.requestAnimationFrame,cancelAnimationFrame:globalThis.cancelAnimationFrame};globalThis.window=createFakeWindow();const win=globalThis.window;
   globalThis.requestAnimationFrame=()=>1;globalThis.cancelAnimationFrame=()=>{};
   const doc=createCepDocument(),calls=[],context={hasComp:true,selectionCount:1,selectedKeys:0};let readFailure=failRead,adjustFailure=false,holdRead=false,applyFailure=false,timingFailure=false;
@@ -156,7 +156,7 @@ const selectedPreset='builtin.motion.studio-letter-silk-rise';
 const galleryLocation=navigation=>({category:navigation.category,query:navigation.query,scope:navigation.scope,scroll:navigation.scroll,selectedId:navigation.selectedId});
 
 test('Show in library restores the same selected preset with its search, collection and exact offset',async t=>{
-  const navigation={view:'edit',category:'studio',query:'silk',scope:'recent',scroll:780,selectedId:selectedPreset};
+  const navigation={view:'edit',category:'text',query:'silk',scope:'recent',scroll:780,selectedId:selectedPreset};
   const expected=galleryLocation(navigation),f=await fixture(t,{navigation,recent:[selectedPreset]});
   f.button('Mostrar na biblioteca').click();await setImmediate();
   assert.equal(navigation.view,'browse');assert.deepEqual(galleryLocation(navigation),expected);
@@ -165,22 +165,22 @@ test('Show in library restores the same selected preset with its search, collect
 });
 
 test('Reveal from the phase editor preserves the selected favorite and its gallery position',async t=>{
-  const navigation={view:'edit',category:'studio',query:'silk',scope:'favorites',scroll:925,selectedId:selectedPreset};
+  const navigation={view:'edit',category:'text',query:'silk',scope:'favorites',scroll:925,selectedId:selectedPreset};
   const expected=galleryLocation(navigation),f=await fixture(t,{navigation,phases:1,favorites:[selectedPreset]});
-  f.button('Revelar').click();await setImmediate();
+  f.button('Mostrar na biblioteca').click();await setImmediate();
   assert.equal(navigation.view,'browse');assert.deepEqual(galleryLocation(navigation),expected);
 });
 
 test('revealing an applied preset hidden by the saved search makes its card available',async t=>{
-  const navigation={view:'edit',category:'studio',query:'does not exist',scope:'all',scroll:530,selectedId:selectedPreset};
+  const navigation={view:'edit',category:'text',query:'does not exist',scope:'all',scroll:530,selectedId:selectedPreset};
   const f=await fixture(t,{navigation});f.button('Mostrar na biblioteca').click();await setImmediate();
-  assert.equal(navigation.view,'browse');assert.equal(navigation.category,'studio');assert.equal(navigation.query,'');
+  assert.equal(navigation.view,'browse');assert.equal(navigation.category,'text');assert.equal(navigation.query,'');
   assert.equal(navigation.selectedId,selectedPreset);
   assert.equal(f.workspace.element.getElementsByTagName('article').find(node=>node.id===selectedPreset)?.getAttribute('data-selected'),'true');
 });
 
 test('removing the last phase returns to Browse at the last selected preset and exact offset',async t=>{
-  const navigation={view:'edit',category:'studio',query:'silk',scope:'recent',scroll:1060,selectedId:selectedPreset};
+  const navigation={view:'edit',category:'text',query:'silk',scope:'recent',scroll:1060,selectedId:selectedPreset};
   const expected=galleryLocation(navigation),f=await fixture(t,{navigation,phases:1,recent:[selectedPreset]});
   f.button('Remover').click();await setImmediate();await setImmediate();
   assert.equal(f.calls.filter(call=>call.command==='ae.presets.phase-action').length,1);
@@ -189,16 +189,16 @@ test('removing the last phase returns to Browse at the last selected preset and 
 });
 
 test('removing one phase keeps Edit when another managed phase remains',async t=>{
-  const navigation={view:'edit',category:'studio',query:'silk',scope:'all',scroll:890,selectedId:selectedPreset};
+  const navigation={view:'edit',category:'text',query:'silk',scope:'all',scroll:890,selectedId:selectedPreset};
   const expected=galleryLocation(navigation),f=await fixture(t,{navigation,phases:2});
   f.button('Remover').click();await setImmediate();await setImmediate();
   assert.equal(navigation.view,'edit');assert.deepEqual(galleryLocation(navigation),expected);
-  assert.deepEqual(f.state.phases.map(phase=>phase.phase),['out']);assert.ok(f.button('Revelar'));
+  assert.deepEqual(f.state.phases.map(phase=>phase.phase),['out']);assert.ok(f.button('Mostrar na biblioteca'));
 });
 
 test('failed removal or failed follow-up inspection retains Edit and the saved gallery position',async t=>{
   for(const failure of ['remove','inspect'])await t.test(failure,async child=>{
-    const navigation={view:'edit',category:'studio',query:'silk',scope:'all',scroll:640,selectedId:selectedPreset};
+    const navigation={view:'edit',category:'text',query:'silk',scope:'all',scroll:640,selectedId:selectedPreset};
     const expected=galleryLocation(navigation),f=await fixture(child,{navigation,phases:1,phaseActionFailure:failure==='remove'});
     if(failure==='inspect')f.failRead(true);
     f.button('Remover').click();await setImmediate();await setImmediate();
@@ -607,4 +607,18 @@ test('phase drafts and a pending timecode survive workspace recreation without h
 
 test('Browse/Edit tabs keep focus, selection, drafts and keyboard semantics',async t=>{
  const f=await fixture(t),edit=f.button('Editar'),browse=f.button('Navegar');f.change(137.5);edit.focus();edit.keydown('Home');assert.equal(f.navigation.view,'browse');assert.equal(f.doc.activeElement,browse);assert.equal(browse.tabIndex,0);assert.equal(edit.tabIndex,-1);browse.keydown('ArrowRight');await setImmediate();assert.equal(f.doc.activeElement,edit);assert.equal(f.intensity().value,'137.5');assert.equal(edit.getAttribute('aria-selected'),'true');
+});
+
+test('Edit keeps only the essentials open; the rest of a phase lives in a closed More settings',async t=>{
+  const f=await fixture(t,{phases:1});
+  const editor=f.workspace.element.getElementsByTagName('div').find(node=>node.className==='ch-phase-editor');
+  assert.ok(editor,'the phase editor is shown');
+  const more=editor.getElementsByTagName('details').find(node=>node.className==='ch-phase-more');
+  assert.ok(more,'each phase has a More settings section');assert.equal(more.open,false,'closed by default');
+  const ids=root=>root.getElementsByTagName('input').map(node=>node.id).concat(root.getElementsByTagName('select').map(node=>node.id));
+  const inside=new Set(ids(more)),outside=ids(editor).filter(id=>!inside.has(id));
+  for(const key of ['durationFrames','intensity','staggerFrames'])assert.ok(outside.some(id=>id.endsWith(`-${key}`)),`${key} stays visible`);
+  for(const key of ['order','offset','motion-blur'])assert.ok([...inside].some(id=>id.endsWith(`-${key}`)),`${key} moves to More settings`);
+  assert.doesNotMatch(editor.allText,/Camada:/,'no layer label, only its name');
+  assert.ok(f.button('Restaurar')&&f.button('Remover'),'reset and remove stay at hand');
 });

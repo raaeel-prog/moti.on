@@ -5,6 +5,8 @@
 (function(global){
   /* global MarkerValue */
   var lib=/** @type {any} */ (global).MotionPresetLibrary,TAG="[Moti.on.library.v3]",LEGACY_TAG="[Moti.on.library.v2]",TR="ADBE Transform Group",ROLES=/** @type {any} */ (["in","out","effect"]),SLOT=/** @type {any} */ ({"in":1,"out":2,"effect":3}),serial=0;
+  /** Nome legível de cada fase no Effect Controls, o mesmo dos marcadores. */
+  var PHASE_LABEL=/** @type {any} */ ({"in":"Moti.on In","out":"Moti.on Out","effect":"Moti.on FX"});
   /** @param {string} message @param {string=} code @returns {MotionCommandFailure} */
   function fail(message,code){return {code:code||MotionContracts.ERROR.INVALID_PRESET,message:message,recoverable:true,details:null};}
   /** @param {any} value @returns {any} */
@@ -26,7 +28,8 @@
       var p=s.meta?lib.definition({presetId:s.presetId}):null;
       if(!p||(role==="effect"&&r.version!==3)||s.meta.presetId!==s.presetId||s.meta.markerInstance!==r.instance||lib.validate(s.meta.options))throw new Error("Receita da fase inválida.");
       if(!fits(role,p)||(role==="effect"?s.meta.effectCue!==1:s.meta.options.phase!==role)||s.meta.instance!==r.instance+"-"+SLOT[role]||!(s.meta.effects instanceof Array)||!(s.meta.expressions instanceof Array)||!(s.meta.animators instanceof Array)||!(s.meta.masks instanceof Array))throw new Error("Vínculos da fase inválidos.");
-      var groups=[s.meta.effects,s.meta.animators,s.meta.masks],owned="Moti.on "+s.meta.instance+" · ",names=/** @type {any} */ ({});
+      if(s.meta.label!==undefined&&(s.meta.label!==PHASE_LABEL[role]||!lib.ownedLabels[s.meta.label]))throw new Error("Rótulo da fase inválido.");
+      var groups=[s.meta.effects,s.meta.animators,s.meta.masks],owned=lib.ownedPrefix(s.meta)+" · ",names=/** @type {any} */ ({});
       for(var g=0;g<groups.length;g++){if(groups[g].length>64)throw new Error("Limite de controles excedido.");for(var n=0;n<groups[g].length;n++){var record=groups[g][n];if(!record||typeof record.name!=="string"||record.name.indexOf(owned)!==0||record.name.length>240||typeof record.matchName!=="string"||names[record.name])throw new Error("Identidade de controle inválida.");names[record.name]=true;}}
       if(s.meta.expressions.length>64)throw new Error("Limite de expressões excedido.");
       for(n=0;n<s.meta.expressions.length;n++){record=s.meta.expressions[n];if(!record||!(record.path instanceof Array)||record.path.length<2||record.path.length>12||record.original!==""||typeof record.enabled!=="boolean")throw new Error("Expressão de fase inválida.");
@@ -235,7 +238,7 @@
   }
   /** @param {any} root @param {string} role @param {string} id @param {any} options @returns {any} */
   function newSlot(root,role,id,options){var args=clone(options);if(role!=="effect")args.phase=role;args.presetId=id;
-    var meta=/** @type {any} */ ({version:1,instance:root.instance+"-"+SLOT[role],presetId:id,was3D:root.was3D,options:args,markerInstance:root.instance,expressions:[],effects:[],animators:[],masks:[]});
+    var meta=/** @type {any} */ ({version:1,instance:root.instance+"-"+SLOT[role],label:PHASE_LABEL[role],presetId:id,was3D:root.was3D,options:args,markerInstance:root.instance,expressions:[],effects:[],animators:[],masks:[]});
     if(role==="effect")meta.effectCue=1;else{meta.markerVersion=1;meta.markerDurationFrames=args.durationFrames;}
     return {presetId:id,meta:meta};}
   /** Anchor Point Grouping of a text layer (1 characters, 2 words, 3 lines, 4 all).

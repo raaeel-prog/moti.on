@@ -1927,5 +1927,29 @@ const MOTION_LIBRARY_RECIPES: readonly MotionLibraryPreset[] = [
   ...MOTION_LIBRARY_TEXT_PRESETS
 ];
 
-export const MOTION_LIBRARY_PRESETS: readonly MotionLibraryPreset[] = MOTION_LIBRARY_RECIPES.map(p =>
-  MOTION_BLUR_BY_DEFAULT.has(p.id) ? { ...p, defaults: { ...p.defaults, motionBlur: true } } : p);
+/** Repetições achadas por `scripts/preset-uniqueness-audit.mjs` (2026-11-18): o mesmo
+ * movimento na mesma pasta, mudando só a ordem ou a curva, que a aba Editar já troca.
+ * Saem da galeria; camadas que já usam continuam inspecionáveis, ajustáveis e removíveis. */
+export const MOTION_LIBRARY_DUPLICATES_RETIRED: ReadonlySet<string> = new Set([
+  "elastic-pivot", "color-punch",
+  "premium-typewriter", "text-v3-characters-typewriter-reverse", "text-v3-characters-position-zipper",
+  "text-v3-characters-fade-center", "text-v3-characters-rotate-swing-settle", "text-v3-characters-scale-drop-settle",
+  "text-v3-words-fade-center", "text-v3-words-rotate-swing-settle", "text-v3-words-scale-drop-settle", "text-v3-words-typewriter-reverse",
+  "text-v3-lines-fade-center", "text-v3-lines-rotate-swing-settle", "text-v3-lines-scale-drop-settle", "text-v3-lines-typewriter-reverse",
+  "text-v3-lines-loop-jitter",
+  /* Curadoria de Tipografia › Caracteres (2026-11-18): 103 presets de 7 coleções repetiam
+   * os mesmos conceitos. Fica o mais bem resolvido de cada ideia; saem estes. */
+  "studio-letter-soft-cascade", "spring-letters", "letter-stretch-rise", "text-v3-characters-combination-wiggly-lift",
+  "text-v3-characters-position-drop", "studio-letter-velvet-turn", "text-dissolve", "studio-letter-focus-bloom",
+  "letter-dissolve", "scattered-letters", "text-v3-characters-combination-gather", "studio-letter-drift-assembly",
+  "bouncy-letters", "jelly-text-bounce", "studio-letter-air-spacing", "text-v3-characters-tracking-spread",
+  "text-v3-characters-tracking-tighten", "studio-letter-fluid-italic", "glitchy-chars", "cyber-text-reveal",
+  "premium-vfx-chroma-pulse", "text-v3-characters-decode-resolve", "text-v3-characters-decode-roll", "text-v3-characters-rotate-arc",
+  "text-v3-characters-scale-height", "text-v3-characters-mask-window-settle", "text-v3-characters-position-block", "text-v3-characters-combination-spark-scale",
+  "text-v3-characters-scale-near"
+]);
+
+export const MOTION_LIBRARY_PRESETS: readonly MotionLibraryPreset[] = MOTION_LIBRARY_RECIPES.map(p => {
+  const blurred = MOTION_BLUR_BY_DEFAULT.has(p.id) ? { ...p, defaults: { ...p.defaults, motionBlur: true } } : p;
+  return MOTION_LIBRARY_DUPLICATES_RETIRED.has(p.id) ? { ...blurred, retired: true as const } : blurred;
+});

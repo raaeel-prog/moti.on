@@ -1,4 +1,4 @@
-import { attachMenuGlide, button, checkboxField, createActionButton, type ActionButtonController, clearNode, createElement, createIcon, createEmptyState, createI18n, searchField, selectField, type PanelPreferences } from "@motion/ui-core";
+import { attachMenuGlide, attachScrubbableNumber, button, checkboxField, createActionButton, type ActionButtonController, clearNode, createElement, createIcon, createEmptyState, createI18n, searchField, selectField, updateSliderFill, type PanelPreferences } from "@motion/ui-core";
 import { MOTION_LIBRARY_PRESETS, MOTION_LIBRARY_DEFAULTS, MOTION_PENNER_FAMILIES, libraryUsesDirection, libraryDirectionAllowed, libraryTextSweeps, libraryTextOrder, libraryTextBase, motionLibraryRequirements, parsePennerEasing, type MotionPennerShape, type MotionLibraryRequirements, type MotionLibraryPreset, type MotionLibraryOptions, type PersonalPresetCatalog, type PersonalPresetItem, type PersonalPresetPreview, type PresetDefinitionV1, type QuickContext } from "@motion/contracts";
 import { paintLibraryPreview, libraryPreviewPlayback, libraryPreviewEnd, cameraPreviewPlayback, librarySample } from "./motion-library-preview.js";
 import { createPersonalMediaPreview } from "./personal-media-preview.js";
@@ -26,6 +26,38 @@ const TEXT_REFERENCE_BASE = "../assets/text-previews/";
  * plays the entrance and the exit, and the card loops whichever is chosen. */
 const RENDERED_KEYS = ["direction", "unit", "easing", "order", "seed", "intensity", "durationFrames", "staggerFrames", "elasticity", "overlap", "speed", "settleAmount", "settleCount", "settleDamping"] as const;
 /** True when the card's current settings are the ones the AE render used. */
+const LAYOUT_PROPERTIES: readonly (readonly [string, string])[] = [["--preview-size", "200px"], ["--preset-sidebar-width", "150px"]];
+const layoutPropertiesRegistered = new WeakSet<Document>();
+const PRESET_OVERSCAN_ROWS = 2;
+const PRESET_CARD_CACHE_SIZE = 32;
+
+type CardLayout = {
+  columns: number;
+  rowHeight: number;
+  rowGap: number;
+  paddingTop: number;
+  paddingBottom: number;
+};
+/**
+ * As variáveis de tamanho da galeria são lidas só pelo elemento que as recebe
+ * (a grade e a raiz da galeria). Uma variável CSS comum é herdada, então cada
+ * passo do controle de tamanho ou do divisor recalculava o estilo de todos os
+ * descendentes: ~124 ms por passo com 473 cards, contra ~32 ms sem herança
+ * (medido no painel, 2026-11-16). Registrá-las sem herança corta esse custo.
+ * O valor inicial precisa existir para a sintaxe <length>; quem não define a
+ * variável recebe o mesmo padrão que os `var(--x, padrão)` das folhas pediam.
+ */
+function registerLayoutProperties(doc: Document): void {
+  if (layoutPropertiesRegistered.has(doc)) return;
+  layoutPropertiesRegistered.add(doc);
+  const css = (doc.defaultView as (Window & { CSS?: { registerProperty?(rule: { name: string; syntax: string; inherits: boolean; initialValue: string }): void } }) | null)?.CSS;
+  if (typeof css?.registerProperty !== "function") return;
+  for (const [name, initialValue] of LAYOUT_PROPERTIES) {
+    // Lança se a variável já foi registrada (painel recriado no mesmo documento).
+    try { css.registerProperty({ name, syntax: "<length>", inherits: false, initialValue }); } catch { /* já registrada */ }
+  }
+}
+
 export function textReferenceMatches(asset: TextReferenceAsset, draft: MotionLibraryOptions): boolean {
   return RENDERED_KEYS.every(key => draft[key] === undefined || asset.options[key] === undefined || draft[key] === asset.options[key]);
 }
@@ -190,7 +222,10 @@ export function createPresetPhaseActions(doc: Document, options: {
   element.setAttribute("data-motion", "view-enter"); element.setAttribute("data-active", "true");
   const controls = new Map<MotionLibraryOptions["phase"], ActionButtonController>();
   for (const [index, phase] of (["in", "out", "both"] as const).entries()) {
-    const control = createActionButton(doc, { label: (pt ? ["Entrada", "Saída", "Ambos"] : ["In", "Out", "Both"])[index]!, variant: "primary", onPress: () => options.onApply(phase) });
+    const control = createActionButton(doc, {
+      label: (pt ? ["Entrada", "Saída", "Ambos"] : ["In", "Out", "Both"])[index]!,
+      variant: "primary", size: 24, onPress: () => options.onApply(phase)
+    });
     control.button.dataset.phase = phase; controls.set(phase, control); element.appendChild(control.element);
     control.button.addEventListener("keydown", event => {
       const direction = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
@@ -272,6 +307,19 @@ export const GALLERY_PRESETS: GalleryPreset[] = [
       applyMode: "camera", reapplyPolicy: "reject-existing-keys", params };
   })
 ];
+const presetById = new Map(GALLERY_PRESETS.map(preset => [preset.id, preset]));
+const presetSearchIndexes = new Map<string, ReadonlyMap<string, string>>();
+
+function presetSearchIndex(locale: string): ReadonlyMap<string, string> {
+  let index = presetSearchIndexes.get(locale);
+  if (!index) {
+    index = new Map(GALLERY_PRESETS.map(preset => [
+      preset.id, normalizeSearch(`${preset.displayName[locale] ?? preset.id} ${preset.tags}`)
+    ]));
+    presetSearchIndexes.set(locale, index);
+  }
+  return index;
+}
 
 /** Saved collection IDs remain stable when their visible labels improve. */
 export function galleryCategoryMatches(category: string, preset: GalleryPreset): boolean {
@@ -291,7 +339,40 @@ export function galleryCategoryMatches(category: string, preset: GalleryPreset):
     category === "motion" && preset.category.startsWith("motion-") || category === "text" && preset.category.startsWith("text-") ||
     category === "studio" && preset.motion?.collection === "studio" || category === "gemini" && preset.motion?.collection === "gemini" ||
     category === "classics" && Boolean(preset.motion) && !preset.motion?.filmSpec && preset.motion?.collection !== "premium" && preset.motion?.collection !== "signature" && preset.motion?.collection !== "momentum" && preset.motion?.collection !== "reveal" && preset.motion?.collection !== "looks" && preset.motion?.collection !== "text" ||
-    category === "camera" && preset.category.startsWith("camera") || category === "camera-moves" && preset.category === "camera" || preset.category === category;
+    (category === "camera" || category === "transitions") && preset.category.startsWith("camera") || category === "camera-moves" && preset.category === "camera" || preset.category === category;
+}
+
+/** A family subfolder needs this many live presets; smaller ones stay in the parent folder only. */
+export const MIN_FAMILY_PRESETS = 3;
+/** Live presets of a browse family ("motion-2d/blur"). */
+export function familySize(filter: string): number {
+  return GALLERY_PRESETS.filter(preset => !preset.motion?.retired && preset.navigation?.filter === filter).length;
+}
+
+/** Folders with no live preset are hidden; insert folders (elements, sounds) and the
+ * personal library own their content and always stay. One child alone folds into its parent. */
+export function pruneEmptyFolders<T extends {id: string; children?: T[]}>(nodes: T[]): T[] {
+  const live = (id: string): boolean => GALLERY_PRESETS.some(preset => !preset.motion?.retired && galleryCategoryMatches(id, preset));
+  const keep = (node: T): T | null => {
+    if (node.id === "all" || node.id === "personal" || node.id.startsWith("elements") || node.id.startsWith("sounds")) return node;
+    const children = (node.children ?? []).map(keep).filter((child): child is T => Boolean(child));
+    if (!children.length && !live(node.id)) return null;
+    return {...node, children: children.length > 1 ? children : []};
+  };
+  return nodes.map(keep).filter((node): node is T => Boolean(node));
+}
+
+/** Folder IDs of the collection-based tree (before 2026-11-18) and where they now live. */
+export function legacyFolderId(id: string): string {
+  if (id === "emulsion" || id.startsWith("emulsion-")) return "camera-transitions/film";
+  if (id === "camera-impact" || id === "premium-camera" || id === "camera") return "camera-transitions";
+  if (id === "reveal") return "motion-2d/reveal";
+  if (id === "looks") return "motion-effects/looks";
+  const unit = /^(?:momentum|premium)-(2d|3d|effects)$/.exec(id);
+  if (unit) return `motion-${unit[1]}`;
+  if (id === "momentum" || id === "premium-motion" || id === "animation" || id === "classics" || id === "studio" || id === "gemini") return "motion";
+  if (id === "signature" || id.startsWith("signature-") || id === "premium-text") return "text";
+  return "all";
 }
 
 export function gallerySequenceControls(preset: MotionLibraryPreset, options: MotionLibraryOptions): {order: boolean; seed: boolean} {
@@ -383,6 +464,7 @@ export function createPresetGallery(doc: Document, options: {
 }): { element: HTMLElement; updateContext(): void; dispose(): void } {
   const i18n = createI18n({ locale: options.locale });
   const pt = i18n.locale() === "pt-BR", nav = options.navigation;
+  const searchIndex = presetSearchIndex(i18n.locale());
   let primaryApply: ActionButtonController | undefined;
   let phaseActions: ReturnType<typeof createPresetPhaseActions> | undefined;
   let applying = false;
@@ -392,11 +474,11 @@ export function createPresetGallery(doc: Document, options: {
   if (nav.category === "ease") nav.category = "all";
   if (nav.selectedId?.startsWith("builtin.ease.")) nav.selectedId = "";
   if (nav.pendingRevealId?.startsWith("builtin.ease.")) delete nav.pendingRevealId;
-  const requestedPreset = GALLERY_PRESETS.find(preset => preset.id === options.revealId);
+  const requestedPreset = options.revealId ? presetById.get(options.revealId) : undefined;
   if (requestedPreset) {
     const prefs = options.preferences.snapshot();
     const categoryVisible = galleryCategoryMatches(nav.category, requestedPreset);
-    const queryVisible = normalizeSearch(`${requestedPreset.displayName[i18n.locale()] ?? requestedPreset.id} ${requestedPreset.tags}`).includes(normalizeSearch(nav.query));
+    const queryVisible = searchIndex.get(requestedPreset.id)!.includes(normalizeSearch(nav.query));
     const scopeVisible = nav.scope === "favorites" ? prefs.favorites.includes(requestedPreset.id) : nav.scope === "recent" ? (nav.recentOrder ?? prefs.recent).includes(requestedPreset.id) : true;
     // A palette reveal goes to the card. Returning from Edit to the same
     // visible selection restores the saved offset, even if it is offscreen.
@@ -415,7 +497,7 @@ export function createPresetGallery(doc: Document, options: {
     "motion-effects": pt ? "Motion · Efeitos" : "Motion · Effects", "text-characters": pt ? "Texto · Caracteres" : "Text · Characters",
     "text-words": pt ? "Texto · Palavras" : "Text · Words", "text-lines": pt ? "Texto · Linhas" : "Text · Lines",
     "text-effects": pt ? "Texto · Efeitos" : "Text · Effects", ease: pt ? "Curvas" : "Curves", camera: pt ? "Câmera" : "Camera",
-    text: pt ? "Tipografia" : "Typography", motion: "Motion", transitions: pt ? "Transições" : "Transitions",
+    text: pt ? "Tipografia" : "Typography", motion: pt ? "Animações" : "Animations", transitions: pt ? "Transições" : "Transitions",
     momentum: pt ? "Impulso" : "Momentum", "momentum-2d": pt ? "Impulso · 2D" : "Momentum · 2D",
     "momentum-3d": pt ? "Impulso · 3D" : "Momentum · 3D", "momentum-effects": pt ? "Impulso · Efeitos" : "Momentum · Effects",
     reveal: pt ? "Revelações" : "Reveals", looks: "Looks", emulsion: "Emulsion · Film Transitions"
@@ -449,11 +531,31 @@ export function createPresetGallery(doc: Document, options: {
   element.appendChild(filterMenu);
   const folderPicker = createFolderPicker(doc, {locale: options.locale, gallery: element, trigger: filterButton, menu: filterMenu, footerTop, onClose: closeFolderMenu,
     current: () => { const rows = Array.from(filterMenu.getElementsByTagName("button")).filter(node => node.className === "ch-folder-select"); return rows.find(node => node.dataset.category === nav.category) ?? rows[0] ?? null; }});
-  const searchControl=searchField(doc,{id:`${galleryId}-search`,label:pt?"Buscar preset":"Find a preset",placeholder:pt?"Buscar preset":"Find a preset",value:nav.query,expandable:false,
-    onInput(value){if(disposed)return;cancelReveal();nav.query=value;nav.scroll=0;pendingScroll=0;syncDiscovery();clearTimeout(debounce);debounce=window.setTimeout(()=>{if(!disposed)draw();},250);}});
+  function queueSearch(value: string): void {
+    if (disposed) return;
+    cancelReveal();
+    nav.query = value;
+    nav.scroll = 0;
+    pendingScroll = 0;
+    clearSearch.hidden = !value;
+    syncDiscovery();
+    clearTimeout(debounce);
+    debounce = window.setTimeout(() => { if (!disposed) draw(); }, 250);
+  }
+  const searchControl=searchField(doc,{id:`${galleryId}-search`,label:pt?"Buscar preset":"Find a preset",placeholder:pt?"Buscar preset":"Find a preset",value:nav.query,expandable:false,onInput:queueSearch});
   searchControl.className+=" ch-preset-search";
   const search=searchControl.getElementsByTagName("input")[0]!;
   search.setAttribute("aria-label",pt?"Buscar preset":"Find a preset");
+  const clearSearch = button(doc, { label: "×", onClick: () => {
+    search.value = "";
+    queueSearch("");
+    search.focus();
+  } });
+  clearSearch.classList.add("ch-preset-search-clear");
+  clearSearch.setAttribute("aria-label", pt ? "Limpar busca" : "Clear search");
+  clearSearch.title = pt ? "Limpar busca" : "Clear search";
+  clearSearch.hidden = !search.value;
+  search.parentNode?.appendChild(clearSearch);
   const syncSearch = (): void => { toolbar.setAttribute("data-search-expanded", searchControl.getAttribute("data-expanded") ?? "false"); };
   const searchObserver = typeof MutationObserver !== "undefined" ? new MutationObserver(syncSearch) : null;
   searchObserver?.observe(searchControl, {attributes:true,attributeFilter:["data-expanded"]}); syncSearch();
@@ -487,49 +589,49 @@ export function createPresetGallery(doc: Document, options: {
   function focusKey(): string | undefined { return (doc.activeElement as HTMLElement | null)?.dataset?.focusKey; }
   function restoreFocus(key?: string): void {
     if (!key) return;
+    const cardKey = key.match(/^(preview|title|adjust|favorite)\.(.+)$/);
+    if (cardKey && resultIndex.has(cardKey[2]!)) renderCardWindow(cardKey[2]);
     const target = Array.from(element.querySelectorAll<HTMLElement>("[data-focus-key]")).find(node => node.dataset.focusKey === key);
-    if (target) target.focus();
+    if (target) {
+      if (doc.activeElement !== target) target.focus({ preventScroll: Boolean(cardKey) });
+    }
     else search.focus();
   }
   function focusSearch(): void {
-    searchControl.getElementsByTagName("button")[0]?.click();
     search.focus();
   }
   type FolderNode = {id: string; label: string; children?: FolderNode[]; rootId?: string};
   /** Effect families of a motion folder, only those with cards; one family alone is no subfolder. */
   function motionFamilies(category: string): FolderNode[] {
-    const used = MOTION_PRESET_FAMILIES.filter(([family]) => GALLERY_PRESETS.some(preset => !preset.motion?.retired && preset.navigation?.filter === `${category}/${family}`));
+    const used = MOTION_PRESET_FAMILIES.filter(([family]) => familySize(`${category}/${family}`) >= MIN_FAMILY_PRESETS);
     return used.length > 1 ? used.map(([family, labelPt, labelEn]) => ({id: `${category}/${family}`, label: pt ? labelPt : labelEn})) : [];
   }
-  // Design system 2026-11: "Todos os presets" abre a árvore, como no estudo.
-  const folders: FolderNode[] = [
+  // Árvore por função (2026-11-18): o que o preset faz decide a pasta, não a coleção de origem.
+  // Signature, Impulso, Premium e Emulsion continuam na busca (tags) e nos IDs salvos, mas não
+  // repetem cards em pastas próprias. Pasta sem preset ativo não aparece.
+  const folders: FolderNode[] = pruneEmptyFolders([
     {id:"all",label:labels.all!},
-    {id: "emulsion", label: "Emulsion · Film Transitions", children: [
-      {id:"emulsion-burn",label:pt?"Queimaduras":"Burns"},{id:"emulsion-chemical",label:pt?"Emulsão e negativos":"Emulsion & negatives"},
-      {id:"emulsion-splice",label:pt?"Película e emendas":"Film & splices"},{id:"emulsion-mixed-media",label:pt?"Mídia mista":"Mixed media"}]},
-    {id: "signature", label: "Signature", children: [
-      {id:"signature-essentials",label:pt?"Entrada e saída":"In & out"},{id:"signature-cinema",label:"Cinema"},
-      {id:"signature-light-matter",label:pt?"Luz e matéria":"Light & matter"},{id:"signature-variation",label:pt?"Variação":"Variation"}]},
-    {id: "momentum", label: pt ? "Impulso" : "Momentum", children: [
-      {id:"momentum-2d",label:pt?"Transições 2D":"2D transitions"},{id:"momentum-3d",label:pt?"Transições 3D":"3D transitions"},
-      {id:"momentum-effects",label:pt?"Efeitos":"Effects"}]},
+    {id: "motion", label: pt ? "Animações" : "Animations", children: [
+      {id:"motion-2d",label:pt?"Entradas e saídas 2D":"2D in & out",children:motionFamilies("motion-2d")},
+      {id:"motion-3d",label:pt?"Entradas e saídas 3D":"3D in & out",children:motionFamilies("motion-3d")},
+      {id:"motion-effects",label:pt?"Efeitos e looks":"Effects & looks",children:motionFamilies("motion-effects")}]},
+    {id: "text", label: pt ? "Tipografia" : "Typography", children: [
+      ...(["text-characters", "text-words", "text-lines"] as const).map((category,index) => ({id:category,label:(pt?["Caracteres","Palavras","Linhas"]:["Characters","Words","Lines"])[index]!,
+        children:TEXT_PRESET_FAMILIES.filter(([family])=>familySize(`${category}/${family}`)>=MIN_FAMILY_PRESETS).map(([family,labelPt,labelEn])=>({id:`${category}/${family}`,label:pt?labelPt:labelEn}))})),
+      {id:"text-effects",label:pt?"Efeitos de texto":"Text effects"}]},
+    {id:"transitions",label:pt?"Transições":"Transitions",children:[
+      {id:"camera-transitions",label:pt?"Transições de corte":"Cut transitions",children:motionFamilies("camera-transitions")},
+      {id:"camera-moves",label:pt?"Movimentos de câmera":"Camera moves"}]},
     {id: "elements", label: pt ? "Elementos" : "Elements", children: [
       {id:"elements-shape",label:pt?"Formas":"Shapes"},{id:"elements-drawn",label:pt?"Traços à mão":"Hand drawn"},{id:"elements-lower-third",label:pt?"Tarjas":"Lower thirds"},
       {id:"elements-text-box",label:pt?"Caixas de texto":"Text boxes"},{id:"elements-title",label:pt?"Títulos":"Titles"},{id:"elements-social",label:pt?"Redes sociais":"Social media"},
       {id:"elements-transition",label:pt?"Transições":"Transitions"},{id:"elements-background",label:pt?"Fundos":"Backgrounds"},
       {id:"elements-counter",label:pt?"Timers e contadores":"Timers & counters"}]},
     {id: "sounds", label: pt ? "Sons" : "Sounds", children: SOUND_FAMILIES.map(family => ({id:`sounds-${family}`,label:SOUND_FAMILY_NAMES[family][pt?"pt-BR":"en-US"]}))},
-    {id: "reveal", label: pt ? "Revelações" : "Reveals"},
-    {id: "looks", label: "Looks"},
-    {id: "text", label: pt ? "Tipografia" : "Typography", children: [
-      ...(["text-characters", "text-words", "text-lines"] as const).map((category,index) => ({id:category,label:(pt?["Caracteres","Palavras","Linhas"]:["Characters","Words","Lines"])[index]!,
-        children:TEXT_PRESET_FAMILIES.filter(([family])=>GALLERY_PRESETS.some(preset=>preset.navigation?.filter===`${category}/${family}`)).map(([family,labelPt,labelEn])=>({id:`${category}/${family}`,label:pt?labelPt:labelEn}))})),
-      {id:"text-effects",label:pt?"Efeitos de texto":"Text effects"}]},
-    {id: "motion", label: "Motion", children: [
-      {id:"motion-2d",label:pt?"Transições 2D":"2D transitions",children:motionFamilies("motion-2d")}, {id:"motion-3d",label:pt?"Transições 3D":"3D transitions",children:motionFamilies("motion-3d")}, {id:"motion-effects",label:pt?"Efeitos":"Effects",children:motionFamilies("motion-effects")}]},
-    {id:"transitions",label:pt?"Transições":"Transitions",children:[{id:"camera-transitions",label:pt?"Transições de corte":"Cut transitions",children:motionFamilies("camera-transitions")},{id:"camera-impact",label:pt?"Impacto e tremor":"Impact & shake"},{id:"camera-moves",label:pt?"Movimentos 3D":"3D movements"}]},
     {id:"personal",label:pt?"Minha biblioteca":"My library",children:[]}
-  ];
+  ]);
+  // Pasta salva de uma árvore antiga abre a pasta por função equivalente.
+  if (!nav.category.startsWith("personal") && !folderPath(folders, nav.category)) nav.category = legacyFolderId(nav.category);
   function personalFolders(parentId: string | null, rootId: string): FolderNode[] {
     return (options.personal?.folders ?? []).filter(f => f.rootId === rootId && f.parentId === parentId).map(f => ({id:`personal.${f.id}`,label:f.name,rootId,children:personalFolders(f.id,rootId)}));
   }
@@ -551,7 +653,6 @@ export function createPresetGallery(doc: Document, options: {
   /** The folder whose chevron just turned: only that one animates after the redraw. */
   let turnedFolder: string | null = null;
   /** The star just toggled: it pops once after the redraw. */
-  let poppedFavorite = "";
   /** Menu da pasta aberto (ou null): o clique fora e o resize o fecham. */
   let openPalette: HTMLElement | null = null, paletteScroll = 0;
   // Ordem e cores do menu de etiquetas do Composer (Kv = [none, ...Yv]). Os ids
@@ -812,6 +913,16 @@ export function createPresetGallery(doc: Document, options: {
   });
   const stage = createElement(doc, "div", "ch-preset-stage"); browser.appendChild(stage);
   const grid = createElement(doc, "div", "ch-preset-grid");
+  let results: readonly GalleryPreset[] = [];
+  let resultIndex = new Map<string, number>();
+  let cardLayout: CardLayout | undefined;
+  let windowFrame = 0;
+  let layoutDirty = true;
+  let rowTracks = "";
+  let menuCardId: string | undefined;
+  const mountedCards = new Map<string, ReturnType<typeof createCard>>();
+  const cachedCards = new Map<string, ReturnType<typeof createCard>>();
+  const canMeasureGrid = typeof doc.defaultView?.getComputedStyle === "function";
   // Redimensionar o painel ou o divisor: cards que mudam de coluna deslizam até o novo lugar.
   const stopGridGlide = attachReflowGlide(motionEnv, grid, { nodes: () => Array.from(grid.children).filter(node => (node as HTMLElement).classList?.contains("ch-preset-card")) as HTMLElement[], viewport: scroll });
   const browserHeading = createElement(doc, "div", "ch-preset-browser-heading");
@@ -923,26 +1034,77 @@ export function createPresetGallery(doc: Document, options: {
   let cardPixels = 0;
   const cardWidth = (view: HTMLElement): number => cardPixels || (cardPixels = view.clientWidth);
   const sizeName=pt?"Tamanho das miniaturas":"Thumbnail size";
-  const sizeLabel=createElement(doc,"label","ch-preset-size");
+  const sizeLabel=createElement(doc,"div","ch-preset-size");
   const size=doc.createElement("input");
   size.type="range";size.min="140";size.max="320";size.step="10";
+  size.className="ch-slider-track";
   size.value=String(options.preferences.snapshot().presetSize);
   size.setAttribute("aria-label",sizeName);
+  const sizeValue = doc.createElement("input");
+  sizeValue.className = "ch-preset-size-value ch-slider-value";
+  sizeValue.value = size.value;
+  sizeValue.min = size.min;
+  sizeValue.max = size.max;
+  sizeValue.step = size.step;
+  sizeValue.setAttribute("aria-label", pt ? "Tamanho da miniatura em pixels" : "Thumbnail size in pixels");
   const updateSizeDescription=():void=>{
     size.title=`${sizeName} (${size.value} px)`;
     size.setAttribute("aria-valuetext",`${size.value} px`);
+    sizeValue.setAttribute("aria-valuenow", size.value);
+    updateSliderFill(size);
   };
   updateSizeDescription();
-  size.addEventListener("input",()=>{
+  // Arrastar o controle só mexe na grade, no máximo uma vez por quadro. Gravar
+  // a preferência (JSON + localStorage + tema) fica para quando o usuário solta.
+  let sizeFrame=0, sizeUnsaved=false;
+  const applySize=():void=>{
+    sizeFrame=0;
     cardPixels=0;
-    options.preferences.setPresetSize(Number(size.value));
     grid.style.setProperty("--preview-size",`${size.value}px`);
-    element.style.setProperty("--preview-size",`${size.value}px`);
+    layoutDirty = true;
+    renderCardWindow();
+    positionSettings();
+  };
+  const commitSize=():void=>{
+    if(sizeFrame){cancelAnimationFrame(sizeFrame);applySize();}
+    if(!sizeUnsaved)return;
+    sizeUnsaved=false;
+    options.preferences.setPresetSize(Number(size.value));
+  };
+  const previewSize = (): void => {
+    sizeUnsaved=true;
     updateSizeDescription();
+    if(!sizeFrame)sizeFrame=requestAnimationFrame(applySize);
+  };
+  size.addEventListener("input",()=>{
+    sizeValue.value = size.value;
+    previewSize();
   });
-  const sizeSmall=createElement(doc,"i","ch-preset-size__small"),sizeBig=createElement(doc,"i","ch-preset-size__big");
-  sizeSmall.setAttribute("aria-hidden","true");sizeBig.setAttribute("aria-hidden","true");
-  sizeLabel.appendChild(sizeSmall);sizeLabel.appendChild(size);sizeLabel.appendChild(sizeBig);footer.appendChild(sizeLabel);
+  size.addEventListener("change",commitSize);
+  function setSizeFromValue(value: number, commit: boolean): void {
+    const normalized = Math.round(value / 10) * 10;
+    if (Number(size.value) !== normalized) {
+      size.value = String(normalized);
+      previewSize();
+    }
+    if (commit) {
+      sizeValue.value = size.value;
+      commitSize();
+    }
+  }
+  const stopSizeScrub = attachScrubbableNumber(sizeValue, {
+    onInput: value => { if (sizeValue.getAttribute("data-scrubbing") === "true") setSizeFromValue(value, false); },
+    onCommit: value => setSizeFromValue(value, true),
+    onGestureEnd: (value, canceled) => { if (canceled) {
+      setSizeFromValue(value, false);
+      sizeUnsaved = false;
+    } }
+  });
+  sizeValue.addEventListener("blur", () => { sizeValue.value = size.value; });
+  sizeValue.addEventListener("dblclick", () => setSizeFromValue(200, true));
+  sizeLabel.appendChild(size);
+  sizeLabel.appendChild(sizeValue);
+  footer.appendChild(sizeLabel);
   // Estudo: a reprodução das prévias é um botão da barra de cima, ao lado da estrela.
   auto.setAttribute("aria-label",pt?"Reproduzir prévias ao passar o cursor":"Play previews on hover");auto.title=auto.getAttribute("aria-label")!;toolbar.appendChild(auto);
   const sidebar=createElement(doc,"aside","ch-preset-sidebar");
@@ -1003,7 +1165,8 @@ export function createPresetGallery(doc: Document, options: {
   // Sized by resize(): a narrow dock (folder picker) leaves the saved width for when the panel widens.
   const sidebarWidth=():number=>nav.sidebarWidth??options.preferences.snapshot().gallery?.sidebarWidth??DEFAULT_TREE_WIDTH;
 
-  grid.style.setProperty("--preview-size",`${size.value}px`);element.style.setProperty("--preview-size",`${size.value}px`);
+  registerLayoutProperties(doc);
+  grid.style.setProperty("--preview-size",`${size.value}px`);
   let disposed = false, debounce = 0, scrollRestoreFrame = 0, scrollRestoreRevision = 0;
   let pendingScroll: number | undefined;
   function rememberScroll(): void {
@@ -1019,9 +1182,12 @@ export function createPresetGallery(doc: Document, options: {
       if (disposed || revision !== scrollRestoreRevision) return;
       scrollRestoreFrame = 0;
       if (grid.isConnected === false) return;
+      if (layoutDirty) renderCardWindow();
+      const previousTop = grid.scrollTop;
       grid.scrollTop = pendingScroll ?? nav.scroll;
       if (revealId && nav.pendingRevealId === revealId) {
-        const card = Array.from(grid.querySelectorAll<HTMLElement>(".ch-preset-card")).find(node => node.id === revealId);
+        renderCardWindow(revealId);
+        const card = mountedCards.get(revealId)?.card;
         if (card) {
           const viewport = grid.getBoundingClientRect(), bounds = card.getBoundingClientRect();
           if (viewport.height > 0 && bounds.height > 0) {
@@ -1033,6 +1199,7 @@ export function createPresetGallery(doc: Document, options: {
       }
       nav.scroll = grid.scrollTop;
       pendingScroll = undefined;
+      if (nav.scroll !== previousTop || revealId) renderCardWindow();
     };
     if ((pendingScroll ?? 0) <= 0 && !revealId) { finish(); return; }
     scrollRestoreFrame = requestAnimationFrame(() => {
@@ -1336,7 +1503,7 @@ export function createPresetGallery(doc: Document, options: {
     previewPlayers.get(preset.id)?.();
   }
   // Categories live in the anchored menu, which sizes itself to its labels.
-  const resize = (): void => { cardPixels = 0; folderPicker.update();if(!folderPicker.active())setSidebar(sidebarWidth());syncDiscovery();positionSettings();if(categories.offsetHeight>0)folderGlide.refresh(false); };
+  const resize = (): void => { cardPixels = 0; folderPicker.update();if(!folderPicker.active())setSidebar(sidebarWidth());syncDiscovery();queueCardWindow(true);if(categories.offsetHeight>0)folderGlide.refresh(false); };
   const outside = (event: MouseEvent): void => { const target = event.target as Node;
     if(settingsOpen && !settingsPanel.contains(target) && !editorTrigger?.contains(target) && !(target as HTMLElement).closest?.(".ch-select-menu"))closeEditor();
     if(openPalette && !openPalette.contains(target) && !(target as HTMLElement).closest?.(".ch-folder-more"))closeFolderMenu();
@@ -1410,7 +1577,7 @@ export function createPresetGallery(doc: Document, options: {
     if (!adjust.hidden) entries.push({ id: "adjust", label: pt ? "Variações…" : "Variations…", icon: "sliders", run: () => openEditor(preset, adjust) });
     entries.push({ separator: true });
     entries.push({ id: "favorite", label: pt ? favorite ? "Remover dos favoritos" : "Adicionar aos favoritos" : favorite ? "Remove from favorites" : "Add to favorites",
-      icon: favorite ? "star-filled" : "star", run: () => { options.preferences.toggleFavorite(preset.id); poppedFavorite = preset.id; draw(); poppedFavorite = ""; restoreFocus(`favorite.${preset.id}`); } });
+      icon: favorite ? "star-filled" : "star", run: () => { toggleCardFavorite(preset); restoreFocus(`favorite.${preset.id}`); } });
     const home = [preset.navigation?.filter, preset.category].find((id): id is string => Boolean(id && folderPath(folders, id)));
     if (home && home !== nav.category) entries.push({ id: "reveal", label: pt ? "Mostrar na pasta" : "Show in folder", icon: "folder", run: () => {
       cancelReveal(); clearTimeout(debounce);
@@ -1420,8 +1587,11 @@ export function createPresetGallery(doc: Document, options: {
     } });
     const clipboard = doc.defaultView?.navigator?.clipboard;
     if (clipboard?.writeText) entries.push({ id: "copy", label: pt ? "Copiar nome" : "Copy name", icon: "copy", run: () => { void clipboard.writeText(name).catch(() => undefined); } });
+    closeContextMenu();
+    menuCardId = preset.id;
     openContextMenu(doc, { x: pointer.clientX, y: pointer.clientY, label: `${pt ? "Ações do preset" : "Preset actions"}: ${name}`, entries,
-      returnFocus: grid.querySelector<HTMLElement>(`[data-focus-key="title.${preset.id}"]`) });
+      returnFocus: mountedCards.get(preset.id)?.title ?? null,
+      onClose: () => { menuCardId = undefined; queueCardWindow(); } });
   }
   function applyPreset(preset: GalleryPreset, phase?: MotionLibraryOptions["phase"]): void {
     if (disposed || options.busy || applying) return;
@@ -1429,14 +1599,15 @@ export function createPresetGallery(doc: Document, options: {
     updateContext();
     if(options.busy||invalidNumbers.get(preset.id)?.size||actions.querySelector<HTMLButtonElement>("button")?.disabled)return;
     if (phase) settings(preset).phase = phase;
+    const feedbackPhase = phase ?? (directPhaseApply(preset) ? settings(preset).phase : undefined);
     rememberScroll();
     applying = true;
-    applyFeedback = { presetId: preset.id, ...(phase ? {phase} : {}), state: "loading", message: pt ? "Aplicando…" : "Applying…" };
+    applyFeedback = { presetId: preset.id, ...(feedbackPhase ? {phase: feedbackPhase} : {}), state: "loading", message: pt ? "Aplicando…" : "Applying…" };
     updateContext(); refreshPreview(preset);
     const finish = (result?: GalleryApplyResult): void => {
       if (disposed) return;
       applying = false;
-      applyFeedback = result ? {presetId:preset.id,...(phase?{phase}:{}),state:result.ok?"success":"error",message:result.message || (result.ok?(pt?"Aplicado":"Applied"):(pt?"Não foi possível aplicar":"Could not apply"))} : undefined;
+      applyFeedback = result ? {presetId:preset.id,...(feedbackPhase?{phase:feedbackPhase}:{}),state:result.ok?"success":"error",message:result.message || (result.ok?(pt?"Aplicado":"Applied"):(pt?"Não foi possível aplicar":"Could not apply"))} : undefined;
       updateContext();
     };
     try {
@@ -1479,20 +1650,18 @@ export function createPresetGallery(doc: Document, options: {
     }
     paintAt(best);
   }
-  function preview(preset: GalleryPreset): HTMLElement {
+  function preview(preset: GalleryPreset) {
     const previewOptions = (): MotionLibraryOptions => settings(preset);
     const overlay = (): boolean => preset.category === "camera-transitions" && (Boolean(preset.motion?.cameraSpec || preset.motion?.filmSpec) || nav.cameraApplyMode !== "layers");
     const filmReference = emulsionReferenceFor(preset.motion);
     const referenceBase = filmReference ? "../packs/emulsion-v2/previews/" : TEXT_REFERENCE_BASE;
     const name = preset.displayName[options.locale] ?? preset.id;
-    const view = button(doc, { label: "", onClick: () => { cardClick(preset);play(); } });
+    const view = button(doc, { label: "" });
     view.className = "ch-preset-preview";
     if (preset.motion?.id === "text-v3-lines-mask-slant-window") view.dataset.previewStyle = "two-line-type";
     if (preset.motion?.cameraSpec?.native || preset.motion?.cameraSpec?.impact || preset.motion?.effect.startsWith("native-")) view.title = pt ? "Prévia ilustrativa; o efeito se adapta à imagem aplicada." : "Illustrative preview; the effect adapts to the applied image.";
     view.setAttribute("aria-label", `${pt ? "Prévia" : "Preview"}: ${name}`);
     view.setAttribute("aria-pressed",String(nav.selectedId===preset.id));view.dataset.focusKey=`preview.${preset.id}`;
-    // A click only selects; a quick second click applies with the card's settings.
-    view.addEventListener("dblclick",()=>{cancelDeselect();if(!options.busy)applyPreset(preset);});
     const svg = doc.createElementNS(ns, "svg"); svg.setAttribute("viewBox", "0 0 320 180"); svg.setAttribute("aria-hidden", "true"); view.appendChild(svg);
     // Text recipes always show their real After Effects render, for the side
     // the card is set to; a drawing remains only for a recipe with no render.
@@ -1611,15 +1780,12 @@ export function createPresetGallery(doc: Document, options: {
       cardWall.attach(view, spec);
       if (!canPlay()) cardWall.pause(view);
     }
-    scenes.set(preset.id,{view,rest,replay:()=>{if(usesReference()){showPoster();playReference();}},ready:()=>ready,pause:()=>cardWall.pause(view),release:()=>{ready=false;clearNode(svg);cardWall.detach(view);if(!poster)view.dataset.loading="true";},start:performance.now(),paint:elapsed=>{
+    const scene = {view,rest,replay:()=>{if(usesReference()){showPoster();playReference();}},ready:()=>ready,pause:()=>cardWall.pause(view),release:()=>{ready=false;clearNode(svg);cardWall.detach(view);if(!poster)view.dataset.loading="true";},start:performance.now(),paint:(elapsed:number)=>{
       if (usesReference()) { showPoster(); playReference(); return; }
       dropPoster(); drawAt(elapsed);
-    }});
+    }};
     if (usesReference()) showPoster();
-    if(intersections){intersections.observe(view);ahead?.observe(view);}else if(visible.size<2){visible.add(preset.id);rest();}
-    previewPlayers.set(preset.id,play);
-
-    return view;
+    return { scene, play };
   }
   /** Each allowed direction as a compact row, the way a variant list reads:
    * a click picks it and the card itself plays it. Diagonals, curve and the
@@ -1707,7 +1873,7 @@ export function createPresetGallery(doc: Document, options: {
       actions.appendChild(phaseActions.element);
     } else {
       primaryApply = createActionButton(doc, { id: "preset-primary-apply", label: overlay ? (pt ? "Criar transição" : "Create transition") : (pt ? "Aplicar preset" : "Apply preset"),
-      variant: "primary", onPress: () => { if (!disposed) applyPreset(preset); } });
+      variant: "primary", size: 28, onPress: () => { if (!disposed) applyPreset(preset); } });
       primaryApply.button.classList.add("ch-preset-primary-apply");
       primaryApply.element.classList.add("ch-preset-primary-action"); actions.appendChild(primaryApply.element);
     }
@@ -1738,7 +1904,7 @@ export function createPresetGallery(doc: Document, options: {
       : selected?.category === "ease" && context.selectedKeys < 1 ? (pt ? "Selecione keyframes" : "Select keyframes")
       : context.selectionCount < 1 && (!selected?.category.startsWith("camera") || selected && directPhaseApply(selected)) ? (pt ? "Nenhuma camada selecionada" : "No layer selected")
       : selected?.motion ? requirementReason(motionLibraryRequirements(selected.motion), context, pt) : null;
-    const visibleSelection = Boolean(selected && Array.from(grid.children).some(card => card.id === selected.id));
+    const visibleSelection = Boolean(selected && resultIndex.has(selected.id));
     const phaseError = applyFeedback?.phase && applyFeedback.presetId === selected?.id && applyFeedback.state === "error"
       ? applyFeedback.message : undefined;
     // Without a preset the name already asks for one: the status adds only a missing composition.
@@ -1756,14 +1922,14 @@ export function createPresetGallery(doc: Document, options: {
       const feedback = applyFeedback?.presetId === selected?.id && applyFeedback?.phase === phase ? applyFeedback : undefined;
       control.setState(feedback?.state ?? "default", feedback?.message);
       const unavailable = options.busy || applying || Boolean(reason) || Boolean(selected && invalidNumbers.get(selected.id)?.size);
-      control.setDisabled(unavailable, options.busy || applying ? (pt ? "Aguarde a operação atual." : "Wait for the current operation.") : reason ?? (pt ? "Corrija os campos indicados." : "Correct the highlighted fields."));
+      control.setDisabled(unavailable && feedback?.state !== "loading", options.busy || applying ? (pt ? "Aguarde a operação atual." : "Wait for the current operation.") : reason ?? (pt ? "Corrija os campos indicados." : "Correct the highlighted fields."));
     }
     if (primaryApply) {
       const feedback = applyFeedback?.presetId === selected?.id ? applyFeedback : undefined;
       primaryApply.setState(feedback?.state ?? "default", feedback?.message);
       const invalid = Boolean(selected && invalidNumbers.get(selected.id)?.size);
       const unavailable = options.busy || applying || Boolean(reason) || invalid;
-      primaryApply.setDisabled(unavailable, options.busy || applying ? (pt ? "Aguarde a operação atual." : "Wait for the current operation.")
+      primaryApply.setDisabled(unavailable && feedback?.state !== "loading", options.busy || applying ? (pt ? "Aguarde a operação atual." : "Wait for the current operation.")
         : reason ?? (invalid ? (pt ? "Corrija os campos indicados." : "Correct the highlighted fields.") : undefined));
     }
   }
@@ -1860,116 +2026,409 @@ export function createPresetGallery(doc: Document, options: {
     grid.appendChild(elementsView.element);
     primaryApply=undefined;clearNode(actions);actions.hidden=false;actions.appendChild(elementsView.actions);
   }
-  function draw(): void {
-    personalPreview?.dispose();personalPreview=undefined;elementsView?.dispose();elementsView=undefined;
-    if (nav.scope !== "recent") delete nav.recentOrder;
-    scrollRestoreRevision++;
-    if(scrollRestoreFrame){cancelAnimationFrame(scrollRestoreFrame);scrollRestoreFrame=0;}
-    pendingScroll = nav.scroll;
-    const focused=focusKey();
-    drawBrowserHeading(); drawLabelFilter();
-    cancelAnimationFrame(animationFrame); animationFrame=0;activePreview="";intersections?.disconnect();ahead?.disconnect();cancelAnimationFrame(prepFrame);prepFrame=0;prepQueue.length=0;near.clear();for(const timer of cueTimers.values())clearTimeout(timer);cueTimers.clear();leftAt.clear();visible.clear();scenes.clear();setHover(null);for(const host of cardWall.hosts())cardWall.detach(host);previewPlayers.clear();closeEditor();clearNode(grid);drawFolders();
-    grid.classList.toggle("ch-preset-grid--personal",nav.category.startsWith("personal")||isInsertFolder());
-    filters.hidden=nav.category.startsWith("personal")||isInsertFolder();
-    if(nav.category.startsWith("personal")){drawInspector();drawPersonal();restoreFocus(focused);restoreScroll();return;}
-    if(isInsertFolder()){drawInspector();drawElements();restoreFocus(focused);restoreScroll();return;}
-    for (const b of Array.from(filters.querySelectorAll<HTMLButtonElement>("[data-scope]"))) b.setAttribute("aria-pressed", String(nav.scope === b.dataset.scope));
-    const prefs = options.preferences.snapshot();
-    // Applying records recency immediately. Retain this browsing order while
-    // editing/removing so the saved offset still points to the same preview.
-    if (nav.scope === "recent") nav.recentOrder ??= [...prefs.recent];
-    const items = nav.scope === "recent" ? nav.recentOrder!.map(id => GALLERY_PRESETS.find(p => p.id === id)).filter((p): p is GalleryPreset => Boolean(p)) : GALLERY_PRESETS;
-    let count = 0, selected:GalleryPreset|undefined;
-    const labelRoots = activeLabels().length ? labelledFolders(prefs.folderColors) : null;
-    for (const preset of items) {
-      // Retired recipes stay editable on layers that use them, but get no card,
-      // except among favourites, where the user can still unmark them.
-      if ((preset.motion?.retired && nav.scope !== "favorites") || !categoryMatches(preset)) continue;
-      if (nav.scope === "favorites" && !prefs.favorites.includes(preset.id)) continue;
-      if (labelRoots && !labelRoots.some(id => galleryCategoryMatches(id, preset))) continue;
-      const name = preset.displayName[i18n.locale()] ?? preset.id;
-      if (!normalizeSearch(`${name} ${preset.tags}`).includes(normalizeSearch(nav.query))) continue;
-      count++;
-      if(nav.selectedId===preset.id)selected=preset;
-      const card = createElement(doc, "article", "ch-preset-card"); card.id = preset.id; card.setAttribute("data-selected", String(nav.selectedId === preset.id));
-      card.appendChild(preview(preset));
-      if (preset.motion && libraryUsesDirection(preset.motion)) {
-        const badge = createElement(doc, "span", "ch-preset-direction-badge"); badge.setAttribute("aria-hidden", "true"); card.appendChild(badge);
-        syncDirectionBadge(preset, card);
-      }
-      if (preset.motion && motionLibraryRequirements(preset.motion).motionCore) {
-        const core = createElement(doc, "span", "ch-preset-core-badge", "Core");
-        core.title = pt ? "Precisa do plugin Moti.on Core instalado." : "Needs the Moti.on Core plugin installed.";
-        card.appendChild(core);
-      }
-      const title = button(doc, { label: name, onClick: () => { cardClick(preset);previewPlayers.get(preset.id)?.(); } }); title.classList.add("ch-preset-apply"); title.title = name;
-      title.addEventListener("dblclick",()=>{cancelDeselect();if(!options.busy)applyPreset(preset);});
-      title.dataset.focusKey=`title.${preset.id}`;
-      const actions = createElement(doc, "div", "ch-preset-actions");
-      actions.appendChild(title);
-      const adjust = button(doc, {label: "", disabled: options.busy, onClick: () => openEditor(preset, adjust)});
-      const motion = preset.motion, cut = preset.category === "camera-transitions" && (Boolean(motion?.cameraSpec || motion?.filmSpec) || nav.cameraApplyMode !== "layers");
-      // The variations list only offers directions: without them there is nothing to choose.
-      if (motion && (cut || !libraryUsesDirection(motion))) adjust.hidden = true;
-      adjust.classList.add("ch-preset-settings-trigger"); adjust.appendChild(createIcon(doc,"variants"));
-      adjust.setAttribute("aria-haspopup","dialog"); adjust.setAttribute("aria-controls",settingsPanel.id);
-      adjust.setAttribute("aria-label", `${pt ? "Variações" : "Variations"}: ${name}`); adjust.setAttribute("aria-expanded", "false"); adjust.title = pt ? "Variações" : "Variations"; actions.appendChild(adjust);
-      adjust.dataset.focusKey=`adjust.${preset.id}`;
-      const fav = button(doc, { label: "", onClick: () => { options.preferences.toggleFavorite(preset.id); poppedFavorite = preset.id; draw(); poppedFavorite = ""; } });
-      if (poppedFavorite === preset.id) fav.dataset.pop = "true";
-      const isFavorite = prefs.favorites.includes(preset.id);
-      const favoriteLabel = i18n.t(isFavorite ? "presets.unfavorite" : "presets.favorite", { name });
-      fav.classList.add("ch-preset-favorite"); fav.appendChild(createIcon(doc, "favorite")); fav.setAttribute("aria-label", favoriteLabel); fav.setAttribute("aria-pressed", String(isFavorite)); fav.title = favoriteLabel; actions.appendChild(fav);
-      fav.dataset.focusKey=`favorite.${preset.id}`;
-      card.appendChild(actions); grid.appendChild(card);
-      card.addEventListener("contextmenu", event => { const pointer = event as MouseEvent; pointer.preventDefault(); pointer.stopPropagation(); openCardMenu(preset, adjust, pointer); });
+
+  function createCard(preset: GalleryPreset) {
+    const name = preset.displayName[i18n.locale()] ?? preset.id;
+    const card = createElement(doc, "article", "ch-preset-card");
+    card.id = preset.id;
+    const { scene, play } = preview(preset);
+    card.appendChild(scene.view);
+    if (preset.motion && libraryUsesDirection(preset.motion)) {
+      const badge = createElement(doc, "span", "ch-preset-direction-badge");
+      badge.setAttribute("aria-hidden", "true");
+      card.appendChild(badge);
     }
-    if (!count) grid.appendChild(emptyState());
-    drawBrowserHeading(count);
-    // Filtering only hides the current selection; returning to the library
-    // restores that preset and its draft instead of silently choosing another.
-    drawInspector(selected ?? GALLERY_PRESETS.find(preset => preset.id === nav.selectedId)); schedulePreviews();restoreFocus(focused);restoreScroll();
+    if (preset.motion && motionLibraryRequirements(preset.motion).motionCore) {
+      const core = createElement(doc, "span", "ch-preset-core-badge", "Core");
+      core.title = pt ? "Precisa do plugin Moti.on Core instalado." : "Needs the Moti.on Core plugin installed.";
+      card.appendChild(core);
+    }
+    const title = button(doc, { label: name });
+    title.classList.add("ch-preset-apply");
+    title.title = name;
+    title.dataset.focusKey = `title.${preset.id}`;
+    const adjust = button(doc, { label: "", disabled: options.busy });
+    adjust.classList.add("ch-preset-settings-trigger");
+    adjust.appendChild(createIcon(doc, "variants"));
+    adjust.setAttribute("aria-haspopup", "dialog");
+    adjust.setAttribute("aria-controls", settingsPanel.id);
+    adjust.setAttribute("aria-label", `${pt ? "Variações" : "Variations"}: ${name}`);
+    adjust.setAttribute("aria-expanded", "false");
+    adjust.title = pt ? "Variações" : "Variations";
+    adjust.dataset.focusKey = `adjust.${preset.id}`;
+    const favorite = button(doc, { label: "" });
+    favorite.classList.add("ch-preset-favorite");
+    favorite.appendChild(createIcon(doc, "favorite"));
+    favorite.dataset.focusKey = `favorite.${preset.id}`;
+    const actions = createElement(doc, "div", "ch-preset-actions");
+    actions.appendChild(title);
+    actions.appendChild(adjust);
+    actions.appendChild(favorite);
+    card.appendChild(actions);
+    return { card, scene, play, title, adjust, favorite, name, row: 0 };
   }
-  grid.addEventListener("keydown", event => {
-    if (disposed || settingsOpen || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
-    const target = event.target as HTMLElement;
-    if (!target.classList.contains("ch-preset-preview") && !target.classList.contains("ch-preset-apply")) return;
-    const cards = Array.from(grid.querySelectorAll<HTMLElement>(".ch-preset-card"));
-    const current = target.closest<HTMLElement>(".ch-preset-card"), index = current ? cards.indexOf(current) : -1;
-    if (index < 0) return;
-    if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-      const preset = GALLERY_PRESETS.find(item => item.id === current?.id), motion = preset?.motion;
-      event.preventDefault();
-      if (!preset || !motion || !libraryUsesDirection(motion) || options.busy) return;
-      const draft = settings(preset);
-      draft.direction = cycleDirection(motion, draft.direction, event.key === "ArrowDown" ? 1 : -1);
-      syncDirectionBadge(preset, current);
-      if (nav.selectedId !== preset.id) select(preset);
-      refreshPreview(preset); previewPlayers.get(preset.id)?.();
+
+  function syncFavorite(view: ReturnType<typeof createCard>, marked: boolean): void {
+    const text = i18n.t(marked ? "presets.unfavorite" : "presets.favorite", { name: view.name });
+    view.favorite.setAttribute("aria-pressed", String(marked));
+    view.favorite.setAttribute("aria-label", text);
+    view.favorite.title = text;
+  }
+
+  function syncCard(preset: GalleryPreset, view: ReturnType<typeof createCard>, favorites: Set<string>): void {
+    view.card.setAttribute("data-selected", String(nav.selectedId === preset.id));
+    view.scene.view.setAttribute("aria-pressed", String(nav.selectedId === preset.id));
+    const motion = preset.motion;
+    const cut = preset.category === "camera-transitions" && (Boolean(motion?.cameraSpec || motion?.filmSpec) || nav.cameraApplyMode !== "layers");
+    view.adjust.hidden = Boolean(motion && (cut || !libraryUsesDirection(motion)));
+    syncDirectionBadge(preset, view.card);
+    syncFavorite(view, favorites.has(preset.id));
+  }
+
+  function mountCard(preset: GalleryPreset, favorites: Set<string>): ReturnType<typeof createCard> {
+    const view = cachedCards.get(preset.id) ?? createCard(preset);
+    cachedCards.delete(preset.id);
+    mountedCards.set(preset.id, view);
+    syncCard(preset, view, favorites);
+    scenes.set(preset.id, view.scene);
+    previewPlayers.set(preset.id, view.play);
+    if (intersections) {
+      intersections.observe(view.scene.view);
+      ahead?.observe(view.scene.view);
+    } else if (visible.size < 2) {
+      visible.add(preset.id);
+      view.scene.rest();
+    }
+    return view;
+  }
+
+  function unmountCard(id: string, view: ReturnType<typeof createCard>): void {
+    if (hoverCard === view.card) setHover(null);
+    if (activePreview === id) activePreview = "";
+    intersections?.unobserve?.(view.scene.view);
+    ahead?.unobserve?.(view.scene.view);
+    visible.delete(id);
+    near.delete(id);
+    leftAt.delete(id);
+    clearCue(id);
+    const queued = prepQueue.indexOf(id);
+    if (queued >= 0) prepQueue.splice(queued, 1);
+    view.scene.release();
+    scenes.delete(id);
+    previewPlayers.delete(id);
+    view.card.parentNode?.removeChild(view.card);
+    delete view.favorite.dataset.pop;
+    mountedCards.delete(id);
+    cachedCards.set(id, view);
+    if (cachedCards.size > PRESET_CARD_CACHE_SIZE) cachedCards.delete(cachedCards.keys().next().value!);
+  }
+
+  function setRow(view: ReturnType<typeof createCard>, row: number): void {
+    if (view.row === row) return;
+    if (row) view.card.style.setProperty("grid-row-start", String(row));
+    else view.card.style.removeProperty("grid-row-start");
+    view.row = row;
+  }
+
+  function setRowTracks(tracks: string): void {
+    if (rowTracks === tracks) return;
+    rowTracks = tracks;
+    if (tracks) grid.style.setProperty("grid-template-rows", tracks);
+    else grid.style.removeProperty("grid-template-rows");
+  }
+
+  function measureCardLayout(favorites: Set<string>): CardLayout | undefined {
+    if (!canMeasureGrid || !grid.clientWidth || !grid.clientHeight || !results.length) return undefined;
+    // A previous wider layout can contain several cards assigned to the same
+    // row. Let CSS place them automatically while measuring the new columns.
+    for (const view of mountedCards.values()) setRow(view, 0);
+    let sample = mountedCards.values().next().value;
+    if (!sample) {
+      sample = mountCard(results[0]!, favorites);
+      grid.appendChild(sample.card);
+    }
+    const style = doc.defaultView!.getComputedStyle(grid);
+    const columns = (style.gridTemplateColumns ?? "").trim().split(/\s+/);
+    const rowHeight = sample.card.getBoundingClientRect().height;
+    if (!rowHeight || !columns.every(column => Number.parseFloat(column) > 0 && column.endsWith("px"))) return undefined;
+    return {
+      columns: columns.length,
+      rowHeight,
+      rowGap: Number.parseFloat(style.rowGap) || 0,
+      paddingTop: Number.parseFloat(style.paddingTop) || 0,
+      paddingBottom: Number.parseFloat(style.paddingBottom) || 0
+    };
+  }
+
+  function renderCardWindow(includeId?: string, refresh = false): void {
+    if (!results.length) {
+      for (const [id, view] of mountedCards) unmountCard(id, view);
+      cardLayout = undefined;
+      setRowTracks("");
+      grid.removeAttribute("data-virtual");
       return;
     }
-    const firstTop = cards[0]?.getBoundingClientRect().top;
-    const columns = Math.max(1, cards.filter(card => Math.abs(card.getBoundingClientRect().top - (firstTop ?? 0)) < 2).length);
+    let favorites: Set<string> | undefined;
+    if (layoutDirty) {
+      favorites = new Set(options.preferences.snapshot().favorites);
+      cardLayout = measureCardLayout(favorites);
+      layoutDirty = !cardLayout;
+    }
+    const layout = cardLayout;
+    let start = 0;
+    // Before attachment there is no geometry. Seed the grid without building
+    // the catalog. Fall back to all results if a visible grid cannot be measured.
+    let end = results.length;
+    const wanted = new Map<string, number>();
+    if (layout) {
+      const { columns, rowHeight, rowGap, paddingTop, paddingBottom } = layout;
+      const rowCount = Math.ceil(results.length / columns);
+      setRowTracks(`repeat(${rowCount}, ${rowHeight}px)`);
+      if (!grid.hasAttribute("data-virtual")) grid.setAttribute("data-virtual", "true");
+      const stride = rowHeight + rowGap;
+      const viewportHeight = grid.clientHeight;
+      const maxTop = rowCount * stride - rowGap + paddingTop + paddingBottom - viewportHeight;
+      const top = Math.min(grid.scrollTop, Math.max(0, maxTop)) - paddingTop;
+      start = Math.max(0, Math.floor(top / stride) - PRESET_OVERSCAN_ROWS) * columns;
+      end = Math.min(results.length, (Math.ceil((top + viewportHeight) / stride) + PRESET_OVERSCAN_ROWS) * columns);
+      const focusedCardId = cardOf(doc.activeElement)?.id;
+      const drawerCardId = !settingsPanel.hidden ? cardOf(editorTrigger)?.id : undefined;
+      // Pin only the owning rows. A far-away draft or focused control must not
+      // expand the mounted window to every row between it and the viewport.
+      for (const id of [focusedCardId, drawerCardId, menuCardId, includeId]) {
+        const index = id ? resultIndex.get(id) : undefined;
+        if (index === undefined || (index >= start && index < end)) continue;
+        const row = Math.floor(index / columns);
+        for (let i = row * columns; i < Math.min(results.length, (row + 1) * columns); i++) wanted.set(results[i]!.id, i);
+      }
+    } else {
+      setRowTracks("");
+      grid.removeAttribute("data-virtual");
+      if (canMeasureGrid && (!grid.clientWidth || !grid.clientHeight)) end = Math.min(results.length, 8);
+      const index = includeId ? resultIndex.get(includeId) : undefined;
+      if (index !== undefined) wanted.set(includeId!, index);
+    }
+    for (let i = start; i < end; i++) wanted.set(results[i]!.id, i);
+    for (const [id, view] of mountedCards) if (!wanted.has(id)) unmountCard(id, view);
+    const currentFocus = doc.activeElement as HTMLElement | null;
+    let next = grid.firstChild;
+    for (const index of [...wanted.values()].sort((a, b) => a - b)) {
+      const preset = results[index]!;
+      const existing = mountedCards.get(preset.id);
+      if (!existing || refresh) favorites ??= new Set(options.preferences.snapshot().favorites);
+      const view = existing ?? mountCard(preset, favorites!);
+      if (existing && refresh) syncCard(preset, existing, favorites!);
+      setRow(view, layout ? Math.floor(index / layout.columns) + 1 : 0);
+      if (view.card !== next) grid.insertBefore(view.card, next);
+      next = view.card.nextSibling;
+    }
+    // Moving an already focused node can blur it during a reorder.
+    if (currentFocus && currentFocus !== doc.activeElement && grid.contains(currentFocus)) currentFocus.focus({ preventScroll: true });
+    schedulePreviews();
+  }
+
+  function queueCardWindow(remeasure = false): void {
+    if (remeasure) layoutDirty = true;
+    if (disposed || !canMeasureGrid || windowFrame || !results.length) return;
+    windowFrame = requestAnimationFrame(() => {
+      windowFrame = 0;
+      const reflow = layoutDirty;
+      renderCardWindow();
+      if (reflow) positionSettings();
+    });
+  }
+
+  function toggleCardFavorite(preset: GalleryPreset): void {
+    options.preferences.toggleFavorite(preset.id);
+    if (nav.scope === "favorites") {
+      draw();
+      return;
+    }
+    const view = mountedCards.get(preset.id);
+    if (!view) return;
+    const marked = options.preferences.snapshot().favorites.includes(preset.id);
+    syncFavorite(view, marked);
+    if (marked) view.favorite.dataset.pop = "true";
+    else delete view.favorite.dataset.pop;
+  }
+  function draw(): void {
+    clearSearch.hidden = !search.value;
+    personalPreview?.dispose();
+    personalPreview = undefined;
+    elementsView?.dispose();
+    elementsView = undefined;
+    if (nav.scope !== "recent") delete nav.recentOrder;
+    scrollRestoreRevision++;
+    if (scrollRestoreFrame) cancelAnimationFrame(scrollRestoreFrame);
+    scrollRestoreFrame = 0;
+    pendingScroll = nav.scroll;
+    const focused = focusKey();
+    closeEditor();
+    if (settingsPanel.parentNode === grid) {
+      settingsPanel.hidden = true;
+      stowDrawer();
+      attach(null);
+    }
+    closeContextMenu();
+    drawLabelFilter();
+    drawFolders();
+    const personal = nav.category.startsWith("personal");
+    const insert = isInsertFolder();
+    const wasPersonal = grid.classList.contains("ch-preset-grid--personal");
+    grid.classList.toggle("ch-preset-grid--personal", personal || insert);
+    filters.hidden = personal || insert;
+    if (personal || insert) {
+      results = [];
+      resultIndex.clear();
+      renderCardWindow();
+      clearNode(grid);
+      drawInspector();
+      if (personal) drawPersonal();
+      else drawElements();
+      restoreFocus(focused);
+      restoreScroll();
+      return;
+    }
+    if (wasPersonal) clearNode(grid);
+    for (const node of Array.from(grid.children)) {
+      if (node !== settingsPanel && !node.classList.contains("ch-preset-card")) grid.removeChild(node);
+    }
+    for (const b of Array.from(filters.querySelectorAll<HTMLButtonElement>("[data-scope]"))) {
+      b.setAttribute("aria-pressed", String(nav.scope === b.dataset.scope));
+    }
+    const prefs = options.preferences.snapshot();
+    // Applying records recency immediately. The saved browsing order still
+    // points to the same preset when returning from Edit.
+    if (nav.scope === "recent") nav.recentOrder ??= [...prefs.recent];
+    const items = nav.scope === "recent"
+      ? nav.recentOrder!.map(id => presetById.get(id)).filter((preset): preset is GalleryPreset => Boolean(preset))
+      : GALLERY_PRESETS;
+    const labelRoots = activeLabels().length ? labelledFolders(prefs.folderColors) : null;
+    const favorites = new Set(prefs.favorites);
+    const query = normalizeSearch(nav.query);
+    results = items.filter(preset =>
+      (!preset.motion?.retired || nav.scope === "favorites") &&
+      categoryMatches(preset) &&
+      (nav.scope !== "favorites" || favorites.has(preset.id)) &&
+      (!labelRoots || labelRoots.some(id => galleryCategoryMatches(id, preset))) &&
+      searchIndex.get(preset.id)!.includes(query)
+    );
+    resultIndex = new Map(results.map((preset, index) => [preset.id, index]));
+    drawBrowserHeading(results.length);
+    // Reset to the requested position before choosing the subset. If the new
+    // results need more scroll extent, restoreScroll applies it after layout.
+    if (nav.scroll === 0) grid.scrollTop = 0;
+    layoutDirty = true;
+    renderCardWindow(undefined, true);
+    if (!results.length) grid.appendChild(emptyState());
+    // Keep the selected preset and its draft even when the filter hides it.
+    drawInspector(nav.selectedId ? presetById.get(nav.selectedId) : undefined);
+    restoreFocus(focused);
+    restoreScroll();
+    if (layoutDirty) queueCardWindow();
+  }
+
+  grid.addEventListener("click", event => {
+    const card = cardOf(event.target);
+    const preset = card ? presetById.get(card.id) : undefined;
+    const view = preset ? mountedCards.get(preset.id) : undefined;
+    if (disposed || !preset || !view) return;
+    const target = event.target as Node;
+    if (view.adjust.contains(target) && !view.adjust.disabled) openEditor(preset, view.adjust);
+    else if (view.favorite.contains(target)) toggleCardFavorite(preset);
+    else if (view.scene.view.contains(target) || view.title.contains(target)) {
+      cardClick(preset);
+      view.play();
+    }
+  });
+  grid.addEventListener("dblclick", event => {
+    const card = cardOf(event.target);
+    const preset = card ? presetById.get(card.id) : undefined;
+    const view = preset ? mountedCards.get(preset.id) : undefined;
+    if (!view || !preset || disposed || options.busy) return;
+    const target = event.target as Node;
+    if (view.scene.view.contains(target) || view.title.contains(target)) {
+      cancelDeselect();
+      applyPreset(preset);
+    }
+  });
+  grid.addEventListener("contextmenu", event => {
+    const card = cardOf(event.target);
+    const preset = card ? presetById.get(card.id) : undefined;
+    const view = preset ? mountedCards.get(preset.id) : undefined;
+    if (!view || !preset || disposed) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openCardMenu(preset, view.adjust, event);
+  });
+
+  grid.addEventListener("keydown", event => {
+    if (disposed || settingsOpen) return;
+    const target = event.target as HTMLElement;
+    const card = cardOf(target);
+    const index = card ? resultIndex.get(card.id) : undefined;
+    if (index === undefined || !card) return;
+    if (event.key === "Tab" && cardLayout) {
+      // Native Tab handles controls within the card. At the edge of a mounted
+      // window, continue in catalog order even if the next card is offscreen.
+      const view = mountedCards.get(card.id)!;
+      const edge = event.shiftKey ? target === view.scene.view : target === view.favorite;
+      const next = results[index + (event.shiftKey ? -1 : 1)];
+      if (edge && next && !mountedCards.has(next.id)) {
+        event.preventDefault();
+        renderCardWindow(next.id);
+        const neighbor = mountedCards.get(next.id)!;
+        (event.shiftKey ? neighbor.favorite : neighbor.scene.view).focus();
+        renderCardWindow();
+      }
+      return;
+    }
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    if (!target.classList.contains("ch-preset-preview") && !target.classList.contains("ch-preset-apply")) return;
+    if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      const preset = results[index]!, motion = preset.motion;
+      event.preventDefault();
+      if (!motion || !libraryUsesDirection(motion) || options.busy) return;
+      const draft = settings(preset);
+      draft.direction = cycleDirection(motion, draft.direction, event.key === "ArrowDown" ? 1 : -1);
+      syncDirectionBadge(preset, card);
+      if (nav.selectedId !== preset.id) select(preset);
+      refreshPreview(preset);
+      previewPlayers.get(preset.id)?.();
+      return;
+    }
+    const columns = cardLayout?.columns ?? 1;
     const step = event.key === "ArrowUp" ? -columns : event.key === "ArrowDown" ? columns : event.key === "ArrowLeft" ? -1 : 1;
-    const next = event.key === "Home" ? 0 : event.key === "End" ? cards.length - 1 : Math.max(0, Math.min(cards.length - 1, index + step));
-    const card = cards[next], preset = GALLERY_PRESETS.find(item => item.id === card?.id);
-    if (!card || !preset) return;
-    event.preventDefault(); select(preset);
-    card.querySelector<HTMLButtonElement>(".ch-preset-preview")?.focus({preventScroll:true});
-    if (!scrollIntoViewSmooth(motionEnv, card)) card.scrollIntoView?.({block:"nearest", inline:"nearest"});
+    const next = event.key === "Home" ? 0 : event.key === "End" ? results.length - 1 : Math.max(0, Math.min(results.length - 1, index + step));
+    const preset = results[next]!;
+    event.preventDefault();
+    renderCardWindow(preset.id);
+    const view = mountedCards.get(preset.id);
+    if (!view) return;
+    select(preset);
+    view.scene.view.focus({ preventScroll: true });
+    // Jump across a large gap immediately to keep keyboard focus visible.
+    if (Math.abs(next - index) > columns || !scrollIntoViewSmooth(motionEnv, view.card, grid)) {
+      view.card.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+      renderCardWindow();
+    }
     rememberScroll();
   });
   grid.addEventListener("scroll", () => {
     if (disposed || grid.isConnected === false) return;
     quietScroll();
+    queueCardWindow();
     if (pendingScroll === undefined || grid.scrollTop > 0) {
       nav.scroll = grid.scrollTop;
       if (pendingScroll !== undefined) pendingScroll = grid.scrollTop;
     }
-    // The settings drawer is part of the grid and scrolls with it, so scrolling never closes it.
+    // The settings drawer is part of the grid and scrolls with it.
   });
+  grid.addEventListener("focusout", () => queueCardWindow());
+  const gridObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => queueCardWindow(true)) : null;
+  gridObserver?.observe(grid);
   scroll.addEventListener("scroll", () => { if(filterButton.getAttribute("aria-expanded")==="true")setFilters(false); });
   const visibility = (): void => { if(doc.hidden)pausePreviews();else if(pointerInside)resumePreviews(); }; doc.addEventListener("visibilitychange", visibility);
   draw();
-  return { element, updateContext, dispose() { if(disposed)return;rememberScroll();personalPreview?.dispose();personalPreview=undefined;elementsView?.dispose();elementsView=undefined;disposeNumbers();clearTimeout(settingsTimer); libraryActions.dispose(); stopGridGlide(); stopSplitter(); savedTabStops.clear(); searchObserver?.disconnect(); disposed = true; scrollRestoreRevision++;if(scrollRestoreFrame)cancelAnimationFrame(scrollRestoreFrame);scrollRestoreFrame=0; cancelAnimationFrame(animationFrame);animationFrame=0;for(const scene of scenes.values())scene.release();scenes.clear();visible.clear();near.clear();prepQueue.length=0;cancelAnimationFrame(prepFrame);prepFrame=0;clearTimeout(leaveTimer);clearTimeout(mediaTimer);clearTimeout(hoverTimer);clearTimeout(intentTimer);clearTimeout(scrollTimer);frameCache.hold(false);cardWall.dispose();cancelDeselect();hoverCard=null;for(const timer of cueTimers.values())clearTimeout(timer);cueTimers.clear();leftAt.clear();previewPlayers.clear();window.removeEventListener("blur",pausePreviews);window.removeEventListener("focus",windowFocus);intersections?.disconnect();ahead?.disconnect();motionObserver?.disconnect(); clearTimeout(debounce); observer?.disconnect(); window.removeEventListener("resize", resize);window.removeEventListener("resize", closeFolderMenu); closeContextMenu(); doc.removeEventListener("mousedown", outside); doc.removeEventListener("keydown", escape); doc.removeEventListener("visibilitychange", visibility); } };
+  return { element, updateContext, dispose() { if(disposed)return;stopSizeScrub();commitSize();rememberScroll();personalPreview?.dispose();personalPreview=undefined;elementsView?.dispose();elementsView=undefined;disposeNumbers();clearTimeout(settingsTimer); libraryActions.dispose(); stopGridGlide(); stopSplitter(); gridObserver?.disconnect(); if(windowFrame)cancelAnimationFrame(windowFrame); cachedCards.clear(); savedTabStops.clear(); searchObserver?.disconnect(); disposed = true; scrollRestoreRevision++;if(scrollRestoreFrame)cancelAnimationFrame(scrollRestoreFrame);scrollRestoreFrame=0; cancelAnimationFrame(animationFrame);animationFrame=0;for(const scene of scenes.values())scene.release();scenes.clear();visible.clear();near.clear();prepQueue.length=0;cancelAnimationFrame(prepFrame);prepFrame=0;clearTimeout(leaveTimer);clearTimeout(mediaTimer);clearTimeout(hoverTimer);clearTimeout(intentTimer);clearTimeout(scrollTimer);frameCache.hold(false);cardWall.dispose();cancelDeselect();hoverCard=null;for(const timer of cueTimers.values())clearTimeout(timer);cueTimers.clear();leftAt.clear();previewPlayers.clear();window.removeEventListener("blur",pausePreviews);window.removeEventListener("focus",windowFocus);intersections?.disconnect();ahead?.disconnect();motionObserver?.disconnect(); clearTimeout(debounce); observer?.disconnect(); window.removeEventListener("resize", resize);window.removeEventListener("resize", closeFolderMenu); closeContextMenu(); doc.removeEventListener("mousedown", outside); doc.removeEventListener("keydown", escape); doc.removeEventListener("visibilitychange", visibility); } };
 }

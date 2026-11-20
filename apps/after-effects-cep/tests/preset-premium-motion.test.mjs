@@ -97,7 +97,7 @@ async function fixture({ fps = 30, height = 1080, text = false } = {}) {
     layer(index) { return this.layers[index - 1]; }
   }
   const comp = new CompItem(), layer = new Layer(text); comp.layers.push(layer); layer.containingComp = comp;
-  const scope = await loadHostModules(['src/json.jsx', 'src/registry.jsx', 'src/marker-window.jsx']);
+  const scope = await loadHostModules(['src/json.jsx', 'src/registry.jsx', 'src/marker-window.jsx', 'src/expression-compose.jsx']);
   scope.MotionLibraryCore = contracts; scope.MotionLibraryCatalog = contracts.MOTION_LIBRARY_PRESETS;
   const globals = {
     app: {project: {activeItem: comp}}, CompItem, CameraLayer: class {}, LightLayer: class {}, KeyframeInterpolationType: {LINEAR: 1},
@@ -209,3 +209,30 @@ test('legacy instances are read without migration and change expressions only af
   position.expression='value+[3,4]';const before=f.mutations;assert.equal(f.handler('remove').preflight({}).code,'EXPRESSION_CONFLICT');assert.equal(f.mutations,before);
 });
 
+
+test('applying a different preset replaces the previous one in the same command instead of refusing',async()=>{
+  const f=await fixture();const position=f.layer.transform.property('ADBE Position'),before=position.expression;
+  f.run('apply',f.args('arc-arrival'));assert.equal(f.meta().presetId,'arc-arrival');assert.notEqual(position.expression,before);
+  assert.equal(f.handler('apply').preflight(f.args('momentum-push')),null);
+  f.run('apply',f.args('momentum-push'));assert.equal(f.meta().presetId,'momentum-push');
+  f.run('remove');assert.equal(position.expression,before);
+});
+
+test('a user expression on Position is kept and becomes the base of the preset motion',async()=>{
+  const f=await fixture();const position=f.layer.transform.property('ADBE Position');
+  position.expression='value.map(function (v) { return v + 5; })';position.expressionEnabled=true;
+  assert.equal(f.handler('apply').preflight(f.args('arc-arrival')),null);
+  f.run('apply',f.args('arc-arrival'));
+  assert.ok(position.expression.startsWith('// Moti.on preset v1:'));
+  assert.ok(position.expression.includes('var motionUserValue = (function () {\nreturn (\nvalue.map(function (v) { return v + 5; })\n);'));
+  assert.ok(position.expression.includes('(function (value) {'));
+  const plain=await fixture();plain.run('apply',plain.args('arc-arrival'));
+  const at=f.layer.inPoint+.2,stacked=position.valueAtTime(at),alone=plain.layer.transform.property('ADBE Position').valueAtTime(at);
+  stacked.forEach((v,i)=>assert.ok(Math.abs(v-(alone[i]+5))<1e-6,'preset motion runs on top of the user result'));
+  f.run('remove');assert.equal(position.expression,'value.map(function (v) { return v + 5; })');assert.equal(position.expressionEnabled,true);
+});
+test('a user expression that ends in a block is still refused with a clear fix',async()=>{
+  const f=await fixture();const position=f.layer.transform.property('ADBE Position');
+  position.expression='if (time > 1) { value } else { value }';position.expressionEnabled=true;
+  assert.equal(f.handler('apply').preflight(f.args('arc-arrival')).code,'EXPRESSION_CONFLICT');
+});
