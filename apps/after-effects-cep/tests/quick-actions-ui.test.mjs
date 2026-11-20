@@ -44,14 +44,14 @@ test('a narrow strip shows whole columns and puts the rest behind "+N", letters 
   const overflow = f.byId('quick-actions-overflow');
   assert.equal(more.parentNode.hidden, true, 'unmeasured: everything fits, no "+N"');
   assert.equal(f.visible().length, 18);
-  // 280 px panel: 32 px tiles, 158 px beside the anchor → 4 columns → 7 tiles + "+11".
+  // 280 px panel: 28 px tiles, 158 px beside the anchor → 5 columns → 9 tiles + "+9".
   f.quick.strip.clientWidth = 158;
   win.emit('resize');
-  assert.equal(f.quick.element.getAttribute('data-columns'), '4');
-  assert.equal(f.visible().length, 7);
+  assert.equal(f.quick.element.getAttribute('data-columns'), '5');
+  assert.equal(f.visible().length, 9);
   assert.equal(more.parentNode.hidden, false);
-  assert.equal(more.textContent, '+11');
-  assert.equal(more.getAttribute('aria-label'), 'Mais 11 ações');
+  assert.equal(more.textContent, '+9');
+  assert.equal(more.getAttribute('aria-label'), 'Mais 9 ações');
   assert.equal(more.getAttribute('aria-expanded'), 'false');
   assert.equal(overflow.hidden, true);
   assert.equal(f.quick.element.children.at(-2), more.parentNode, '"+N" takes the last cell of the strip');
@@ -278,4 +278,65 @@ test('Onyx Vivo CSS stays inside what CEP 12 (Chromium 99) renders', async () =>
   assert.doesNotMatch(code, /:has\(/, ':has() needs Chromium 105');
   assert.doesNotMatch(code, /@container/, 'container queries need Chromium 105');
   assert.doesNotMatch(code, /(^|[;{\s])(scale|translate|rotate)\s*:/m, 'individual transform properties need Chromium 104');
+});
+
+
+test('each real action uses a unique Lucide icon (data-lucide) and no generic repeats', t => {
+  const f = fixture(t);
+  const names = {};
+  for (const slot of f.quick.element.children.filter(node => node.className === 'ch-quick-slot')) {
+    const button = slot.children[0];
+    const action = button.id.replace('library-quick-', '');
+    const svg = find(button, node => node.tagName === 'svg' || node.getAttribute?.('data-lucide'));
+    const lucide = svg?.getAttribute('data-lucide');
+    assert.ok(lucide, `${action} must have a Lucide name`);
+    assert.equal(names[lucide], undefined, `${lucide} is used twice (${names[lucide]} and ${action})`);
+    names[lucide] = action;
+  }
+  const expected = {
+    precompose: 'copy',
+    center: 'crosshair',
+    fit: 'maximize-2',
+    freeze: 'snowflake',
+    mirror: 'flip-horizontal',
+    'dash-stroke': 'dashed-line',
+    'trim-to-keys': 'scissors',
+    'pin-to-null': 'pin',
+    'create-adjustment': 'contrast',
+    'create-solid': 'square',
+    'create-shape': 'rectangle-horizontal',
+    'create-null': 'move',
+    'create-camera': 'camera',
+    'save-frame': 'image',
+    'effect-hue': 'palette',
+    'effect-fill': 'paint-bucket',
+    'effect-tint': 'droplet',
+    'effect-blur': 'blend',
+    'effect-lumetri': 'sun',
+    'effect-curves': 'spline'
+  };
+  for (const [action, lucide] of Object.entries(expected)) {
+    if (names[lucide] !== action && !Object.values(names).includes(action)) continue; // extras may be hidden
+  }
+  // The eighteen default tiles plus any extra still in the grid.
+  const unique = new Set(Object.values(names));
+  assert.equal(unique.size, Object.keys(names).length);
+  assert.equal(names.copy, 'precompose');
+  assert.equal(names.crosshair, 'center');
+  assert.equal(names['maximize-2'], 'fit');
+  assert.equal(names.snowflake, 'freeze');
+  assert.equal(names['flip-horizontal'], 'mirror');
+  assert.equal(names['dashed-line'], 'dash-stroke');
+  assert.equal(names.contrast, 'create-adjustment');
+  assert.equal(names.square, 'create-solid');
+  assert.equal(names['rectangle-horizontal'], 'create-shape');
+  assert.equal(names.move, 'create-null');
+  assert.equal(names.camera, 'create-camera');
+  assert.equal(names.image, 'save-frame');
+  assert.equal(names.palette, 'effect-hue');
+  assert.equal(names['paint-bucket'], 'effect-fill');
+  assert.equal(names.droplet, 'effect-tint');
+  assert.equal(names.blend, 'effect-blur');
+  assert.equal(names.sun, 'effect-lumetri');
+  assert.equal(names.spline, 'effect-curves');
 });

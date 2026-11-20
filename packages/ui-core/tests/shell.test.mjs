@@ -13,6 +13,7 @@ import {
   notice,
   propertyRow,
   resolveWidthClass,
+  visibleLibraryTabCount,
   COMPACT_MAX,
   DEFAULT_MAX,
   COMFORT_MAX
@@ -899,4 +900,122 @@ test('additional primary workspaces join navigation and retain a single active k
   assert.equal(f.shell.activeView(),'presets');
   f.byView('presets').keydown('ArrowLeft');
   assert.equal(f.shell.activeView(),'ease');
+});
+
+
+test('visibleLibraryTabCount follows the 300 / 360 / 440 breakpoints', () => {
+  assert.equal(visibleLibraryTabCount(undefined), 2);
+  assert.equal(visibleLibraryTabCount(299), 2);
+  assert.equal(visibleLibraryTabCount(300), 2);
+  assert.equal(visibleLibraryTabCount(359), 2);
+  assert.equal(visibleLibraryTabCount(360), 3);
+  assert.equal(visibleLibraryTabCount(439), 3);
+  assert.equal(visibleLibraryTabCount(440), Number.POSITIVE_INFINITY);
+  assert.equal(visibleLibraryTabCount(500), Number.POSITIVE_INFINITY);
+});
+
+function fiveTabLibrary() {
+  const doc = createFakeDocument();
+  const mount = doc.createElement('div');
+  const i18n = createI18n({locale: 'pt-BR'});
+  const views = [
+    {id:'home', labelKey:'library.browse', titleKey:'view.home.title'},
+    {id:'ease', labelKey:'tool.ease.name', titleKey:'tool.ease.name', primary:true},
+    {id:'parallax', labelKey:'nav.parallax', titleKey:'nav.parallax', primary:true},
+    {id:'presets', labelKey:'library.presets', titleKey:'library.presets'},
+    {id:'stock', labelKey:'nav.stock', titleKey:'nav.stock', primary:true},
+    {id:'settings', labelKey:'nav.settings', titleKey:'view.settings.title'}
+  ];
+  const shell = createShell({mount,document:doc,i18n,subtitleKey:'app.subtitle.afterEffects',views,
+    layout:'library',onRender(){}});
+  const nav = mount.children[0].children[1];
+  const primary = nav.children.find(n => n.className === 'ch-nav__primary');
+  const more = nav.getElementsByTagName('button').find(n => n.className === 'ch-nav__more');
+  const overflow = more.parentNode.children.find(n => n.className === 'ch-nav__overflow');
+  const idsIn = node => node.getElementsByTagName('button').filter(n => n.getAttribute('data-view')).map(n => n.getAttribute('data-view'));
+  const labelOf = id => {
+    const btn = shell.element().getElementsByTagName('button').find(n => n.getAttribute('data-view') === id);
+    const span = btn?.getElementsByTagName('span')[0];
+    return span?.textContent ?? '';
+  };
+  return {doc,shell,nav,primary,more,overflow,idsIn,labelOf,i18n};
+}
+
+test('library text tabs overflow into Mais at 300 and 360 and show all five from 440', () => {
+  const f = fiveTabLibrary();
+  const names = ['home','ease','parallax','presets','stock'].map(f.labelOf);
+  assert.deepEqual(names, ['Ferramentas','Suavização','Parallax','Presets','Banco de mídia']);
+  assert.match(f.more.allText || f.more.textContent, /Mais/);
+  assert.match(f.more.textContent, /▾/);
+
+  f.shell.setWidth(300);
+  assert.deepEqual(f.idsIn(f.primary), ['home','ease']);
+  assert.deepEqual(f.idsIn(f.overflow), ['parallax','presets','stock']);
+  assert.equal(f.more.hidden, false);
+  assert.equal(f.shell.element().getAttribute('data-nav-tabs'), '2');
+
+  f.shell.setWidth(360);
+  assert.deepEqual(f.idsIn(f.primary), ['home','ease','parallax']);
+  assert.deepEqual(f.idsIn(f.overflow), ['presets','stock']);
+  assert.equal(f.more.hidden, false);
+  assert.equal(f.shell.element().getAttribute('data-nav-tabs'), '3');
+
+  f.shell.setWidth(440);
+  assert.deepEqual(f.idsIn(f.primary), ['home','ease','parallax','presets','stock']);
+  assert.equal(f.more.hidden, true);
+  assert.equal(f.overflow.hidden, true);
+  assert.equal(f.shell.element().getAttribute('data-nav-tabs'), '5');
+
+  f.shell.setWidth(500);
+  assert.deepEqual(f.idsIn(f.primary), ['home','ease','parallax','presets','stock']);
+  assert.equal(f.more.hidden, true);
+});
+
+test('the active library tab stays among the visible text tabs when it would overflow', () => {
+  const f = fiveTabLibrary();
+  f.shell.setWidth(300);
+  f.shell.navigate('stock');
+  assert.deepEqual(f.idsIn(f.primary), ['home','stock']);
+  assert.ok(f.idsIn(f.overflow).includes('ease'));
+  assert.ok(!f.idsIn(f.overflow).includes('stock'));
+  assert.equal(f.primary.getElementsByTagName('button').find(n => n.getAttribute('data-view')==='stock').getAttribute('aria-selected'), 'true');
+
+  f.shell.setWidth(360);
+  f.shell.navigate('presets');
+  assert.ok(f.idsIn(f.primary).includes('presets'));
+  assert.ok(!f.idsIn(f.overflow).includes('presets'));
+  assert.equal(f.idsIn(f.primary).length, 3);
+});
+
+test('Mais opens a keyboard menu of overflowed text tabs and Escape restores focus', () => {
+  const f = fiveTabLibrary();
+  f.shell.setWidth(300);
+  assert.equal(f.overflow.hidden, true);
+  f.more.click();
+  assert.equal(f.overflow.hidden, false);
+  assert.equal(f.doc.activeElement, f.idsIn(f.overflow).length ? f.overflow.children[0] : null);
+  f.overflow.emit('keydown', { key: 'ArrowDown', preventDefault(){} });
+  assert.equal(f.doc.activeElement, f.overflow.children[1]);
+  f.overflow.emit('keydown', { key: 'End', preventDefault(){} });
+  assert.equal(f.doc.activeElement, f.overflow.children[f.overflow.children.length-1]);
+  f.shell.element().keydown('Escape');
+  assert.equal(f.overflow.hidden, true);
+  assert.equal(f.doc.activeElement, f.more);
+
+  const home = f.primary.getElementsByTagName('button').find(n => n.getAttribute('data-view')==='home');
+  home.keydown('ArrowRight');
+  assert.equal(f.shell.activeView(), 'ease', 'arrows cycle only the visible tabs, not the overflow');
+  // Never an icon-only tab: every visible primary keeps its text label.
+  for (const id of f.idsIn(f.primary)) {
+    assert.ok(f.labelOf(id).length > 0, id + ' must keep its full name');
+  }
+});
+
+test('Mais label follows the locale and is not an icon-only control', () => {
+  const f = fiveTabLibrary();
+  assert.match(f.more.textContent, /Mais/);
+  f.i18n.setLocale('en-US');
+  f.shell.refreshChrome();
+  assert.match(f.more.textContent, /More/);
+  assert.equal(f.more.getAttribute('aria-label'), 'More');
 });

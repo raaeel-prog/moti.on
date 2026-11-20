@@ -74,16 +74,16 @@ test('page buttons move by the visible width minus one column; reduced motion ju
 });
 
 test('the quick dock shows whole columns only: max(2, floor((width + 4) / (tile + 4)))', () => {
-  assert.equal(strip.fitColumns(158, 32), 4, '280 px panel: 158 px beside the anchor');
-  assert.equal(strip.fitColumns(236, 36), 6);
-  assert.equal(strip.fitColumns(355, 36), 8, '355 + 4 = 359 < 360: the ninth column does not fit');
-  assert.equal(strip.fitColumns(356, 36), 9);
-  assert.equal(strip.fitColumns(40, 36), 2, 'never fewer than two columns');
-  assert.equal(strip.fitColumns(0, 36), 2);
-  assert.equal(strip.fitTileSize(280), 32);
-  assert.equal(strip.fitTileSize(339), 32);
-  assert.equal(strip.fitTileSize(340), 36);
-  assert.equal(strip.fitTileSize(720), 36);
+  assert.equal(strip.fitColumns(158, 28), 5, '280 px panel: 158 px beside the 28 px icons');
+  assert.equal(strip.fitColumns(236, 28), 7);
+  assert.equal(strip.fitColumns(284, 28), 9, '284 + 4 = 288 = 9 × 32');
+  assert.equal(strip.fitColumns(283, 28), 8);
+  assert.equal(strip.fitColumns(40, 28), 2, 'never fewer than two columns');
+  assert.equal(strip.fitColumns(0, 28), 2);
+  assert.equal(strip.fitTileSize(280), 28);
+  assert.equal(strip.fitTileSize(339), 28);
+  assert.equal(strip.fitTileSize(340), 28);
+  assert.equal(strip.fitTileSize(720), 28);
 });
 
 test('the fitted strip wraps the grid without page buttons and reports columns once per change', t => {
@@ -97,11 +97,11 @@ test('the fitted strip wraps the grid without page buttons and reports columns o
   assert.equal(fitted.element.children.length, 1, 'no pagers, no fades');
   fitted.element.clientWidth = 196;
   fitted.refresh(); clock.advance(16);
-  assert.deepEqual(seen.at(-1), [5, 36]);
+  assert.deepEqual(seen.at(-1), [6, 28]);
   fitted.refresh(); clock.advance(16);
   fitted.element.clientWidth = 0;
   fitted.refresh(); clock.advance(16);
-  assert.deepEqual(seen.at(-1), [5, 36], 'an unmeasured strip keeps its last layout');
+  assert.deepEqual(seen.at(-1), [6, 28], 'an unmeasured strip keeps its last layout');
 });
 
 test('each tile row mirrors its keyboard row at any strip width', () => {

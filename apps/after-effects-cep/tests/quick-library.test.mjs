@@ -373,7 +373,7 @@ test('Alt+click and the corner three dots open the tool settings instead of appl
 });
 
 
-test('status line names the hovered tool and the Details column follows it; idle shows only the hint', t => {
+test('status line names the hovered tool and the Details column follows it; idle stays empty (hint lives in Settings → Help)', t => {
   const doc=createFakeDocument();
   const create=doc.createElement;
   doc.createElement=tag=>{const node=create(tag);node.style={setProperty(){}};node.classList={add(){}};return node;};
@@ -390,7 +390,7 @@ test('status line names the hovered tool and the Details column follows it; idle
   const text=node=>node.children?.length?node.children.map(text).join(''):(node.textContent??'');
   const status=byClass('ch-tool-status')[0],details=byClass('ch-tool-details')[0];
   assert.equal(status.getAttribute('data-idle'),'true');
-  assert.equal(text(status),'Clique aplica · › abre a página · Botão direito: mais opções');
+  assert.equal(text(status),'');
   const tiles=byClass('ch-tool-tile');
   assert.equal(tiles.length,2);
   assert.equal(text(byClass('ch-tool-group-count')[0]),'1','each group title carries its own count');
