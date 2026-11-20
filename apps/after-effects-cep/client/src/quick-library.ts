@@ -2,7 +2,10 @@ import { button, createElement, createIcon, clearNode, createEmptyState, createI
 import { MOTION_CATALOG } from "@motion/ui-motion";
 import { browserMotionEnv, playStagger, smoothScrollTo } from "./motion/index.js";
 import { uiIcon } from "./ui-icons.js";
+import { onQuickStatus } from "./quick-actions.js";
 
+/** How long the status line keeps "✓ <Nome> aplicado · Ajustar" (2026-11-20 brief: 3 s). */
+export const STATUS_APPLIED_MS = 3000;
 const TOOLTIP_EXIT_MS = MOTION_CATALOG.find(motion => motion.id === "tooltip-enter")!.durationMs[0]!;
 const SURFACE_MS = MOTION_CATALOG.find(motion => motion.id === "surface-morph")!.durationMs[0]!;
 const RIPPLE_MS = MOTION_CATALOG.find(motion => motion.id === "tile-ripple")!.durationMs[0]!;
@@ -35,8 +38,8 @@ export interface LibraryState {
   scroll: number;
 }
 export const LIBRARY_COPY = {
-  "pt-BR": { allTools: "Todas as ferramentas", categories: "Categoria", more: "Mais categorias", all: "Todas", favorites: "Favoritos", favoritesOnly: "Só favoritas", recent: "Recentes", search: "Buscar ferramenta", apply: "Aplicar", edit: "Ajustes…", altClick: "Alt+clique", favorite: "Favoritar", unfavorite: "Remover dos favoritos", empty: "Nenhuma ferramenta encontrada.", quick: "Clique para aplicar", configure: "Abrir ajustes", anchor: "Escolha na grade de âncora", options: "Opções de", adjustOf: "Ajustes de", help: "Clique aplica · › abre a página · Botão direito: mais opções", details: "Detalhes", settings: "Ajustes…", keyClick: "Clique", keyClickQuick: "Aplica o preset padrão", keyClickConfigure: "Abre os ajustes e a prévia", keyAdjust: "Alt+clique", keyAdjustText: "Abre os ajustes", keyContext: "Botão direito", keyContextText: "Favoritar e mais opções", collapse: "Recolher", expand: "Expandir", groupHint: "Alt+clique: todas as categorias" },
-  "en-US": { allTools: "All tools", categories: "Category", more: "More categories", all: "All", favorites: "Favorites", favoritesOnly: "Favorites only", recent: "Recent", search: "Search tools", apply: "Apply", edit: "Settings…", altClick: "Alt+click", favorite: "Favorite", unfavorite: "Remove from favorites", empty: "No tools found.", quick: "Click to apply", configure: "Open settings", anchor: "Choose on the anchor grid", options: "Options for", adjustOf: "Settings for", help: "Click applies · › opens the page · Right click: more options", details: "Details", settings: "Settings…", keyClick: "Click", keyClickQuick: "Applies the default preset", keyClickConfigure: "Opens the settings and preview", keyAdjust: "Alt+click", keyAdjustText: "Opens the settings", keyContext: "Right click", keyContextText: "Favorite and more options", collapse: "Collapse", expand: "Expand", groupHint: "Alt+click: every category" }
+  "pt-BR": { allTools: "Todas as ferramentas", categories: "Categoria", more: "Mais categorias", all: "Todas", favorites: "Favoritos", favoritesOnly: "Só favoritas", recent: "Recentes", search: "Buscar ferramenta", apply: "Aplicar", edit: "Ajustes…", altClick: "Alt+clique", favorite: "Favoritar", unfavorite: "Remover dos favoritos", empty: "Nenhuma ferramenta encontrada.", quick: "Clique para aplicar", configure: "Abrir ajustes", anchor: "Escolha na grade de âncora", options: "Opções de", adjustOf: "Ajustes de", details: "Detalhes", settings: "Ajustes…", keyClick: "Clique", keyClickQuick: "Aplica o preset padrão", keyClickConfigure: "Abre os ajustes e a prévia", keyAdjust: "Alt+clique", keyAdjustText: "Abre os ajustes", keyContext: "Botão direito", keyContextText: "Favoritar e mais opções", collapse: "Recolher", expand: "Expandir", groupHint: "Alt+clique: todas as categorias" },
+  "en-US": { allTools: "All tools", categories: "Category", more: "More categories", all: "All", favorites: "Favorites", favoritesOnly: "Favorites only", recent: "Recent", search: "Search tools", apply: "Apply", edit: "Settings…", altClick: "Alt+click", favorite: "Favorite", unfavorite: "Remove from favorites", empty: "No tools found.", quick: "Click to apply", configure: "Open settings", anchor: "Choose on the anchor grid", options: "Options for", adjustOf: "Settings for", details: "Details", settings: "Settings…", keyClick: "Click", keyClickQuick: "Applies the default preset", keyClickConfigure: "Opens the settings and preview", keyAdjust: "Alt+click", keyAdjustText: "Opens the settings", keyContext: "Right click", keyContextText: "Favorite and more options", collapse: "Collapse", expand: "Expand", groupHint: "Alt+click: every category" }
 };
 export function normalizeSearch(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -146,11 +149,21 @@ export function createQuickLibrary(doc: Document, options: {
   const motionEnv = browserMotionEnv(doc.defaultView, doc.documentElement);
   element.appendChild(grid);
   // Linha de estado (design system 2026-11): nome e descrição da ferramenta sob o cursor, sem esperar a dica.
-  // Em repouso fica vazia de propósito: status permanente de seleção foi recusado como poluição.
+  // Em repouso fica vazia de propósito (2026-11-20: a dica fixa de gestos foi para Configurações › Ajuda).
+  // Também mostra o ladrilho das ações rápidas sob o cursor ou o foco e, por 3 s, "✓ <Nome> aplicado · Ajustar".
+  // O texto repete a dica rica e o anúncio do shell: fica fora da árvore de acessibilidade; só "Ajustar" entra nela.
   const status = createElement(doc, "div", "ch-tool-status");
-  status.setAttribute("aria-hidden", "true");
   element.appendChild(status);
+  let pointed: { name: string; detail: string } | null = null;
+  let appliedNote: { name: string; adjust: (() => void) | null } | null = null;
+  let appliedTimer: ReturnType<typeof setTimeout> | undefined;
   showStatus(null);
+  const stopQuickStatus = onQuickStatus(doc, next => {
+    if (!alive) return;
+    if (next?.kind === "applied") { showApplied(next.name, null); return; }
+    pointed = next ? { name: next.name, detail: next.gesture } : null;
+    renderStatus();
+  });
   element.appendChild(options.anchor);
   // Coluna Detalhes: só aparece no layout amplo (CSS), no lugar do espaço vazio ao lado da grade.
   const details = createElement(doc, "aside", "ch-tool-details");
@@ -159,19 +172,57 @@ export function createQuickLibrary(doc: Document, options: {
   let detailId: string | null = null;
   let detailKey = "";
   function showStatus(id: string | null): void {
-    clearNode(status);
     const item = id ? itemMap.get(id) : undefined;
-    status.setAttribute("data-idle", String(!item));
-    if (!item) { status.appendChild(createElement(doc, "span", "", copy.help)); return; }
-    // Losango azul do estudo: marca a linha como "isto é o que está sob o cursor".
-    if (typeof doc.createElementNS === "function") {
-      const mark = doc.createElementNS(SVG_NS, "svg");
-      mark.setAttribute("class", "ch-tool-status__mark"); mark.setAttribute("viewBox", "0 0 16 16"); mark.setAttribute("aria-hidden", "true");
-      const shape = doc.createElementNS(SVG_NS, "path"); shape.setAttribute("d", "M8 2.5 13.5 8 8 13.5 2.5 8z"); shape.setAttribute("fill", "currentColor");
-      mark.appendChild(shape); status.appendChild(mark);
+    pointed = item ? { name: item.name, detail: item.reason ?? item.description } : null;
+    renderStatus();
+  }
+  /** "✓ <Nome> aplicado · Ajustar" for 3 s after a confirmed run; a hover in the meantime wins. */
+  function showApplied(name: string, adjust: (() => void) | null): void {
+    clearTimeout(appliedTimer);
+    appliedNote = { name, adjust };
+    appliedTimer = setTimeout(() => { appliedTimer = undefined; appliedNote = null; if (alive) renderStatus(); }, STATUS_APPLIED_MS);
+    if (!pointed) renderStatus();
+  }
+  function statusMark(kind: "point" | "ok"): void {
+    if (typeof doc.createElementNS !== "function") return;
+    const mark = doc.createElementNS(SVG_NS, "svg");
+    mark.setAttribute("class", kind === "ok" ? "ch-tool-status__mark ch-tool-status__mark--ok" : "ch-tool-status__mark");
+    mark.setAttribute("viewBox", "0 0 16 16"); mark.setAttribute("aria-hidden", "true");
+    const shape = doc.createElementNS(SVG_NS, "path");
+    // Losango azul do estudo para "isto é o que está sob o cursor"; ✓ desenhado para "aplicado".
+    if (kind === "ok") { shape.setAttribute("d", "M3.5 8.5 6.5 11.5 12.5 4.5"); shape.setAttribute("fill", "none"); shape.setAttribute("stroke", "currentColor"); shape.setAttribute("stroke-width", "2"); shape.setAttribute("stroke-linecap", "round"); shape.setAttribute("stroke-linejoin", "round"); }
+    else { shape.setAttribute("d", "M8 2.5 13.5 8 8 13.5 2.5 8z"); shape.setAttribute("fill", "currentColor"); }
+    mark.appendChild(shape); status.appendChild(mark);
+  }
+  function statusText(tag: "strong" | "span", text: string): void {
+    const node = createElement(doc, tag, "", text);
+    node.setAttribute("aria-hidden", "true");
+    status.appendChild(node);
+  }
+  function renderStatus(): void {
+    clearNode(status);
+    const note = pointed ? null : appliedNote;
+    status.setAttribute("data-idle", String(!pointed && !note));
+    status.setAttribute("data-kind", pointed ? "point" : note ? "applied" : "idle");
+    if (pointed) {
+      statusMark("point");
+      statusText("strong", pointed.name);
+      if (pointed.detail) statusText("span", ` · ${pointed.detail}`);
+      return;
     }
-    status.appendChild(createElement(doc, "strong", "", item.name));
-    status.appendChild(createElement(doc, "span", "", ` · ${item.reason ?? item.description}`));
+    if (!note) return;
+    statusMark("ok");
+    statusText("strong", i18n.t("quick.status.applied", { name: note.name }));
+    if (!note.adjust) return;
+    statusText("span", " · ");
+    const run = note.adjust;
+    const adjust = button(doc, { label: i18n.t("quick.status.adjust"), variant: "tertiary", onClick: () => {
+      clearTimeout(appliedTimer); appliedTimer = undefined; appliedNote = null; renderStatus(); run();
+    } });
+    adjust.id = "library-status-adjust";
+    adjust.className += " ch-tool-status__adjust";
+    adjust.setAttribute("aria-label", i18n.t("quick.status.adjustOf", { name: note.name }));
+    status.appendChild(adjust);
   }
   function drawDetails(): void {
     const item = (detailId ? itemMap.get(detailId) : undefined) ?? items[0];
@@ -639,6 +690,8 @@ export function createQuickLibrary(doc: Document, options: {
     (parts.check as unknown as HTMLElement).getBoundingClientRect?.();
     parts.check.setAttribute("data-active", "true");
     parts.dot.setAttribute("data-active", "true");
+    const item = itemMap.get(id);
+    if (item) showApplied(item.name, () => { hideTooltip(); closeMenu(false, true); itemMap.get(id)?.edit(); });
     parts.timer = setTimeout(() => {
       if (!alive) return;
       node.setAttribute("data-feedback", "idle");
@@ -843,6 +896,8 @@ export function createQuickLibrary(doc: Document, options: {
       alive = false; ++scrollVersion;
       stopCascade?.();
       for (const parts of feedback.values()) clearTimeout(parts.timer);
+      clearTimeout(appliedTimer); appliedTimer = undefined;
+      stopQuickStatus();
       if (scrollFrame !== undefined) doc.defaultView?.cancelAnimationFrame?.(scrollFrame);
       scrollFrame = undefined;
       hideTooltip(); closeMenu(false, true);

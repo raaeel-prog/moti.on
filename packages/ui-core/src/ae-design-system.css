@@ -145,11 +145,17 @@
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-library-refined .ch-library-star[aria-pressed="true"] { background:var(--ds-sunken); color:var(--ds-value); box-shadow:inset 0 0 0 1px var(--ds-line); }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-library-refined .ch-library-star > .ch-icon { width:16px; height:16px; }
 
-/* Linha de estado: losango azul, nome e descrição da ferramenta sob o cursor. Em repouso, só a dica. */
-[data-host="after-effects"] .ch-tool-status { flex:0 0 auto; box-sizing:border-box; display:flex; align-items:center; height:24px; padding:0 12px; border-top:1px solid var(--ds-line); color:var(--ds-text-3); font-size:11px; line-height:23px; white-space:nowrap; overflow:hidden; }
+/* Linha de estado (2026-11-20): 24 px sempre reservados e vazia em repouso (a dica de gestos foi para
+ * Configurações › Ajuda). Sob o cursor ou o foco: losango, nome em 11 px/600 e gesto ou descrição em
+ * terciário. Depois de aplicar, por 3 s: ✓, "<Nome> aplicado" e o botão "Ajustar". */
+[data-host="after-effects"] .ch-tool-status { flex:0 0 auto; box-sizing:border-box; display:flex; align-items:center; height:24px; min-height:24px; max-height:24px; padding:0 12px; border-top:1px solid var(--ds-line); color:var(--ds-text-3); font-size:11px; line-height:23px; white-space:nowrap; overflow:hidden; }
 [data-host="after-effects"] .ch-tool-status > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:pre; }
-[data-host="after-effects"] .ch-tool-status > strong { flex:0 0 auto; color:var(--ds-text); font-weight:600; }
+[data-host="after-effects"] .ch-tool-status > strong { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; color:var(--ds-text); font-size:11px; font-weight:600; }
 [data-host="after-effects"] .ch-tool-status__mark { flex:0 0 auto; width:10px; height:10px; margin-right:6px; color:var(--ds-value); }
+[data-host="after-effects"] .ch-tool-status > .ch-tool-status__adjust,
+[data-host="after-effects"] .ch-shell .ch-tool-status > .ch-tool-status__adjust { flex:0 0 auto; width:auto; min-width:0; height:20px; min-height:20px; margin:0; padding:0 4px; border:0; border-radius:var(--radius-small); background:transparent; box-shadow:none; color:var(--ds-value); font-size:11px; font-weight:600; line-height:20px; }
+[data-host="after-effects"] .ch-shell .ch-tool-status > .ch-tool-status__adjust:hover { background:var(--ds-hover); color:var(--ds-value-hi); }
+[data-host="after-effects"] .ch-shell .ch-tool-status > .ch-tool-status__adjust:focus-visible { outline:var(--focus-ring); outline-offset:-1px; }
 [data-host="after-effects"] .ch-context-library .ch-tool-status { display:none; }
 @media (max-height:420px) { [data-host="after-effects"] .ch-tool-status { display:none; } }
 
