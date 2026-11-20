@@ -29,7 +29,33 @@ export function stripColumns(count: number): number {
   return Math.max(1, Math.ceil(count / 2));
 }
 
-/** Letter of the tile at `index` in a two-row strip `columns` wide: each row mirrors its keyboard row. */
+export interface StripLayout {
+  /** Grid columns on screen (the "+N" tile takes the last cell when something is left over). */
+  readonly columns: number;
+  /** Tiles shown in the strip, in order. */
+  readonly shown: number;
+  /** Tiles behind the "+N" tile (its N). */
+  readonly hidden: number;
+  /** Columns of the keyboard map: letters never change with the dock width. */
+  readonly keyColumns: number;
+}
+
+/**
+ * Two-row strip for `count` tiles when `fit` whole columns fit (quick-strip.ts `fitColumns`).
+ * Everything fits: the rows mirror the keyboard rows. Otherwise `2 × fit − 1` tiles and a "+N".
+ */
+export function stripLayout(count: number, fit: number): StripLayout {
+  const keyColumns = stripColumns(count);
+  if (!(fit < keyColumns)) return { columns: keyColumns, shown: count, hidden: 0, keyColumns };
+  const columns = Math.max(2, Math.floor(fit));
+  const shown = Math.min(count, 2 * columns - 1);
+  return { columns, shown, hidden: count - shown, keyColumns };
+}
+
+/**
+ * Letter of the tile at `index` in the two-row keyboard map `columns` wide: each row mirrors
+ * its keyboard row. Pass `StripLayout.keyColumns`, so a tile keeps its letter behind "+N".
+ */
 export function tileLetter(index: number, columns: number): string {
   return KEY_ROWS[Math.floor(index / columns)]?.[index % columns] ?? "";
 }

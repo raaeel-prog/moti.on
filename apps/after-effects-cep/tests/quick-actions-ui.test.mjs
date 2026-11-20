@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { setImmediate } from 'node:timers/promises';
-import { createFakeDocument } from '../../../packages/ui-core/tests/fake-dom.mjs';
+import { createFakeDocument, createFakeWindow } from '../../../packages/ui-core/tests/fake-dom.mjs';
 
 const built = await build({ entryPoints: [fileURLToPath(new URL('../client/src/quick-actions.ts', import.meta.url))], bundle: true, platform: 'node', format: 'esm', write: false });
-const { createQuickActions } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+const { createQuickActions, onQuickStatus } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
 function find(node, predicate) {
   if (predicate(node)) return node;
@@ -15,6 +15,7 @@ function find(node, predicate) {
 }
 function fixture(t, overrides = {}) {
   const doc = createFakeDocument();
+  if (overrides.win) doc.defaultView = overrides.win;
   const scope = doc.createElement('section');
   const calls = { actions: [], favorites: [], recents: [], notices: [], denied: [], anchor: [] };
   const quick = createQuickActions(doc, {
@@ -27,7 +28,7 @@ function fixture(t, overrides = {}) {
     onAnchorKey: index => calls.anchor.push(index),
     ...overrides.options
   });
-  scope.appendChild(quick.toolbar); scope.appendChild(quick.element); scope.appendChild(quick.footer);
+  scope.appendChild(quick.toolbar); scope.appendChild(quick.strip); scope.appendChild(quick.footer);
   t.after(() => quick.dispose());
   const byId = id => find(scope, node => node.id === id) ?? find(quick.rail, node => node.id === id);
   const slot = action => byId(`library-quick-${action}`).parentNode;
@@ -35,6 +36,71 @@ function fixture(t, overrides = {}) {
   const key = (k, init = {}) => scope.emit('keydown', { key: k, target: scope, ...init });
   return { doc, scope, quick, calls, byId, slot, visible, key };
 }
+
+test('a narrow strip shows whole columns and puts the rest behind "+N", letters unchanged', async t => {
+  const win = createFakeWindow(280);
+  const f = fixture(t, { win, result: () => Promise.resolve(true) });
+  const more = f.byId('quick-actions-more');
+  const overflow = f.byId('quick-actions-overflow');
+  assert.equal(more.parentNode.hidden, true, 'unmeasured: everything fits, no "+N"');
+  assert.equal(f.visible().length, 18);
+  // 280 px panel: 32 px tiles, 158 px beside the anchor → 4 columns → 7 tiles + "+11".
+  f.quick.strip.clientWidth = 158;
+  win.emit('resize');
+  assert.equal(f.quick.element.getAttribute('data-columns'), '4');
+  assert.equal(f.visible().length, 7);
+  assert.equal(more.parentNode.hidden, false);
+  assert.equal(more.textContent, '+11');
+  assert.equal(more.getAttribute('aria-label'), 'Mais 11 ações');
+  assert.equal(more.getAttribute('aria-expanded'), 'false');
+  assert.equal(overflow.hidden, true);
+  assert.equal(f.quick.element.children.at(-2), more.parentNode, '"+N" takes the last cell of the strip');
+  // A tile behind "+N" keeps its letter and its shortcut.
+  assert.equal(f.byId('library-quick-create-null').getAttribute('aria-keyshortcuts'), 'A');
+  f.key('a');
+  assert.deepEqual(f.calls.actions, ['create-null']);
+  more.click();
+  assert.equal(overflow.hidden, false);
+  assert.equal(overflow.getAttribute('data-open'), 'true');
+  assert.equal(more.getAttribute('aria-expanded'), 'true');
+  assert.equal(f.doc.activeElement?.id, 'library-quick-create-solid', 'focus enters the popover on its first tile');
+  overflow.emit('keydown', { key: 'Escape' });
+  assert.equal(overflow.hidden, true, 'Esc closes');
+  assert.equal(f.doc.activeElement, more, 'focus goes back to "+N"');
+  more.click();
+  f.byId('library-quick-effect-blur').click();
+  assert.deepEqual(f.calls.actions, ['create-null', 'effect-blur']);
+  assert.equal(overflow.hidden, true, 'a tile picked from the popover closes it');
+  assert.equal(f.doc.activeElement, more);
+  await setImmediate();
+  // Wide again: all eighteen fit and the rows mirror the keyboard.
+  f.quick.strip.clientWidth = 400;
+  win.innerWidth = 480;
+  win.emit('resize');
+  assert.equal(f.quick.element.getAttribute('data-columns'), '9');
+  assert.equal(f.visible().length, 18);
+  assert.equal(more.parentNode.hidden, true);
+});
+
+test('tiles feed the status line: name and gesture on hover or focus, then the applied run', async t => {
+  const f = fixture(t, { result: () => Promise.resolve(true) });
+  const seen = [];
+  const stop = onQuickStatus(f.doc, status => seen.push(status));
+  t.after(stop);
+  f.slot('center').emit('mouseenter');
+  assert.deepEqual(seen.at(-1), { kind: 'point', name: 'Centralizar na composição', gesture: 'Clique aplica · Botão direito: favoritar' });
+  f.slot('center').emit('mouseleave');
+  assert.equal(seen.at(-1), null);
+  f.byId('library-quick-fit').emit('focus');
+  assert.equal(seen.at(-1).name, 'Ajustar à composição');
+  f.byId('library-quick-fit').click();
+  await setImmediate();
+  assert.deepEqual(seen.at(-1), { kind: 'applied', name: 'Ajustar à composição' });
+  f.quick.update({ locale: 'pt-BR', busy: false, hasComp: true, selectionCount: 0 });
+  f.slot('mirror').emit('mouseenter');
+  assert.equal(seen.at(-1).gesture, 'Selecione uma camada.', 'an unavailable tile says why instead of the gesture');
+  assert.equal(find(f.quick.element, node => node.className === 'ch-quick-action__label'), null, 'no abbreviation on the tiles');
+});
 
 test('rail starts with the three primary shortcuts and follows favorites', t => {
   const f = fixture(t);

@@ -1,13 +1,35 @@
-import { button, createElement } from "@motion/ui-core";
+import { button, createElement, createI18n } from "@motion/ui-core";
 import { MOTION_CATALOG } from "@motion/ui-motion";
 import { createQuickActionIcon, quickActionFamily } from "./quick-action-icons.js";
 import {
-  QUICK_COPY, QUICK_TABS, anchorIndexForKey, stripColumns, tileIndexForLetter, tileLetter, withFavorite, withRecent,
+  QUICK_COPY, QUICK_TABS, anchorIndexForKey, stripColumns, stripLayout, tileIndexForLetter, tileLetter, withFavorite, withRecent,
   type QuickTab
 } from "./quick-actions-keys.js";
 import { browserMotionEnv } from "./motion/env.js";
-import { createQuickStrip } from "./quick-strip.js";
+import { createFittedStrip } from "./quick-strip.js";
 import { uiIcon } from "./ui-icons.js";
+
+/**
+ * What the status line under the tool grid shows for the quick dock (quick-library.ts
+ * subscribes). "point": a tile under the pointer or focus. "applied": a confirmed run.
+ * `null`: the pointer or focus left the tiles.
+ */
+export type QuickStatus =
+  | { kind: "point"; name: string; gesture: string }
+  | { kind: "applied"; name: string }
+  | null;
+type QuickStatusListener = (status: QuickStatus) => void;
+const statusListeners = new WeakMap<object, Set<QuickStatusListener>>();
+/** One channel per document: the dock and the status line are built apart (main.ts). */
+export function onQuickStatus(doc: Document, listener: QuickStatusListener): () => void {
+  let set = statusListeners.get(doc);
+  if (!set) { set = new Set(); statusListeners.set(doc, set); }
+  set.add(listener);
+  return () => { set!.delete(listener); };
+}
+function publishStatus(doc: Document, status: QuickStatus): void {
+  for (const listener of Array.from(statusListeners.get(doc) ?? [])) listener(status);
+}
 
 /**
  * Action IDs, abbreviations and names retained from the user's FX Studio Quick Tools.
@@ -167,6 +189,7 @@ function strokeIcon(doc: Document, path: string): Element | null {
 export function createQuickActions(doc: Document, options: QuickActionsOptions): QuickActionsController {
   const pt = options.locale === "pt-BR";
   const copy = QUICK_COPY[pt ? "pt-BR" : "en-US"];
+  const i18n = createI18n({ locale: options.locale });
   let context: QuickActionsContext = { locale: options.locale, busy: options.busy, hasComp: options.hasComp, selectionCount: options.selectionCount };
   let favorites: QuickAction[] = (options.favorites ?? QUICK_RAIL_ACTIONS).filter(isQuickAction);
   let recents: QuickAction[] = (options.recents ?? []).filter(isQuickAction).slice(0, RECENT_MAX);
@@ -332,15 +355,28 @@ export function createQuickActions(doc: Document, options: QuickActionsOptions):
     renderRecents();
   }
 
+  function applied(action: QuickAction): void {
+    if (!alive) return;
+    remember(action);
+    publishStatus(doc, { kind: "applied", name: quickActionName(action, context.locale) });
+  }
+
   function trigger(entry: Entry): void {
     if (entry.control.disabled || reasonFor(entry.action)) return;
+    // A tile picked from the "+N" popover closes it; focus goes back to "+N".
+    if (entry.kind === "tile" && overflowOpen && entry.slot.parentNode === overflowGrid) closeOverflow(true);
     const result = options.onAction(entry.action);
-    if (!result || typeof (result as Promise<boolean | void>).then !== "function") { remember(entry.action); return; }
+    if (!result || typeof (result as Promise<boolean | void>).then !== "function") { applied(entry.action); return; }
     setFeedback(entry, "loading");
     (result as Promise<boolean | void>).then(
-      ok => { setFeedback(entry, ok === false ? "idle" : "success"); if (ok !== false && alive) remember(entry.action); },
+      ok => { setFeedback(entry, ok === false ? "idle" : "success"); if (ok !== false) applied(entry.action); },
       () => setFeedback(entry, "idle")
     );
+  }
+
+  /** The status line names the tile under the pointer or focus, with its gesture (or why not). */
+  function pointStatus(entry: Entry): void {
+    publishStatus(doc, { kind: "point", name: quickActionName(entry.action, context.locale), gesture: reasonFor(entry.action) ?? i18n.t("quick.status.gesture") });
   }
 
   /** Eight sparks fly out of the star when an action is pinned (prototype burst). */
@@ -386,10 +422,16 @@ export function createQuickActions(doc: Document, options: QuickActionsOptions):
     control.setAttribute("data-icon-family", quickActionFamily(action));
     control.setAttribute("data-feedback", "idle");
     control.appendChild(createQuickActionIcon(doc, action));
-    if (kind !== "rail") control.appendChild(createElement(doc, "span", "ch-quick-action__label", abbreviation));
+    // Tiles carry no abbreviation (2026-11-20): the name is in the rich tip and the status line.
+    if (kind === "recent") control.appendChild(createElement(doc, "span", "ch-quick-action__label", abbreviation));
     control.addEventListener("pointerdown", event => ripple(control, event as PointerEvent));
     slot.addEventListener("click", event => { if ((event as Event).target === slot) deny(entry); });
     if (tile) {
+      // The slot also catches the pointer over a disabled tile (its button gets no mouse events).
+      slot.addEventListener("mouseenter", () => pointStatus(entry));
+      slot.addEventListener("mouseleave", () => publishStatus(doc, null));
+      control.addEventListener("focus", () => pointStatus(entry));
+      control.addEventListener("blur", () => publishStatus(doc, null));
       const star = createElement(doc, "span", "ch-quick-action__star");
       const starIcon = uiIcon(doc, "star-filled", 8);
       if (starIcon) star.appendChild(starIcon); else star.textContent = "★";
@@ -451,9 +493,12 @@ export function createQuickActions(doc: Document, options: QuickActionsOptions):
   function inTab(action: QuickAction): boolean {
     return tab === "all" || (tab === "favorites" ? favorites.includes(action) : quickActionFamily(action) === tab);
   }
-  /** Two-row strip columns for the visible tiles; each row mirrors its keyboard row. */
+  /** Columns of the keyboard map for the visible tiles; each row mirrors its keyboard row. */
   let columns = stripColumns(QUICK_ACTIONS.length);
-  /** Category filter and keyboard hints. */
+  /** Whole columns that fit beside the anchor (quick-strip.ts); unmeasured = everything fits. */
+  let fit = Number.POSITIVE_INFINITY;
+  let layoutKey = "";
+  /** Category filter, keyboard hints and the whole-column layout with its "+N" tile. */
   function applyView(): void {
     for (const entry of entries) {
       if (entry.kind !== "tile") continue;
@@ -461,19 +506,146 @@ export function createQuickActions(doc: Document, options: QuickActionsOptions):
       entry.slot.setAttribute("data-favorite", String(favorites.includes(entry.action)));
     }
     const tiles = visibleTiles();
-    columns = stripColumns(tiles.length);
-    pad.style?.setProperty?.("--qa-columns", String(columns));
+    const layout = stripLayout(tiles.length, fit);
+    columns = layout.keyColumns;
+    pad.style?.setProperty?.("--qa-columns", String(layout.columns));
+    pad.setAttribute("data-columns", String(layout.columns));
     tiles.forEach((entry, index) => {
       const letter = tileLetter(index, columns);
       if (entry.key) entry.key.textContent = letter;
       if (letter) entry.control.setAttribute("aria-keyshortcuts", letter); else entry.control.removeAttribute("aria-keyshortcuts");
     });
+    placeTiles(tiles, layout.shown, layout.hidden);
     const none = tiles.length === 0;
     empty.hidden = !none;
     empty.textContent = none ? copy.noFavorites : "";
     pad.setAttribute("data-empty", String(none));
-    strip?.refresh();
   }
+
+  /**
+   * The first `shown` visible tiles stay in the strip, the rest move into the "+N" popover
+   * (the same nodes: handlers, feedback and letters go with them). Nothing moves unless the
+   * split changed, so a focused tile keeps its focus.
+   */
+  function placeTiles(tiles: Entry[], shown: number, hidden: number): void {
+    const key = `${tiles.map(entry => entry.action).join()}|${shown}`;
+    if (key === layoutKey) return;
+    layoutKey = key;
+    if (overflowOpen) closeOverflow(false);
+    const focused = doc.activeElement as HTMLElement | null;
+    const inStrip = new Set(tiles.slice(0, shown));
+    const move = (node: HTMLElement, home: HTMLElement): void => { node.parentNode?.removeChild(node); home.appendChild(node); };
+    for (const entry of entries) {
+      if (entry.kind !== "tile") continue;
+      move(entry.slot, entry.slot.hidden || inStrip.has(entry) ? pad : overflowGrid);
+    }
+    move(moreSlot, pad);
+    move(empty, pad);
+    moreSlot.hidden = hidden === 0;
+    more.textContent = `+${hidden}`;
+    const label = i18n.t("quick.overflow.more", { count: hidden });
+    more.setAttribute("aria-label", label);
+    more.setAttribute("data-tip", label);
+    more.title = label;
+    if (focused && focused !== doc.activeElement && contains(pad, focused)) focused.focus?.();
+  }
+
+  // ── "+N": the tiles that do not fit, in a popover of six columns ──────────────
+  const moreSlot = createElement(doc, "span", "ch-quick-slot ch-quick-slot--more");
+  moreSlot.hidden = true;
+  const more = button(doc, { label: "+0", onClick: () => { if (overflowOpen) closeOverflow(true); else openOverflow(); } });
+  more.id = "quick-actions-more";
+  more.className += " ch-quick-action ch-quick-more";
+  more.setAttribute("aria-expanded", "false");
+  more.setAttribute("aria-controls", "quick-actions-overflow");
+  moreSlot.appendChild(more);
+  const overflow = createElement(doc, "div", "ch-quick-overflow");
+  overflow.id = "quick-actions-overflow";
+  overflow.setAttribute("role", "group");
+  overflow.setAttribute("aria-label", i18n.t("quick.overflow.title"));
+  overflow.setAttribute("data-open", "false");
+  overflow.setAttribute("tabindex", "-1");
+  overflow.hidden = true;
+  const overflowGrid = createElement(doc, "div", "ch-quick-overflow__grid ch-quick-actions");
+  overflow.appendChild(overflowGrid);
+  let overflowOpen = false;
+  const overflowRelease: Array<() => void> = [];
+  const onOutside = (event: Event): void => {
+    const target = event.target as Node | null;
+    if (!contains(overflow, target) && !contains(moreSlot, target)) closeOverflow(false);
+  };
+  const onViewportChange = (): void => closeOverflow(false);
+  const watch = (node: EventTarget | null | undefined, type: string, handler: (event: Event) => void, capture: boolean): void => {
+    if (!node?.addEventListener) return;
+    node.addEventListener(type, handler, capture);
+    overflowRelease.push(() => node.removeEventListener?.(type, handler, capture));
+  };
+
+  /** Below "+N", right-aligned with it; above when it would not fit; never past the panel edge. */
+  function placeOverflow(): void {
+    const view = doc.defaultView;
+    const style = overflow.style;
+    if (!view || !style || typeof more.getBoundingClientRect !== "function" || typeof overflow.getBoundingClientRect !== "function") return;
+    style.left = "0px"; style.top = "0px";
+    // A transformed ancestor would move the fixed box: measure where (0, 0) actually lands.
+    const zero = overflow.getBoundingClientRect();
+    const anchor = more.getBoundingClientRect();
+    const edge = 8, gap = 4;
+    const width = zero.width, height = zero.height;
+    const left = Math.max(edge, Math.min(anchor.right - width, view.innerWidth - edge - width));
+    const below = anchor.bottom + gap, above = anchor.top - gap - height;
+    const side = below + height <= view.innerHeight - edge || above < edge ? "below" : "above";
+    const top = side === "below" ? below : above;
+    style.left = `${Math.round(left - zero.left)}px`;
+    style.top = `${Math.round(top - zero.top)}px`;
+    overflow.setAttribute("data-side", side);
+    // The entry grows out of "+N".
+    style.setProperty?.("transform-origin", `${Math.round(anchor.left + anchor.width / 2 - left)}px ${side === "below" ? 0 : Math.round(height)}px`);
+  }
+
+  function openOverflow(): void {
+    if (overflowOpen || moreSlot.hidden) return;
+    overflowOpen = true;
+    overflow.hidden = false;
+    placeOverflow();
+    overflow.setAttribute("data-open", "true");
+    more.setAttribute("aria-expanded", "true");
+    watch(doc, "pointerdown", onOutside, true);
+    watch(doc, "scroll", onViewportChange, true);
+    watch(doc.defaultView, "resize", onViewportChange, false);
+    const first = entries.find(entry => entry.kind === "tile" && entry.slot.parentNode === overflowGrid && !entry.control.disabled);
+    (first?.control ?? overflow).focus?.();
+  }
+
+  function closeOverflow(returnFocus: boolean): void {
+    if (!overflowOpen) return;
+    overflowOpen = false;
+    while (overflowRelease.length) overflowRelease.pop()!();
+    overflow.setAttribute("data-open", "false");
+    overflow.hidden = true;
+    more.setAttribute("aria-expanded", "false");
+    publishStatus(doc, null);
+    if (returnFocus) more.focus?.();
+  }
+
+  overflow.addEventListener("keydown", event => {
+    const key = event as KeyboardEvent;
+    if (key.key !== "Escape") return;
+    key.preventDefault?.(); key.stopPropagation?.();
+    closeOverflow(true);
+  });
+  more.addEventListener("keydown", event => {
+    const key = event as KeyboardEvent;
+    if (key.key === "Escape" && overflowOpen) { key.preventDefault?.(); key.stopPropagation?.(); closeOverflow(true); }
+    if (key.key === "ArrowDown" && !overflowOpen) { key.preventDefault?.(); openOverflow(); }
+  });
+  // Tabbing out of the popover closes it (focus already went elsewhere).
+  overflow.addEventListener("focusout", event => {
+    const next = (event as FocusEvent).relatedTarget;
+    if (next && !contains(overflow, next) && !contains(moreSlot, next)) closeOverflow(false);
+  });
+  more.addEventListener("mouseenter", () => publishStatus(doc, { kind: "point", name: more.getAttribute("aria-label") ?? "", gesture: "" }));
+  more.addEventListener("mouseleave", () => publishStatus(doc, null));
 
   /** Prototype "tileIn": visible tiles rise in one after another on mount and on every filter change. */
   let entryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -494,7 +666,9 @@ export function createQuickActions(doc: Document, options: QuickActionsOptions):
    */
   function syncBusy(): void {
     const local = entries.some(entry => entry.control.getAttribute("data-feedback") === "loading");
-    pad.setAttribute("data-busy", !context.busy ? "false" : local ? "local" : "external");
+    const busy = !context.busy ? "false" : local ? "local" : "external";
+    pad.setAttribute("data-busy", busy);
+    overflowGrid.setAttribute("data-busy", busy);
   }
 
   function applyAvailability(): void {
@@ -570,6 +744,7 @@ export function createQuickActions(doc: Document, options: QuickActionsOptions):
 
   function showKeys(on: boolean): void {
     pad.setAttribute("data-show-keys", String(on || keysLatched));
+    overflowGrid.setAttribute("data-show-keys", String(on || keysLatched));
   }
 
   footer.appendChild(createElement(doc, "span", "ch-quick-recents__label", copy.recents));
@@ -583,10 +758,16 @@ export function createQuickActions(doc: Document, options: QuickActionsOptions):
   renderRail();
   renderRecents();
 
-  // Beside the anchor the strip scrolls sideways: wheel, page buttons and edge fades, no scrollbar.
+  // Beside the anchor the strip shows whole columns only; what does not fit is behind "+N".
   const win = doc.defaultView;
-  const strip = createQuickStrip(doc, browserMotionEnv(win, doc.documentElement), pad, { previous: copy.previous, next: copy.next });
-  disposers.push(() => strip.dispose());
+  const strip = createFittedStrip(doc, browserMotionEnv(win, doc.documentElement), pad, next => {
+    if (next === fit) return;
+    fit = next;
+    applyView();
+  });
+  strip.element.appendChild(overflow);
+  strip.refresh();
+  disposers.push(() => { closeOverflow(false); strip.dispose(); });
 
   /**
    * Onyx Vivo anchor: the 3×3 radios sit in a framed box with crosshair guides and a
