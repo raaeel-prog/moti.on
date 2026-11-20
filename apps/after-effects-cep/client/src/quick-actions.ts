@@ -542,6 +542,7 @@ export function createQuickActions(doc: Document, options: QuickActionsOptions):
     move(moreSlot, pad);
     move(empty, pad);
     moreSlot.hidden = hidden === 0;
+    overflowGrid.style?.setProperty?.("--qa-columns", String(Math.min(6, Math.max(1, hidden))));
     more.textContent = `+${hidden}`;
     const label = i18n.t("quick.overflow.more", { count: hidden });
     more.setAttribute("aria-label", label);

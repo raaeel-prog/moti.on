@@ -1,18 +1,19 @@
 /* Onyx Vivo — Ações rápidas (AE only).
  * Motion reference: the approved "Ações rápidas — conceito premium" prototype.
- * Refined 2026-10-24 at the user's request: soft-square tiles (the anchor frame's
- * corner family), the anchor always at the left, a two-row strip exactly as tall as
- * the anchor that scrolls sideways with the wheel and page buttons, edge fades instead
- * of a scrollbar, no selection counter, no category dots and no cursor spotlight.
+ * Refined 2026-10-24 at the user's request: the anchor always at the left, no selection
+ * counter, no category dots and no cursor spotlight. 2026-11-20: the two-row strip shows
+ * whole columns only with a "+N" popover for the rest (no sideways scroll), 36 px sunken
+ * tiles without abbreviations, names in the rich tip and the status line.
  * Markup from apps/after-effects-cep/client/src/quick-actions.ts, quick-strip.ts and quick-dock.ts.
  * CEP 12 renders with Chromium 99: no color-mix(), :has(), container queries or the
  * individual scale/translate/rotate properties; tints use rgba() with RGB triplets. */
 @property --qa-fade-start { syntax: "<length>"; inherits: false; initial-value: 0px; }
 @property --qa-fade-end { syntax: "<length>"; inherits: false; initial-value: 0px; }
 .ch-quick-dock, .ch-quick-anchor {
-  --qa-tile: 44px;
+  /* 2026-11-20: 36 px tiles (32 px below 340 px), radius 4 px; quick-strip.ts reads --qa-tile. */
+  --qa-tile: 36px;
   --qa-gap: 4px;
-  --qa-radius: 7px;
+  --qa-radius: var(--r-tile, 4px);
   --qa-fade: 24px;
   --qa-well: var(--bg-3);
   --qa-line: var(--line-hairline);
@@ -124,21 +125,31 @@
 .ch-quick-anchorpad__label { width: 100%; height: 16px; overflow: hidden; color: var(--qa-muted); font-size: 11px; line-height: 16px; text-align: center; white-space: nowrap; }
 .ch-quick-anchorpad__name { display: block; overflow: hidden; text-overflow: ellipsis; animation: ch-quick-bump .35s var(--qa-spring); }
 
-/* ── Strip: two rows of soft-square tiles, exactly as tall as the anchor frame
- *    (2 × 44 + 4 = 92 px). Each row mirrors a keyboard row, so the strip is
- *    ceil(n / 2) columns wide (quick-actions.ts sets --qa-columns). It scrolls
- *    sideways without a scrollbar; the sides with more tiles fade out
- *    (quick-strip.ts sets data-overflow-start/end) and show a page button on hover. */
-.ch-quick-strip { position: relative; flex: 1 1 auto; min-width: 0; }
+/* ── Strip: two rows of whole columns beside the anchor (2026-11-20). quick-strip.ts
+ *    measures the strip (ResizeObserver) and quick-actions.ts sets --qa-columns to
+ *    max(2, floor((width + 4) / (tile + 4))); when the tiles do not fit, the last cell is
+ *    the "+N" tile that opens the rest in a popover. Never a horizontal scroll, fade or
+ *    page button here: those (.ch-quick-strip__page below) belong to the ease strip. */
+.ch-quick-strip { position: relative; flex: 1 1 0; min-width: 0; }
 .ch-shell[data-layout="library"] .ch-quick-anchor .ch-quick-actions,
 .ch-quick-anchor .ch-quick-actions { --qa-columns: 9; flex: none; display: grid; grid-template-columns: repeat(var(--qa-columns), var(--qa-tile)); grid-template-rows: repeat(2, var(--qa-tile)); grid-auto-rows: var(--qa-tile); gap: var(--qa-gap);
-  justify-content: start; align-content: start; min-height: 0; max-width: none; min-width: 0; margin: -2px; padding: 2px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--qa-fade-start), #000 calc(100% - var(--qa-fade-end)), transparent 100%);
-  transition: --qa-fade-start .25s var(--qa-glide), --qa-fade-end .25s var(--qa-glide); }
-.ch-quick-anchor .ch-quick-actions::-webkit-scrollbar { display: none; width: 0; height: 0; }
-.ch-quick-strip[data-overflow-start="true"] .ch-quick-actions { --qa-fade-start: var(--qa-fade); }
-.ch-quick-strip[data-overflow-end="true"] .ch-quick-actions { --qa-fade-end: var(--qa-fade); }
+  justify-content: start; align-content: start; min-height: 0; max-width: 100%; min-width: 0; margin: 0; padding: 0; overflow: visible; }
 .ch-quick-anchor .ch-quick-actions[data-empty="true"] { display: flex; align-items: center; min-height: calc(var(--qa-tile) * 2 + var(--qa-gap)); }
+
+/* "+N" popover: the leftover tiles in up to six columns, opened from "+N" (quick-actions.ts places it). */
+.ch-quick-overflow { position: fixed; z-index: 40; left: 0; top: 0; box-sizing: border-box; padding: 6px; border: 1px solid var(--line-hairline); border-radius: var(--r-pop, 6px); background: var(--surface-raised); box-shadow: var(--ae-shadow-popover); outline: 0; }
+.ch-quick-overflow[hidden] { display: none; }
+.ch-quick-overflow[data-open="true"] { animation: ch-quick-pop-in 140ms cubic-bezier(.2, .8, .2, 1) both; }
+.ch-shell[data-layout="library"] .ch-quick-anchor .ch-quick-overflow__grid.ch-quick-actions,
+.ch-quick-anchor .ch-quick-overflow__grid.ch-quick-actions { --qa-columns: 6; grid-template-rows: none; grid-auto-rows: var(--qa-tile); }
+@keyframes ch-quick-pop-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes ch-quick-pop-fade { from { opacity: 0; } to { opacity: 1; } }
+/* Reduced motion (internal toggle or system): opacity only, 90 ms. Beats the blanket
+ * "animation: none" of motion.css and the dock's own reduced-motion rule. */
+[data-reduced-motion="true"] .ch-quick-anchor .ch-quick-overflow[data-open="true"] { animation: ch-quick-pop-fade 90ms linear both !important; }
+@media (prefers-reduced-motion: reduce) {
+  .ch-quick-dock .ch-quick-anchor .ch-quick-overflow[data-open="true"], .ch-quick-anchor .ch-quick-overflow[data-open="true"] { animation: ch-quick-pop-fade 90ms linear both !important; }
+}
 .ch-library-refined .ch-quick-strip__page, .ch-quick-strip__page { position: absolute; top: 50%; z-index: 5; width: 24px; min-width: 24px; height: 32px; min-height: 32px; margin: -16px 0 0; padding: 0;
   display: grid; place-items: center; border: 1px solid var(--qa-line); border-radius: 6px; background: var(--bg-2); box-shadow: 0 2px 6px -2px rgba(0, 0, 0, .6); color: var(--txt-2); cursor: pointer;
   opacity: 0; pointer-events: none; transition: opacity .2s, color .2s, transform .3s var(--qa-spring); }
@@ -159,18 +170,24 @@
 /* Behaviour, not look: a disabled button gets no mouse events in Chromium 99, so the slot
  * takes them — its hover shows the reason (rich-tooltip.ts) and its click the refusal. */
 .ch-quick-actions .ch-quick-action:disabled { pointer-events: none; }
+/* Tile (2026-11-20): 36 × 36 (32 × 32 below 340 px), 16 px icon, radius 4, no abbreviation.
+ * Rest on the sunken surface, hover --surface-hover, pressed --surface-active, focus ring
+ * --focus-ring. The name lives in the rich tip (rich-tooltip.ts) and the status line. */
 .ch-shell .ch-quick-actions .ch-quick-action, .ch-quick-actions .ch-quick-action {
-  position: relative; overflow: hidden; isolation: isolate; box-sizing: border-box; width: var(--qa-tile); min-width: var(--qa-tile); height: var(--qa-tile); min-height: var(--qa-tile); padding: 0 1px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  border: 1px solid var(--qa-line); border-radius: var(--qa-radius); color: #CFCFCF; background: var(--bg-2);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03); font-size: 10px; font-weight: 600;
-  transition: transform .22s var(--qa-spring), background-color .2s, opacity .25s, filter .25s, border-color .2s, box-shadow .25s, color .2s; }
-:root[data-theme="light"] .ch-quick-actions .ch-quick-action { color: var(--txt-1); }
+  position: relative; overflow: hidden; isolation: isolate; box-sizing: border-box; width: var(--qa-tile); min-width: var(--qa-tile); height: var(--qa-tile); min-height: var(--qa-tile); padding: 0;
+  display: grid; place-items: center;
+  border: 0; border-radius: var(--qa-radius); color: var(--text-secondary); background: var(--surface-deep);
+  box-shadow: none; font-size: 11px; font-weight: 600;
+  transition: transform 90ms ease-out, background-color 90ms, opacity .25s, filter .25s, color 90ms; }
 .ch-quick-actions .ch-quick-action > .ch-icon { position: relative; z-index: 2; width: 16px; height: 16px; color: inherit; --icon-color: currentColor; transition: transform .4s var(--qa-spring), opacity .2s; }
-.ch-quick-actions .ch-quick-action:hover:not(:disabled) > .ch-icon, .ch-quick-actions .ch-quick-action:focus-visible > .ch-icon { --icon-color: var(--qa-cat); }
+.ch-quick-actions .ch-quick-action:hover:not(:disabled) > .ch-icon, .ch-quick-actions .ch-quick-action:focus-visible > .ch-icon { --icon-color: var(--qa-cat, currentColor); }
 .ch-quick-action__label { position: relative; z-index: 2; line-height: 1; letter-spacing: .03em; transition: opacity .2s, transform .3s, color .2s; }
-.ch-quick-actions .ch-quick-action:hover:not(:disabled) { color: #fff; transform: translateY(-1px); border-color: var(--line-strong, var(--qa-line)); background: var(--bg-3); box-shadow: 0 2px 6px -2px rgba(0, 0, 0, .6); }
-.ch-quick-actions .ch-quick-action:active:not(:disabled), .ch-quick-actions .ch-quick-action[data-pressed="true"] { transform: scale(.92); transition-duration: .08s; }
+.ch-quick-actions .ch-quick-action:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-hover); }
+.ch-quick-actions .ch-quick-action:focus-visible { outline: var(--focus-ring); outline-offset: 1px; color: var(--text-primary); }
+.ch-quick-actions .ch-quick-action:active:not(:disabled), .ch-quick-actions .ch-quick-action[data-pressed="true"] { background: var(--surface-active); transform: scale(.96); }
+/* "+N": same tile, the count in 11 px; pressed while its popover is open. */
+.ch-quick-actions .ch-quick-more { font-size: 11px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.ch-quick-actions .ch-quick-more[aria-expanded="true"] { background: var(--surface-active); color: var(--text-primary); }
 .ch-quick-actions .ch-quick-action:disabled { opacity: .35; filter: grayscale(1); }
 .ch-quick-actions[data-busy="local"] .ch-quick-action:disabled { opacity: .5; filter: none; }
 .ch-quick-actions[data-busy="external"] .ch-quick-action:disabled { opacity: 1; filter: none; cursor: progress; }
@@ -194,7 +211,7 @@
 .ch-quick-action > .ch-tile-ripple[data-active="true"] { animation: ch-quick-ripple .6s var(--qa-glide) forwards; }
 @keyframes ch-quick-ripple { from { transform: scale(0); opacity: 1; } to { transform: scale(1); opacity: 0; } }
 .ch-quick-action__ring { position: absolute; inset: -60%; z-index: 0; background: conic-gradient(from 0deg, transparent 0 55%, var(--qa-cat) 85%, #fff 100%); opacity: 0; transition: opacity .2s; pointer-events: none; }
-.ch-quick-action__cover { position: absolute; inset: 1.5px; z-index: 1; border-radius: calc(var(--qa-radius) - 1.5px); background: var(--bg-2); opacity: 0; transition: opacity .2s; pointer-events: none; }
+.ch-quick-action__cover { position: absolute; inset: 1.5px; z-index: 1; border-radius: calc(var(--qa-radius) - 1.5px); background: var(--surface-deep); opacity: 0; transition: opacity .2s; pointer-events: none; }
 .ch-quick-action[data-running="true"] .ch-quick-action__ring { opacity: 1; animation: ch-quick-spin .75s linear infinite; }
 .ch-quick-action[data-running="true"] .ch-quick-action__cover { opacity: 1; }
 .ch-quick-action[data-running="true"] > .ch-icon { animation: ch-quick-breathe .75s ease-in-out infinite; }
@@ -227,7 +244,10 @@
 .ch-quick-keys-toggle[aria-pressed="true"] { color: var(--qa-accent); background: rgba(var(--qa-accent-rgb), .12); }
 
 /* ── Narrow docks: the layout never reflows — the anchor keeps its place and the strip
- *    beside it shows fewer columns (wheel, page buttons). Only text labels go. */
+ *    beside it shows fewer whole columns, the rest behind "+N". Only text labels go. */
+@media (max-width: 339.98px) {
+  .ch-quick-dock, .ch-quick-anchor { --qa-tile: 32px; }
+}
 @media (max-width: 359.98px) {
   .ch-quick-recents__action > .ch-quick-action__label, .ch-quick-keys-toggle__label { display: none; }
 }

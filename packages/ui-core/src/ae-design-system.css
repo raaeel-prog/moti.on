@@ -237,9 +237,13 @@
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-quick-tabs__tab:hover,
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-quick-tabs__tab[aria-pressed="true"] { color:var(--ds-text); }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-quick-anchorpad__frame { border-radius:var(--radius-large); background:var(--ds-sunken); box-shadow:inset 0 0 0 1px var(--ds-line); border-color:transparent; }
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-quick-slot > .ch-quick-action { border-radius:var(--radius-medium); background:var(--ds-raised); box-shadow:inset 0 0 0 1px var(--ds-line), var(--ds-edge); border-color:transparent; color:var(--ds-text-2); }
+/* Ladrilho das ações rápidas (2026-11-20): rebaixado em repouso, hover e pressionado do tema do host, anel de foco. */
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-quick-slot > .ch-quick-action { border-radius:var(--radius-medium); background:var(--ds-sunken); box-shadow:none; border-color:transparent; color:var(--ds-text-2); }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-quick-slot > .ch-quick-action:hover:not(:disabled):not([aria-disabled="true"]) { background:var(--ds-hover); color:var(--ds-text); }
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-quick-slot > .ch-quick-action:active:not(:disabled):not([aria-disabled="true"]) { background:var(--ds-sunken); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-quick-slot > .ch-quick-action:active:not(:disabled):not([aria-disabled="true"]),
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-quick-slot > .ch-quick-action[data-pressed="true"],
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-quick-slot > .ch-quick-more[aria-expanded="true"] { background:var(--ds-active); color:var(--ds-text); }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-quick-slot > .ch-quick-action:focus-visible { outline:var(--focus-ring); outline-offset:1px; box-shadow:none; color:var(--ds-text); }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-quick-slot > .ch-quick-action:hover:not([aria-disabled="true"]) .ch-icon { --icon-color:var(--ds-value); }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-quick-slot[data-disabled="true"] > .ch-quick-action { color:var(--ds-text-off); }
 
