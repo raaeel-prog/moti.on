@@ -221,9 +221,13 @@ test('the anchor puck follows the applied point even though the owner disables t
   const { cells, frame, label } = anchorFixture(t);
   assert.equal(frame.getAttribute('data-point'), '4', 'starts at the centre');
   assert.equal(label.children[0].textContent, 'Centro');
+  assert.match(cells[4].className, /\bis-active\b/, 'centre is marked for the #54A3F6 dot');
+  assert.equal(cells.filter(cell => /\bis-active\b/.test(cell.className)).length, 1);
   cells[2].click();
   assert.equal(frame.getAttribute('data-point'), '2');
   assert.equal(label.children[0].textContent, 'Superior direito');
+  assert.match(cells[2].className, /\bis-active\b/);
+  assert.equal(/\bis-active\b/.test(cells[4].className), false);
   const ping = frame.children.find(node => node.className === 'ch-quick-anchorpad__ping');
   assert.ok(ping, 'a ring fires at the destination');
   t.mock.timers.tick(800);

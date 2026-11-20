@@ -793,6 +793,13 @@ export function createQuickActions(doc: Document, options: QuickActionsOptions):
     const place = (index: number, ping: boolean): void => {
       const cell = cells[index];
       if (!cell) return;
+      // Keep is-active in sync with the current point so the 6 px #54A3F6 dot
+      // shows without the old puck (hidden in dir. A).
+      cells.forEach((entry, i) => {
+        const names = String(entry.className || "").split(/\s+/).filter(name => name && name !== "is-active");
+        if (i === index) names.push("is-active");
+        entry.className = names.join(" ");
+      });
       const column = index % 3, row = Math.floor(index / 3);
       frame.setAttribute("data-point", String(index));
       frame.style?.setProperty?.("--anchor-col", String(column));
