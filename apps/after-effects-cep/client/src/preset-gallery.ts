@@ -952,8 +952,11 @@ export function createPresetGallery(doc: Document, options: {
     shortcut.dataset.focusKey = `discover.${id}`;
     discovery.appendChild(shortcut);
   }
+  /** Os atalhos repetem as pastas de 1º nível da árvore: só aparecem com a árvore
+   * recolhida no botão de pasta, e só onde sobra altura para eles (doca alta). */
+  const DISCOVERY_MIN_STAGE = 480;
   function syncDiscovery(): void {
-    discovery.hidden = !(discoveryAvailable() && stage.clientHeight >= 220);
+    discovery.hidden = !(discoveryAvailable() && folderPicker.active() && stage.clientHeight >= DISCOVERY_MIN_STAGE);
     for (const shortcut of Array.from(discovery.getElementsByTagName("button")))
       shortcut.setAttribute("aria-pressed", String(shortcut.dataset.category === nav.category));
   }

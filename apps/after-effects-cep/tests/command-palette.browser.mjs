@@ -154,6 +154,8 @@ try {
   await search(page).press("Shift+Enter");
   await page.locator('.ch-preset-card[data-selected="true"]').filter({ hasText: "Arco coreografado" }).waitFor();
   await browseSearch(page).fill("");
+  // Os atalhos repetem as pastas da árvore: só aparecem com a árvore recolhida (doca estreita e alta).
+  await page.setViewportSize({ width: 300, height: 720 });
   await page.locator('.ch-preset-discovery').getByRole("button", { name: "Tipografia" }).waitFor();
   await page.setViewportSize({ width: 210, height: 250 });
   await page.locator('.ch-preset-discovery').waitFor({ state: "hidden" });
@@ -175,8 +177,11 @@ try {
   });
   await capture(page, "depois-previa-tipografia-720x580");
   await browseSearch(page).fill("");
-  await page.locator('.ch-preset-discovery').getByRole("button", { name: "Motion", exact: true }).click();
-  await capture(page, "depois-descoberta-720x580");
+  // Com a árvore visível (720 × 580) os atalhos somem; voltam na doca estreita e alta.
+  await page.locator('.ch-preset-discovery').waitFor({ state: "hidden" });
+  await page.setViewportSize({ width: 300, height: 720 });
+  await page.locator('.ch-preset-discovery').getByRole("button", { name: "Animações", exact: true }).click();
+  await capture(page, "depois-descoberta-300x720");
   await browseSearch(page).fill("Separação RGB premium");
   const rgb = page.locator('[data-preview-id="builtin.motion.premium-rgb-split"]');
   await rgb.locator('path[d^="M-52-30"]').first().waitFor();
