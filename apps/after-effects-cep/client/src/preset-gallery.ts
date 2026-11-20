@@ -120,7 +120,7 @@ export function settleFieldLabels(kind: string, locale: string): [keyof Pick<Mot
   ];
 }
 let gallerySequence = 0;
-/** Largura inicial da árvore de pastas no estudo do design system (150 px), arrastável de 120 até o limite. */
+/** Largura-base da árvore (150 px). A partir de 480 px de painel, o padrão vai até 200 px (36% da largura). Abaixo de 480 px o mínimo arrastável é 120 px. */
 const DEFAULT_TREE_WIDTH = 150;
 type Curve = { x1: number; y1: number; x2: number; y2: number };
 // Built-in generators reuse the package's preset metadata. Their preview is a
@@ -1165,13 +1165,16 @@ export function createPresetGallery(doc: Document, options: {
   referenceFooter.appendChild(libraryActions.element);referenceFooter.appendChild(footer);referenceFooter.appendChild(actions);
   element.appendChild(sidebar);element.appendChild(splitter);element.appendChild(scroll);element.appendChild(referenceFooter);element.appendChild(settingsPanel);
   let splitterHeld=false;
+  const panelWidth = (): number => element.getBoundingClientRect().width || window.innerWidth || 506;
+  const sidebarDefault = (): number => panelWidth() >= 480 ? Math.max(150, Math.min(panelWidth() * 0.36, 200)) : DEFAULT_TREE_WIDTH;
+  const sidebarMin = (): number => panelWidth() >= 480 ? 150 : 120;
   const sidebarLimit=():number=>Math.max(120,Math.min(320,(element.getBoundingClientRect().width||window.innerWidth||506)-160));
   function setSidebar(value:number,persist=false):void {
     // The grid beside the sidebar changes width with it.
     cardPixels=0;
-    const width=Math.round(Math.max(120,Math.min(sidebarLimit(),value)));nav.sidebarWidth=width;
+    const width=Math.round(Math.max(sidebarMin(),Math.min(sidebarLimit(),value)));nav.sidebarWidth=width;
     element.setAttribute("data-narrow-tree",String(width<140));
-    element.style.setProperty("--preset-sidebar-width",width+"px");splitter.setAttribute("aria-valuemin","120");splitter.setAttribute("aria-valuemax",String(sidebarLimit()));splitter.setAttribute("aria-valuenow",String(width));
+    element.style.setProperty("--preset-sidebar-width",width+"px");splitter.setAttribute("aria-valuemin",String(sidebarMin()));splitter.setAttribute("aria-valuemax",String(sidebarLimit()));splitter.setAttribute("aria-valuenow",String(width));
     if(persist)options.preferences.setGallery?.({sidebarWidth:width});
   }
   // Pointer capture keeps the drag when the cursor leaves the panel; the grip settles on the
@@ -1196,11 +1199,11 @@ export function createPresetGallery(doc: Document, options: {
   splitter.addEventListener("mousedown",event=>{if(splitterHeld)return;holdSplitter(event as MouseEvent);doc.addEventListener("mousemove",moveSplitter);doc.addEventListener("mouseup",stopSplitter);window.addEventListener("blur",stopSplitter);});
   splitter.addEventListener("dblclick",()=>{
     closeEditor();sidebarTween?.cancel();
-    sidebarTween=tween(motionEnv,{from:nav.sidebarWidth??DEFAULT_TREE_WIDTH,to:DEFAULT_TREE_WIDTH,durationMs:aeMotionMs("height-glide"),curve:aeMotionCurve("height-glide"),onUpdate:value=>setSidebar(value),onDone:()=>setSidebar(DEFAULT_TREE_WIDTH,true)});
+    sidebarTween=tween(motionEnv,{from:nav.sidebarWidth??sidebarDefault(),to:sidebarDefault(),durationMs:aeMotionMs("height-glide"),curve:aeMotionCurve("height-glide"),onUpdate:value=>setSidebar(value),onDone:()=>setSidebar(sidebarDefault(),true)});
   });
-  splitter.addEventListener("keydown",event=>{if(!["ArrowLeft","ArrowRight","Home","End"].includes(event.key))return;event.preventDefault();closeEditor();setSidebar(event.key==="Home"?120:event.key==="End"?sidebarLimit():(nav.sidebarWidth??DEFAULT_TREE_WIDTH)+(event.key==="ArrowLeft"?-8:8),true);});
+  splitter.addEventListener("keydown",event=>{if(!["ArrowLeft","ArrowRight","Home","End"].includes(event.key))return;event.preventDefault();closeEditor();setSidebar(event.key==="Home"?sidebarMin():event.key==="End"?sidebarLimit():(nav.sidebarWidth??sidebarDefault())+(event.key==="ArrowLeft"?-8:8),true);});
   // Sized by resize(): a narrow dock (folder picker) leaves the saved width for when the panel widens.
-  const sidebarWidth=():number=>nav.sidebarWidth??options.preferences.snapshot().gallery?.sidebarWidth??DEFAULT_TREE_WIDTH;
+  const sidebarWidth=():number=>nav.sidebarWidth??options.preferences.snapshot().gallery?.sidebarWidth??sidebarDefault();
 
   registerLayoutProperties(doc);
   grid.style.setProperty("--preview-size",`${size.value}px`);
