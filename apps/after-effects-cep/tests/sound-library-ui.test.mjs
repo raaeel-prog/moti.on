@@ -56,3 +56,68 @@ test("English sessions read English names", t => {
   const f = fixture(t, { locale: "en-US", family: "boom" });
   assert.ok(f.all("span").some(s => s.textContent === "Trailer boom"));
 });
+
+// Barra de áudio (2026-11-18).
+const peaksBuilt = await build({ entryPoints: [fileURLToPath(new URL("../client/src/sound-waveform.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", write: false });
+const wave = await import(`data:text/javascript;base64,${Buffer.from(peaksBuilt.outputFiles[0].text).toString("base64")}`);
+const { renderSoundPeaksModule } = await import("../../../scripts/generate-sound-peaks.mjs");
+const { readFile } = await import("node:fs/promises");
+
+test("the committed waveform peaks match the synthesized sounds", async () => {
+  const committed = await readFile(new URL("../client/src/generated/sound-peaks.ts", import.meta.url), "utf8");
+  assert.equal(committed.replace(/\r\n/g, "\n"), renderSoundPeaksModule(), "run node scripts/generate-sound-peaks.mjs");
+  for (const sound of MOTION_SOUNDS) {
+    const data = wave.soundPeaksFor(sound.id);
+    assert.ok(data && data.durationMs > 0 && data.peaks.length === 48, sound.id);
+    assert.ok(data.peaks.every(p => p >= 0 && p <= 100) && Math.max(...data.peaks) > 50, `${sound.id} has a visible shape`);
+  }
+});
+
+test("every sound row shows its waveform and duration", t => {
+  const f = fixture(t, { family: "swoosh" });
+  const row = f.byId("button", "sound-whoosh");
+  const bars = row.getElementsByTagName("span").filter(s => s.className === "ch-wave__bar");
+  assert.equal(bars.length, 48);
+  assert.ok(row.getElementsByTagName("span").some(s => s.textContent === "0,62 s"));
+  assert.equal(wave.formatSoundDuration(620, false), "0.62 s");
+});
+
+test("the inspector bar follows playback, seeks on keys and stops on a second listen", t => {
+  const doc = createCepDocument(), audio = { currentTime: 0, duration: .62, paused: false, ended: false, pause() { this.paused = true; }, play() { this.paused = false; } };
+  const frames = [];
+  doc.defaultView = { requestAnimationFrame: fn => { frames.push(fn); return frames.length; } };
+  const library = ui.createSoundLibrary(doc, { i18n: createI18n({ locale: "pt-BR" }), family: "swoosh", context: () => ({ isComposition: true }),
+    execute: async () => ok, error: () => "erro", play: () => audio });
+  t.after(() => library.dispose());
+  library.element.getElementsByTagName("button").find(b => b.id === "sound-whoosh").click();
+  const big = library.element.getElementsByTagName("span").find(s => s.className.includes("ch-wave--inspector"));
+  assert.equal(big.getAttribute("role"), "slider");
+  audio.currentTime = .31; frames.shift()();
+  assert.equal(big.dataset.playing, "true");
+  assert.equal(big.getAttribute("aria-valuenow"), "50");
+  assert.equal(big.getElementsByTagName("span").filter(s => s.dataset.played === "true").length, 24, "half of the bars are played");
+  big.emit("keydown", { key: "End", preventDefault() {} });
+  assert.equal(audio.currentTime, .62);
+  const listen = library.element.getElementsByTagName("button").find(b => b.id === "sounds-listen" || b.closest?.("#sounds-listen"));
+  (listen ?? library.element.getElementsByTagName("button").find(b => b.textContent === "Ouvir")).click();
+  assert.equal(audio.paused, true, "a second listen stops the sound");
+  assert.equal(big.dataset.playing, "false");
+});
+
+test("the cursor keeps going while the file is still loading (duration not known yet)", t => {
+  const doc = createCepDocument(), audio = { currentTime: 0, duration: NaN, paused: false, ended: false, pause() { this.paused = true; }, play() { this.paused = false; } };
+  const frames = [];
+  doc.defaultView = { requestAnimationFrame: fn => { frames.push(fn); return frames.length; } };
+  const library = ui.createSoundLibrary(doc, { i18n: createI18n({ locale: "pt-BR" }), family: "swoosh", context: () => ({ isComposition: true }),
+    execute: async () => ok, error: () => "erro", play: () => audio });
+  t.after(() => library.dispose());
+  library.element.getElementsByTagName("button").find(b => b.id === "sound-whoosh").click();
+  const big = library.element.getElementsByTagName("span").find(s => s.className.includes("ch-wave--inspector"));
+  frames.shift()();
+  assert.equal(big.dataset.playing, "true", "loading is not stopped");
+  assert.equal(frames.length, 1, "the loop keeps running");
+  audio.currentTime = .31; frames.shift()();
+  assert.equal(big.getAttribute("aria-valuenow"), "50", "the build-time duration stands in");
+  audio.ended = true; frames.shift()();
+  assert.equal(big.dataset.playing, "false"); assert.equal(frames.length, 0, "the loop ends with the sound");
+});

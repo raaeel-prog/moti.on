@@ -8,6 +8,17 @@ import {
   type CommandResponse, type MotionSound, type SoundFamily, type SoundInsertArgs
 } from "@motion/contracts";
 import { createActionButton, createElement, type ActionButtonController, type I18n } from "@motion/ui-core";
+import { createSoundWaveform, formatSoundDuration, soundPeaksFor, type SoundWaveform } from "./sound-waveform.js";
+
+/** O que o painel precisa de um som tocando (um HTMLAudioElement serve). */
+export interface SoundPlayback {
+  currentTime: number;
+  readonly duration: number;
+  readonly paused: boolean;
+  readonly ended: boolean;
+  pause(): void;
+  play(): unknown;
+}
 
 export interface SoundLibraryOptions {
   i18n: I18n;
@@ -18,7 +29,8 @@ export interface SoundLibraryOptions {
   execute(args: SoundInsertArgs): Promise<CommandResponse>;
   error(response: CommandResponse): string;
   busy?(value: boolean): void;
-  play?(sound: string): void;
+  /** Toca o som; devolver a reprodução liga o cursor da barra de áudio. */
+  play?(sound: string): SoundPlayback | void;
 }
 export interface SoundLibrary { element: HTMLElement; actions: HTMLElement; refresh(): void; dispose(): void }
 
@@ -45,6 +57,46 @@ export function createSoundLibrary(doc: Document, options: SoundLibraryOptions):
   const status = createElement(doc, "div", "ch-sounds-status"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite");
   element.appendChild(list); element.appendChild(inspector); element.appendChild(status);
   let draft: Draft | null = null, running = false, alive = true, message = "";
+  // Reprodução atual: o cursor anda na linha do som e na barra grande do inspetor.
+  let playback: SoundPlayback | null = null, playingId = "", frame = 0;
+  const rowWaves = new Map<string, SoundWaveform>();
+  let inspectorWave: SoundWaveform | null = null, playButton: ActionButtonController | null = null;
+  const view = doc.defaultView;
+  const raf = (fn: () => void): number => view?.requestAnimationFrame ? view.requestAnimationFrame(fn) : 0;
+
+  function paint(): void {
+    // Enquanto o arquivo carrega, duration ainda é NaN: vale a duração conhecida do build,
+    // e o laço continua até o som terminar ou ser parado.
+    const known = (soundPeaksFor(playingId)?.durationMs ?? 0) / 1000;
+    const length = playback && playback.duration > 0 && Number.isFinite(playback.duration) ? playback.duration : known;
+    const active = Boolean(playback && !playback.ended && !(playback.paused && playback.currentTime > 0));
+    const fraction = active && length > 0 ? Math.min(1, playback!.currentTime / length) : null;
+    rowWaves.get(playingId)?.setProgress(fraction);
+    if (draft?.soundId === playingId) inspectorWave?.setProgress(fraction);
+    playButton?.button.setAttribute("aria-pressed", String(fraction !== null));
+    if (fraction === null) { frame = 0; return; }
+    frame = raf(paint);
+  }
+  function stopPlayback(): void {
+    if (playback && !playback.paused) playback.pause();
+    rowWaves.get(playingId)?.setProgress(null); inspectorWave?.setProgress(null);
+    playback = null; playingId = ""; frame = 0;
+    playButton?.button.setAttribute("aria-pressed", "false");
+  }
+  function startPlayback(id: string, fraction = 0): void {
+    if (playback && playingId === id && !playback.ended) {
+      playback.currentTime = fraction * (playback.duration || 0);
+      if (playback.paused) playback.play();
+    } else {
+      stopPlayback();
+      const started = options.play?.(id);
+      if (started && typeof started === "object") {
+        playback = started; playingId = id;
+        if (fraction > 0) { try { started.currentTime = fraction * ((soundPeaksFor(id)?.durationMs ?? 0) / 1000); } catch { /* ainda carregando */ } }
+      }
+    }
+    if (playback && !frame) frame = raf(paint);
+  }
 
   const reason = (): string | null => {
     if (running) return pt ? "Inserindo…" : "Inserting…";
@@ -78,7 +130,7 @@ export function createSoundLibrary(doc: Document, options: SoundLibraryOptions):
   function choose(sound: MotionSound): void {
     if (running) return;
     draft = draft?.soundId === sound.id ? null : { soundId: sound.id, reverse: false, gainDb: 0 };
-    if (draft) options.play?.(sound.id);
+    if (draft) startPlayback(sound.id); else stopPlayback();
     message = "";
     for (const row of Array.from(list.getElementsByTagName("button"))) row.setAttribute("aria-selected", String(row.dataset["sound"] === draft?.soundId));
     renderInspector(); updateChrome();
@@ -88,12 +140,16 @@ export function createSoundLibrary(doc: Document, options: SoundLibraryOptions):
     button.type = "button"; button.id = `sound-${sound.id}`; button.dataset["sound"] = sound.id;
     button.setAttribute("role", "option"); button.setAttribute("aria-selected", String(draft?.soundId === sound.id));
     button.appendChild(createElement(doc, "span", "ch-sounds-row__name", sound.name[locale]));
-    button.appendChild(createElement(doc, "span", "ch-sounds-row__family", SOUND_FAMILY_NAMES[sound.family][locale]));
+    const wave = createSoundWaveform(doc, sound.id, { size: "row" });
+    rowWaves.set(sound.id, wave); button.appendChild(wave.element);
+    const peaks = soundPeaksFor(sound.id);
+    button.appendChild(createElement(doc, "span", "ch-sounds-row__family", peaks ? formatSoundDuration(peaks.durationMs, pt) : SOUND_FAMILY_NAMES[sound.family][locale]));
+    button.title = `${sound.name[locale]} · ${SOUND_FAMILY_NAMES[sound.family][locale]}`;
     button.addEventListener("click", () => choose(sound));
     return button;
   }
   function renderList(): void {
-    clear(list);
+    clear(list); rowWaves.clear();
     const sounds = visibleSounds(locale, options.family, options.query);
     if (!sounds.length) { list.appendChild(createElement(doc, "p", "ch-sounds-empty", pt ? "Nenhum som encontrado." : "No sounds found.")); return; }
     for (const family of SOUND_FAMILIES) {
@@ -105,11 +161,21 @@ export function createSoundLibrary(doc: Document, options: SoundLibraryOptions):
   }
   function renderInspector(): void {
     clear(inspector);
-    inspector.hidden = !draft;
+    inspector.hidden = !draft; inspectorWave = null; playButton = null;
     if (!draft) return;
     const own = draft;
-    const listen = createActionButton(doc, { id: "sounds-listen", label: pt ? "Ouvir" : "Listen", variant: "tertiary", onPress: () => options.play?.(own.soundId) });
-    if (options.play) inspector.appendChild(listen.element);
+    if (options.play) {
+      const player = createElement(doc, "div", "ch-sounds-player");
+      const listen = createActionButton(doc, { id: "sounds-listen", label: pt ? "Ouvir" : "Listen", variant: "tertiary", onPress: () => {
+        if (playback && playingId === own.soundId && !playback.paused && !playback.ended) stopPlayback(); else startPlayback(own.soundId);
+      } });
+      playButton = listen; player.appendChild(listen.element);
+      inspectorWave = createSoundWaveform(doc, own.soundId, { size: "inspector", label: pt ? "Posição do som" : "Sound position", onSeek: fraction => startPlayback(own.soundId, fraction) });
+      player.appendChild(inspectorWave.element);
+      const peaks = soundPeaksFor(own.soundId);
+      if (peaks) player.appendChild(createElement(doc, "span", "ch-sounds-player__time", formatSoundDuration(peaks.durationMs, pt)));
+      inspector.appendChild(player);
+    }
     const reverse = createElement(doc, "label", "ch-sounds-option");
     const box = doc.createElement("input"); box.type = "checkbox"; box.id = "sounds-reverse"; box.checked = own.reverse;
     box.addEventListener("change", () => { own.reverse = box.checked; updateChrome(); });
@@ -125,5 +191,5 @@ export function createSoundLibrary(doc: Document, options: SoundLibraryOptions):
   }
 
   renderList(); renderInspector(); updateChrome();
-  return { element, actions, refresh: () => { if (alive && !running) updateChrome(); }, dispose: () => { alive = false; } };
+  return { element, actions, refresh: () => { if (alive && !running) updateChrome(); }, dispose: () => { alive = false; stopPlayback(); } };
 }
