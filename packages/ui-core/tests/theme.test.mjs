@@ -4,7 +4,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolveColorToken, themeDeclarations } from "../../ui-tokens/scripts/check-contrast.mjs";
 
-const css = await readFile(new URL("../src/theme.css", import.meta.url), "utf8");
+const [css, tokens] = await Promise.all([
+  readFile(new URL("../src/base.css", import.meta.url), "utf8"),
+  readFile(new URL("../../ui-tokens/src/tokens.css", import.meta.url), "utf8")
+]);
 
 function hexToRgb(hex) {
   const value = Number.parseInt(hex.slice(1), 16);
@@ -30,7 +33,7 @@ function contrast(foreground, background) {
 function colorToken(name, theme = "dark") {
   // A whole-file hex search mixed dark literal status colors with light
   // surfaces whenever the dark declaration used var(). Resolve one theme.
-  return resolveColorToken(themeDeclarations(css, theme), name);
+  return resolveColorToken(themeDeclarations(tokens, theme), name);
 }
 
 test("root e shell permitem que somente o conteudo role em painel baixo", () => {

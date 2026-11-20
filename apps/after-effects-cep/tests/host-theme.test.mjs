@@ -4,7 +4,7 @@ import {build} from 'esbuild';
 import {fileURLToPath} from 'node:url';
 import {createFakeDocument} from '../../../packages/ui-core/tests/fake-dom.mjs';
 const code=await build({entryPoints:[fileURLToPath(new URL('../client/src/host-theme.ts',import.meta.url))],bundle:true,format:'esm',platform:'node',write:false});
-const {hostThemeTokens,createHostTheme,themeContrast}=await import('data:text/javascript;base64,'+Buffer.from(code.outputFiles[0].text).toString('base64'));
+const {accentTokens,hostThemeTokens,createHostTheme,themeContrast}=await import('data:text/javascript;base64,'+Buffer.from(code.outputFiles[0].text).toString('base64'));
 const gray=n=>({red:n,green:n,blue:n});
 test('native RGB is exact, sRGB takes precedence, theme changes do not render, listeners clean up',()=>{
  const values=new Map(),attrs=new Map();let listener,removed,mode='host',skin={panelBackgroundColorSRGB:{color:gray(50)},panelBackgroundColor:{color:gray(66)}};
@@ -36,8 +36,27 @@ test('AE appearance migration defaults to host and retains manual choice; Premie
  const doc=createFakeDocument(),root=doc.createElement('html');let saved=JSON.stringify({version:1,theme:'light',favorites:['wiggle']});const storage={getItem:()=>saved,setItem:(_k,v)=>saved=v};let refreshes=0;
  const ae=createPanelPreferences(root,storage,{hostTheme:true,onThemeChange:()=>refreshes++});assert.equal(ae.snapshot().theme,'host');assert.deepEqual(ae.snapshot().favorites,['wiggle']);
  ae.setTheme('light');assert.equal(root.getAttribute('data-theme'),'light');assert.equal(createPanelPreferences(root,storage,{hostTheme:true}).snapshot().theme,'light');assert.ok(refreshes>=2);
+ assert.equal(ae.accentChoice(),'host');
+ ae.setAccent('BB9CFF');ae.setAccent('bad');
+ assert.equal(createPanelPreferences(root,storage,{hostTheme:true}).accentChoice(),'#bb9cff');
+ assert.deepEqual(ae.snapshot().favorites,['wiggle']);
  ae.resetInterface();assert.equal(ae.snapshot().theme,'host');
+ assert.equal(ae.accentChoice(),'host');
  const premiere=createPanelPreferences(root);premiere.setTheme('host');assert.equal(premiere.snapshot().theme,'dark');assert.equal(premiere.supportsHostTheme,false);
+});
+
+test('custom accent keeps text and button states readable in dark and light, and can follow native RGB',()=>{
+ const dark=['#202124','#27282a','#303134','#343940'];
+ const light=['#e8e8e8','#f2f2f2','#dcdcdc'];
+ for(const surfaces of [dark,light])for(const choice of ['#60a5ff','#111111','#ffffff','#ff00ff','host']){
+  const tokens=accentTokens(choice,{red:33,green:164,blue:112},surfaces);
+  for(const role of ['action-text','action-text-hover','action-text-press']){
+   for(const surface of surfaces)assert.ok(themeContrast(tokens[role],surface)>=4.5,`${choice} ${role} on ${surface}`);
+  }
+  for(const role of ['action-fill','action-fill-hover','action-fill-press'])assert.ok(themeContrast(tokens[role],tokens['action-on'])>=4.5);
+  if(choice==='host')assert.equal(tokens['ae-accent-source'],'#21a470');
+ }
+ assert.equal(accentTokens('#60a5ff',null,dark)['ae-accent'],'#60a5ff');
 });
 test('design-system scale: three text levels, own hover/active steps and family tones stay legible on every host gray',()=>{
  const darkest=hostThemeTokens(gray(29)).tokens;

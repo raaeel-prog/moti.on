@@ -779,6 +779,10 @@
       "fam-project": {
         "$value": "#B8BCCC",
         "$type": "color"
+      },
+      "ae-overlay-tint": {
+        "$value": "rgba(58,58,58,.93)",
+        "$type": "string"
       }
     },
     "light": {
