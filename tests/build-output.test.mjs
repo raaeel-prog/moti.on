@@ -247,6 +247,9 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       // Chaves de mensagem de falha (lista fechada) que o dispatcher repassa ao
       // painel. Interno: só monta falhas e lê marcas de exceção.
       "MotionErrors",
+      // Combina a expressao do usuario com a de uma ferramenta (sem eval):
+      // texto puro, sem Undo nem acesso ao projeto.
+      "MotionExpressionCompose",
       "MotionExpressions",
       // Internal grouped-control writer; host mutations still pass through dispatch.
       "MotionGroupedControls",
@@ -258,6 +261,9 @@ test("o host montado expoe apenas MotionAE.dispatch", async () => {
       // expõe dispatch nem contorna o registry — só captura, restaura e remove
       // keyframes preservando metadata.
       "MotionKeyframes",
+      // Copia efeitos entre camadas para morph/revelacao aceitarem texto com
+      // efeitos de outras ferramentas. Modulo interno, sem Undo proprio.
+      "MotionLayerLook",
       "MotionLibraryCatalog", "MotionLibraryCore",
       // Writer/reader/updater comum de Expression Controls. Continua interno:
       // comandos persistem seus registros em RigMetadata e o dispatcher segue

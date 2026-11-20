@@ -46,10 +46,56 @@
     for (i = 0; i < records.length; i += 1) refs[records[i].paramId] = MotionLiveControls.expressionReference(records[i]);
     return refs;
   }
+  /**
+   * Wiggle v3, "Flutuação": ruído Perlin contínuo (`noise`) mais duas órbitas
+   * lentas com frequências sem relação inteira. O caminho passa pelas
+   * diagonais em curvas, em vez dos trechos retos do `wiggle()` (que sorteia
+   * um alvo novo por eixo a cada 1/f s). Reaproveita os MESMOS controles da v2
+   * — o grupo do Effect Controls é um FFX pré-gerado por conjunto de rótulos:
+   * Frequência = ciclos por segundo; Detalhe = camadas finas de ruído;
+   * Detalhe: amplitude = peso de cada camada seguinte, como no wiggle.
+   * Rotação e valores 1D inclinam junto com o eixo X (mesma semente e
+   * velocidade), o que dá o balanço de algo boiando. Entra suave em 0,6 s a
+   * partir do início da camada.
+   * @param {any} refs @param {any} meta @returns {string}
+   */
+  /** Formula 1D por eixo (ver `axis` em configuration). @param {unknown} axis @returns {string} */
+  function oneD(axis) {
+    if (axis === 0 || axis === 1 || axis === 2) return "drift(" + axis + ")";
+    if (axis === 10) return "(n(9, 1) * 0.6 + drift(1) * 0.4)";
+    if (axis === 11) return "(n(8, 1) * 0.6 + d0 * 0.4)";
+    return "(n(5, 1) * 0.6 + d0 * 0.4)";
+  }
+  /** @param {any} refs @param {any} meta @returns {string} */
+  function drift(refs, meta) {
+    return "var f = " + refs.frequency + ";\nvar a = " + refs.amplitude + ";\n" +
+      "var s = Math.floor(" + refs.seed + ");\n" +
+      "var oct = Math.round(" + refs.octaves + "), mul = " + refs.amplitudeMultiplier + ";\n" +
+      "if (on && mix > 0 && f > 0 && a > 0) {\n" +
+      "  var t0 = time - inPoint, t = t0 * f;\n" +
+      "  var n = function (k, q) { return noise([t * q + k * 13.17, s * 7.31 + k]); };\n" +
+      "  var drift = function (axis) {\n" +
+      "    var d = axis === 0 ? n(1, 1) * 0.65 + Math.cos(t * 2.31 + s) * 0.35\n" +
+      "      : axis === 1 ? n(2, 1) * 0.65 + Math.sin(t * 1.43 + s * 1.7) * 0.35 : n(6 + axis, 1) * 0.8;\n" +
+      "    var w = mul * 0.35, q = 2;\n" +
+      "    for (var o = 1; o < oct; o++) { d += n(20 + axis * 7 + o, q) * w; w *= mul; q *= 2; }\n" +
+      "    return d;\n" +
+      "  };\n" +
+      "  var g = a * ease(t0, 0, 0.6, 0, 1) * mix;\n" +
+      "  var d0 = drift(0);\n" +
+      "  if (typeof value === 'number') result = value + " + oneD(meta.axis) + " * g;\n" +
+      "  else { var mask = Math.round(" + (refs.axes || "7") + "); result = []; for (var i = 0; i < value.length; i++) {\n" +
+      "    var delta = (i === 0 ? d0 : drift(i)) * g;\n" +
+      (meta.scale ? "    if (" + refs.linkedScale + ") delta = value[0] === 0 ? d0 * g : d0 * g * value[i] / value[0];\n" : "") +
+      "    result[i] = value[i] + ((mask & (1 << i)) ? delta : 0);\n" +
+      "  } }\n}\n";
+  }
   /** @param {string} kind @param {any} refs @param {any} meta @returns {string} */
   function body(kind, refs, meta) {
     var lines = "var on = " + refs.enabled + ";\nvar mix = " + refs.intensity + " / 100;\nvar result = value;\n";
-    if (kind === "wiggle") {
+    if (kind === "wiggle" && meta.version === 3) {
+      lines += drift(refs, meta);
+    } else if (kind === "wiggle") {
       lines += "var f = " + refs.frequency + ";\nvar a = " + refs.amplitude + ";\n" +
         "seedRandom(Math.floor(" + refs.seed + "), true);\n" +
         "if (on && mix > 0 && f > 0 && a > 0) {\n" +
@@ -88,7 +134,7 @@
     try {
       var end = source.indexOf("\n");
       var meta = /** @type {any} */ (MotionJson.parse(source.substring(HEADER.length, end)));
-      if (!meta || meta.kind !== kind || meta.version !== 2 || !meta.records || meta.records.length > 16) return null;
+      if (!meta || meta.kind !== kind || !(meta.version === 2 || (meta.version === 3 && kind === "wiggle")) || !meta.records || meta.records.length > 16) return null;
       return render(meta) === source ? meta : null;
     } catch (error) { return null; }
   }
@@ -121,6 +167,30 @@
         if (opacity) leaves.push(opacity);
       }
     }
+    // Wiggle com camada selecionada e nenhuma propriedade: Posicao + Rotacao,
+    // que e o uso do preset Flutuar. A rotacao recebe a amplitude em graus.
+    var swayLeaves = /** @type {any[]} */ ([]);
+    if (!leaves.length && kind === "wiggle") {
+      var picked = /** @type {any[]} */ (comp.selectedLayers || []);
+      for (i = 0; i < picked.length; i += 1) {
+        var transformGroup = picked[i].property("ADBE Transform Group");
+        if (!transformGroup) continue;
+        var position = transformGroup.property("ADBE Position");
+        if (position && position.dimensionsSeparated) {
+          if (transformGroup.property("ADBE Position_0")) leaves.push(transformGroup.property("ADBE Position_0"));
+          if (transformGroup.property("ADBE Position_1")) leaves.push(transformGroup.property("ADBE Position_1"));
+        } else if (position) leaves.push(position);
+        // Rotacao em X/Y/Z (bits 1/2/4 de rotationAxes). X e Y so existem em camada 3D.
+        var rotAxes = typeof args.rotationAxes === "number" ? args.rotationAxes : 7;
+        if (!(typeof args.rotation === "number" && args.rotation <= 0)) {
+          var rotNames = picked[i].threeDLayer ? ["ADBE Rotate X", "ADBE Rotate Y", "ADBE Rotate Z"] : ["", "", "ADBE Rotate Z"];
+          for (j = 0; j < 3; j += 1) {
+            var rotation = rotNames[j] && (rotAxes & (1 << j)) ? transformGroup.property(rotNames[j]) : null;
+            if (rotation) { leaves.push(rotation); swayLeaves.push(rotation); }
+          }
+        }
+      }
+    }
     if (!leaves.length) return { error: fail("NO_SELECTION", "Selecione uma propriedade numerica."), items: [] };
     if (leaves.length > 32) return { error: fail("INVALID_SELECTION_TYPE", "Selecione ate 32 propriedades por operacao."), items: [] };
     var items = /** @type {any[]} */ ([]), totals = /** @type {any[]} */ ([]);
@@ -147,7 +217,9 @@
           if (!effect || effect.matchName !== record.matchName) return { error: fail("EXPRESSION_CONFLICT", "Um controle foi removido ou renomeado. Restaure o vinculo no Effect Controls antes de reaplicar."), items: [] };
         }
       }
-      var config = configuration(kind, args, property, comp, options);
+      var sway = false;
+      for (j = 0; j < swayLeaves.length; j += 1) if (swayLeaves[j] === property) sway = true;
+      var config = configuration(kind, args, property, comp, options, sway);
       var group = null;
       for (j = 0; j < totals.length; j += 1) if (totals[j].layer === layer) group = totals[j];
       if (!group) { group = { layer: layer, count: layer.property("ADBE Effect Parade").numProperties }; totals.push(group); }
@@ -157,8 +229,8 @@
     }
     return { error: null, items: items };
   }
-  /** @param {string} kind @param {any} args @param {any} property @param {any} comp @param {any} options @returns {any} */
-  function configuration(kind, args, property, comp, options) {
+  /** @param {string} kind @param {any} args @param {any} property @param {any} comp @param {any} options @param {boolean} [sway] Rotacao escolhida pelo fallback de camada. @returns {any} */
+  function configuration(kind, args, property, comp, options, sway) {
     var bindings = /** @type {any[]} */ ([]), values = /** @type {Record<string, any>} */ ({}), order = 0;
     /** @param {string} id @param {string} pt @param {string} en @param {any} value @param {number} min @param {number} max @param {string} [unit] @param {string} [control] */
     function add(id, pt, en, value, min, max, unit, control) {
@@ -170,9 +242,11 @@
       var amplitude = args.amplitude;
       var unit = "none";
       var quick = !options || options.mode !== "advanced";
-      if (name.indexOf("ADBE Position") === 0 || name === "ADBE Anchor Point") { unit = "px"; if (quick) amplitude = 20 * Math.min(comp.width || 1920, comp.height || 1080) / 1080; }
-      else if (name.indexOf("ADBE Rotate") === 0 || name === "ADBE Orientation") { unit = "°"; if (quick) amplitude = 5; }
-      else if (scale) { unit = "%"; if (quick) amplitude = 4; }
+      // Pixels chegam do painel ja escalados pela resolucao (Flutuar: 14 px em 1080p).
+      if (name.indexOf("ADBE Position") === 0 || name === "ADBE Anchor Point") { unit = "px"; if (quick && !(typeof amplitude === "number" && amplitude > 0)) amplitude = 14 * Math.min(comp.width || 1920, comp.height || 1080) / 1080; }
+      else if (sway) { unit = "°"; amplitude = typeof args.rotation === "number" ? args.rotation : 0.6; }
+      else if (name.indexOf("ADBE Rotate") === 0 || name === "ADBE Orientation") { unit = "°"; if (quick) amplitude = 3; }
+      else if (scale) { unit = "%"; if (quick) amplitude = 2; }
       else if (quick) amplitude = color ? 0.02 : 2;
       add("frequency", "Frequência", "Frequency", args.frequency, 0, 100);
       add("amplitude", "Amplitude", "Amplitude", amplitude, 0, 100000, unit);
@@ -205,7 +279,11 @@
       add("intensity", "Intensidade", "Intensity", 100, 0, 100, "%");
       add("enabled", "Ativo", "Enabled", true, 0, 1, "none", "checkbox");
     }
-    return { bindings: bindings, values: values, scale: scale, color: color, opacity: name === "ADBE Opacity" };
+    // Eixo do movimento 1D da Flutuacao: Posicao separada segue o proprio eixo;
+    // Rotacao X inclina com o vertical, Y com o horizontal; Z e o resto balancam.
+    var axis = name === "ADBE Position_0" ? 0 : name === "ADBE Position_1" ? 1 : name === "ADBE Position_2" ? 2
+      : name === "ADBE Rotate X" ? 10 : name === "ADBE Rotate Y" ? 11 : -1;
+    return { bindings: bindings, values: values, scale: scale, color: color, opacity: name === "ADBE Opacity", axis: axis };
   }
   /** @param {string} kind @param {any} args @param {any} context @param {any} options @returns {MotionCommandResult} */
   function run(kind, args, context, options) {
@@ -250,7 +328,8 @@
         });
         created.push({ layer: item.handle.layer, records: made.records });
         if (item.states) { grouped.copyStates(item.handle.layer, made.records, item.states); migrations.push(item); }
-        item.meta = { version: 2, kind: kind, scale: config.scale, color: config.color, opacity: config.opacity, records: made.records };
+        item.meta = { version: kind === "wiggle" ? 3 : 2, kind: kind, scale: config.scale, color: config.color, opacity: config.opacity, records: made.records };
+        if (kind === "wiggle" && config.axis !== -1) item.meta.axis = config.axis;
         item.desired = render(item.meta);
       }
       for (i = 0; i < items.length; i += 1) {

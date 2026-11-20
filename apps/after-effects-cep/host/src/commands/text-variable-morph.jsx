@@ -106,7 +106,7 @@
     var s=source(l),doc=s.value;
     var baseline=doc.baselineLocs;
     if(s.numKeys||s.expression||doc.boxText||!baseline||baseline.length!==4||baseline[1]!==baseline[3]||/[\r\n]/.test(doc.text)||!doc.text.length||doc.text.length>128) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Use texto de ponto horizontal, estático e de uma linha, com até 128 caracteres.");
-    if(l.property(TEXT).property(ANIMATORS).numProperties>(m?1:0)) return fail(MotionContracts.ERROR.EXPRESSION_CONFLICT,"Use um texto sem outros animadores para medir a proximidade das letras.");
+    // measure() mede numa cópia sem animadores; os do usuário ficam no original.
     if(typeof doc.characterRange==="function") {
       var range=doc.characterRange(0,doc.text.length);
       if(typeof range.font!=="string"||!finite(range.fontSize)||!finite(range.tracking)) return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Use a mesma fonte, tamanho e espaçamento em todo o texto.");
@@ -342,11 +342,11 @@
     if(l.locked||c.locked)return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Desbloqueie o texto e o controlador.");
     for(var i=0;i<CONTROLS.length;i++){var e=child(c.property(EFFECTS),m.controls&&m.controls[CONTROLS[i][0]]);if(!e||e.matchName!=="ADBE Slider Control")return fail(MotionContracts.ERROR.TRACK_CONFLICT,"Um controle do morph foi removido ou renomeado.");}
     if(m.renderer==="outline"){
-      var r=byId(comp,m.resultId),rm=r&&meta(r);if(!r||!rm||rm.role!=="outline"||rm.rigId!==m.rigId||r.parent!==l||r.locked||signature(r.property(ROOT))!==m.resultSignature||signature(r.property(TRANSFORM))!==m.transformSignature||r.property(EFFECTS).numProperties!==2||r.property("ADBE Mask Parade").numProperties)return fail(MotionContracts.ERROR.TRACK_CONFLICT,"A geometria ou as expressões do morph foram personalizadas.");
+      var r=byId(comp,m.resultId),rm=r&&meta(r);if(!r||!rm||rm.role!=="outline"||rm.rigId!==m.rigId||r.parent!==l||r.locked||signature(r.property(ROOT))!==m.resultSignature||signature(r.property(TRANSFORM))!==m.transformSignature||r.property(EFFECTS).numProperties<2||r.property("ADBE Mask Parade").numProperties)return fail(MotionContracts.ERROR.TRACK_CONFLICT,"A geometria ou as expressões do morph foram personalizadas.");
       var cl=control(r,m.link),sl=control(r,m.sourceLink);if(!cl||!sl||cl.value!==c.index||sl.value!==l.index)return fail(MotionContracts.ERROR.TRACK_CONFLICT,"Os vínculos do morph foram alterados.");
       for(i=1;i<=comp.numLayers;i++)if(comp.layer(i).parent===r)return fail(MotionContracts.ERROR.TRACK_CONFLICT,"A camada do morph possui conteúdo externo.");p.result=r;
     }else{
-      var animators=l.property(TEXT).property(ANIMATORS);if(animators.numProperties!==m.animators.length)return fail(MotionContracts.ERROR.TRACK_CONFLICT,"O texto possui animadores externos.");
+      var animators=l.property(TEXT).property(ANIMATORS);
       for(i=0;i<m.animators.length;i++){var a=child(animators,m.animators[i].name);if(!a||signature(a)!==m.animators[i].signature)return fail(MotionContracts.ERROR.TRACK_CONFLICT,"Um animador do morph foi personalizado.");}
       var link=control(l,m.link);if(!link||link.value!==c.index)return fail(MotionContracts.ERROR.TRACK_CONFLICT,"O vínculo do morph foi alterado.");
     }
@@ -362,14 +362,14 @@
     while(current){if(current.threeDLayer)return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Use texto e hierarquia em 2D.");current=current.parent;}
     if(s.numKeys||s.expression||d.boxText||!text.length||characterCount(text)>MAX_GLYPHS||/[\u0590-\u08ff\u200f\u202a-\u202e\t]/.test(text)||!baselines||!baselines.length)return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Use texto de ponto horizontal, estático e da esquerda para a direita.");
     if(host.LineOrientation&&typeof d.lineOrientation!=="undefined"&&d.lineOrientation!==host.LineOrientation.HORIZONTAL)return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Use linhas horizontais com quebras manuais.");
-    for(var i=0;!(p.meta&&p.meta.renderer==="variable")&&i<baselines.length;i+=4)if(finite(baselines[i])&&Math.abs(baselines[i+1]-baselines[i+3])>.01)return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Use linhas horizontais com quebras manuais.");
+    for(var i=0;!(p.meta&&p.meta.renderer==="variable")&&i+3<baselines.length;i+=4)if(finite(baselines[i])&&baselines[i+2]!==baselines[i]&&Math.abs(baselines[i+1]-baselines[i+3])>.01)return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Use linhas horizontais com quebras manuais.");
     if(d.applyFill!==true||d.applyStroke===true)return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Use preenchimento sólido, sem contorno no texto original.");
     if(typeof d.characterRange!=="function")return fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE,"O host não expõe o estilo uniforme do texto.");
     var style=d.characterRange(0,text.length),attrs=/** @type {any} */(["font","fontSize","tracking","horizontalScale","verticalScale","baselineShift","fauxBold","fauxItalic","applyFill","applyStroke","fillColor"]);
     for(i=0;i<attrs.length;i++)if(typeof style[attrs[i]]==="undefined")return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Use um estilo uniforme em toda a camada.");
-    if(l.property("ADBE Mask Parade").numProperties||l.hasTrackMatte||l.isTrackMatte||l.solo||l.guideLayer)return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Use texto sem máscaras, matte, solo ou camada guia.");
-    var managed=p.meta&&p.meta.renderer==="variable"?p.meta.animators.length:p.legacy?1:0;
-    if(l.property(TEXT).property(ANIMATORS).numProperties!==managed||l.property(EFFECTS).numProperties>(p.meta&&p.meta.renderer==="variable"||p.legacy?1:0))return fail(MotionContracts.ERROR.EXPRESSION_CONFLICT,"Use texto sem outros animadores ou efeitos.");
+    if(l.hasTrackMatte||l.isTrackMatte||l.solo||l.guideLayer)return fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE,"Use texto sem matte, solo ou camada guia.");
+    // Animadores e efeitos de outras ferramentas convivem com o morph: no modo
+    // variável eles continuam no texto; no contorno, os efeitos são copiados.
     return null;
   }
   /** @param {any} c @param {any} m @param {any} a @param {boolean} write @returns {any[]} */
@@ -421,7 +421,7 @@
   /** @param {any} p @param {any} m @param {any[]} glyphs @returns {any} */
   function createOutline(p,m,glyphs) {
     var l=p.comp.layers.addShape();p.created.push(l);l.name=p.source.name+" · Morph";l.enabled=false;attach(l,p.source);l.inPoint=p.source.inPoint;l.outPoint=p.source.outPoint;l.motionBlur=p.source.motionBlur;l.blendingMode=p.source.blendingMode;
-    addControl(l,m.link,"ADBE Layer Control",p.controller.index);addControl(l,m.sourceLink,"ADBE Layer Control",p.source.index);
+    addControl(l,m.link,"ADBE Layer Control",p.controller.index);addControl(l,m.sourceLink,"ADBE Layer Control",p.source.index);if(host.MotionLayerLook)host.MotionLayerLook.copyEffects(p.source,l);
     for(var i=0;i<glyphs.length;i++){
       var glyph=glyphs[i],name="Glyph "+glyph.textIndex,g=l.property(ROOT).addProperty("ADBE Vector Group");g.name=name;
       for(var j=0;j<glyph.contours.length;j++){var cg=glyphGroup(l,name).property(CONTENTS).addProperty("ADBE Vector Shape - Group");cg.name="Contour "+(j+1);cg.property("ADBE Vector Shape").setValue(nativeShape(glyph.contours[j]));}

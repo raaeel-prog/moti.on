@@ -169,12 +169,26 @@
       var property = rotationOf(layer);
       if (!property || property.canSetExpression !== true) continue;
       if (layer.locked) return MotionErrors.failure(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "hostError.layerLocked", "Desbloqueie as camadas selecionadas para encarar.", null, { selectionIndex: i });
-      var managed = is3D(layer) ? MotionExpressions.isManagedLookAt(property.expression) : MotionExpressions.isManagedLookAt2D(property.expression);
-      if (property.expression !== "" && !managed) return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A rotacao contem uma expressao de usuario.", { selectionIndex: i });
+      if (!acceptsTool(property, managedFor(layer))) return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A expressao de usuario na rotacao termina em um bloco (if/for) e nao pode ser combinada. Faca a ultima linha devolver o valor.", { selectionIndex: i });
       count += 1;
     }
     if (count === 0) return failure(MotionContracts.ERROR.NO_SELECTION, "Selecione ao menos uma camada para encarar o alvo.", null);
     return null;
+  }
+
+  /** @param {any} layer @returns {(source:string) => boolean} */
+  function managedFor(layer) { return is3D(layer) ? MotionExpressions.isManagedLookAt : MotionExpressions.isManagedLookAt2D; }
+  /** A expressao do usuario continua valendo por baixo (expression-compose.jsx).
+   * @param {any} property @param {(source:string) => boolean} managed @returns {boolean} */
+  function acceptsTool(property, managed) {
+    var compose = /** @type {any} */ ($.global).MotionExpressionCompose;
+    if (!compose) return String(property.expression || "") === "" || managed(String(property.expression));
+    return compose.accepts(property, managed);
+  }
+  /** @param {any} property @param {string} expression @param {(source:string) => boolean} managed @returns {string} */
+  function stackedExpression(property, expression, managed) {
+    var compose = /** @type {any} */ ($.global).MotionExpressionCompose;
+    return compose ? compose.stackFor(property, expression, managed) : expression;
   }
 
   /** @param {Record<string, unknown>} args @returns {MotionCommandResult} */
@@ -233,7 +247,7 @@
         var property = /** @type {Property} */ (rotationOf(layer));
         var tokens = { targetLayerName: args.targetLayerName, controllerName: controller.name, effectName: control.name,
           forwardAxis: args.forwardAxis, offsetOrientation: args.offsetOrientation, constrainAxes: args.constrainAxes };
-        var expression = is3D(layer) ? MotionExpressions.renderLookAt(tokens) : MotionExpressions.renderLookAt2D(tokens);
+        var expression = stackedExpression(property, is3D(layer) ? MotionExpressions.renderLookAt(tokens) : MotionExpressions.renderLookAt2D(tokens), managedFor(layer));
         if (property.expression === expression && property.expressionEnabled === true) { unchangedCount += 1; continue; }
         touched.push({ property: property, expression: property.expression, enabled: property.expressionEnabled });
         property.expression = expression;

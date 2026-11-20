@@ -20,6 +20,20 @@
  * verifica avaliando a formula em varias distancias.
  */
 (function () {
+  /** @param {string} source @returns {boolean} */
+  function managedSource(source) { return MotionExpressions.isManagedEffector(source); }
+  /** Expressao do usuario continua valendo por baixo da ferramenta (expression-compose.jsx).
+   * @param {any} property @returns {boolean} */
+  function acceptsTool(property) {
+    var compose = /** @type {any} */ ($.global).MotionExpressionCompose;
+    if (!compose) return String(property.expression || "") === "" || managedSource(String(property.expression));
+    return compose.accepts(property, managedSource);
+  }
+  /** @param {any} property @param {string} expression @returns {string} */
+  function stackedExpression(property, expression) {
+    var compose = /** @type {any} */ ($.global).MotionExpressionCompose;
+    return compose ? compose.stackFor(property, expression, managedSource) : expression;
+  }
   /* global Property */
   var ALLOWED = {
     effectorType: true,
@@ -177,8 +191,8 @@
             property: alvo.propriedade
           });
         }
-        if (property.expression !== "" && !MotionExpressions.isManagedEffector(property.expression)) {
-          return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A propriedade contem expressao de usuario.", {
+        if (!acceptsTool(property)) {
+          return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A expressao de usuario na propriedade termina em um bloco (if/for) e nao pode ser combinada. Faca a ultima linha devolver o valor.", {
             selectionIndex: i,
             property: alvo.propriedade
           });
@@ -272,7 +286,7 @@
             expression: property.expression,
             expressionEnabled: property.expressionEnabled
           });
-          property.expression = expr;
+          property.expression = stackedExpression(property, expr);
           // O After Effects nao lanca ao recusar uma expressao: reporta em
           // expressionError e deixa a propriedade acesa e quebrada.
           if (typeof property.expressionError === "string" && property.expressionError !== "") {

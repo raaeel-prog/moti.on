@@ -161,7 +161,7 @@ class CompItem {
 async function fixture() {
   const comp = new CompItem();
   const source = new TextLayer(comp, "Original"); comp.layers.push(source);
-  const scope = await loadHostModules(["src/registry.jsx", "src/commands/text-vertical-pulse.jsx"], {
+  const scope = await loadHostModules(["src/registry.jsx", "src/layer-look.jsx", "src/commands/text-vertical-pulse.jsx"], {
     app: { project: { activeItem: comp } }, CompItem, TextLayer,
     MotionContracts: { ERROR }, MotionJson: JSON
   });
@@ -388,7 +388,7 @@ test("reapply updates controls without duplicates; remove restores only managed 
   assert.equal(source.property("ADBE Effect Parade").numProperties, 0);
 });
 
-test("modified echoes are never removed, and creation failure rolls back the source and copies", async () => {
+test("echoes with extra user effects stay removable, and creation failure rolls back the source and copies", async () => {
   const { comp, source, handler, run } = await fixture();
   const comment = source.comment;
   comp.failBlur = true;
@@ -399,7 +399,7 @@ test("modified echoes are never removed, and creation failure rolls back the sou
   assert.equal(source.property("ADBE Effect Parade").numProperties, 0);
   run({});
   role(comp, "edge").property("ADBE Effect Parade").addProperty("ADBE Gaussian Blur 2");
-  assert.equal(handler.preflight({ action: "remove" }).code, ERROR.TRACK_CONFLICT);
+  assert.equal(handler.preflight({ action: "remove" }), null);
   assert.equal(comp.numLayers, 4);
 });
 
@@ -621,3 +621,21 @@ test("migration restores the edge's original neighbor on failure and leaves unre
   assert.deepEqual(comp.layers.map(layer => layer.id), order);
 });
 
+
+test("text that already has another tool's effect and animator gets the pulse; the core echo keeps the effect", async () => {
+  const { comp, source, handler, run } = await fixture();
+  const parade = source.property("ADBE Effect Parade");
+  parade.addProperty("ADBE Gaussian Blur 2").name = "Moti.on Gradiente";
+  source.property("ADBE Text Properties").property("ADBE Text Animators").addProperty("ADBE Text Animator").name = "Moti.on Text";
+  assert.equal(handler.preflight({ ...defaults }), null);
+  run({});
+  assert.equal(comp.numLayers, 4);
+  const core = role(comp, "core").property("ADBE Effect Parade");
+  assert.match(core.property(1).matchName, /Turbulent Displace/);
+  assert.equal(core.property(core.numProperties).name, "Moti.on Gradiente");
+  for (const name of ["glow", "edge"]) for (let i = 1; i <= role(comp, name).property("ADBE Effect Parade").numProperties; i += 1) assert.notEqual(role(comp, name).property("ADBE Effect Parade").property(i).name, "Moti.on Gradiente");
+  assert.equal(role(comp, "core").property("ADBE Text Properties").property("ADBE Text Animators").numProperties, 1);
+  handler.run({ action: "remove" });
+  assert.equal(comp.numLayers, 1);
+  assert.equal(parade.property("Moti.on Gradiente").matchName, "ADBE Gaussian Blur 2");
+});

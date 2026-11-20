@@ -6,7 +6,7 @@
  */
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-export type UiIconName = "chevron-down" | "chevron-right" | "chevron-left" | "live" | "plus" | "search" | "check" | "star" | "star-filled" | "close" | "more" | "pin" | "info" | "alert" | "grip" | "filter" | "play" | "folder" | "copy" | "sliders" | "clock" | "autoplay" | "keyboard" | "variants" | "speed";
+export type UiIconName = "chevron-down" | "chevron-right" | "chevron-left" | "live" | "plus" | "search" | "check" | "star" | "star-filled" | "close" | "more" | "pin" | "info" | "alert" | "grip" | "filter" | "play" | "folder" | "copy" | "sliders" | "clock" | "autoplay" | "keyboard" | "variants" | "speed" | "edit";
 
 interface IconShape { d: string; fill?: true }
 
@@ -40,6 +40,8 @@ const SHAPES: Readonly<Record<UiIconName, readonly IconShape[]>> = Object.freeze
   keyboard: [{ d: "M1.5 4.5h13v7h-13zM4 7h.01M6.5 7h.01M9 7h.01M11.5 7h.01M5 9.5h6" }],
   variants: [{ d: "M3 5h10M3 8h10M3 11h10" }],
   // Área de velocidade da v6: um pico sobre a linha de base.
+  // Lápis do botão Editar (ferramentas de um clique, 2026-11-19).
+  edit: [{ d: "M2.75 13.25l.9-3.2 7.1-7.1 2.3 2.3-7.1 7.1zM9.4 4.3l2.3 2.3" }],
   speed: [{ d: "M2.5 13V11.2C5 11.2 6.2 4.5 8 4.5s3 6.7 5.5 6.7V13z", fill: true }]
 });
 

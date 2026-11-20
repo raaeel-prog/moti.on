@@ -661,3 +661,19 @@ test("colar sem ter copiado recusa antes de abrir o Undo", async () => {
   assert.deepEqual(calls, []);
 });
 
+
+test("Jump convive com expressao que usa value e recusa so a que esconderia o salto", async () => {
+  const combina = new FakeLayer({ position: new FakeProperty({ value: [100, 200], expression: "value + [0, 5]", expressionEnabled: true }) });
+  const ok = await fixture(new FakeCompItem([combina], [], 1), JUMP);
+  const aplicado = JSON.parse(ok.scope.MotionAE.dispatch(request("ae.animate.jump", jumpArgs)));
+  assert.equal(aplicado.ok, true);
+  assert.equal(combina.position.expression, "value + [0, 5]");
+  assert.equal(combina.position.keys.length, 3);
+
+  const fixa = new FakeLayer({ position: new FakeProperty({ value: [100, 200], expression: "[960, 540]", expressionEnabled: true }) });
+  const recusa = await fixture(new FakeCompItem([fixa], [], 1), JUMP);
+  const recusado = JSON.parse(recusa.scope.MotionAE.dispatch(request("ae.animate.jump", jumpArgs)));
+  assert.equal(recusado.ok, false);
+  assert.equal(recusado.error.code, "EXPRESSION_CONFLICT");
+  assert.equal(fixa.position.keys.length, 0);
+});

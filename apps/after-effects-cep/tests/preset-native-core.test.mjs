@@ -228,12 +228,17 @@ test('text presets do not unnecessarily reject separated layer Position', async 
   f.run('apply',f.args('native-text-chromatic'));f.run('remove');
 });
 
-test('motion still rejects expression conflicts on the properties it animates', async () => {
+test('motion refuses only active user expressions it cannot stack, and reunites separated Position', async () => {
   const f=await fixture();const position=f.layer.transform.property('ADBE Position');
-  position.expression='value+[10,0]';
+  position.expression='value+[10,0]';position.expressionEnabled=true;
+  // Sem o combinador carregado, a expressão ativa continua protegida.
   assert.equal(f.handler('apply').preflight(f.args('arc-arrival')).code,'EXPRESSION_CONFLICT');
+  position.expressionEnabled=false;
+  assert.equal(f.handler('apply').preflight(f.args('arc-arrival')),null,'a disabled expression is restored on removal');
   position.expression='';position.dimensionsSeparated=true;
-  assert.equal(f.handler('apply').preflight(f.args('arc-arrival')).code,'INVALID_SELECTION_TYPE');
+  assert.equal(f.handler('apply').preflight(f.args('arc-arrival')),null);
+  f.run('apply',f.args('arc-arrival'));assert.equal(position.dimensionsSeparated,false);
+  f.run('remove');assert.equal(position.dimensionsSeparated,true);
 });
 
 test('bake failure restores pre-expression base values and expression state', async () => {

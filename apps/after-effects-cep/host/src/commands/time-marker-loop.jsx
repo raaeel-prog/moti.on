@@ -108,17 +108,29 @@
         var tr = /** @type {Property} */ (layer.property("ADBE Time Remapping"));
         if (
           tr instanceof Property &&
-          tr.expression !== "" &&
-          !MotionExpressions.isManagedMarkerLoop(tr.expression) &&
-          !MotionExpressions.isManagedTimeController(tr.expression)
+          !acceptsTool(tr)
         ) {
-          return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "Time Remap contem expressao de usuario.", null);
+          return failure(MotionContracts.ERROR.EXPRESSION_CONFLICT, "A expressao de usuario termina em um bloco (if/for) e nao pode ser combinada. Faca a ultima linha devolver o valor.", null);
         }
       }
     }
     return null;
   }
 
+  /** @param {string} source @returns {boolean} */
+  function managedSource(source) { return MotionExpressions.isManagedMarkerLoop(source) || MotionExpressions.isManagedTimeController(source); }
+  /** Expressao do usuario continua valendo por baixo da ferramenta (expression-compose.jsx).
+   * @param {any} property @returns {boolean} */
+  function acceptsTool(property) {
+    var compose = /** @type {any} */ ($.global).MotionExpressionCompose;
+    if (!compose) return String(property.expression || "") === "" || managedSource(String(property.expression));
+    return compose.accepts(property, managedSource);
+  }
+  /** @param {any} property @param {string} expression @returns {string} */
+  function stackedExpression(property, expression) {
+    var compose = /** @type {any} */ ($.global).MotionExpressionCompose;
+    return compose ? compose.stackFor(property, expression, managedSource) : expression;
+  }
   /**
    * O After Effects nao lanca quando recusa uma expressao: guarda o motivo em
    * expressionError e deixa a propriedade acesa e quebrada. Sem ler esse campo o
@@ -129,7 +141,7 @@
    * @returns {void}
    */
   function applyExpression(property, expression) {
-    property.expression = expression;
+    property.expression = stackedExpression(property, expression);
     if (typeof property.expressionError === "string" && property.expressionError !== "") {
       throw new Error("After Effects recusou a expressao gerenciada.");
     }

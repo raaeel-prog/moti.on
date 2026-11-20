@@ -2206,4 +2206,17 @@
       seed: BEAT_SEED_SLIDER
     }
   };
+
+  // Uma expressao gerenciada pode estar empilhada sobre a do usuario
+  // (expression-compose.jsx): todo reconhecedor olha a parte da ferramenta.
+  var api = /** @type {any} */ (global.MotionExpressions);
+  for (var key in api) {
+    if (!Object.prototype.hasOwnProperty.call(api, key) || key.indexOf("isManaged") !== 0 || typeof api[key] !== "function") continue;
+    api[key] = (function (/** @type {(source:string) => boolean} */ recognize) {
+      return function (/** @type {string} */ source) {
+        var compose = /** @type {any} */ ($.global).MotionExpressionCompose;
+        return recognize(compose && typeof source === "string" ? compose.toolOf(source) : source);
+      };
+    }(api[key]));
+  }
 }($.global));

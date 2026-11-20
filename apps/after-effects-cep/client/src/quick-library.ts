@@ -22,6 +22,8 @@ export interface LibraryItem {
   aliases: string;
   category: string;
   interaction: "quick" | "configure" | "direct-control";
+  /** Applied to the current selection by the one-click path: the tile shows a small dot. */
+  applied?: boolean;
   reason: string | null;
   run(): void;
   edit(): void;
@@ -33,8 +35,8 @@ export interface LibraryState {
   scroll: number;
 }
 export const LIBRARY_COPY = {
-  "pt-BR": { allTools: "Todas as ferramentas", categories: "Categoria", more: "Mais categorias", all: "Todas", favorites: "Favoritos", favoritesOnly: "Só favoritas", recent: "Recentes", search: "Buscar ferramenta", apply: "Aplicar", edit: "Ajustes…", altClick: "Alt+clique", favorite: "Favoritar", unfavorite: "Remover dos favoritos", empty: "Nenhuma ferramenta encontrada.", quick: "Clique para aplicar", configure: "Abrir ajustes", anchor: "Escolha na grade de âncora", options: "Opções de", adjustOf: "Ajustes de", help: "Clique abre os ajustes · Botão direito: mais opções", details: "Detalhes", settings: "Ajustes…", keyClick: "Clique", keyClickQuick: "Aplica com os ajustes atuais", keyClickConfigure: "Abre os ajustes e a prévia", keyAdjust: "Alt+clique", keyAdjustText: "Abre os ajustes", keyContext: "Botão direito", keyContextText: "Favoritar e mais opções", collapse: "Recolher", expand: "Expandir", groupHint: "Alt+clique: todas as categorias" },
-  "en-US": { allTools: "All tools", categories: "Category", more: "More categories", all: "All", favorites: "Favorites", favoritesOnly: "Favorites only", recent: "Recent", search: "Search tools", apply: "Apply", edit: "Settings…", altClick: "Alt+click", favorite: "Favorite", unfavorite: "Remove from favorites", empty: "No tools found.", quick: "Click to apply", configure: "Open settings", anchor: "Choose on the anchor grid", options: "Options for", adjustOf: "Settings for", help: "Click opens the settings · Right click: more options", details: "Details", settings: "Settings…", keyClick: "Click", keyClickQuick: "Applies with the current settings", keyClickConfigure: "Opens the settings and preview", keyAdjust: "Alt+click", keyAdjustText: "Opens the settings", keyContext: "Right click", keyContextText: "Favorite and more options", collapse: "Collapse", expand: "Expand", groupHint: "Alt+click: every category" }
+  "pt-BR": { allTools: "Todas as ferramentas", categories: "Categoria", more: "Mais categorias", all: "Todas", favorites: "Favoritos", favoritesOnly: "Só favoritas", recent: "Recentes", search: "Buscar ferramenta", apply: "Aplicar", edit: "Ajustes…", altClick: "Alt+clique", favorite: "Favoritar", unfavorite: "Remover dos favoritos", empty: "Nenhuma ferramenta encontrada.", quick: "Clique para aplicar", configure: "Abrir ajustes", anchor: "Escolha na grade de âncora", options: "Opções de", adjustOf: "Ajustes de", help: "Clique aplica · › abre a página · Botão direito: mais opções", details: "Detalhes", settings: "Ajustes…", keyClick: "Clique", keyClickQuick: "Aplica o preset padrão", keyClickConfigure: "Abre os ajustes e a prévia", keyAdjust: "Alt+clique", keyAdjustText: "Abre os ajustes", keyContext: "Botão direito", keyContextText: "Favoritar e mais opções", collapse: "Recolher", expand: "Expandir", groupHint: "Alt+clique: todas as categorias" },
+  "en-US": { allTools: "All tools", categories: "Category", more: "More categories", all: "All", favorites: "Favorites", favoritesOnly: "Favorites only", recent: "Recent", search: "Search tools", apply: "Apply", edit: "Settings…", altClick: "Alt+click", favorite: "Favorite", unfavorite: "Remove from favorites", empty: "No tools found.", quick: "Click to apply", configure: "Open settings", anchor: "Choose on the anchor grid", options: "Options for", adjustOf: "Settings for", help: "Click applies · › opens the page · Right click: more options", details: "Details", settings: "Settings…", keyClick: "Click", keyClickQuick: "Applies the default preset", keyClickConfigure: "Opens the settings and preview", keyAdjust: "Alt+click", keyAdjustText: "Opens the settings", keyContext: "Right click", keyContextText: "Favorite and more options", collapse: "Collapse", expand: "Expand", groupHint: "Alt+click: every category" }
 };
 export function normalizeSearch(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -55,6 +57,8 @@ export function createQuickLibrary(doc: Document, options: {
   anchor: HTMLElement;
   /** Mounted behind the sliding inspector or coming back from it: no entry cascade. */
   quietEntry?: boolean;
+  /** Shown right after the search field (the Edit button of one-click tools). */
+  searchAccessory?: HTMLElement;
   onNavigate(): void;
 }): { element: HTMLElement; update(items: LibraryItem[]): void; setFeedback(id: string, state: TileFeedback): void; dispose(): void } {
   const i18n = createI18n({ locale: options.locale });
@@ -84,6 +88,7 @@ export function createQuickLibrary(doc: Document, options: {
   searchInput.setAttribute("autocomplete", "off");
   search.appendChild(searchInput);
   toolbarInner.appendChild(search);
+  if (options.searchAccessory) toolbarInner.appendChild(options.searchAccessory);
   searchInput.addEventListener("input", () => {
     if (nav.query === searchInput.value) return;
     nav.query = searchInput.value; nav.scroll = 0; options.onNavigate(); draw();
@@ -172,7 +177,7 @@ export function createQuickLibrary(doc: Document, options: {
     const item = (detailId ? itemMap.get(detailId) : undefined) ?? items[0];
     if (!item) { clearNode(details); detailKey = ""; return; }
     const favorite = options.preferences.snapshot().favorites.includes(item.id);
-    const key = [item.id, item.name, item.description, item.reason ?? "", item.interaction, favorite].join("|");
+    const key = [item.id, item.name, item.description, item.reason ?? "", item.interaction, item.applied ? "applied" : "", favorite].join("|");
     if (key === detailKey) return;
     detailKey = key;
     clearNode(details);
@@ -504,6 +509,8 @@ export function createQuickLibrary(doc: Document, options: {
     const icon = createIcon(doc, id);
     node.appendChild(icon);
     node.appendChild(createElement(doc, "span", "ch-tool-name", itemMap.get(id)?.name ?? id));
+    // Marcas do um clique: › (abre página) e ponto (já aplicado). Elementos próprios: ::after é a luz do ponteiro.
+    for (const mark of ["open", "applied"]) { const node2 = createElement(doc, "span", `ch-tool-mark ch-tool-mark--${mark}`, ""); node2.setAttribute("aria-hidden", "true"); node.appendChild(node2); }
     // The tile carries its family so ripple and feedback share the icon color.
     const family = icon.getAttribute("data-icon-family");
     if (family) node.setAttribute("data-icon-family", family);
@@ -719,6 +726,7 @@ export function createQuickLibrary(doc: Document, options: {
       tile.star.setAttribute("aria-label", `${favorite ? copy.unfavorite : copy.favorite}: ${item.name}`);
       if (poppedStar === item.id) tile.star.setAttribute("data-pop", "true"); else tile.star.removeAttribute("data-pop");
       tile.node.setAttribute("data-interaction", item.interaction);
+      if (item.applied) tile.node.setAttribute("data-applied", "true"); else tile.node.removeAttribute("data-applied");
       tile.node.setAttribute("aria-disabled", String(Boolean(item.reason)));
       tile.node.setAttribute("aria-label", item.name);
       const name = Array.from(tile.node.getElementsByTagName("span")).find(node => node.className === "ch-tool-name");

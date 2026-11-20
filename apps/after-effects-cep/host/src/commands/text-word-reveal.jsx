@@ -128,7 +128,9 @@
         if (source.enabled === false) return {error: fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Ative a visibilidade do texto antes de aplicar.", {reason: "source-disabled"})};
         if (!doc || doc.boxText || source.threeDLayer || source.hasTrackMatte || source.isTrackMatte || source.solo || source.guideLayer) return {error: fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Use texto de ponto 2D, sem matte, solo ou camada guia.")};
         if (prop.numKeys > 0 || prop.expression) return {error: fail(MotionContracts.ERROR.KEYFRAME_CONFLICT, "Use texto estatico, sem expressao ou keyframes no conteudo.")};
-        if (source.property("ADBE Text Properties").property("ADBE Text Animators").numProperties > 0 || source.property("ADBE Effect Parade").numProperties > 0 || source.property("ADBE Mask Parade").numProperties > 0) return {error: fail(MotionContracts.ERROR.TRACK_CONFLICT, "Use texto sem animadores, efeitos ou mascaras; as transformacoes sao preservadas.")};
+        // Animadores do texto sao substituidos pela revelacao (o original fica
+        // oculto e volta intacto); efeitos sao copiados para cada palavra.
+        if (source.property("ADBE Effect Parade").numProperties > 0 && !(/** @type {any} */ ($.global)).MotionLayerLook) return {error: fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "Atualize o Moti.on para copiar os efeitos do texto.")};
         if (typeof doc.characterRange !== "function" || !doc.baselineLocs || typeof source.id !== "number") return {error: fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "O host nao expoe medicao e estilos de texto necessarios.")};
         if (typeof source.sourceRectAtTime !== "function" || !range(doc.fontSize, 1, 2000)) return {error: fail(MotionContracts.ERROR.CAPABILITY_UNAVAILABLE, "O texto nao permite medicao.")};
         var content = String(doc.text), words = content.match(/\S+/g);
@@ -138,8 +140,9 @@
         for (j = 0; j < attributes.length; j += 1) if (typeof style[attributes[j]] === "undefined") return {error: fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Use um estilo uniforme em toda a camada.")};
         if ((style.applyFill && typeof style.fillColor === "undefined") || (style.applyStroke && (typeof style.strokeColor === "undefined" || typeof style.strokeWidth === "undefined"))) return {error: fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Use cores e contorno uniformes.")};
         var lines = /** @type {any} */ (content.replace(/\r\n/g, "\r").replace(/\n/g, "\r").split("\r"));
-        if (doc.baselineLocs.length !== lines.length * 4) return {error: fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Use texto horizontal com quebras manuais de linha.")};
-        for (j = 0; j < lines.length; j += 1) if (/\S/.test(lines[j]) && (!range(doc.baselineLocs[j * 4], -100000, 100000) || !range(doc.baselineLocs[j * 4 + 1], -100000, 100000) || Math.abs(doc.baselineLocs[j * 4 + 3] - doc.baselineLocs[j * 4 + 1]) > 0.01)) return {error: fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "O texto precisa ter linhas horizontais.")};
+        var lastLine = lines.length - 1; while (lastLine > 0 && !/\S/.test(lines[lastLine])) lastLine -= 1;
+        if (doc.baselineLocs.length < (lastLine + 1) * 4) return {error: fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Use texto horizontal com quebras manuais de linha.")};
+        for (j = 0; j <= lastLine; j += 1) if (/\S/.test(lines[j]) && (!range(doc.baselineLocs[j * 4], -100000, 100000) || !range(doc.baselineLocs[j * 4 + 1], -100000, 100000) || Math.abs(doc.baselineLocs[j * 4 + 3] - doc.baselineLocs[j * 4 + 1]) > 0.01)) return {error: fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "O texto precisa ter linhas horizontais.")};
         if (comp.time < source.inPoint || comp.time >= source.outPoint) return {error: fail(MotionContracts.ERROR.INVALID_SELECTION_TYPE, "Posicione o cursor dentro do tempo da camada.")};
       }
       if (args.action === "apply") {
@@ -196,6 +199,7 @@
         if (!range(r.width, 0.001, 100000) || !range(r.height, 0.001, 100000)) throw new Error("Word measurement failed");
         var x = baselines[line * 4] + prefixRect.left + prefixRect.width - r.left - r.width, y = baselines[line * 4 + 1];
         var text = comp.layers.addText(""); created.push(text); textProp(text).setValue(md);
+        if ((/** @type {any} */ ($.global)).MotionLayerLook) (/** @type {any} */ ($.global)).MotionLayerLook.copyEffects(source, text);
         text.name = source.name + " - " + (order + 1) + " " + word;
         attach(text, controller, [x, y]); text.inPoint = controller.inPoint; text.outPoint = source.outPoint;
         text.motionBlur = source.motionBlur; text.blendingMode = source.blendingMode;

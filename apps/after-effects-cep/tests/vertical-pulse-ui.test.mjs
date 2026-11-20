@@ -180,13 +180,12 @@ async function mountPulsePanel(data = empty(), { holdRead = false } = {}) {
   return { qa, mount, document, byId, back, edit, input, writes };
 }
 
-test('Pulse opens its legacy controls without mutation; Apply preserves them without duplicate writes', async () => {
+test('Pulse one click preserves legacy controls without duplicate writes', async () => {
   const controls = { action: 'apply', renderer: 'legacy', durationFrames: 74, peakScalePercent: 235, distortion: 21, glow: 60, seed: 7,
     accentColor: [.2,.3,.4], animationMode: 'uniform', waveSpread: 0 };
   const f = await mountPulsePanel(selected({ rigVersion: 3, renderer: 'legacy', preset: null, controls, vertexCount: 0 }));
-  f.byId('library-tool-verticalPulse').click(); f.byId('library-tool-verticalPulse').click(); await tick();
-  assert.equal(f.writes().length,0);
-  f.byId('tool-verticalPulse-apply').click(); f.byId('tool-verticalPulse-apply').click(); await tick();
+  // 2026-11-19: o Pulso aplica com um clique; um duplo clique não cria dois rigs.
+  f.byId('library-tool-verticalPulse').click(); f.byId('library-tool-verticalPulse').click(); await tick(); await tick();
   assert.equal(f.writes().length, 1); assert.deepEqual(f.writes()[0].args, controls);
   assert.equal(f.writes()[0].options.mode, 'quick'); assert.equal(f.writes()[0].options.preserveSelection, true);
   assert.ok(f.byId('library-tool-verticalPulse'), 'Quick keeps the library open');
