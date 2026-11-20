@@ -16,7 +16,7 @@ A fundação compartilhada permanece preservada. O código atual também contém
 - **Matriz de capacidades** (`packages/capability-matrix`) com disponibilidade de feature sondada por presença de símbolo; a versão rotula o tier, não libera recurso sozinha. Uma sonda que não conclui reporta `unknown`, não `false`.
 - **Registro de comandos** (`packages/command-registry`) onde o descriptor declara se o comando muta, se é destrutivo e qual o rótulo de Undo — separado de onde ele é implementado.
 - **Logging estruturado** (`packages/logging`) com redaction na escrita, rotação por contagem e bytes UTF-8, bundle de suporte e modo debug temporário. Payload arbitrário vindo do host não é persistido nem no modo debug.
-- **Shell compartilhado** (`packages/ui-core`) com tokens sobre `#1D1D1D`, i18n pt-BR/en-US, navegação acessível e modos de largura para 280/360/480/720 px.
+- **Shell compartilhado** (`packages/ui-core`) com tokens de tema (no AE o painel segue o host; fallback `#323232`; Onyx `#121212` só para o kit compartilhado e o Premiere), i18n pt-BR/en-US, navegação acessível e modos de largura para 280/360/480/720 px.
 - **Metadata de rigs** (`packages/rig-metadata`): create/read/update/remove/migrate em domínio puro, JSON canônico, base64url, SHA-256 e plano de sidecar sem fazer I/O.
 
 ### After Effects — CEP + ExtendScript
@@ -155,4 +155,4 @@ Pontos de entrada:
 - `skills-manifest.json`
 - `.agents/skills/orchestrating-crosshost-work/SKILL.md`
 
-A direção visual é fixa: base `#1D1D1D`, uma tarefa dominante por tela, property rows compactas e progressive disclosure. Recursos dependentes do host permanecem `IMPLEMENTED_NOT_HOST_VERIFIED` até serem executados em uma instalação real do After Effects ou Premiere Pro.
+A direção visual é fixa: no AE o painel segue o host; fallback `#323232`; Onyx `#121212` só para o kit compartilhado e o Premiere; uma tarefa dominante por tela, property rows compactas e progressive disclosure. Recursos dependentes do host permanecem `IMPLEMENTED_NOT_HOST_VERIFIED` até serem executados em uma instalação real do After Effects ou Premiere Pro.

@@ -9,7 +9,7 @@
   "project": "CrossHost Motion Suite",
   "generatedAt": "2026-08-24",
   "design": {
-    "background": "#1D1D1D",
+    "background": "no AE o painel segue o host; fallback #323232; Onyx #121212 só para o kit compartilhado e o Premiere",
     "accent": "#35C978",
     "visualDensity": 3,
     "layoutVariance": 2,

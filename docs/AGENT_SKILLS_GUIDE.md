@@ -49,7 +49,7 @@ Carregue o menor conjunto que cobre completamente a tarefa. Muitas skills simult
 ```text
 Use $orchestrating-crosshost-work, $designing-adobe-workstation-ui,
 $building-crosshost-panel-ui e $testing-adobe-hosts.
-Implemente a tela [FEATURE] com base #1D1D1D, uma tarefa dominante,
+Implemente a tela [FEATURE] seguindo o tema (no AE o painel segue o host; fallback #323232; Onyx #121212 só para o kit compartilhado e o Premiere), uma tarefa dominante,
 property rows compactas e progressive disclosure. Não crie dashboard geral.
 Entregue screenshots em 280, 360, 480 e 720 px e registre a auditoria visual.
 ```
