@@ -1153,7 +1153,9 @@ export function createPresetGallery(doc: Document, options: {
   selectionSummary.appendChild(selectedName); selectionSummary.appendChild(selectionStatus);
   referenceFooter.appendChild(selectionSummary);
   function selectionSummaryText(name: string, status: string): void {
-    // "Selecione um preset" fica apagado (estudo); um nome escolhido fica em negrito.
+    // O rodapé tem uma linha só: o nome fica para leitores de tela (o card selecionado já o
+    // mostra) e só o estado aparece, no vão antes de Entrada/Saída/Ambos. Sem preset, o
+    // pedido "Selecione um preset" é o motivo dos segmentos desabilitados.
     const empty = [pt ? "Selecione um preset" : "Select a preset", pt ? "Selecione um arquivo" : "Select a file"].includes(name);
     selectionSummary.setAttribute("data-empty", String(empty));
     selectedName.textContent = name; selectedName.title = name;
@@ -1869,10 +1871,12 @@ export function createPresetGallery(doc: Document, options: {
     // Restore the persistent close button before replacing the body controls.
     settingsTabStops(true);
     disposeNumbers();clearNode(inspector); clearNode(settingsBody);
-    primaryApply = undefined; phaseActions = undefined; clearNode(actions); actions.removeAttribute("data-phase-actions"); actions.removeAttribute("data-floating"); element.removeAttribute("data-phase-actions");
+    primaryApply = undefined; phaseActions = undefined; clearNode(actions); actions.removeAttribute("data-empty"); actions.removeAttribute("data-phase-actions"); actions.removeAttribute("data-floating"); element.removeAttribute("data-phase-actions");
     editor.hidden = !preset;
     actions.hidden = false;
-    if (!preset) { const placeholder=createPresetPhaseActions(doc,{locale:options.locale,onApply:()=>{}});for(const control of placeholder.controls.values())control.setDisabled(true,pt?"Selecione um preset.":"Select a preset.");actions.appendChild(placeholder.element); inspector.appendChild(createElement(doc, "p", "ch-preset-hint", pt ? "Escolha um preset para aplicar ou ajustar." : "Choose a preset to apply or adjust.")); selectionSummaryText(pt?"Selecione um preset":"Select a preset",options.context?.().hasComp===false?(pt?"Abra uma composição":"Open a composition"):""); return; }
+    // Sem preset, os três segmentos ficam neutros e desabilitados; o pedido vira o motivo
+    // (dica e aria-describedby), em vez de uma linha própria no rodapé.
+    if (!preset) { const placeholder=createPresetPhaseActions(doc,{locale:options.locale,onApply:()=>{}});actions.setAttribute("data-empty","true");for(const control of placeholder.controls.values()){control.setDisabled(true,pt?"Selecione um preset":"Select a preset");control.button.disabled=true;}actions.appendChild(placeholder.element); inspector.appendChild(createElement(doc, "p", "ch-preset-hint", pt ? "Escolha um preset para aplicar ou ajustar." : "Choose a preset to apply or adjust.")); selectionSummaryText(pt?"Selecione um preset":"Select a preset",options.context?.().hasComp===false?(pt?"Abra uma composição":"Open a composition"):""); return; }
     const presetId=preset.id;
     settingsTitle.textContent = preset.displayName[options.locale] ?? preset.id;
     // Lean box: name, badges and notes stay out; the card already shows them,

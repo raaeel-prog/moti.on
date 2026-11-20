@@ -1261,3 +1261,27 @@
   :root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-folder-picker="true"] .ch-preset-toolbar-approved > .ch-preset-search { flex:1 1 calc(100% - 140px); }
   :root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery[data-folder-picker="true"] .ch-preset-toolbar-approved > .ch-preset-folder-picker { flex:1 1 96px; }
 }
+
+/* Rodapé numa linha de 32 px: [Ações de presets] [tamanho] … estado … [Entrada | Saída | Ambos].
+   O nome do preset fica só para leitores de tela; o estado ocupa o vão e some primeiro. */
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery > .ch-preset-reference-footer {
+  display:flex !important; flex-wrap:nowrap; align-items:center; gap:6px;
+  height:32px; min-height:32px; margin:0; padding:0 8px; box-sizing:border-box;
+  border-top:1px solid var(--border-subtle); background:var(--ds-bg);
+}
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery > .ch-preset-reference-footer > .ch-preset-library-actions { order:1; flex:0 0 auto; }
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery > .ch-preset-reference-footer > .ch-preset-preview-controls { order:2; flex:0 1 112px; width:auto !important; min-width:56px; max-width:112px; }
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery > .ch-preset-reference-footer > .ch-preset-selection-summary {
+  order:3; display:flex !important; flex:1 1 0; justify-content:flex-end; align-items:center; min-width:0; overflow:hidden;
+  font-size:11px; line-height:16px;
+}
+:root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery > .ch-preset-reference-footer > .ch-preset-applybar { order:4; flex:0 0 auto !important; min-width:0 !important; margin:0 !important; padding:0 !important; }
+:root[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-selection-summary > .ch-preset-selected-name {
+  position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}
+:root[data-host="after-effects"] .ch-preset-reference-footer .ch-preset-selection-summary > .ch-preset-selection-status {
+  flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-tertiary); font-size:11px;
+}
+@media (max-width:279px) {
+  :root[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-preset-gallery > .ch-preset-reference-footer { flex-wrap:wrap; height:auto; padding-block:4px; row-gap:4px; }
+}
