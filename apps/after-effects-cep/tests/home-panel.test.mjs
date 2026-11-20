@@ -59,7 +59,9 @@ async function mountPanel(commandData, { holdWrites = false, holdCommands = [], 
   return { mount, requests, document, context, pendingWrites,
     completeNextWrite: () => pendingWrites.shift()?.(),
     buttons: () => mount.getElementsByTagName("button"),
-    nav: (label) => mount.getElementsByRole("tab").find((node) => node.allText === label) };
+    // At the default unmeasured 360 px width, Presets and Stock sit in Mais as menuitems.
+    nav: (label) => mount.getElementsByRole("tab").find((node) => node.allText === label)
+      || mount.getElementsByRole("menuitem").find((node) => node.allText === label) };
 }
 
 test("AE bundle: named tools, fixed anchor and no diagnostic actions on Home", async () => {
