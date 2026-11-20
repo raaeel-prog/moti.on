@@ -1,6 +1,6 @@
 ---
 name: designing-adobe-workstation-ui
-description: "Designs and reviews the CrossHost plugin interface as a subtle Adobe-style workstation panel. Use for layouts, navigation, visual hierarchy, tokens, controls, responsive docking, iconography, interaction polish, or UI audits. Enforces the #121212 dark direction and prevents crowded dashboard output."
+description: "Designs and reviews the CrossHost plugin interface as a subtle Adobe-style workstation panel. Use for layouts, navigation, visual hierarchy, tokens, controls, responsive docking, iconography, interaction polish, or UI audits. Enforces the host-following dark direction (Onyx #121212 only for the shared kit and Premiere) and prevents crowded dashboard output."
 ---
 
 # Designing an Adobe Workstation UI
@@ -31,25 +31,19 @@ Increasing feature count must not increase simultaneous visual density. Use prog
 
 ## Color foundation
 
-The current user-selected docked panel base is:
+After Effects panel (CEP): the panel follows the host theme. `apps/after-effects-cep/client/src/host-theme.ts` reads `appSkinInfo`, derives every surface and text token with at least 4.5:1 contrast (`hostThemeTokens`) and builds the user accent (`accentTokens`, default "Follow AE"). When the host theme cannot be read, the fallback is `packages/ui-tokens/src/after-effects.css` (`--bg-host: #323232`). Example with AE at `#232323`: background `#232323`, field `#171717`, raised `#2B2B2B`, text `#DEDEDE` / `#B2B2B2` / `#949494`, editable value `#8AB8FF`, primary action `#0969DA` with white text.
 
-```css
---bg-host: #121212;
---ch-surface-raised: #262626;
---ch-surface-hover: #303030;
---ch-surface-pressed: #303030;
---ch-text-primary: #FFFFFF;
---ch-accent: #FFFFFF;
-```
+Shared kit and Premiere (UXP): Onyx, `--bg-host: #121212`, from `packages/ui-tokens/src/tokens.css`.
 
-The complete dark/light palette and AA-corrected implementation values live in `packages/ui-tokens/src/tokens.css`; never retype a partial palette in a component.
+The complete dark/light palettes and AA-corrected values live in those files; never retype a partial palette in a component, and never write new hex values in AE CSS (use `--ds-*`, `--surface-*`, `--text-*`, `--action-*`).
 
 Rules:
 
-- Neutral surfaces carry the interface; white carries the primary action, while selection has a restrained highlight.
+- Neutral surfaces carry the interface; the accent (action color) carries the primary action, while selection has a restrained highlight.
 - No “AI glow,” mesh gradient, glassmorphism, or neon halo as a default. Color for feedback is semantic and must not become decoration.
 - Use a one-pixel border or surface contrast, not both everywhere.
-- Avoid pure black; white is reserved for the primary action and high-contrast text where needed.
+- Avoid pure black. A disabled control never uses the action color and always explains its reason in the tooltip.
+- Text is never below 11 px; never hide controls behind horizontal scrolling without a visible affordance.
 - Status must never depend on color alone.
 
 ## Typography

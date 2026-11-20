@@ -4,7 +4,7 @@ Read `docs/MASTER_BUILD_SPEC.md`, `docs/AGENT_SKILLS_GUIDE.md`, and the relevant
 
 Project skills are mirrored under `.claude/skills/`. For non-trivial work, begin with `/orchestrating-crosshost-work`, then invoke only the specialist skills required by the routing matrix.
 
-For every UI task, invoke `/designing-adobe-workstation-ui` and `/building-crosshost-panel-ui`. The panel base is `#1D1D1D`, one task dominates each view, ordinary controls use compact property rows, and the result must work as a dockable Adobe workstation panel at 280, 360, 480 and 720 px.
+For every UI task, invoke `/designing-adobe-workstation-ui` and `/building-crosshost-panel-ui`. The After Effects panel follows the host theme (`apps/after-effects-cep/client/src/host-theme.ts`, fallback `#323232` in `packages/ui-tokens/src/after-effects.css`; Onyx `#121212` in `packages/ui-tokens/src/tokens.css` is only for the shared kit and Premiere), text is never below 11 px, nothing hides behind horizontal scrolling, disabled controls never use the action color, one task dominates each view, ordinary controls use compact property rows, and the result must work as a dockable Adobe workstation panel at 280, 360, 480 and 720 px.
 
 For any current or uncertain Adobe API, provider policy, manifest permission or release rule, invoke `/researching-adobe-capabilities` before implementation.
 

@@ -26,7 +26,10 @@ This repository uses repo-local Agent Skills under `.agents/skills/`.
 
 ## Non-negotiable product rules
 
-- Keep the UI subtle, minimal and Adobe-native with base `#121212` (Onyx approved 2026-10-03; see `docs/UI_FOUNDATION.md`).
+- Keep the UI subtle, minimal and Adobe-native. The After Effects panel follows the host theme: `apps/after-effects-cep/client/src/host-theme.ts` (`hostThemeTokens` + `accentTokens`) is the source of truth, with fallback `#323232` in `packages/ui-tokens/src/after-effects.css`. Onyx `#121212` (approved 2026-10-03, `docs/UI_FOUNDATION.md`) applies only to the shared kit and Premiere (`packages/ui-tokens/src/tokens.css`).
+- Accent is the user's choice, default "Follow AE", always at least 4.5:1 over the real surfaces (`accentTokens`). Never write new hex values in AE CSS: use `--ds-*`, `--surface-*`, `--text-*`, `--action-*`.
+- Text is never below 11 px. Never hide content behind horizontal scrolling. A disabled control never uses the action color; it shows its reason in the tooltip.
+- UI evidence: screenshots at 280/360/480/720 px and 360x380, plus an automated contrast check (axe color-contrast).
 - Show one dominant task at a time; never create an all-in-one dashboard.
 - Use documented Adobe APIs plus runtime capability gates; never invent methods.
 - Keep AE CEP/ExtendScript and Premiere UXP host layers separate.
