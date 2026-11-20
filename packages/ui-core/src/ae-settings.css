@@ -15,6 +15,7 @@
 [data-host="after-effects"] .ch-settings .ch-field--number .ch-field__control { flex:0 0 auto; }
 [data-host="after-effects"] .ch-settings .ch-field__description,
 [data-host="after-effects"] .ch-settings .ch-hint { margin:0 0 8px; color:var(--text-secondary); font-size:11px; line-height:16px; overflow-wrap:break-word; }
+[data-host="after-effects"] .ch-settings .ch-settings-help-gestures { flex:0 0 100%; margin:0 0 8px; color:var(--text-secondary); font-size:11px; line-height:16px; }
 [data-host="after-effects"] .ch-settings .ch-field__description { margin:0; padding:0; }
 /* The input and its associated label stay native; the whole label is a target. */
 [data-host="after-effects"] .ch-settings .ch-field--checkbox { gap:0 4px; }

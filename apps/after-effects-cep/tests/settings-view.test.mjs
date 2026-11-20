@@ -19,6 +19,8 @@ for(const locale of ['pt-BR','en-US'])test(`local settings organize five groups 
   assert.ok(heading.textContent.length>0,'the visible section heading supplies its accessible name');
  }
  assert.match(view.element.allText,locale==='pt-BR'?/sistema está reduzindo/:/system is reducing/);
+ const helpSection=[...view.element.getElementsByTagName('section')].find(node=>node.className.includes('ch-settings-help'));
+ assert.match(helpSection?.allText??helpSection?.textContent??'',locale==='pt-BR'?/Clique aplica · › abre a página · Botão direito: mais opções/:/Click applies · › opens the page · Right click: more options/);
  control('settings-clear-colors').click();assert.deepEqual(preferences.snapshot().recentColors,[]);assert.deepEqual(preferences.snapshot().favorites,['wiggle']);assert.deepEqual(preferences.snapshot().recent,['neon']);
  control('settings-reset-preview').click();assert.equal(preferences.snapshot().presetAutoplay,true);assert.equal(preferences.snapshot().theme,'light');assert.equal(refreshes,1);
  control('settings-reset-interface').click();assert.equal(preferences.snapshot().theme,'dark');assert.deepEqual(locales,['host']);assert.deepEqual(preferences.snapshot().favorites,['wiggle']);

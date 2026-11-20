@@ -96,6 +96,9 @@ export function createAeSettingsView(doc: Document, options: {
   local.appendChild(localStatus);
   const help = section("settings.help.title");
   help.classList.add("ch-settings-help");
+  const gestures = hint(doc, i18n.t("settings.help.gestures"));
+  gestures.classList.add("ch-settings-help-gestures");
+  help.appendChild(gestures);
   const helpActions = createElement(doc, "div", "ch-settings-help-actions");
   help.appendChild(helpActions);
   for (const view of ["context", "system", "diagnostics"] as const) {
