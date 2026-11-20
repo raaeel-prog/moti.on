@@ -309,14 +309,10 @@
  * names from 440 px. No mix of words and icons; the view title below names the screen
  * and every icon keeps its tooltip and accessible name. The command search shows at
  * every width now that the icons leave room for it. */
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] { width: 32px; min-width: 32px; height: 28px; min-height: 28px; padding: 0; justify-content: center; }
-[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] > .ch-nav__label { display: none; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] { width: auto; min-width: 0; height: 28px; min-height: 28px; padding: 0 8px; justify-content: flex-start; font-size: 11px; font-weight: 500; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] > .ch-nav__label { display: inline; overflow: visible; white-space: nowrap; }
+[data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] > svg { display: none; }
 [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__utilities > .ch-nav__search { display: inline-flex; }
-@media (min-width: 440px) {
-  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] { width: auto; max-width: none; padding: 0 10px; font-size: 12px; font-weight: 500; }
-  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] > svg { display: none; }
-  [data-host="after-effects"] .ch-shell[data-layout="library"] .ch-nav__item[role="tab"] > .ch-nav__label { display: inline; overflow: visible; }
-}
 
 /* Home toolbar: each menu takes its own width (the compact shell stretched both to an
  * equal share and cut "Todas" to "T…"). Below 360 px the collection menu keeps its icon
