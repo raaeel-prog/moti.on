@@ -1,8 +1,20 @@
 # Moti.on
 
-Suíte de motion design projetada para **Premiere Pro** e **After Effects**, respeitando o runtime de cada aplicativo.
+[![CI](https://github.com/raaeel-prog/moti.on/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/raaeel-prog/moti.on/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/raaeel-prog/moti.on?include_prereleases&sort=semver)](https://github.com/raaeel-prog/moti.on/releases)
+[![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT%20%2B%20terceiros-blue)](LICENSE)
 
-> **Estado em 2026-09-10:** build de desenvolvimento `0.1.0`, com toolkit AE, busca, Quick/Advanced, favoritos, recentes e preferências de tema/espaçamento. Migração para macOS arm64 concluída; Moti.on instalado em AE e Premiere. A validação real do Premiere está bloqueada pela inicialização/licenciamento Adobe. Consulte o [checkpoint atual](docs/HANDOFF_MACOS_2026-09-10.md) para separar implementação de evidência. As seções históricas abaixo descrevem a fundação; não representam todo o código atual. O [master spec](docs/MASTER_BUILD_SPEC.md) e seu [addendum](docs/ADDENDUM_A_QUICK_UX_SPEC.md) continuam sendo o briefing.
+Suíte de motion design para **Adobe After Effects** (CEP 12 + ExtendScript) e **Premiere Pro** (UXP), com uma base compartilhada de contratos, registro de comandos, interface e testes, e um adapter específico para cada aplicativo.
+
+| | |
+|---|---|
+| **Versão atual** | `0.2.0` (painel After Effects) · `0.1.0` (Premiere Pro UXP) |
+| **Estado** | Desenvolvimento ativo. Recursos que dependem do host ficam `IMPLEMENTED_NOT_HOST_VERIFIED` até serem provados no aplicativo real |
+| **Plataformas** | Windows 11 e macOS (arm64) · After Effects 25.0+ · Premiere Pro 25.6+ |
+| **Changelog** | [`CHANGELOG.md`](CHANGELOG.md) · [Releases](https://github.com/raaeel-prog/moti.on/releases) |
+| **Como contribuir** | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+
+> **Estado em 2026-11-20:** a `main` foi reorganizada por pull requests (baseline de outubro/novembro, documentação, tema/CSS, prévias e biblioteca de presets, ferramentas de um clique, som/waveform, alinhamento de docs de UI, recortes aprovados de Presets e Ajuda). O histórico anterior está preservado nas tags `backup/*` e `archive/*`. As seções abaixo descrevem a fundação; o detalhe de cada entrega está no [changelog](CHANGELOG.md), e o que já foi provado em host real está em [`docs/HOST_LIMITATIONS.md`](docs/HOST_LIMITATIONS.md).
 
 ## O que existe hoje
 
@@ -130,6 +142,17 @@ CHMS-001 a CHMS-008 têm implementação e evidência automatizada no worktree, 
 
 Até esses passos, o P0 não está fechado para a matriz declarada. O shell e o adapter AE estão verificados somente no ambiente acima; Premiere, exportação e a matriz visual completa permanecem `IMPLEMENTED_NOT_HOST_VERIFIED`. O núcleo puro do CHMS-009 está concluído, mas ainda faltam o adapter do After Effects, persistência sidecar e prova de Undo/host. O plano completo está em [`docs/MASTER_BUILD_SPEC.md`](docs/MASTER_BUILD_SPEC.md); as decisões de arquitetura tomadas até aqui estão em [`docs/adr/`](docs/adr/).
 
+## Fluxo de trabalho no GitHub
+
+- **`main` é protegida:** só recebe mudanças por pull request, com a CI (`check` em Ubuntu e Windows, Node 22 e 24) verde. Force-push e deleção da `main` são bloqueados.
+- **Nomes de branch:** `feat/<tema>`, `fix/<tema>`, `docs/<tema>`, `chore/<tema>`, `ui/<recorte>` para trabalho de interface e `dev/<área>-<tema>` para o trabalho em andamento de cada dev. Datas no formato `AAAAMMDD` quando a branch for um recorte pontual.
+- **Merge:** merge commit para trens com histórico relevante; squash para PRs de um assunto só.
+- **Arquivo:** branches encerradas são preservadas como tag `archive/<nome>` antes de qualquer remoção; estados de segurança ficam em `backup/<nome>`.
+- **Labels:** `bug`, `enhancement`, `documentation`, `ui`, `host`, `tooling`, `qa`, `premiere`, `needs-host-verification`.
+- **Mídia:** prévias (`*.mp4`, `*.jpg`) continuam no Git normal e são tratadas como binário. Formatos pesados novos (`*.mov`, `*.wav`, `*.aif(f)`, `*.flac`, `*.psd`, `*.aep`, `*.mxf`) entram por **Git LFS** (`git lfs install` uma vez por máquina). O histórico existente não é migrado.
+
+Detalhes em [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 ## Master implementation specification
 
 The production implementation plan is in [`docs/MASTER_BUILD_SPEC.md`](docs/MASTER_BUILD_SPEC.md). Claude Code should also read `CLAUDE.md`; Codex and other coding agents should read `AGENTS.md`.
@@ -156,3 +179,6 @@ Pontos de entrada:
 - `.agents/skills/orchestrating-crosshost-work/SKILL.md`
 
 A direção visual é fixa: base `#1D1D1D`, uma tarefa dominante por tela, property rows compactas e progressive disclosure. Recursos dependentes do host permanecem `IMPLEMENTED_NOT_HOST_VERIFIED` até serem executados em uma instalação real do After Effects ou Premiere Pro.
+
+
+</cursor_untrusted_data_1337

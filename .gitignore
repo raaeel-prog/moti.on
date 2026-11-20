@@ -85,3 +85,13 @@ apps/Site/
 /*-log.txt
 /test-results.txt
 apps/after-effects-cep/account/config.json
+
+# Logs de verificacao local e worktrees de organizacao fora do repositorio.
+*-check.log
+*-npmci.log
+
+# Salvamentos automaticos e caches do After Effects / Premiere.
+Adobe After Effects Auto-Save/
+*.aep.lock
+Adobe Premiere Pro Auto-Save/
+*.prproj.lock

@@ -1,3 +1,17 @@
+## 0.2.0 — 2026-11-20 — Organização do GitHub e trem de integração
+
+Primeira release publicada no GitHub desde o `starter-0.1.0`. Junta na `main`, por pull request e com CI verde, o trabalho de outubro e novembro que só existia na máquina de desenvolvimento.
+
+- **Baseline de outubro/novembro (17 commits):** editor de curva no estilo do vídeo de referência, barra rápida nativa na timeline, conta Google, admin e modo desenvolvedor, cofre da conta e build verificados no Windows, instalação do `MotionCore.aex` na pasta que o AE carrega, gradiente na GPU (DirectX 12 e CUDA).
+- **Documentação:** compatibilidade, fluxo de um clique, reorganização de presets, plano de UI/desempenho e `UI_FOUNDATION` atualizados.
+- **Tema e CSS:** pipeline `theme.css` → `base.css` em camadas, `theme-sources.mjs`, `host-theme.ts`, cor de destaque, kit do `ui-core`, tokens do AE e auditoria de desempenho do painel.
+- **Prévias e biblioteca de presets:** 93 prévias de texto v3 regeneradas com `manifest.json`; galeria, workspace, fases, `preset-library.jsx`, `preset-phases.jsx` e `motion-library.jsx` gerado.
+- **Ferramentas de um clique:** Flutuação/Wiggle, `expression-compose.jsx`, `layer-look.jsx`, novos comandos do host e auditorias de fluxo.
+- **Som:** biblioteca de sons com waveform pré-calculado (`sound-peaks`).
+- **UI:** regra "cor = tema do host" em `AGENTS.md`, `CLAUDE.md` e nas skills de UI; recorte aprovado de Presets (segmentado Navegar/Editar, atalhos de categoria, rodapé de 32 px, segmentado de fase, árvore 150–200 px); texto de gestos em Configurações › Ajuda.
+- **Repositório:** `README` e `CONTRIBUTING` com o fluxo de PR, nomes de branch, labels e política de mídia; template de PR; `.gitattributes` com mídia como binário e Git LFS só para formatos pesados novos; tags `backup/*` e `archive/*` preservam o estado anterior.
+- Estado: `IMPLEMENTED_NOT_HOST_VERIFIED` para o que ainda não foi visto no After Effects real.
+
 ## 2026-11-13 — Banco de mídia: vídeos, imagens e sons gratuitos (Pexels, Pixabay, Unsplash, Freesound)
 
 Pedido do usuário: conectar o plugin a bancos gratuitos de imagem, vídeo e som, com o administrador configurando o acesso e o usuário recebendo pronto.

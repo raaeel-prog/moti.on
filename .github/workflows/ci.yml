@@ -38,6 +38,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Midia pesada nova entra por Git LFS (ver .gitattributes).
+          lfs: true
 
       - uses: actions/setup-node@v4
         with:
