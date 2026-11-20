@@ -1,23 +1,28 @@
 /**
- * Presets in narrow docks: the folder tree folds into one picker above the cards.
+ * Presets in narrow or short docks: the folder tree folds into one picker on the search row.
  *
  * Beside the cards, below 360 px the tree cut its names ("Entrada…", "Luz e m…") and
- * left one thin card column. There the picker names the current folder and opens the
- * same tree — same rows, collapsed folders and labels — as a sheet over the cards, and
- * the cards take the full width. From 360 px the tree is the resizable sidebar again.
+ * left one thin card column; below 420 px of height it took the rows the cards need.
+ * There the picker ("Todos os presets ▾", 24 px, on the search row) names the current
+ * folder and opens the same tree — same rows, collapsed folders and labels — as a sheet
+ * over the cards, and the cards take the full width. Otherwise the tree is the
+ * resizable sidebar again.
  * The gallery's `data-folder-picker` attribute switches the layout (ae-workstation.css).
  */
 import { uiIcon } from "./ui-icons.js";
 
 /** Narrowest panel that keeps the folder tree beside the cards. */
 export const FOLDER_PICKER_BREAKPOINT = 360;
+/** Shortest panel that keeps the tree: below it the cards need every row (2026-11-20). */
+export const FOLDER_PICKER_MIN_HEIGHT = 420;
 /** Space between the picker and its sheet, and between the sheet and the footer. */
 const SHEET_GAP = 2;
 /** When there's no room for three rows below the picker, use the whole gallery body. */
 const ANCHORED_MIN_HEIGHT = 80;
 
-export function folderPickerActive(panelWidth: number): boolean {
-  return panelWidth > 0 && panelWidth < FOLDER_PICKER_BREAKPOINT;
+/** A panel without layout (width 0) keeps the sidebar; an unknown height (0) never folds it. */
+export function folderPickerActive(panelWidth: number, panelHeight = 0): boolean {
+  return panelWidth > 0 && (panelWidth < FOLDER_PICKER_BREAKPOINT || (panelHeight > 0 && panelHeight < FOLDER_PICKER_MIN_HEIGHT));
 }
 
 /** The picker shows the folder and its parent; the parent gives way first when space runs out. */
@@ -70,6 +75,7 @@ export function createFolderPicker(doc: Document, options: {
   let active = false, open = false;
   gallery.setAttribute("data-folder-picker", "false");
   const panelWidth = (): number => (doc.defaultView ?? window).innerWidth || 0;
+  const panelHeight = (): number => (doc.defaultView ?? window).innerHeight || 0;
 
   function place(): void {
     const host = gallery.getBoundingClientRect(), anchor = trigger.getBoundingClientRect();
@@ -117,7 +123,7 @@ export function createFolderPicker(doc: Document, options: {
     else if (!back.hidden) back.focus({ preventScroll: true });
   }
   function update(): boolean {
-    const next = folderPickerActive(panelWidth());
+    const next = folderPickerActive(panelWidth(), panelHeight());
     if (next === active) { if (open) place(); return false; }
     const focus = doc.activeElement as HTMLElement | null, inMenu = Boolean(focus && menu.contains(focus)), onTrigger = focus === trigger;
     active = next; gallery.setAttribute("data-folder-picker", String(active));
